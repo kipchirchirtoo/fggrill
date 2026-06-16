@@ -10,6 +10,7 @@ const adjustmentRoles = [
     UserRole.AUDITOR,
     UserRole.GENERAL_MANAGER,
     UserRole.BRANCH_MANAGER,
+    UserRole.BRANCH_ACCOUNTANT,
 ];
 
 // Protect all routes in this file

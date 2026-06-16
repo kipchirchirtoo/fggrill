@@ -13,8 +13,9 @@ import { supabaseAdmin } from '../../config/supabase-admin';
  */
 export const createDispatch = async (req: Request, res: Response) => {
   try {
-    const { items, destination_branch, driver_id, notes } = req.body;
+    const { items, destination_branch, destination_branch_id, to_branch_id, driver_id, notes } = req.body;
     const userId = (req as any).user?.id;
+    const destBranchId = destination_branch_id ?? to_branch_id ?? (destination_branch ? Number(destination_branch) : undefined);
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -24,7 +25,7 @@ export const createDispatch = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Items array is required' });
     }
 
-    if (!destination_branch) {
+    if (!destBranchId) {
       return res.status(400).json({ error: 'Destination branch is required' });
     }
 
@@ -32,7 +33,8 @@ export const createDispatch = async (req: Request, res: Response) => {
     const { data: dispatch, error: dispatchError } = await supabase
       .from('dispatches')
       .insert({
-        destination_branch,
+        destination_branch_id: destBranchId,
+        to_branch_id: destBranchId,
         driver_id,
         notes,
         created_by: userId,
@@ -45,16 +47,16 @@ export const createDispatch = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Failed to create dispatch', details: dispatchError?.message });
     }
 
-    // Insert dispatch items
+    // Insert dispatch lines (items table for the dispatches/OTP system)
     const dispatchItems = items.map((item: any) => ({
       dispatch_id: dispatch.id,
       item_id: item.item_id,
-      quantity: item.quantity,
-      notes: item.notes,
+      packed_quantity: item.quantity ?? 0,
+      unit: item.unit ?? 'units',
     }));
 
     const { error: itemsError } = await supabase
-      .from('dispatch_items')
+      .from('dispatch_lines')
       .insert(dispatchItems);
 
     if (itemsError) {
@@ -116,22 +118,26 @@ export const getDispatches = async (req: Request, res: Response) => {
     const userRole = (req as any).user?.role;
     const userBranch = (req as any).user?.branch_id;
 
+    const to_branch_id = req.query.to_branch_id;
+
     let query = supabase
       .from('dispatches')
-      .select('*, dispatch_items(*, inventory_items(*)), dispatch_otps(*)')
+      .select('*, dispatch_lines(*, inventory_items(id, sku, item_name, unit)), dispatch_otps(*)')
       .order('created_at', { ascending: false });
 
     // Apply RLS filtering based on role
     if (userRole === 'branch_storekeeper' && userBranch) {
-      query = query.eq('destination_branch', userBranch);
+      query = query.eq('destination_branch_id', Number(userBranch));
     }
 
     if (status) {
       query = query.eq('status', status);
     }
 
-    if (branch_id) {
-      query = query.eq('destination_branch', branch_id);
+    if (to_branch_id) {
+      query = query.eq('destination_branch_id', Number(to_branch_id));
+    } else if (branch_id) {
+      query = query.eq('destination_branch_id', Number(branch_id));
     }
 
     const { data, error } = await query;
@@ -159,7 +165,7 @@ export const getDispatchById = async (req: Request, res: Response) => {
       .from('dispatches')
       .select(`
         *,
-        dispatch_items(*, inventory_items(*)),
+        dispatch_lines(*, inventory_items(id, sku, item_name, unit)),
         dispatch_otps(*),
         dispatch_documents(*),
         dispatch_audit_log(*)
@@ -185,15 +191,16 @@ export const getDispatchById = async (req: Request, res: Response) => {
 export const verifyDriverOtp = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { driver_otp } = req.body;
+    const { driver_otp, otp } = req.body;
+    const driverOtpValue = driver_otp || otp;
     const userId = (req as any).user?.id;
 
-    if (!driver_otp) {
+    if (!driverOtpValue) {
       return res.status(400).json({ error: 'Driver OTP is required' });
     }
 
     // Validate OTP format (D-XXXX)
-    if (!/^D-\d{4}$/.test(driver_otp)) {
+    if (!/^D-\d{4}$/.test(driverOtpValue)) {
       return res.status(400).json({ error: 'Invalid OTP format. Must be D-XXXX (e.g., D-1234)' });
     }
 
@@ -202,7 +209,7 @@ export const verifyDriverOtp = async (req: Request, res: Response) => {
       .from('dispatch_otps')
       .select('*')
       .eq('dispatch_id', id)
-      .eq('driver_otp', driver_otp)
+      .eq('driver_otp', driverOtpValue)
       .single();
 
     if (otpError || !otpRecord) {
@@ -256,15 +263,16 @@ export const verifyDriverOtp = async (req: Request, res: Response) => {
 export const verifyBranchOtp = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { branch_otp } = req.body;
+    const { branch_otp, otp } = req.body;
+    const branchOtpValue = branch_otp || otp;
     const userId = (req as any).user?.id;
 
-    if (!branch_otp) {
+    if (!branchOtpValue) {
       return res.status(400).json({ error: 'Branch OTP is required' });
     }
 
     // Validate OTP format (B-XXXX)
-    if (!/^B-\d{4}$/.test(branch_otp)) {
+    if (!/^B-\d{4}$/.test(branchOtpValue)) {
       return res.status(400).json({ error: 'Invalid OTP format. Must be B-XXXX (e.g., B-1234)' });
     }
 
@@ -289,7 +297,7 @@ export const verifyBranchOtp = async (req: Request, res: Response) => {
       .from('dispatch_otps')
       .select('*')
       .eq('dispatch_id', id)
-      .eq('branch_otp', branch_otp)
+      .eq('branch_otp', branchOtpValue)
       .single();
 
     if (otpError || !otpRecord) {
@@ -376,8 +384,6 @@ export const uploadDocument = async (req: Request, res: Response) => {
         document_url: urlData.publicUrl,
         document_type: 'stock_sheet',
         file_name: file.originalname,
-        file_size: file.size,
-        mime_type: file.mimetype,
         uploaded_by: userId,
       });
 

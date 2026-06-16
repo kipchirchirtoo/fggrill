@@ -632,6 +632,8 @@ class _KitchenOperationsDashboardState
             trailing: (row) => _RowActions(actions: [
               _RowAction('Detail', Icons.visibility_outlined,
                   () => _showRequisitionDetail(row)),
+              _RowAction('Activity', Icons.link_outlined,
+                  () => _showRequisitionRelatedActivity(row)),
               if (_value(row, ['status']) == 'PENDING')
                 _RowAction(
                   'Approve',
@@ -1269,6 +1271,74 @@ class _KitchenOperationsDashboardState
     );
   }
 
+  Future<void> _showRequisitionRelatedActivity(Map<String, dynamic> row) async {
+    try {
+      final activity = await _repo.getRequisitionRelatedActivity('${row['id']}');
+      if (!mounted) return;
+      final grns = _rows(activity['grns']);
+      final usageEntries = _rows(activity['usageEntries']);
+      final wastageEntries = _rows(activity['wastageEntries']);
+      final issueEntries = _rows(activity['issueEntries']);
+      final ledgerEntries = _rows(activity['ledgerEntries']);
+
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Related Activity — ${_value(row, ['requisition_number', 'id'])}'),
+          content: SizedBox(
+            width: 640,
+            height: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (grns.isNotEmpty)
+                    _ActivitySection(title: 'GRN Receipts (${grns.length})', children: grns.map((g) => ListTile(
+                      dense: true,
+                      title: Text('GRN #${_value(g, ['grn_number', 'id'])}'),
+                      subtitle: Text('${_isoDate(DateTime.tryParse('${g['created_at'] ?? ''}') ?? DateTime.now())} | ${_rows(g['items']).length} items'),
+                    )).toList()),
+                  if (ledgerEntries.isNotEmpty)
+                    _ActivitySection(title: 'Stock Ledger (${ledgerEntries.length})', children: ledgerEntries.map((l) => ListTile(
+                      dense: true,
+                      title: Text('${_value(l, ['item_name', 'item_sku'])}'),
+                      subtitle: Text('${l['transaction_type']} | ${_num(l['quantity_in']) > 0 ? '+' : '-'}${_num(l['quantity_in']) > 0 ? _num(l['quantity_in']) : _num(l['quantity_out'])} ${l['unit_of_measure'] ?? ''}'),
+                    )).toList()),
+                  if (usageEntries.isNotEmpty)
+                    _ActivitySection(title: 'Kitchen Usage (${usageEntries.length})', children: usageEntries.map((u) => ListTile(
+                      dense: true,
+                      title: Text('${_value(u, ['item_name', 'item_sku'])}'),
+                      subtitle: Text('${_isoDate(DateTime.tryParse('${u['usage_date'] ?? ''}') ?? DateTime.now())} | ${_num(u['quantity'])} ${u['unit_of_measure'] ?? ''} | ${u['usage_type'] ?? 'CONSUMPTION'}'),
+                    )).toList()),
+                  if (wastageEntries.isNotEmpty)
+                    _ActivitySection(title: 'Wastage (${wastageEntries.length})', children: wastageEntries.map((w) => ListTile(
+                      dense: true,
+                      title: Text('${_value(w, ['item_name', 'item_sku'])}'),
+                      subtitle: Text('${_isoDate(DateTime.tryParse('${w['wastage_date'] ?? ''}') ?? DateTime.now())} | ${_num(w['quantity'])} ${w['unit_of_measure'] ?? ''} | ${w['reason'] ?? ''}'),
+                    )).toList()),
+                  if (issueEntries.isNotEmpty)
+                    _ActivitySection(title: 'Department Issues (${issueEntries.length})', children: issueEntries.map((i) => ListTile(
+                      dense: true,
+                      title: Text('${_value(i, ['item_name', 'item_sku'])}'),
+                      subtitle: Text('${_isoDate(DateTime.tryParse('${i['issued_at'] ?? ''}') ?? DateTime.now())} | Dept: ${i['department_code'] ?? i['department_name'] ?? ''}'),
+                    )).toList()),
+                  if (grns.isEmpty && ledgerEntries.isEmpty && usageEntries.isEmpty && wastageEntries.isEmpty && issueEntries.isEmpty)
+                    const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No related activity found yet.'))),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          ],
+        ),
+      );
+    } catch (error) {
+      _snack('Failed to load activity: $error');
+    }
+  }
+
   Future<void> _approveRequisition(Map<String, dynamic> row) async {
     final items = _rows(row['items']);
     await _run(() => _repo.approveRequisition(
@@ -1887,6 +1957,28 @@ class _SectionCard extends StatelessWidget {
             child,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ActivitySection extends StatelessWidget {
+  const _ActivitySection({required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          const SizedBox(height: 4),
+          ...children,
+          const Divider(),
+        ],
       ),
     );
   }

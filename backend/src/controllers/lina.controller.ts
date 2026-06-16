@@ -725,18 +725,47 @@ const LINA_READABLE_TABLES = new Set([
   'feature_flags',
   'security_config',
   'finance_invoices',
+  'branch_payments',
+  'credit_bills',
   'store_purchase_orders',
+  'store_purchase_order_items',
+  'store_grn',
+  'store_grn_items',
+  'store_supplier_invoices',
+  'store_supplier_payments',
+  'store_payment_invoice_allocations',
+  'store_supplier_balances',
+  'simple_items',
+  'branch_stock',
+  'branch_stock_movements',
+  'inventory_items',
+  'inventory_locations',
+  'inventory_balances',
+  'inventory_movements',
+  'inventory_reservations',
+  'inventory_batches',
+  'inventory_alerts',
+  'stock_counts',
+  'stock_count_items',
+  'central_stock_take_sessions',
+  'central_stock_take_items',
   'impersonation_sessions',
   'pos_transactions',
   'restaurant_orders',
   'bar_orders',
   'rooms',
+  'conference_bookings',
+  'catering_bookings',
   'expenses',
   'lina_remediation_proposals',
   'lina_remediation_executions',
   'lina_remediation_events',
   'lina_agent_logs',
   'lina_system_snapshots',
+  'lina_memories',
+  'lina_daily_financial_snapshots',
+  'lina_variance_findings',
+  'lina_agent_findings',
 ]);
 
 const LINA_BRANCH_SCOPED_TABLES = new Set([
@@ -744,14 +773,36 @@ const LINA_BRANCH_SCOPED_TABLES = new Set([
   'audit_exceptions',
   'bookings',
   'finance_invoices',
+  'branch_payments',
+  'credit_bills',
   'store_purchase_orders',
+  'store_grn',
+  'store_supplier_invoices',
+  'store_supplier_payments',
+  'store_supplier_balances',
+  'branch_stock',
+  'branch_stock_movements',
+  'inventory_balances',
+  'inventory_movements',
+  'inventory_reservations',
+  'inventory_batches',
+  'inventory_alerts',
+  'stock_counts',
+  'central_stock_take_sessions',
+  'central_stock_take_items',
   'pos_transactions',
   'restaurant_orders',
   'bar_orders',
   'rooms',
+  'conference_bookings',
+  'catering_bookings',
   'expenses',
   'lina_remediation_proposals',
   'lina_system_snapshots',
+  'lina_memories',
+  'lina_daily_financial_snapshots',
+  'lina_variance_findings',
+  'lina_agent_findings',
 ]);
 
 const LINA_GLOBAL_READ_ROLES = new Set([
@@ -776,6 +827,631 @@ function canReadSensitiveLinaTable(req: Request, table: string): boolean {
   if (!LINA_SENSITIVE_TABLES.has(table)) return true;
   if (LINA_GLOBAL_READ_ROLES.has(role)) return true;
   return table === 'users' && ['branch_accountant', 'branch_manager'].includes(role);
+}
+
+type LinaBusinessDomain =
+  | 'inventory'
+  | 'procurement'
+  | 'finance'
+  | 'pos'
+  | 'rooms'
+  | 'staff'
+  | 'audit'
+  | 'security'
+  | 'suppliers'
+  | 'general';
+
+type LinaAgentKey =
+  | 'finance'
+  | 'inventory'
+  | 'procurement'
+  | 'audit'
+  | 'hr'
+  | 'revenue'
+  | 'analytics'
+  | 'executive'
+  | 'operations';
+
+type LinaProviderRole = 'strategic_logic' | 'warehouse_analysis' | 'real_time_ops' | 'client_side_assist';
+
+const LINA_PROVIDER_ROLES: Record<string, { role: LinaProviderRole; allowed_for: string[]; not_allowed_for: string[] }> = {
+  openai: {
+    role: 'strategic_logic',
+    allowed_for: ['ERP reasoning', 'financial workflow analysis', 'structured decision support', 'controlled remediation planning'],
+    not_allowed_for: ['direct database mutation', 'ungoverned approvals'],
+  },
+  gemini: {
+    role: 'warehouse_analysis',
+    allowed_for: ['large historical context', 'trend summaries', 'multi-branch analytics', 'document-scale synthesis'],
+    not_allowed_for: ['final accounting decisions without backend evidence', 'direct workflow execution'],
+  },
+  groq: {
+    role: 'real_time_ops',
+    allowed_for: ['fast operational Q&A', 'navigation help', 'quick status interpretation', 'front-desk style responses'],
+    not_allowed_for: ['accounting conclusions', 'audit sign-off', 'payment decisions'],
+  },
+  puter: {
+    role: 'client_side_assist',
+    allowed_for: ['autocomplete', 'form copy suggestions', 'draft descriptions', 'text cleanup'],
+    not_allowed_for: ['database reads', 'ERP decisions', 'supplier payments', 'audit findings', 'inventory mutations'],
+  },
+};
+
+const LINA_AGENT_PROFILES: Record<LinaAgentKey, { label: string; owns: LinaBusinessDomain[]; primary_provider: keyof typeof LINA_PROVIDER_ROLES; purpose: string }> = {
+  finance: {
+    label: 'Finance Intelligence Agent',
+    owns: ['finance', 'suppliers'],
+    primary_provider: 'openai',
+    purpose: 'P&L, payables, receivables, cash position, supplier liability, and branch profitability reasoning.',
+  },
+  inventory: {
+    label: 'Inventory Control Agent',
+    owns: ['inventory'],
+    primary_provider: 'openai',
+    purpose: 'Stock balances, movements, reservations, GRNs, issues, stock takes, wastage, and reorder risk.',
+  },
+  procurement: {
+    label: 'Procurement Agent',
+    owns: ['procurement', 'suppliers'],
+    primary_provider: 'openai',
+    purpose: 'PO, GRN, supplier invoice, payment loop, and three-way match status.',
+  },
+  audit: {
+    label: 'Audit AI Agent',
+    owns: ['audit', 'security'],
+    primary_provider: 'openai',
+    purpose: 'Exceptions, suspicious activity, variance, compliance findings, and approval evidence.',
+  },
+  hr: {
+    label: 'HR and Payroll Agent',
+    owns: ['staff'],
+    primary_provider: 'openai',
+    purpose: 'Attendance, leave, payroll risk, staff performance, and labor-cost exposure.',
+  },
+  revenue: {
+    label: 'Revenue Agent',
+    owns: ['finance', 'pos', 'rooms'],
+    primary_provider: 'gemini',
+    purpose: 'Room, POS, bar, restaurant, conference, and catering revenue intelligence.',
+  },
+  analytics: {
+    label: 'Analytics Agent',
+    owns: ['general', 'finance', 'inventory', 'rooms', 'pos', 'staff'],
+    primary_provider: 'gemini',
+    purpose: 'Cross-branch trend analysis, forecasting context, and executive pattern detection.',
+  },
+  executive: {
+    label: 'Executive Director Agent',
+    owns: ['general', 'finance', 'audit', 'inventory', 'rooms', 'pos', 'staff', 'procurement', 'suppliers'],
+    primary_provider: 'openai',
+    purpose: 'Director-ready summary, risk ranking, recommended actions, and governance status.',
+  },
+  operations: {
+    label: 'Real-Time Operations Agent',
+    owns: ['rooms', 'pos', 'inventory', 'general'],
+    primary_provider: 'groq',
+    purpose: 'Fast operational search, module navigation, and live status explanation.',
+  },
+};
+
+type LinaReadResult = {
+  table: string;
+  rows: any[];
+  row_count: number;
+  select: string;
+  branch_scoped: boolean;
+  generated_at: string;
+  error?: string;
+  unavailable?: boolean;
+};
+
+type LinaTableReadOptions = {
+  select?: string;
+  limit?: number;
+  filters?: Record<string, any>;
+  orderBy?: { column: string; ascending?: boolean };
+};
+
+function linaRole(req: Request): string {
+  return `${req.user?.role || ''}`;
+}
+
+function linaBranchId(req: Request): string | number | null {
+  return req.user?.branch_id ?? req.user?.branchId ?? null;
+}
+
+function hasGlobalLinaRead(req: Request): boolean {
+  return LINA_GLOBAL_READ_ROLES.has(linaRole(req));
+}
+
+function isSchemaUnavailable(message: string): boolean {
+  return /schema cache|could not find the table|could not find a relationship|column .* does not exist|permission denied|not found/i.test(message);
+}
+
+function classifyBusinessDomains(input: string): LinaBusinessDomain[] {
+  const text = input.toLowerCase();
+  const domains: LinaBusinessDomain[] = [];
+  const add = (domain: LinaBusinessDomain, pattern: RegExp): void => {
+    if (pattern.test(text) && !domains.includes(domain)) domains.push(domain);
+  };
+
+  add('inventory', /\b(stock|inventory|item|sku|batch|expiry|expired|movement|ledger|quantity|reorder|low stock|stock take|wastage|issue|min|department issue)\b/);
+  add('procurement', /\b(procure|purchase order|po\b|grn|goods receipt|supplier invoice|ready to bill|three-way|3-way|receive goods|bill)\b/);
+  add('suppliers', /\b(supplier|vendor|payee|folio|supplier payment|supplier balance)\b/);
+  add('finance', /\b(finance|revenue|cash|payment|mpesa|m-pesa|card|bank|expense|profit|loss|invoice|credit|outbound|payable|receivable|cashier|shift)\b/);
+  add('pos', /\b(pos|restaurant|bar|order|waiter|void|menu|sales|outlet)\b/);
+  add('rooms', /\b(room|booking|reservation|guest|occupancy|check-?in|check-?out|conference|catering)\b/);
+  add('staff', /\b(staff|employee|hr|attendance|leave|payroll|performance|overtime)\b/);
+  add('audit', /\b(audit|exception|anomaly|discrepancy|compliance|risk|fraud|variance)\b/);
+  add('security', /\b(security|login|auth|session|impersonation|suspicious|ip|2fa|permission|role)\b/);
+
+  return domains.length ? domains : ['general'];
+}
+
+function selectLinaAgents(domains: LinaBusinessDomain[], intent: LinaIntent, message: string): Array<Record<string, string>> {
+  const selected = new Set<LinaAgentKey>();
+  const normalized = message.toLowerCase();
+
+  if (domains.includes('finance') || domains.includes('suppliers')) selected.add('finance');
+  if (domains.includes('inventory')) selected.add('inventory');
+  if (domains.includes('procurement') || domains.includes('suppliers')) selected.add('procurement');
+  if (domains.includes('audit') || domains.includes('security') || /\b(risk|variance|fraud|exception|discrepanc)/.test(normalized)) selected.add('audit');
+  if (domains.includes('staff')) selected.add('hr');
+  if (domains.includes('pos') || domains.includes('rooms') || /\b(revenue|sales|occupancy|booking)\b/.test(normalized)) selected.add('revenue');
+  if (intent === 'executive_summary' || /\b(director|executive|board|perfect|whole business|overview)\b/.test(normalized)) selected.add('executive');
+  if (intent === 'anomaly_report' || intent === 'financial_intelligence') selected.add('analytics');
+  if (domains.includes('general') || intent === 'chat') selected.add('operations');
+
+  if (!selected.size) selected.add('operations');
+
+  return Array.from(selected).map((key) => {
+    const profile = LINA_AGENT_PROFILES[key];
+    return {
+      key,
+      label: profile.label,
+      provider: profile.primary_provider,
+      provider_role: LINA_PROVIDER_ROLES[profile.primary_provider].role,
+      purpose: profile.purpose,
+    };
+  });
+}
+
+function explicitTablesFromMessage(input: string): string[] {
+  const text = input.toLowerCase();
+  return Array.from(LINA_READABLE_TABLES)
+    .filter((table) => {
+      const loose = table.replace(/_/g, ' ');
+      return text.includes(table.toLowerCase()) || text.includes(loose.toLowerCase());
+    })
+    .slice(0, 6);
+}
+
+async function linaReadTable(req: Request, table: string, options: LinaTableReadOptions = {}): Promise<LinaReadResult> {
+  const select = sanitizedSelect(options.select || '*');
+  const limit = Math.max(1, Math.min(Number(options.limit || 40) || 40, 150));
+  const generatedAt = new Date().toISOString();
+  const empty = (error: string, unavailable = false): LinaReadResult => ({
+    table,
+    rows: [],
+    row_count: 0,
+    select,
+    branch_scoped: false,
+    generated_at: generatedAt,
+    error,
+    unavailable,
+  });
+
+  if (!LINA_READABLE_TABLES.has(table)) {
+    return empty('Table is not available to Lina read tools');
+  }
+  if (!canReadSensitiveLinaTable(req, table)) {
+    return empty('Role is not allowed to read this Lina table');
+  }
+
+  try {
+    let query: any = supabase.from(table).select(select).limit(limit);
+    const filters = options.filters && typeof options.filters === 'object' ? options.filters : {};
+    Object.entries(filters).slice(0, 12).forEach(([key, value]) => {
+      if (!/^[a-zA-Z0-9_]+$/.test(key)) return;
+      if (Array.isArray(value)) {
+        query = query.in(key, value.slice(0, 50));
+      } else if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+        query = query.eq(key, value as any);
+      }
+    });
+
+    let branchScoped = false;
+    const branchId = linaBranchId(req);
+    if (!hasGlobalLinaRead(req) && branchId != null) {
+      if (table === 'users') {
+        query = query.eq('branch_id', branchId);
+        branchScoped = true;
+      } else if (LINA_BRANCH_SCOPED_TABLES.has(table)) {
+        const branchColumn = table === 'lina_remediation_proposals' ? 'affected_branch_id' : 'branch_id';
+        query = query.eq(branchColumn, branchId);
+        branchScoped = true;
+      }
+    }
+
+    if (options.orderBy?.column && /^[a-zA-Z0-9_]+$/.test(options.orderBy.column)) {
+      query = query.order(options.orderBy.column, { ascending: options.orderBy.ascending ?? false });
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      return empty(error.message, isSchemaUnavailable(error.message));
+    }
+
+    return {
+      table,
+      rows: data || [],
+      row_count: data?.length || 0,
+      select,
+      branch_scoped: branchScoped,
+      generated_at: generatedAt,
+    };
+  } catch (err: any) {
+    const message = err?.message || String(err);
+    return empty(message, isSchemaUnavailable(message));
+  }
+}
+
+function rowsFrom(reads: LinaReadResult[], table: string): any[] {
+  return reads.find((r) => r.table === table)?.rows || [];
+}
+
+function countByStatus(rows: any[]): Record<string, number> {
+  return rows.reduce((acc: Record<string, number>, row: any) => {
+    const key = `${row.status || row.payment_status || row.finance_status || 'unknown'}`;
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function countByField(rows: any[], field: string): Record<string, number> {
+  return rows.reduce((acc: Record<string, number>, row: any) => {
+    const key = `${row[field] || 'unknown'}`;
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function sumRows(rows: any[], keys: string[]): number {
+  return rows.reduce((sum, row) => {
+    const value = keys.map((k) => Number(row[k])).find((n) => Number.isFinite(n));
+    return sum + (value || 0);
+  }, 0);
+}
+
+function deriveBusinessMetrics(ctx: Record<string, any>, reads: LinaReadResult[]): Record<string, any> {
+  const branchStock = rowsFrom(reads, 'branch_stock');
+  const inventoryBalances = rowsFrom(reads, 'inventory_balances');
+  const movements = [...rowsFrom(reads, 'inventory_movements'), ...rowsFrom(reads, 'branch_stock_movements')];
+  const purchaseOrders = rowsFrom(reads, 'store_purchase_orders');
+  const grns = rowsFrom(reads, 'store_grn');
+  const supplierInvoices = rowsFrom(reads, 'store_supplier_invoices');
+  const supplierPayments = rowsFrom(reads, 'store_supplier_payments');
+  const branchPayments = rowsFrom(reads, 'branch_payments');
+  const rooms = rowsFrom(reads, 'rooms');
+  const bookings = rowsFrom(reads, 'bookings');
+  const attendance = rowsFrom(reads, 'staff_attendance');
+  const leaves = rowsFrom(reads, 'staff_leave');
+  const auditExceptions = rowsFrom(reads, 'audit_exceptions');
+  const authLogs = rowsFrom(reads, 'auth_logs');
+  const memories = rowsFrom(reads, 'lina_memories');
+  const dailyFinancialSnapshots = rowsFrom(reads, 'lina_daily_financial_snapshots');
+  const varianceFindings = rowsFrom(reads, 'lina_variance_findings');
+  const agentFindings = rowsFrom(reads, 'lina_agent_findings');
+
+  const getQty = (row: any): number => Number(row.available_quantity ?? row.quantity_available ?? row.quantity ?? row.current_quantity ?? 0) || 0;
+  const getReserved = (row: any): number => Number(row.reserved_quantity ?? row.reserved ?? 0) || 0;
+  const lowStock = branchStock.filter((row: any) => {
+    const qty = getQty(row);
+    const reorder = Number(row.reorder_level ?? row.min_quantity ?? row.minimum_quantity ?? 0) || 0;
+    return reorder > 0 && qty <= reorder;
+  });
+  const outOfStock = branchStock.filter((row: any) => getQty(row) <= 0);
+
+  const invoiceBalance = supplierInvoices.reduce((sum: number, row: any) => {
+    const balance = Number(row.balance_due ?? row.outstanding_amount ?? row.balance_amount);
+    if (Number.isFinite(balance)) return sum + balance;
+    return sum + Math.max(0, Number(row.total_amount ?? row.amount ?? 0) - Number(row.amount_paid ?? row.paid_amount ?? 0));
+  }, 0);
+
+  return {
+    inventory: {
+      branch_stock_rows: branchStock.length,
+      inventory_balance_rows: inventoryBalances.length,
+      low_stock_count: lowStock.length,
+      out_of_stock_count: outOfStock.length,
+      reserved_quantity: branchStock.reduce((s: number, row: any) => s + getReserved(row), 0),
+      recent_movement_count: movements.length,
+      low_stock_examples: lowStock.slice(0, 8).map((row: any) => ({
+        item: row.item_name || row.name || row.item_sku || row.sku || row.item_id,
+        sku: row.item_sku || row.sku || row.item_id,
+        quantity: getQty(row),
+        reorder_level: row.reorder_level ?? row.min_quantity,
+      })),
+      out_of_stock_examples: outOfStock.slice(0, 8).map((row: any) => row.item_name || row.item_sku || row.sku || row.item_id || row.id),
+    },
+    procurement: {
+      purchase_orders: purchaseOrders.length,
+      purchase_order_statuses: countByStatus(purchaseOrders),
+      purchase_order_value: sumRows(purchaseOrders, ['total_amount', 'grand_total', 'amount']),
+      grns: grns.length,
+      grn_statuses: countByStatus(grns),
+      supplier_invoices: supplierInvoices.length,
+      supplier_invoice_statuses: countByStatus(supplierInvoices),
+      supplier_payments: supplierPayments.length,
+      amount_billed: sumRows(supplierInvoices, ['total_amount', 'amount', 'grand_total']),
+      amount_paid: sumRows(supplierPayments, ['amount', 'payment_amount', 'paid_amount']),
+      balance_due: invoiceBalance,
+    },
+    finance: {
+      branch_payments: branchPayments.length,
+      branch_payment_statuses: countByStatus(branchPayments),
+      branch_payment_value: sumRows(branchPayments, ['amount', 'total_amount']),
+      cashier_7d_revenue: ctx.revenue?.total_7d || 0,
+      cashier_discrepancy_value: ctx.revenue?.discrepancy_amount_7d || 0,
+      void_bill_count: ctx.revenue?.void_bills_7d || 0,
+      void_bill_value: ctx.revenue?.void_amount_7d || 0,
+    },
+    rooms: {
+      room_rows: rooms.length,
+      room_statuses: countByStatus(rooms),
+      booking_rows: bookings.length,
+      booking_statuses: countByStatus(bookings),
+      snapshot_occupancy_pct: ctx.occupancy?.occupancy_pct || 0,
+    },
+    staff: {
+      attendance_rows: attendance.length,
+      attendance_statuses: countByStatus(attendance),
+      leave_rows: leaves.length,
+      leave_statuses: countByStatus(leaves),
+      snapshot_attendance_rate_pct: ctx.staff_today?.attendance_rate_pct || 0,
+    },
+    risk: {
+      audit_exception_rows: auditExceptions.length,
+      audit_statuses: countByStatus(auditExceptions),
+      suspicious_logins_loaded: authLogs.filter((row: any) => row.is_suspicious).length,
+      snapshot_critical_anomalies: ctx.anomalies?.critical_count || 0,
+      snapshot_high_anomalies: ctx.anomalies?.high_count || 0,
+    },
+    intelligence: {
+      memory_rows: memories.length,
+      memory_types: countByField(memories, 'memory_type'),
+      active_agent_findings: agentFindings.filter((row: any) => !['closed', 'resolved', 'dismissed'].includes(`${row.status || ''}`)).length,
+      findings_by_agent: countByField(agentFindings, 'agent_key'),
+      variance_findings: varianceFindings.length,
+      high_risk_variances: varianceFindings.filter((row: any) => ['high', 'critical'].includes(`${row.severity || ''}`)).length,
+      financial_snapshots: dailyFinancialSnapshots.length,
+      latest_financial_snapshot: dailyFinancialSnapshots[0] || null,
+    },
+  };
+}
+
+function compactReadForPrompt(read: LinaReadResult): Record<string, any> {
+  return {
+    table: read.table,
+    row_count: read.row_count,
+    branch_scoped: read.branch_scoped,
+    select: read.select,
+    error: read.error || null,
+    unavailable: read.unavailable || false,
+    rows: read.rows.slice(0, 25),
+  };
+}
+
+async function gatherBusinessEvidence(req: Request, message: string, ctx: Record<string, any>): Promise<Record<string, any>> {
+  const domains = classifyBusinessDomains(message);
+  const tablePlans: Array<{ table: string; options: LinaTableReadOptions; domains: LinaBusinessDomain[] }> = [
+    { table: 'branch_stock', domains: ['inventory'], options: { select: 'id,branch_id,item_id,item_sku,item_name,quantity,reserved_quantity,reorder_level,max_stock_level,last_stock_in,last_stock_out,updated_at', limit: 120, orderBy: { column: 'updated_at' } } },
+    { table: 'inventory_balances', domains: ['inventory'], options: { select: 'id,branch_id,location_id,item_id,current_quantity,reserved_quantity,damaged_quantity,expired_quantity,available_quantity,updated_at', limit: 80, orderBy: { column: 'updated_at' } } },
+    { table: 'inventory_movements', domains: ['inventory'], options: { select: 'id,branch_id,item_id,movement_type,quantity,source_location_id,destination_location_id,document_reference,reason,created_at', limit: 60, orderBy: { column: 'created_at' } } },
+    { table: 'branch_stock_movements', domains: ['inventory'], options: { select: 'id,branch_id,item_id,item_sku,item_name,movement_type,quantity,reference,reason,created_at', limit: 60, orderBy: { column: 'created_at' } } },
+    { table: 'inventory_alerts', domains: ['inventory', 'audit'], options: { select: 'id,branch_id,item_id,alert_type,severity,status,message,created_at', limit: 50, orderBy: { column: 'created_at' } } },
+    { table: 'simple_items', domains: ['inventory', 'pos'], options: { select: 'id,sku,item_name,description,category,store_type,cost_price,unit_of_measure,is_active', limit: 100 } },
+
+    { table: 'store_purchase_orders', domains: ['procurement', 'suppliers'], options: { select: 'id,branch_id,po_number,supplier_id,supplier_name,status,total_amount,created_at,expected_delivery_date,updated_at', limit: 80, orderBy: { column: 'updated_at' } } },
+    { table: 'store_grn', domains: ['procurement', 'suppliers'], options: { select: 'id,branch_id,grn_number,po_id,supplier_id,supplier_name,status,total_amount,invoice_number,delivery_note_number,received_at,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'store_supplier_invoices', domains: ['procurement', 'suppliers', 'finance'], options: { select: 'id,branch_id,invoice_number,po_id,grn_id,supplier_id,supplier_name,status,total_amount,amount_paid,balance_due,due_date,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'store_supplier_payments', domains: ['procurement', 'suppliers', 'finance'], options: { select: 'id,branch_id,payment_number,supplier_id,supplier_name,invoice_id,po_id,grn_id,status,amount,payment_method,paid_at,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'branch_payments', domains: ['finance', 'suppliers'], options: { select: 'id,branch_id,payment_number,category,payment_method,payee_name,amount,status,po_id,grn_id,invoice_id,created_at,updated_at', limit: 80, orderBy: { column: 'created_at' } } },
+
+    { table: 'cashier_shifts', domains: ['finance', 'pos'], options: { select: 'id,branch_id,status,total_sales,discrepancy_amount,opened_at,closed_at', limit: 80, orderBy: { column: 'opened_at' } } },
+    { table: 'pos_transactions', domains: ['finance', 'pos'], options: { select: 'id,branch_id,amount,total,payment_method,source,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'restaurant_orders', domains: ['finance', 'pos'], options: { select: 'id,branch_id,total_amount,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'bar_orders', domains: ['finance', 'pos'], options: { select: 'id,branch_id,total,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'expenses', domains: ['finance'], options: { select: 'id,branch_id,amount,status,category,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+
+    { table: 'rooms', domains: ['rooms'], options: { select: 'id,branch_id,room_number,room_type,type,status,hk_status,floor,updated_at', limit: 120, orderBy: { column: 'updated_at' } } },
+    { table: 'bookings', domains: ['rooms', 'finance'], options: { select: 'id,branch_id,confirmation_number,guest_id,room_id,status,check_in,check_out,total_amount,payment_status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'conference_bookings', domains: ['rooms', 'finance'], options: { select: 'id,branch_id,booking_number,client_name,status,total_amount,event_date,created_at', limit: 60, orderBy: { column: 'created_at' } } },
+    { table: 'catering_bookings', domains: ['rooms', 'finance'], options: { select: 'id,branch_id,booking_number,client_name,status,total_amount,event_date,created_at', limit: 60, orderBy: { column: 'created_at' } } },
+
+    { table: 'staff_attendance', domains: ['staff'], options: { select: 'id,staff_id,branch_id,status,attendance_date,clock_in,clock_out,overtime_hours,shift_type', limit: 120, orderBy: { column: 'attendance_date' } } },
+    { table: 'staff_leave', domains: ['staff'], options: { select: 'id,staff_id,branch_id,leave_type,start_date,end_date,status,days_requested,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'staff_payroll', domains: ['staff', 'finance'], options: { select: 'id,staff_id,branch_id,month,year,net_salary,base_salary,overtime_hours,bonuses,deductions,status', limit: 80 } },
+    { table: 'users', domains: ['staff', 'security'], options: { select: 'id,first_name,last_name,email,role,branch_id,status,created_at,force_logout_at', limit: 100, orderBy: { column: 'created_at' } } },
+
+    { table: 'audit_exceptions', domains: ['audit', 'finance', 'pos'], options: { select: 'id,branch_id,exception_type,severity,description,amount,status,detected_at', limit: 100, orderBy: { column: 'detected_at' } } },
+    { table: 'audit_trail', domains: ['audit'], options: { select: 'id,user_id,action,entity_type,entity_id,performed_at', limit: 100, orderBy: { column: 'performed_at' } } },
+    { table: 'auth_logs', domains: ['security', 'audit'], options: { select: 'email,ip_address,status,is_suspicious,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'impersonation_sessions', domains: ['security', 'audit'], options: { select: 'id,superadmin_id,impersonated_user_id,started_at,ended_at', limit: 40, orderBy: { column: 'started_at' } } },
+
+    { table: 'lina_memories', domains: ['general', 'finance', 'inventory', 'procurement', 'suppliers', 'pos', 'rooms', 'staff', 'audit', 'security'], options: { select: 'id,branch_id,memory_type,subject_type,subject_id,title,summary,severity,confidence,status,last_seen_at,source_module', limit: 80, orderBy: { column: 'last_seen_at' } } },
+    { table: 'lina_daily_financial_snapshots', domains: ['general', 'finance', 'suppliers'], options: { select: 'id,branch_id,snapshot_date,revenue_total,expense_total,cash_total,card_total,mpesa_total,supplier_liability,payroll_cost,inventory_value,generated_at', limit: 40, orderBy: { column: 'snapshot_date' } } },
+    { table: 'lina_variance_findings', domains: ['general', 'finance', 'inventory', 'audit', 'staff', 'suppliers'], options: { select: 'id,branch_id,finding_date,variance_type,expected_amount,actual_amount,variance_amount,likely_cause,confidence,severity,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'lina_agent_findings', domains: ['general', 'finance', 'inventory', 'procurement', 'suppliers', 'pos', 'rooms', 'staff', 'audit', 'security'], options: { select: 'id,agent_key,branch_id,subject_type,subject_id,title,severity,confidence,recommended_action,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+  ];
+
+  const explicitTables = explicitTablesFromMessage(message);
+  const selectedPlans = tablePlans.filter((plan) =>
+    plan.domains.some((domain) => domains.includes(domain)) || explicitTables.includes(plan.table),
+  );
+  explicitTables.forEach((table) => {
+    if (!selectedPlans.some((plan) => plan.table === table)) {
+      selectedPlans.push({ table, domains: ['general'], options: { select: '*', limit: 50 } });
+    }
+  });
+
+  const reads = await Promise.all(selectedPlans.map((plan) => linaReadTable(req, plan.table, plan.options)));
+  const intent = classifyLinaIntent(message);
+  const agents = selectLinaAgents(domains, intent, message);
+  const metrics = deriveBusinessMetrics(ctx, reads);
+  const evidence = {
+    query: message,
+    domains,
+    intent,
+    agents,
+    actor: {
+      role: linaRole(req),
+      branch_id: linaBranchId(req),
+      global_read: hasGlobalLinaRead(req),
+    },
+    metrics,
+    reads: reads.map(compactReadForPrompt),
+    generated_at: new Date().toISOString(),
+  };
+
+  await writeLinaAgentLog(req, {
+    action: 'business_evidence_read',
+    tool_name: 'business.evidence_reader',
+    risk_classification: 'READ_ONLY',
+    input: { message, domains, intent, agents: agents.map((agent) => agent.key), tables: reads.map((r) => r.table) },
+    output: {
+      tables: reads.length,
+      rows: reads.reduce((sum, read) => sum + read.row_count, 0),
+      unavailable: reads.filter((read) => read.unavailable).map((read) => ({ table: read.table, error: read.error })),
+    },
+    status: reads.some((read) => read.row_count > 0) ? 'succeeded' : 'completed_no_rows',
+  });
+
+  return evidence;
+}
+
+function localBusinessGuruAnswer(_message: string, ctx: Record<string, any>, evidence: any, reason: string): string {
+  const domains: LinaBusinessDomain[] = evidence.domains || ['general'];
+  const metrics = evidence.metrics || {};
+  const tables = evidence.reads || [];
+  const agents = Array.isArray(evidence.agents) ? evidence.agents : [];
+  const unavailable = tables.filter((r: any) => r.error);
+  const sections: string[] = [];
+
+  sections.push(`## Lina Business Answer`);
+  sections.push('');
+  sections.push(`### Executive Summary`);
+  sections.push(`I read the live ERP tables for this request in **READ_ONLY** mode. Query focus: **${domains.join(', ')}**. ${reason ? `AI route: ${reason}` : ''}`.trim());
+
+  if (agents.length) {
+    sections.push('');
+    sections.push(`### Lina Agents Routed`);
+    agents.slice(0, 6).forEach((agent: any) => {
+      sections.push(`- **${agent.label || agent.key}** using **${agent.provider || 'backend'}** for ${agent.provider_role || 'evidence-first analysis'}.`);
+    });
+  }
+
+  if (domains.includes('inventory')) {
+    const inv = metrics.inventory || {};
+    sections.push('');
+    sections.push(`### Inventory Logic`);
+    sections.push(`- Branch stock rows read: **${inv.branch_stock_rows || 0}**; movement rows read: **${inv.recent_movement_count || 0}**.`);
+    sections.push(`- Low-stock items: **${inv.low_stock_count || 0}**; out-of-stock items: **${inv.out_of_stock_count || 0}**; reserved quantity loaded: **${inv.reserved_quantity || 0}**.`);
+    sections.push(`- Rule applied: **Available = Current - Reserved - Damaged - Expired** where those fields are visible.`);
+    if (Array.isArray(inv.low_stock_examples) && inv.low_stock_examples.length) {
+      sections.push(`- Examples needing reorder: ${inv.low_stock_examples.map((i: any) => `${i.item || i.sku} (${i.quantity}/${i.reorder_level})`).join(', ')}.`);
+    }
+  }
+
+  if (domains.includes('procurement') || domains.includes('suppliers')) {
+    const p = metrics.procurement || {};
+    sections.push('');
+    sections.push(`### Procurement / Supplier Logic`);
+    sections.push(`- POs read: **${p.purchase_orders || 0}** worth **${formatKes(p.purchase_order_value || 0)}**.`);
+    sections.push(`- GRNs read: **${p.grns || 0}**; supplier invoices: **${p.supplier_invoices || 0}**; supplier payments: **${p.supplier_payments || 0}**.`);
+    sections.push(`- Billed: **${formatKes(p.amount_billed || 0)}**; paid: **${formatKes(p.amount_paid || 0)}**; balance due: **${formatKes(p.balance_due || 0)}**.`);
+    sections.push(`- Rule applied: PO receipt status must come from GRN quantities; finance status is computed from linked invoice/payment settlement.`);
+  }
+
+  if (domains.includes('finance') || domains.includes('pos')) {
+    const f = metrics.finance || {};
+    sections.push('');
+    sections.push(`### Finance / POS Logic`);
+    sections.push(`- Cashier revenue in current snapshot: **${formatKes(f.cashier_7d_revenue || 0)}**.`);
+    sections.push(`- Cashier discrepancy exposure: **${formatKes(f.cashier_discrepancy_value || 0)}**; void bills: **${f.void_bill_count || 0}** worth **${formatKes(f.void_bill_value || 0)}**.`);
+    sections.push(`- Branch payments read: **${f.branch_payments || 0}** worth **${formatKes(f.branch_payment_value || 0)}**.`);
+  }
+
+  if (domains.includes('rooms')) {
+    const rooms = metrics.rooms || {};
+    sections.push('');
+    sections.push(`### Rooms / Bookings Logic`);
+    sections.push(`- Rooms read: **${rooms.room_rows || 0}**; booking rows read: **${rooms.booking_rows || 0}**; snapshot occupancy: **${rooms.snapshot_occupancy_pct || 0}%**.`);
+    sections.push(`- Room statuses: ${JSON.stringify(rooms.room_statuses || {})}; booking statuses: ${JSON.stringify(rooms.booking_statuses || {})}.`);
+  }
+
+  if (domains.includes('staff')) {
+    const staff = metrics.staff || {};
+    sections.push('');
+    sections.push(`### Staff Logic`);
+    sections.push(`- Attendance rows read: **${staff.attendance_rows || 0}**; leave rows read: **${staff.leave_rows || 0}**; snapshot attendance rate: **${staff.snapshot_attendance_rate_pct || 0}%**.`);
+    sections.push(`- Attendance statuses: ${JSON.stringify(staff.attendance_statuses || {})}; leave statuses: ${JSON.stringify(staff.leave_statuses || {})}.`);
+  }
+
+  if (domains.includes('audit') || domains.includes('security')) {
+    const risk = metrics.risk || {};
+    sections.push('');
+    sections.push(`### Audit / Security Logic`);
+    sections.push(`- Audit exceptions loaded: **${risk.audit_exception_rows || 0}**; suspicious logins loaded: **${risk.suspicious_logins_loaded || 0}**.`);
+    sections.push(`- Snapshot anomaly flags: **${risk.snapshot_critical_anomalies || 0} critical**, **${risk.snapshot_high_anomalies || 0} high**.`);
+  }
+
+  const intelligence = metrics.intelligence || {};
+  if ((intelligence.memory_rows || 0) > 0 || (intelligence.active_agent_findings || 0) > 0 || (intelligence.variance_findings || 0) > 0) {
+    sections.push('');
+    sections.push(`### Lina Memory / Findings`);
+    sections.push(`- Memory records loaded: **${intelligence.memory_rows || 0}** by type ${JSON.stringify(intelligence.memory_types || {})}.`);
+    sections.push(`- Active AI findings: **${intelligence.active_agent_findings || 0}** by agent ${JSON.stringify(intelligence.findings_by_agent || {})}.`);
+    sections.push(`- Variance findings: **${intelligence.variance_findings || 0}**; high/critical: **${intelligence.high_risk_variances || 0}**.`);
+    if (intelligence.latest_financial_snapshot) {
+      const snapshot = intelligence.latest_financial_snapshot;
+      sections.push(`- Latest financial snapshot: **${snapshot.snapshot_date || snapshot.generated_at}**, revenue **${formatKes(snapshot.revenue_total || 0)}**, supplier liability **${formatKes(snapshot.supplier_liability || 0)}**, inventory value **${formatKes(snapshot.inventory_value || 0)}**.`);
+    }
+  }
+
+  sections.push('');
+  sections.push(`### Evidence`);
+  sections.push(tables.length
+    ? tables.map((r: any) => `- ${r.table}: ${r.row_count} row(s)${r.branch_scoped ? ' (branch-scoped)' : ''}${r.error ? `; warning: ${r.error}` : ''}`).join('\n')
+    : '- No targeted table reads were required.');
+
+  sections.push('');
+  sections.push(`### Risks`);
+  if (unavailable.length) {
+    sections.push(`- **MEDIUM** Some expected ERP tables/columns were not readable: ${unavailable.map((r: any) => r.table).join(', ')}. This may mean migrations are not applied or schema cache is stale.`);
+  } else {
+    sections.push('- **LOW** Lina completed the read without schema/tool errors.');
+  }
+
+  sections.push('');
+  sections.push(`### Recommended Actions`);
+  sections.push('1. Use the evidence above as the operational truth for this question.');
+  sections.push('2. If a correction is needed, create a Lina remediation proposal so approval, execution, and verification are logged.');
+  sections.push('3. Re-run after migrations or schema cache refresh if any table is reported unavailable.');
+
+  sections.push('');
+  sections.push(`### Approval Requirement`);
+  sections.push('READ_ONLY. No business-state mutation was executed.');
+
+  sections.push('');
+  sections.push(`### Execution Status`);
+  sections.push('Database evidence read completed through Lina backend tools only.');
+
+  sections.push('');
+  sections.push(`### Verification Status`);
+  sections.push(`Verified against live read bundle at ${evidence.generated_at || ctx.snapshot_time || new Date().toISOString()}.`);
+
+  return sections.join('\n');
 }
 
 function sanitizedSelect(value: any): string {
@@ -847,7 +1523,7 @@ function normalizeSafeJob(action: string, target?: string): string {
   return 'verify_system_health';
 }
 
-function linaUser(req: Request) {
+function linaUser(req: Request): { id: string | null; role: string | null; branch_id?: string | number | null } {
   return {
     id: req.user?.id || null,
     role: req.user?.role || null,
@@ -870,7 +1546,7 @@ async function writeLinaAgentLog(req: Request | null, payload: {
   input?: Record<string, any>;
   output?: Record<string, any>;
   status?: string;
-}) {
+}): Promise<void> {
   const user = req ? linaUser(req) : { id: null, role: null };
   await supabase.from('lina_agent_logs').insert({
     actor_id: user.id,
@@ -1421,6 +2097,7 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
 
   try {
     const ctx = await gatherSystemContext();
+    const evidence = await gatherBusinessEvidence(req, message, ctx);
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1430,16 +2107,19 @@ export const chat = async (req: Request, res: Response): Promise<void> => {
     const historyBlock = history.slice(-12).map((h) => `${h.role.toUpperCase()}: ${h.content}`).join('\n');
     const prompt = `${GROQ_CHAT_SYSTEM}${buildContextBlock(ctx)}
 
+TARGETED LIVE DATABASE EVIDENCE:
+${JSON.stringify(evidence, null, 2)}
+
 RECENT CONVERSATION:
 ${historyBlock || '(none)'}
 
 USER REQUEST:
 ${message}
 
-Respond using Lina Core OS output style. If the user asks for action, classify it as READ_ONLY, SAFE_AUTO, APPROVAL_REQUIRED, or MANUAL_ONLY and route execution through Fix Center rather than pretending to mutate data.`;
+Respond using Lina Core OS output style. Answer from TARGETED LIVE DATABASE EVIDENCE first, then from the broader LIVE SYSTEM CONTEXT. If a table read reports an error or zero rows, say that plainly. If the user asks for action, classify it as READ_ONLY, SAFE_AUTO, APPROVAL_REQUIRED, or MANUAL_ONLY and route execution through Fix Center rather than pretending to mutate data.`;
 
     const routed = await generateRoutedAnalysis(req, intent, prompt, ctx, normalizeActionClass(null, message), 1200);
-    const fullText = routed.text || localExecutiveSummary(ctx, routed.reason).summary;
+    const fullText = routed.text || localBusinessGuruAnswer(message, ctx, evidence, routed.reason);
     const chunks = fullText.match(/[\s\S]{1,900}/g) || [fullText];
     for (const chunk of chunks) {
       res.write(`data: ${JSON.stringify({ type: 'delta', text: chunk, model: 'LINA AI' })}\n\n`);
@@ -1451,7 +2131,8 @@ Respond using Lina Core OS output style. If the user asks for action, classify i
     if (!res.headersSent) {
       try {
         const ctx = await gatherSystemContext();
-        const fallback = localExecutiveSummary(ctx, aiFailureReason(err)).summary;
+        const evidence = await gatherBusinessEvidence(req, message, ctx);
+        const fallback = localBusinessGuruAnswer(message, ctx, evidence, aiFailureReason(err));
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
@@ -1893,6 +2574,20 @@ export const getModelRouterStatus = async (req: Request, res: Response): Promise
         audit: 'logged',
         tools: ['database reads', 'audit trails', 'workflow approvals', 'safe job execution', 'verification'],
       },
+      provider_roles: LINA_PROVIDER_ROLES,
+      agents: Object.entries(LINA_AGENT_PROFILES).map(([key, profile]) => ({
+        key,
+        label: profile.label,
+        provider: profile.primary_provider,
+        provider_role: LINA_PROVIDER_ROLES[profile.primary_provider].role,
+        purpose: profile.purpose,
+      })),
+      puter_js: {
+        boundary: 'client_side_only',
+        docs: 'https://docs.puter.com/',
+        allowed_for: LINA_PROVIDER_ROLES.puter.allowed_for,
+        not_allowed_for: LINA_PROVIDER_ROLES.puter.not_allowed_for,
+      },
       workflow: sampleIntents.map((intent) => ({
         intent,
         agent: 'LINA AI',
@@ -1908,9 +2603,11 @@ export const getLinaTools = async (req: Request, res: Response): Promise<void> =
     success: true,
     data: {
       tools: [
+        { name: 'business.evidence_reader', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/chat', purpose: 'Automatically gathers role-scoped ERP evidence before Lina answers business questions.' },
         { name: 'db.read_table', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-table', tables: Array.from(LINA_READABLE_TABLES).sort() },
         { name: 'db.run_readonly_sql', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-only-sql', restricted_to: Array.from(LINA_GLOBAL_READ_ROLES).sort() },
         { name: 'model.router', action_class: 'READ_ONLY', endpoint: 'GET /api/lina/model-router' },
+        { name: 'client.puter_quick_assist', action_class: 'CLIENT_SIDE_ONLY', endpoint: 'frontend Puter.js helper', purpose: 'Autocomplete, draft descriptions, form copy, and text cleanup only. No ERP decisions or database reads.' },
         { name: 'remediation.create_proposal', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/remediate' },
         { name: 'remediation.approve', action_class: 'APPROVAL_REQUIRED', endpoint: 'POST /api/lina/remediations/:id/approve' },
         { name: 'remediation.execute_safe_job', action_class: 'SAFE_AUTO', endpoint: 'POST /api/lina/remediations/:id/execute' },
@@ -1922,6 +2619,7 @@ export const getLinaTools = async (req: Request, res: Response): Promise<void> =
         service_role_location: 'backend_only',
         branch_scope_enforced: true,
         sensitive_tables_require_leadership: true,
+        puter_js_boundary: 'client-only helper; never ERP truth, payment approval, audit conclusion, or inventory mutation',
       },
     },
   });
@@ -1930,48 +2628,24 @@ export const getLinaTools = async (req: Request, res: Response): Promise<void> =
 export const readLinaTableTool = async (req: Request, res: Response): Promise<void> => {
   try {
     const table = `${req.body?.table || ''}`.trim();
-    if (!LINA_READABLE_TABLES.has(table)) {
-      res.status(400).json({ success: false, message: 'Table is not available to Lina read tools' });
-      return;
-    }
-    if (!canReadSensitiveLinaTable(req, table)) {
-      res.status(403).json({ success: false, message: 'Role is not allowed to read this Lina tool table' });
-      return;
-    }
-
     const limit = Math.max(1, Math.min(Number(req.body?.limit || 50) || 50, 100));
     const select = sanitizedSelect(req.body?.select);
     const filters = req.body?.filters && typeof req.body.filters === 'object' ? req.body.filters : {};
-    let query: any = supabase.from(table).select(select).limit(limit);
-
-    Object.entries(filters).slice(0, 10).forEach(([key, value]) => {
-      if (!/^[a-zA-Z0-9_]+$/.test(key)) return;
-      if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
-        query = query.eq(key, value as any);
-      }
-    });
-
-    const role = `${req.user?.role || ''}`;
-    const branchId = req.user?.branch_id ?? req.user?.branchId;
-    if (!LINA_GLOBAL_READ_ROLES.has(role) && branchId != null) {
-      if (table === 'users') query = query.eq('branch_id', branchId);
-      if (LINA_BRANCH_SCOPED_TABLES.has(table)) {
-        const branchColumn = table === 'lina_remediation_proposals' ? 'affected_branch_id' : 'branch_id';
-        query = query.eq(branchColumn, branchId);
-      }
+    const result = await linaReadTable(req, table, { select, filters, limit });
+    if (result.error && !result.unavailable) {
+      const status = /not available/i.test(result.error) ? 400 : /not allowed/i.test(result.error) ? 403 : 500;
+      res.status(status).json({ success: false, message: result.error });
+      return;
     }
-
-    const { data, error } = await query;
-    if (error) throw error;
     await writeLinaAgentLog(req, {
       action: 'tool_read_table',
       tool_name: 'db.read_table',
       risk_classification: 'READ_ONLY',
       input: { table, select, filters, limit },
-      output: { rows: data?.length || 0 },
-      status: 'succeeded',
+      output: { rows: result.row_count, error: result.error || null },
+      status: result.error ? 'completed_with_warning' : 'succeeded',
     });
-    res.json({ success: true, data: { table, rows: data || [], row_count: data?.length || 0, generated_at: new Date().toISOString() } });
+    res.json({ success: true, data: result });
   } catch (err: any) {
     logger.error('Lina read table tool error', err);
     await writeLinaAgentLog(req, {

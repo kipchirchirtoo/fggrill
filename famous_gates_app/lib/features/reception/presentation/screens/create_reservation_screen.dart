@@ -444,7 +444,7 @@ class _CreateReservationScreenState
                   Icons.bed,
                   color: isSelected ? AppColors.kPrimary : null,
                 ),
-                title: Text('Room ${room.number}'),
+                title: Text('Room ${room.displayNumber}'),
                 subtitle: Text(
                     '${room.type ?? "Standard"} • KES ${room.pricePerNight?.toStringAsFixed(0) ?? "0"}/night'),
                 trailing: isSelected

@@ -95,6 +95,82 @@ const num = (v: any): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const firstNumber = (row: any, keys: string[]): number => {
+  for (const key of keys) {
+    const value = row?.[key] ?? row?.item?.[key];
+    if (value === null || value === undefined || `${value}`.trim() === '') continue;
+    const parsed = Number(`${value}`.replace(/,/g, ''));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+};
+
+const firstText = (row: any, keys: string[], fallback = '—'): string => {
+  for (const key of keys) {
+    const value = row?.[key] ?? row?.item?.[key];
+    if (value !== null && value !== undefined && `${value}`.trim() !== '' && `${value}` !== 'null') {
+      return `${value}`.trim();
+    }
+  }
+  return fallback;
+};
+
+function normalizeStockTakeItem(row: any): any {
+  const sku = firstText(row, ['item_sku', 'sku', 'item_code', 'id'], '');
+  const name = firstText(row, ['item_name', 'name', 'description'], sku || 'Unknown Item');
+  const additions =
+    firstNumber(row, ['additions', 'adds', 'added_quantity']) +
+    firstNumber(row, ['transfers_in', 'received_quantity']) +
+    firstNumber(row, ['production_quantity', 'produced_quantity']);
+  const issued =
+    firstNumber(row, ['issued_quantity', 'sales_quantity', 'sold_quantity', 'quantity_issued']) +
+    firstNumber(row, ['transfers_out', 'wastage_quantity']);
+  let opening = firstNumber(row, ['opening_stock', 'opening_quantity', 'opening']);
+  const systemQty = firstNumber(row, ['system_closing_stock', 'system_quantity', 'current_stock', 'quantity']);
+  if (opening === 0 && additions === 0 && issued === 0 && systemQty > 0) opening = systemQty;
+  const systemClosing = systemQty || Math.max(opening + additions - issued, 0);
+  const physicalRaw = row?.counted_quantity ?? row?.physical_quantity ?? row?.actual_quantity ?? row?.closing_quantity ?? row?.closing_stock;
+  const counted = physicalRaw === null || physicalRaw === undefined || `${physicalRaw}`.trim() === ''
+    ? null
+    : num(physicalRaw);
+  const cost = firstNumber(row, ['cost_price', 'unit_cost', 'buying_price', 'cost']);
+  const selling = firstNumber(row, ['selling_price', 'unit_price', 'price', 'retail_price']);
+  const variance = counted === null
+    ? null
+    : (row?.variance === null || row?.variance === undefined ? counted - systemClosing : num(row.variance));
+  const variancePct = variance === null
+    ? null
+    : systemClosing === 0
+      ? (variance === 0 ? 0 : 100)
+      : Number(((variance / systemClosing) * 100).toFixed(2));
+  return {
+    ...row,
+    item_name: name,
+    item_sku: sku || row.item_sku,
+    category: firstText(row, ['category', 'store_type'], 'Uncategorised'),
+    unit: firstText(row, ['unit', 'unit_of_measure'], 'units'),
+    opening_stock: opening,
+    additions,
+    transfers_in: firstNumber(row, ['transfers_in']),
+    transfers_out: firstNumber(row, ['transfers_out']),
+    production_quantity: firstNumber(row, ['production_quantity', 'produced_quantity']),
+    sales_quantity: firstNumber(row, ['sales_quantity', 'sold_quantity']),
+    issued_quantity: issued,
+    wastage_quantity: firstNumber(row, ['wastage_quantity']),
+    returns_quantity: firstNumber(row, ['returns_quantity']),
+    system_closing_stock: systemClosing,
+    physical_quantity: counted,
+    counted_quantity: counted,
+    variance,
+    variance_percentage: variancePct,
+    variance_value: variance === null ? null : variance * cost,
+    variance_severity: row.variance_severity || (variancePct === null ? 'pending' : Math.abs(variancePct) >= 10 ? 'red' : Math.abs(variancePct) >= 3 ? 'amber' : 'green'),
+    cost_price: cost,
+    selling_price: selling,
+    variance_reason: row.variance_reason || row.reason || row.notes || null,
+  };
+}
+
 const money = (n: number | null | undefined): string =>
   `KES ${num(n).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -439,7 +515,8 @@ function ensureSpace(doc: PDFKit.PDFDocument, y: number, needed: number, title: 
 // ── PDF: main entry point ──────────────────────────────────────────────────────
 export async function generateBranchStockTakeReportPDF(res: Response, data: StockTakeReportData): Promise<void> {
   const family = stockTakeFamily(data.header?.store_type);
-  const t = computeTotals(data.items);
+  const reportItems = data.items.map(normalizeStockTakeItem);
+  const t = computeTotals(reportItems);
 
   const variantTitle =
     data.variant === 'accountant_review' ? 'STOCK TAKE — BRANCH ACCOUNTANT REVIEW'
@@ -484,7 +561,7 @@ export async function generateBranchStockTakeReportPDF(res: Response, data: Stoc
   y = sectionTitle(doc, y, family === 'bar' ? 'Bar Stock Detail' : family === 'kitchen' ? 'Kitchen Production Detail' : 'Stock Take Detail');
   const cols = detailColumns(family);
 
-  const groups = data.items.reduce((acc: Record<string, any[]>, it) => {
+  const groups = reportItems.reduce((acc: Record<string, any[]>, it) => {
     const cat = it.category || 'Uncategorised';
     (acc[cat] = acc[cat] || []).push(it);
     return acc;
@@ -505,7 +582,7 @@ export async function generateBranchStockTakeReportPDF(res: Response, data: Stoc
     }
     y += 6;
   }
-  if (data.items.length === 0) {
+  if (reportItems.length === 0) {
     doc.fontSize(9).fillColor(SECONDARY).text('No items recorded for this stock take.', 30, y + 6);
     y += 24;
   }
@@ -564,10 +641,10 @@ export async function generateBranchStockTakeReportPDF(res: Response, data: Stoc
 
   // Kitchen production efficiency
   if (family === 'kitchen') {
-    const produced = data.items.reduce((s, it) => s + num(it.production_quantity), 0);
-    const sold = data.items.reduce((s, it) => s + num(it.sales_quantity), 0);
-    const wastage = data.items.reduce((s, it) => s + num(it.wastage_quantity), 0);
-    const issued = data.items.reduce((s, it) => s + num(it.issued_quantity), 0);
+    const produced = reportItems.reduce((s, it) => s + num(it.production_quantity), 0);
+    const sold = reportItems.reduce((s, it) => s + num(it.sales_quantity), 0);
+    const wastage = reportItems.reduce((s, it) => s + num(it.wastage_quantity), 0);
+    const issued = reportItems.reduce((s, it) => s + num(it.issued_quantity), 0);
     const yieldPct = produced > 0 ? (sold / produced) * 100 : 0;
     const wastePct = produced > 0 ? (wastage / produced) * 100 : 0;
     y = ensureSpace(doc, y, 80, variantTitle, subtitle);
@@ -671,7 +748,8 @@ function severityFill(sev: string): { bg: string; tx: string } {
 
 export async function generateBranchStockTakeWorkbook(res: Response, data: StockTakeReportData): Promise<void> {
   const family = stockTakeFamily(data.header?.store_type);
-  const t = computeTotals(data.items);
+  const reportItems = data.items.map(normalizeStockTakeItem);
+  const t = computeTotals(reportItems);
   const wb = new ExcelJS.Workbook();
   wb.creator = COMPANY_NAME;
   wb.created = new Date();
@@ -729,64 +807,156 @@ export async function generateBranchStockTakeWorkbook(res: Response, data: Stock
       ws.getCell(`B${r}`).value = v || '—';
       r++;
     });
-  }
 
-  // ── Sheet 2: Branch Stock Take Details ──
-  {
-    const ws = wb.addWorksheet('Stock Take Details', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1 } });
-    const r0 = brandSheetHeader(wb, ws, 'BRANCH STOCK TAKE DETAILS', data, 'N');
-    const headers = ['#', 'Item', 'SKU', 'Category', 'UoM', 'Opening', 'Additions', 'Cost Price', 'Issued/Sales', 'Expected', 'Physical', 'Variance Qty', 'Variance %', 'Variance Value'];
-    const hr = ws.getRow(r0);
-    hr.values = headers;
-    styleColHeader(hr);
-    ws.views = [{ state: 'frozen', ySplit: r0 }];
-    const widths = [5, 30, 16, 18, 8, 11, 11, 13, 12, 12, 12, 12, 11, 14];
-    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-
-    let rr = r0 + 1;
-    const firstData = rr;
-    data.items.forEach((it, i) => {
-      const counted = it.counted_quantity ?? it.physical_quantity;
-      const sev = severityFill(it.variance_severity);
-      const row = ws.getRow(rr);
-      row.values = [
-        i + 1, it.item_name || '—', it.item_sku || '—', it.category || '—', it.unit || '—',
-        num(it.opening_stock), num(it.additions), num(it.cost_price), num(it.issued_quantity),
-        num(it.system_closing_stock), counted === null ? null : num(counted),
-        it.variance === null ? null : num(it.variance),
-        it.variance_percentage === null ? null : num(it.variance_percentage),
-        it.variance_value === null ? null : num(it.variance_value),
-      ];
-      row.eachCell((cell: any, col: number) => {
+    r += 2;
+    const previewTitle = ws.getCell(`A${r}`);
+    previewTitle.value = 'Stock Lines Preview';
+    previewTitle.font = { name: 'Calibri', bold: true, size: 11, color: { argb: X_WHITE } };
+    previewTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: X_HEADER } };
+    ws.mergeCells(`A${r}:D${r}`);
+    r++;
+    const previewHead = ws.getRow(r);
+    previewHead.values = ['Item', 'SKU', 'Expected Qty', 'Cost Price'];
+    styleColHeader(previewHead);
+    r++;
+    reportItems.slice(0, 12).forEach((item, i) => {
+      const row = ws.getRow(r);
+      row.values = [item.item_name || '—', item.item_sku || '—', num(item.system_closing_stock), num(item.cost_price)];
+      row.getCell(3).numFmt = QTY_FMT;
+      row.getCell(4).numFmt = KES_FMT;
+      row.eachCell((cell: any) => {
         cell.font = { name: 'Calibri', size: 9 };
         if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: X_ZEBRA } };
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFD0D7E0' } } };
-        if ([6, 7, 9, 10, 11].includes(col)) cell.numFmt = QTY_FMT;
-        if ([8, 14].includes(col)) cell.numFmt = KES_FMT;
-        if (col === 13) cell.numFmt = PCT_FMT;
-        if (col === 12) cell.numFmt = '+#,##0.00;-#,##0.00;0';
-        if ([12, 13, 14].includes(col)) {
-          cell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: sev.tx } };
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: sev.bg } };
-        }
       });
+      r++;
+    });
+  }
+
+  // ── Sheet 2: Stock Take Worksheet (matches PDF template) ──
+  // Columns: # | Items (name+SKU) | O/s | Adds | Total | C/s | Sales | Unit Price | Amount | Buying Price | Opening Sales | Closing Sales | Added Stock | Notes
+  {
+    const ws = wb.addWorksheet('Stock Take Worksheet', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, paperSize: 9 } });
+    const r0 = brandSheetHeader(wb, ws, 'STOCK TAKE WORKSHEET', data, 'N');
+    //                           A   B   C     D      E      F     G       H           I        J              K               L               M              N
+    const colWidths =          [ 4, 32,  9,    9,     9,    10,    9,     12,          12,      13,            13,             13,             13,            24 ];
+    const headers = ['#', 'Items', 'O/s', 'Adds', 'Total', 'C/s', 'Sales', 'Unit Price', 'Amount', 'Buying Price', 'Opening Sales', 'Closing Sales', 'Added Stock', 'Notes'];
+    colWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    // Header row
+    const hr = ws.getRow(r0);
+    hr.values = headers;
+    hr.height = 24;
+    hr.eachCell((cell: any, col: number) => {
+      cell.font = { name: 'Calibri', bold: true, size: 9, color: { argb: X_WHITE } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: X_HEADER } };
+      cell.alignment = { horizontal: col === 2 ? 'left' : 'center', vertical: 'middle', wrapText: true };
+      cell.border = { top: { style: 'thin', color: { argb: 'FFB0BEC5' } }, bottom: { style: 'medium', color: { argb: X_GOLD } }, left: { style: 'hair', color: { argb: 'FF90A4AE' } }, right: { style: 'hair', color: { argb: 'FF90A4AE' } } };
+    });
+
+    // C/s column header: gold accent to mark it as input field
+    const csHdr = hr.getCell(6);
+    csHdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: X_GOLD } };
+    csHdr.font = { name: 'Calibri', bold: true, size: 9, color: { argb: 'FF1A3C5E' } };
+
+    ws.views = [{ state: 'frozen', ySplit: r0, xSplit: 2 }];
+
+    const THIN_BORDER = { style: 'hair' as const, color: { argb: 'FFD0D7E0' } };
+    const ALL_BORDERS = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
+    const X_CS_INPUT = 'FFFEF9E7'; // light gold for C/s input column
+
+    let rr = r0 + 1;
+    const firstData = rr;
+
+    reportItems.forEach((it, i) => {
+      const counted = it.counted_quantity;
+      const rowBg = i % 2 === 1 ? X_ZEBRA : 'FFFFFFFF';
+      const row = ws.getRow(rr);
+      row.height = 26;
+
+      // Col 1: #
+      row.getCell(1).value = i + 1;
+      // Col 2: Items — item name + newline + SKU
+      const itemCell = row.getCell(2);
+      itemCell.value = `${it.item_name || '—'}\n${it.item_sku || ''}`;
+      itemCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      itemCell.font = { name: 'Calibri', size: 9 };
+
+      // Col 3: O/s (opening stock)
+      row.getCell(3).value = num(it.opening_stock);
+      // Col 4: Adds
+      row.getCell(4).value = num(it.additions);
+      // Col 5: Total = O/s + Adds (live formula)
+      row.getCell(5).value = { formula: `C${rr}+D${rr}` };
+      // Col 6: C/s (physical count — INPUT CELL)
+      const csCell = row.getCell(6);
+      csCell.value = counted !== null ? num(counted) : null;
+      csCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: X_CS_INPUT } };
+      // Col 7: Sales / issued
+      row.getCell(7).value = num(it.issued_quantity || it.sales_quantity);
+      // Col 8: Unit Price (selling price)
+      const sellingPrice = num(it.selling_price);
+      row.getCell(8).value = sellingPrice || null;
+      // Col 9: Amount = Sales × Unit Price (formula)
+      row.getCell(9).value = { formula: `G${rr}*H${rr}` };
+      // Col 10: Buying Price (cost)
+      const costPrice = num(it.cost_price);
+      row.getCell(10).value = costPrice || null;
+      // Col 11: Opening Sales = O/s × Buying Price (formula)
+      row.getCell(11).value = { formula: `C${rr}*J${rr}` };
+      // Col 12: Closing Sales = Total × Buying Price (formula)
+      row.getCell(12).value = { formula: `E${rr}*J${rr}` };
+      // Col 13: Added Stock = Adds × Buying Price (formula)
+      row.getCell(13).value = { formula: `D${rr}*J${rr}` };
+      // Col 14: Notes
+      row.getCell(14).value = it.variance_reason || null;
+
+      // Style all cells
+      row.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
+        if (col === 6) return; // C/s already styled
+        cell.font = { name: 'Calibri', size: 9 };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+        cell.border = ALL_BORDERS;
+      });
+      // Borders on C/s too
+      csCell.border = { ...ALL_BORDERS, left: { style: 'medium', color: { argb: X_GOLD } }, right: { style: 'medium', color: { argb: X_GOLD } } };
+
+      // Number formats
+      [3, 4, 5, 6, 7].forEach(c => { const cell = row.getCell(c); cell.numFmt = '#,##0.00'; cell.alignment = { horizontal: 'center', vertical: 'middle' }; });
+      [8, 9, 10, 11, 12, 13].forEach(c => { const cell = row.getCell(c); cell.numFmt = KES_FMT; cell.alignment = { horizontal: 'right', vertical: 'middle' }; });
+      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(14).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
       rr++;
     });
 
-    // Totals row with live formulas
-    if (data.items.length) {
-      const tr = ws.getRow(rr);
+    // Totals row
+    if (reportItems.length) {
       const last = rr - 1;
+      const tr = ws.getRow(rr);
+      tr.height = 20;
       tr.getCell(2).value = 'TOTALS';
-      [6, 7, 9, 10, 11].forEach(c => { tr.getCell(c).value = { formula: `SUM(${colLetter(c)}${firstData}:${colLetter(c)}${last})` }; tr.getCell(c).numFmt = QTY_FMT; });
-      tr.getCell(14).value = { formula: `SUM(N${firstData}:N${last})` };
-      tr.getCell(14).numFmt = KES_FMT;
-      tr.eachCell((cell: any) => {
+      // Sum columns: O/s(3), Adds(4), Total(5), C/s(6), Sales(7), Amount(9), OpeningSales(11), ClosingSales(12), AddedStock(13)
+      [3, 4, 5, 6, 7].forEach(c => {
+        tr.getCell(c).value = { formula: `SUM(${colLetter(c)}${firstData}:${colLetter(c)}${last})` };
+        tr.getCell(c).numFmt = '#,##0.00';
+      });
+      [9, 11, 12, 13].forEach(c => {
+        tr.getCell(c).value = { formula: `SUM(${colLetter(c)}${firstData}:${colLetter(c)}${last})` };
+        tr.getCell(c).numFmt = KES_FMT;
+      });
+      tr.eachCell({ includeEmpty: true }, (cell: any, col: number) => {
         cell.font = { name: 'Calibri', bold: true, size: 10, color: { argb: X_WHITE } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: X_HEADER } };
+        cell.alignment = { horizontal: col === 2 ? 'left' : col >= 3 && col <= 7 ? 'center' : 'right', vertical: 'middle' };
+        cell.border = ALL_BORDERS;
       });
       ws.autoFilter = { from: { row: r0, column: 1 }, to: { row: last, column: headers.length } };
     }
+
+    // Print area / page setup
+    ws.pageSetup.printArea = `A${r0}:N${rr}`;
+    ws.pageSetup.repeatRows = `${r0}:${r0}`;
   }
 
   // ── Sheet 3: Variance Analysis ──
@@ -797,7 +967,7 @@ export async function generateBranchStockTakeWorkbook(res: Response, data: Stock
     const hr = ws.getRow(r0); hr.values = headers; styleColHeader(hr);
     ws.views = [{ state: 'frozen', ySplit: r0 }];
     [30, 18, 12, 12, 12, 11, 14, 11, 34].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-    const sorted = [...data.items].sort((a, b) => Math.abs(num(b.variance_value)) - Math.abs(num(a.variance_value)));
+    const sorted = [...reportItems].sort((a, b) => Math.abs(num(b.variance_value)) - Math.abs(num(a.variance_value)));
     let rr = r0 + 1;
     sorted.forEach((it) => {
       const sev = severityFill(it.variance_severity);
@@ -836,7 +1006,7 @@ export async function generateBranchStockTakeWorkbook(res: Response, data: Stock
     ws.views = [{ state: 'frozen', ySplit: r0 }];
     [30, 8, 11, 11, 12, 12, 11, 11, 11, 11, 11, 11].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
     let rr = r0 + 1;
-    data.items.forEach((it, i) => {
+    reportItems.forEach((it, i) => {
       const row = ws.getRow(rr);
       row.values = [
         it.item_name || '—', it.unit || '—', num(it.opening_stock), num(it.additions),
@@ -852,7 +1022,7 @@ export async function generateBranchStockTakeWorkbook(res: Response, data: Stock
       });
       rr++;
     });
-    if (data.items.length) ws.autoFilter = { from: { row: r0, column: 1 }, to: { row: rr - 1, column: headers.length } };
+    if (reportItems.length) ws.autoFilter = { from: { row: r0, column: 1 }, to: { row: rr - 1, column: headers.length } };
   }
 
   // ── Sheet 5: Approvals & Audit Trail ──
@@ -894,9 +1064,9 @@ export async function generateBranchStockTakeWorkbook(res: Response, data: Stock
     r++;
     const sevHdr = ws.getRow(r); sevHdr.values = ['Severity', 'Item Count', 'Variance Value']; styleColHeader(sevHdr); r++;
     ([
-      ['Red (Critical)', t.red, severityValue(data.items, 'red')],
-      ['Amber (Watch)', t.amber, severityValue(data.items, 'amber')],
-      ['Green (Tolerance)', t.green, severityValue(data.items, 'green')],
+      ['Red (Critical)', t.red, severityValue(reportItems, 'red')],
+      ['Amber (Watch)', t.amber, severityValue(reportItems, 'amber')],
+      ['Green (Tolerance)', t.green, severityValue(reportItems, 'green')],
     ] as [string, number, number][]).forEach(([label, count, val]) => {
       const row = ws.getRow(r);
       row.values = [label, count, val];
@@ -909,7 +1079,7 @@ export async function generateBranchStockTakeWorkbook(res: Response, data: Stock
     ws.getCell(`A${r}`).font = { name: 'Calibri', bold: true, size: 11, color: { argb: X_HEADER } };
     r++;
     const catHdr = ws.getRow(r); catHdr.values = ['Category', 'Item Count', 'Variance Value']; styleColHeader(catHdr); r++;
-    const byCat = data.items.reduce((acc: Record<string, { c: number; v: number }>, it) => {
+    const byCat = reportItems.reduce((acc: Record<string, { c: number; v: number }>, it) => {
       const k = it.category || 'Uncategorised';
       acc[k] = acc[k] || { c: 0, v: 0 };
       acc[k].c++; acc[k].v += num(it.variance_value);

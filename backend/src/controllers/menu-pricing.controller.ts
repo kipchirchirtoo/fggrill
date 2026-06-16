@@ -105,7 +105,7 @@ const fetchBranchPricing = async (
   if (wantRestaurant) {
     const { data, error } = await supabase
       .from('restaurant_menu_items')
-      .select('id, name, price, cost_price, is_available, category:restaurant_menu_categories(name)')
+      .select('id, name, selling_price, cost_price, is_available, category:restaurant_menu_categories(name)')
       .or(`branch_id.is.null,branch_id.eq.${branchId}`)
       .order('name', { ascending: true });
     if (error) throw error;
@@ -118,7 +118,7 @@ const fetchBranchPricing = async (
           it.name || 'Item',
           cat?.name ?? null,
           'each',
-          num(it.price),
+          num(it.selling_price),
           num(it.cost_price),
           it.is_available !== false,
           overrideMap.get(`restaurant:${it.id}`)

@@ -496,7 +496,7 @@ export const exportConsumptionAnalytics = async (req: Request, res: Response, ne
 
     let movQ = supabase.from('branch_stock_movements').select('item_sku, quantity, movement_type, branch_id, created_at, branch:branches(name)').gte('created_at', start).lte('created_at', end);
     movQ = branchFilter(movQ, branch_ids);
-    let reqQ = supabase.from('stock_requests').select('id, requesting_branch_id, status, created_at, branch:branches!requesting_branch_id(name)').gte('created_at', start).lte('created_at', end);
+    let reqQ = supabase.from('stock_requests').select('id, requesting_branch_id, status, created_at, branch:branches!branch_id(name)').gte('created_at', start).lte('created_at', end);
     reqQ = branchFilter(reqQ, branch_ids, 'requesting_branch_id');
 
     const [{ data: movements }, { data: requests }] = await Promise.all([movQ, reqQ]);
@@ -871,7 +871,7 @@ export const getBranchPerformanceReport = exportRevenueReconciliation;
 export const getStockUsageReport = exportStockVarianceReport;
 export const getEmployeeCreditReport = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { data: bills, error } = await supabase.from('staff_credit_bills').select('*, employee:staff_profiles(id, first_name, last_name, id_number), branch:branches(name)').eq('status', 'pending').order('bill_date', { ascending: false });
+    const { data: bills, error } = await supabase.from('staff_credit_bills').select('*, employee:staff_profiles(id, first_name, last_name, employee_number), branch:branches(name)').eq('status', 'pending').order('bill_date', { ascending: false });
     if (error) throw error;
     res.status(200).json({ success: true, data: bills });
   } catch (e) { next(e); }

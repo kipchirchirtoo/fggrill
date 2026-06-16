@@ -110,29 +110,66 @@ export const createUser = async (
       employeeId, employee_id,
       department, shift, startDate, start_date,
       emergencyContact, emergency_contact,
-      address
+      address,
+      staffProfileId, staff_profile_id
     } = req.body;
 
-    const fName = (firstName || first_name || '').trim();
-    const lName = (lastName || last_name || '').trim();
-    const bId = branchId || branch_id;
-    const pNumber = phoneNumber || phone_number;
-    const empId = employeeId || employee_id;
-    const sDate = startDate || start_date;
-    const eContact = emergencyContact || emergency_contact;
+    let fName = (firstName || first_name || '').trim();
+    let lName = (lastName || last_name || '').trim();
+    let userRole = role;
+    let bId = branchId || branch_id;
+    let pNumber = phoneNumber || phone_number;
+    let empId = employeeId || employee_id;
+    let dept = department;
+    let shiftVal = shift;
+    let sDate = startDate || start_date;
+    let eContact = emergencyContact || emergency_contact;
+    let userEmail = email;
+
+    // If creating from a staff profile, fetch staff data first
+    const staffProfileIdVal = staffProfileId || staff_profile_id;
+    let staffProfile: any = null;
+
+    if (staffProfileIdVal) {
+      const { data: sp, error: spError } = await supabase
+        .from('staff_profiles')
+        .select('*')
+        .eq('id', staffProfileIdVal)
+        .single();
+
+      if (spError || !sp) {
+        res.status(404).json({ success: false, message: 'Staff profile not found' });
+        return;
+      }
+
+      staffProfile = sp;
+      // Use staff profile data as defaults, but allow explicit overrides
+      fName = fName || sp.first_name || '';
+      lName = lName || sp.last_name || '';
+      userRole = userRole || sp.role || 'employee';
+      bId = bId ?? sp.branch_id;
+      pNumber = pNumber || sp.phone;
+      empId = empId || sp.employee_number;
+      dept = dept || sp.department;
+      shiftVal = shiftVal || sp.shift;
+      sDate = sDate || sp.start_date;
+      userEmail = userEmail || sp.email;
+    }
 
     // Validate required fields
-    if (!fName || !lName || !role) {
-      // console.log('[DEBUG] Missing required fields:', { fName, lName, role });
+    if (!fName || !lName || !userRole) {
       res.status(400).json({ success: false, message: 'Please provide firstName, lastName, and role' });
       return;
     }
 
+    if (!userEmail) {
+      res.status(400).json({ success: false, message: 'Email is required for user accounts' });
+      return;
+    }
+
     // Step 1: Create auth user via Supabase Admin API
-    const userEmail = email || `pos_${Date.now()}_${Math.random().toString(36).substr(2, 9)}@pos.local`;
     const userPassword = password || (Math.random().toString(36).substr(2, 12) + 'Aa1!');
 
-    // console.log('[DEBUG] Creating auth user:', { userEmail, role });
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: userEmail,
       password: userPassword,
@@ -152,7 +189,6 @@ export const createUser = async (
     }
 
     const userId = authData.user.id;
-    // console.log('[DEBUG] Auth user created with ID:', userId);
 
     // Hash password for local database fallback
     const salt = await bcrypt.genSalt(10);
@@ -164,12 +200,12 @@ export const createUser = async (
       email: userEmail,
       first_name: fName,
       last_name: lName,
-      role,
+      role: userRole,
       branch_id: bId || null,
       phone_number: pNumber || null,
       employee_id: empId || null,
-      department: department || null,
-      shift: shift || null,
+      department: dept || null,
+      shift: shiftVal || null,
       start_date: sDate || null,
       emergency_contact: eContact ? JSON.stringify(eContact) : null,
       address: address || null,
@@ -179,7 +215,6 @@ export const createUser = async (
       updated_at: new Date().toISOString()
     };
 
-    // console.log('[DEBUG] Upserting profile for ID:', userId);
     const { data: profile, error: upsertError } = await supabase
       .from('users')
       .upsert(profileData, { onConflict: 'id' })
@@ -200,9 +235,24 @@ export const createUser = async (
       return;
     }
 
-    // console.log('[DEBUG] User created successfully');
-    res.status(201).json({ success: true, data: profile, message: 'User created successfully' });
-    logger.info(`User created by admin: ${userEmail} (${role})`);
+    // Step 3: Link staff profile to user if provided
+    if (staffProfileIdVal) {
+      const { error: linkError } = await supabase
+        .from('staff_profiles')
+        .update({ user_id: userId, email: userEmail })
+        .eq('id', staffProfileIdVal);
+
+      if (linkError) {
+        logger.warn('Failed to link staff profile to user:', linkError.message);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { ...profile, temp_password: password === undefined ? userPassword : undefined },
+      message: 'User created successfully'
+    });
+    logger.info(`User created by admin: ${userEmail} (${userRole})`);
 
   } catch (error: any) {
     console.error('[DEBUG] Fatal error in createUser:', error);

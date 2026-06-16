@@ -31,13 +31,34 @@ class _BranchSalesPaymentsViewState
   String _d(DateTime v) => DateFormat('yyyy-MM-dd').format(v);
 
   Future<Map<String, dynamic>> _load() async {
-    final dio = ref.read(dioProvider);
     final branchId = await ref
         .read(secureStorageProvider)
         .read(key: AuthRepository.branchIdKey);
+    if (branchId != null && branchId.isNotEmpty) {
+      return _loadBranch(branchId);
+    }
+
+    final branches = await _loadBranches();
+    if (branches.isEmpty) return _emptySalesData();
+
+    final reports = <Map<String, dynamic>>[];
+    for (final branch in branches) {
+      final id = '${branch['id'] ?? branch['branch_id'] ?? ''}';
+      if (id.isEmpty) continue;
+      try {
+        reports.add(await _loadBranch(id));
+      } catch (error) {
+        debugPrint('Branch sales load failed for branch $id: $error');
+      }
+    }
+
+    return reports.isEmpty ? _emptySalesData() : _mergeSalesReports(reports);
+  }
+
+  Future<Map<String, dynamic>> _loadBranch(String branchId) async {
+    final dio = ref.read(dioProvider);
     final res = await dio.post('/analytics/branch-sales', data: {
-      if (branchId != null && branchId.isNotEmpty)
-        'branch_id': int.tryParse(branchId) ?? branchId,
+      'branch_id': int.tryParse(branchId) ?? branchId,
       'start_date': _d(_start),
       'end_date': _d(_end),
       'filters': const {},
@@ -48,6 +69,119 @@ class _BranchSalesPaymentsViewState
     }
     if (body is Map) return Map<String, dynamic>.from(body);
     return {};
+  }
+
+  Future<List<Map<String, dynamic>>> _loadBranches() async {
+    final dio = ref.read(dioProvider);
+    try {
+      final res = await dio.get('/finance/branches');
+      final body = res.data;
+      final raw = body is Map ? body['data'] : body;
+      return (raw is List)
+          ? raw
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList()
+          : const [];
+    } catch (error) {
+      debugPrint('Branch list load failed for sales aggregation: $error');
+      return const [];
+    }
+  }
+
+  Map<String, dynamic> _emptySalesData() => {
+        'summary': {'total_sales': 0, 'transaction_count': 0},
+        'payment_method_breakdown': <Map<String, dynamic>>[],
+        'category_breakdown': <Map<String, dynamic>>[],
+        'transactions': <Map<String, dynamic>>[],
+      };
+
+  Map<String, dynamic> _mergeSalesReports(List<Map<String, dynamic>> reports) {
+    var totalSales = 0.0;
+    var transactionCount = 0;
+    final methods = <String, Map<String, dynamic>>{};
+    final categories = <String, Map<String, dynamic>>{};
+    final transactions = <Map<String, dynamic>>[];
+
+    for (final report in reports) {
+      final summary = report['summary'] is Map
+          ? Map<String, dynamic>.from(report['summary'] as Map)
+          : const <String, dynamic>{};
+      totalSales += _n(summary['total_sales']).toDouble();
+      transactionCount += _n(summary['transaction_count']).toInt();
+      _mergeBreakdown(methods, report['payment_method_breakdown'],
+          keyFields: const ['payment_method', 'method']);
+      _mergeBreakdown(categories, report['category_breakdown'],
+          keyFields: const ['category', 'source']);
+      transactions.addAll((report['transactions'] as List? ?? [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item)));
+    }
+
+    List<Map<String, dynamic>> finalizeBreakdown(
+      Map<String, Map<String, dynamic>> bucket,
+    ) {
+      return bucket.values.map((row) {
+        final amount = _n(row['total_sales'] ?? row['amount']);
+        return {
+          ...row,
+          'total_sales': amount,
+          'amount': amount,
+          'transaction_count': _n(row['transaction_count'] ?? row['count']),
+          'percentage': totalSales > 0 ? (amount / totalSales) * 100 : 0,
+        };
+      }).toList()
+        ..sort((a, b) => _n(b['total_sales'] ?? b['amount'])
+            .compareTo(_n(a['total_sales'] ?? a['amount'])));
+    }
+
+    return {
+      'summary': {
+        'total_sales': totalSales,
+        'transaction_count': transactionCount,
+      },
+      'payment_method_breakdown': finalizeBreakdown(methods),
+      'category_breakdown': finalizeBreakdown(categories),
+      'transactions': transactions,
+    };
+  }
+
+  void _mergeBreakdown(
+    Map<String, Map<String, dynamic>> bucket,
+    dynamic rawRows, {
+    required List<String> keyFields,
+  }) {
+    for (final item in (rawRows as List? ?? []).whereType<Map>()) {
+      final row = Map<String, dynamic>.from(item);
+      var key = '';
+      for (final field in keyFields) {
+        final value = '${row[field] ?? ''}'.trim();
+        if (value.isNotEmpty && value != 'null') {
+          key = value;
+          break;
+        }
+      }
+      if (key.isEmpty) key = 'Other';
+      final current = bucket.putIfAbsent(
+        key,
+        () => {
+          ...row,
+          'total_sales': 0,
+          'amount': 0,
+          'transaction_count': 0,
+          'count': 0,
+        },
+      );
+      current[keyFields.first] = key;
+      final amount = _n(current['total_sales'] ?? current['amount']) +
+          _n(row['total_sales'] ?? row['amount']);
+      final count = _n(current['transaction_count'] ?? current['count']) +
+          _n(row['transaction_count'] ?? row['count']);
+      current['total_sales'] = amount;
+      current['amount'] = amount;
+      current['transaction_count'] = count;
+      current['count'] = count;
+    }
   }
 
   void _refresh() => setState(() => _future = _load());
@@ -430,7 +564,8 @@ class _BranchSalesPaymentsViewState
     final shortCode = '${t['short_code'] ?? ''}';
     final id = '${t['id'] ?? ''}';
     final waiter = '${t['waiter_name'] ?? ''}';
-    final created = '${t['created_at'] ?? t['transaction_date'] ?? t['date'] ?? ''}';
+    final created =
+        '${t['created_at'] ?? t['transaction_date'] ?? t['date'] ?? ''}';
     String when = created;
     final parsed = DateTime.tryParse(created);
     if (parsed != null) when = DateFormat('MMM d, HH:mm').format(parsed);

@@ -70,6 +70,277 @@ const fetchSimpleItemsBySku = async (skus: any[]): Promise<Record<string, any>> 
   return Object.fromEntries((data || []).map((item: any) => [`${item.sku}`, item]));
 };
 
+const safeRows = async (
+  table: string,
+  select = '*',
+  limit = 250,
+  orderColumn = 'created_at'
+): Promise<any[]> => {
+  try {
+    const { data, error } = await supabase
+      .from(table)
+      .select(select)
+      .order(orderColumn, { ascending: false })
+      .limit(limit);
+    if (error) {
+      logger.warn(`Auditor source skipped: ${table}`, { error: error.message });
+      return [];
+    }
+    return data || [];
+  } catch (error: any) {
+    logger.warn(`Auditor source unavailable: ${table}`, { error: error?.message || error });
+    return [];
+  }
+};
+
+const asText = (value: any): string | null => {
+  if (value === null || value === undefined) return null;
+  const text = `${value}`.trim();
+  return text.length > 0 ? text : null;
+};
+
+const asNumber = (value: any): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const firstNonEmpty = (row: any, keys: string[]): any => {
+  for (const key of keys) {
+    if (row?.[key] !== null && row?.[key] !== undefined && `${row[key]}`.trim() !== '') return row[key];
+  }
+  return undefined;
+};
+
+const branchMatches = (row: any, branchId?: string): boolean => {
+  if (!branchId || branchId === '0') return true;
+  const candidate = firstNonEmpty(row, ['branch_id', 'requesting_branch_id', 'from_branch_id', 'to_branch_id']);
+  return candidate === undefined || `${candidate}` === `${branchId}`;
+};
+
+const pendingLike = (status: any): boolean => {
+  const value = `${status || ''}`.toLowerCase();
+  return !value || ['draft', 'pending', 'submitted', 'pending_audit', 'unverified', 'ready_to_bill'].includes(value);
+};
+
+const normalizeAuditDocument = (row: any, source: string, type: string) => {
+  const amount = asNumber(firstNonEmpty(row, [
+    'total_amount',
+    'grand_total',
+    'amount',
+    'balance',
+    'balance_due',
+    'total_value',
+    'net_amount',
+  ]));
+  const supplierName =
+    firstNonEmpty(row, ['supplier_name', 'vendor_name', 'payee_name', 'customer_name', 'guest_name', 'employee_name', 'staff_name']) ||
+    row.supplier?.name ||
+    row.vendor?.name ||
+    row.customer?.customer_name ||
+    'Counterparty';
+  const documentNumber =
+    firstNonEmpty(row, ['document_number', 'invoice_number', 'bill_number', 'grn_number', 'payment_number', 'reference', 'po_number']) ||
+    row.id;
+
+  return {
+    ...row,
+    _source: source,
+    type,
+    document_number: documentNumber,
+    invoice_number: firstNonEmpty(row, ['invoice_number', 'bill_number', 'document_number']) || documentNumber,
+    supplier_name: supplierName,
+    counterparty_name: supplierName,
+    total_amount: amount,
+    amount,
+    status: firstNonEmpty(row, ['audit_status', 'status', 'payment_status', 'approval_status']) || 'pending',
+    created_at: firstNonEmpty(row, ['created_at', 'invoice_date', 'bill_date', 'received_date', 'payment_date']) || null,
+  };
+};
+
+export const getAuditorDashboard = async (req: Request, res: Response): Promise<void> => {
+  const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
+  const [exceptions, approvals, voidBills, logbooks, watchlist] = await Promise.all([
+    safeRows('audit_exceptions'),
+    safeRows('approval_requests'),
+    safeRows('void_bills'),
+    safeRows('cashier_logbooks'),
+    safeRows('auditor_watchlist'),
+  ]);
+
+  const scopedExceptions = exceptions.filter((row) => branchMatches(row, branchId));
+  const scopedApprovals = approvals.filter((row) => branchMatches(row, branchId));
+  const scopedVoidBills = voidBills.filter((row) => branchMatches(row, branchId));
+  const scopedLogbooks = logbooks.filter((row) => branchMatches(row, branchId));
+  const scopedWatchlist = watchlist.filter((row) => branchMatches(row, branchId));
+
+  res.json({
+    success: true,
+    data: {
+      void_bills: scopedVoidBills.length,
+      price_overrides: scopedExceptions.filter((row) => `${row.severity || row.risk_level || ''}`.toLowerCase() === 'critical').length,
+      large_discounts: scopedApprovals.filter((row) => pendingLike(row.status)).length,
+      pending_approvals: scopedApprovals.filter((row) => pendingLike(row.status)).length,
+      open_exceptions: scopedExceptions.filter((row) => `${row.status || ''}`.toLowerCase() !== 'resolved').length,
+      pending_logbooks: scopedLogbooks.filter((row) => pendingLike(row.status)).length,
+      watchlist: scopedWatchlist.filter((row) => `${row.status || ''}`.toLowerCase() !== 'resolved').length,
+    },
+  });
+};
+
+export const getAuditTools = async (_req: Request, res: Response): Promise<void> => {
+  res.json({
+    success: true,
+    data: {
+      records: [
+        { title: 'Sales Audit', route: '/auditor/verify/sales', module: 'POS / Restaurant / Bar' },
+        { title: 'Financial Reconciliation', route: '/auditor/verify/finances', module: 'Cashier / Finance' },
+        { title: 'Invoice Verification', route: '/auditor/invoice-verification', module: 'Accounting / Suppliers' },
+        { title: 'Credit Bills', route: '/auditor/credit-bills', module: 'Reception / Payroll' },
+        { title: 'Stock Levels', route: '/auditor/verify/stock-levels', module: 'Branch Store / Central Store' },
+        { title: 'Branch Orders', route: '/auditor/verify/branch-orders', module: 'Store Requests' },
+        { title: 'Deliveries', route: '/dispatch/auditor/deliveries', module: 'Dispatch' },
+        { title: 'Staff Audit', route: '/auditor/staff-audit', module: 'HR' },
+        { title: 'Kitchen Usage', route: '/kitchen/usage', module: 'Kitchen' },
+        { title: 'Void Bills', route: '/auditor/void-bills', module: 'Cashier / POS' },
+      ],
+    },
+  });
+};
+
+export const getInvoiceVerification = async (req: Request, res: Response): Promise<void> => {
+  const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
+  const [arInvoices, apBills, supplierInvoices, grns] = await Promise.all([
+    safeRows('accounting_ar_invoices'),
+    safeRows('accounting_ap_bills'),
+    safeRows('store_supplier_invoices'),
+    safeRows('store_grn'),
+  ]);
+
+  const invoiceRows = arInvoices
+    .filter((row) => branchMatches(row, branchId))
+    .map((row) => normalizeAuditDocument(row, 'accounting_ar_invoices', 'customer_invoice'));
+  const billRows = apBills
+    .filter((row) => branchMatches(row, branchId))
+    .map((row) => normalizeAuditDocument(row, 'accounting_ap_bills', 'supplier_bill'));
+  const supplierInvoiceRows = supplierInvoices
+    .filter((row) => branchMatches(row, branchId))
+    .map((row) => normalizeAuditDocument(row, 'store_supplier_invoices', 'supplier_invoice'));
+  const readyToBillGrns = grns
+    .filter((row) => branchMatches(row, branchId))
+    .filter((row) => {
+      const status = `${firstNonEmpty(row, ['finance_status', 'invoice_status', 'status']) || ''}`.toLowerCase();
+      return !['billed', 'paid', 'closed', 'cancelled'].includes(status);
+    })
+    .map((row) => normalizeAuditDocument(
+      { ...row, status: firstNonEmpty(row, ['finance_status', 'invoice_status']) || 'ready_to_bill' },
+      'store_grn',
+      'ready_to_bill_grn'
+    ));
+
+  const records = [...invoiceRows, ...billRows, ...supplierInvoiceRows, ...readyToBillGrns]
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+  res.json({
+    success: true,
+    count: records.length,
+    data: {
+      summary: {
+        records: records.length,
+        pending_review: records.filter((row) => pendingLike(row.status)).length,
+        total_value: records.reduce((sum, row) => sum + asNumber(row.total_amount), 0),
+        ready_to_bill_grns: readyToBillGrns.length,
+      },
+      records,
+      invoices: [...invoiceRows, ...supplierInvoiceRows],
+      bills: billRows,
+      grns: readyToBillGrns,
+    },
+  });
+};
+
+export const getCreditBillsForAudit = async (req: Request, res: Response): Promise<void> => {
+  const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
+  const [cashierBills, payrollBills, creditBills, staffBills] = await Promise.all([
+    safeRows('cashier_credit_bills'),
+    safeRows('payroll_credit_bills'),
+    safeRows('credit_bills'),
+    safeRows('staff_credit_bills'),
+  ]);
+
+  const guestBills = [...cashierBills, ...creditBills]
+    .filter((row) => branchMatches(row, branchId))
+    .map((row) => normalizeAuditDocument(row, row._source || 'cashier_credit_bills', 'guest_credit_bill'));
+  const employeeBills = [...payrollBills, ...staffBills]
+    .filter((row) => branchMatches(row, branchId))
+    .map((row) => normalizeAuditDocument(row, row._source || 'payroll_credit_bills', 'employee_credit_bill'));
+  const records = [...guestBills, ...employeeBills]
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+  res.json({
+    success: true,
+    count: records.length,
+    data: {
+      summary: {
+        records: records.length,
+        pending_review: records.filter((row) => pendingLike(row.status)).length,
+        total_value: records.reduce((sum, row) => sum + asNumber(row.total_amount), 0),
+      },
+      records,
+      credit_bills: records,
+      guest_bills: guestBills,
+      employee_bills: employeeBills,
+    },
+  });
+};
+
+export const getAuditorDeliveriesAlias = async (req: Request, res: Response): Promise<void> => {
+  const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
+  const [dispatchNotes, deliveries] = await Promise.all([
+    safeRows('dispatch_notes'),
+    safeRows('dispatches'),
+  ]);
+  const records = [...dispatchNotes, ...deliveries]
+    .filter((row) => branchMatches(row, branchId))
+    .map((row) => ({
+      ...row,
+      dispatch_number: firstNonEmpty(row, ['dispatch_number', 'note_number', 'reference']) || row.id,
+      branch_name: firstNonEmpty(row, ['branch_name', 'to_branch_name', 'destination_branch_name']),
+      status: firstNonEmpty(row, ['audit_status', 'status']) || 'pending',
+      created_at: firstNonEmpty(row, ['created_at', 'dispatch_date', 'sent_at']) || null,
+    }));
+  res.json({ success: true, count: records.length, data: { records, deliveries: records } });
+};
+
+export const getNightAuditStatus = async (_req: Request, res: Response): Promise<void> => {
+  const sessions = await safeRows('audit_night_sessions', '*', 5);
+  const exceptions = await safeRows('audit_exceptions', '*', 200);
+  const latest = sessions[0] || null;
+  res.json({
+    success: true,
+    data: {
+      status: latest?.status || 'not_started',
+      active_session: latest,
+      open_exceptions: exceptions.filter((row) => `${row.status || ''}`.toLowerCase() !== 'resolved').length,
+    },
+  });
+};
+
+export const completeLatestNightAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const sessions = await safeRows('audit_night_sessions', '*', 5);
+    const latest = sessions.find((session) => `${session.status}`.toLowerCase() === 'in_progress') || sessions[0];
+    if (!latest?.id) {
+      res.status(404).json({ success: false, message: 'No night audit session found' });
+      return;
+    }
+    req.params.id = latest.id;
+    return completeNightAudit(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ============ NIGHT AUDIT ============
 
 export const startNightAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -1892,8 +2163,14 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
 
     if (effectiveBranchId && effectiveBranchId !== '0') query = query.eq('requesting_branch_id', effectiveBranchId);
     if (status) query = query.eq('status', status);
-    if (start_date) query = query.gte('created_at', start_date);
-    if (end_date) query = query.lte('created_at', end_date);
+    if (start_date) {
+      const startIso = String(start_date).includes('T') ? String(start_date) : `${start_date}T00:00:00.000Z`;
+      query = query.gte('created_at', startIso);
+    }
+    if (end_date) {
+      const endIso = String(end_date).includes('T') ? String(end_date) : `${end_date}T23:59:59.999Z`;
+      query = query.lte('created_at', endIso);
+    }
 
     const { data: rawRequests, error: requestsError } = await query;
     if (requestsError) throw requestsError;
@@ -2301,7 +2578,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const days = Math.max(1, Math.ceil((new Date(endIso).getTime() - new Date(startIso).getTime()) / (24 * 60 * 60 * 1000)));
 
     let restQuery = supabase.from('restaurant_orders').select('id, branch_id, created_at, order_type, room_number, department').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
-    let barQuery = supabase.from('bar_orders').select('id, branch_id, created_at, room_number').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
+    let barQuery = supabase.from('bar_orders').select('id, branch_id, created_at').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
     let outletOrderQuery = supabase
       .from('pos_shift_orders')
       .select('id, outlet_id, shift_id, order_number, order_type, room_number, customer_name, status, payment_status, total_amount, items, created_at, kitchen_status, kitchen_ready_at, updated_at')
@@ -2309,13 +2586,13 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       .lte('created_at', endIso)
       .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)');
     let stockReqQuery = supabase.from('stock_requests').select('id, requesting_branch_id').gte('created_at', startIso).lte('created_at', endIso);
-    let barStockReqQuery = supabase.from('bar_stock_requests').select('id, bar_branch_id').gte('created_at', startIso).lte('created_at', endIso);
+    let barStockReqQuery = supabase.from('bar_stock_requests').select('id, branch_id').gte('created_at', startIso).lte('created_at', endIso);
 
     if (effectiveBranchId) {
       restQuery = restQuery.eq('branch_id', effectiveBranchId);
       barQuery = barQuery.eq('branch_id', effectiveBranchId);
       stockReqQuery = stockReqQuery.eq('requesting_branch_id', effectiveBranchId);
-      barStockReqQuery = barStockReqQuery.eq('bar_branch_id', effectiveBranchId);
+      barStockReqQuery = barStockReqQuery.eq('branch_id', effectiveBranchId);
     }
 
     const [rawRest, rawBar, rawOutletOrders, rawStock, rawBarStock] = await Promise.all([restQuery, barQuery, outletOrderQuery, stockReqQuery, barStockReqQuery]);
@@ -2793,11 +3070,79 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     };
     summary.profit_margin = summary.total_revenue > 0 ? (summary.gross_profit / summary.total_revenue) * 100 : 0;
 
+    // ── Cashier Payment Clearance ──────────────────────────────────────────────
+    let cashierClearance: any = { shifts: [], summary: {} };
+    try {
+      let shiftsQuery = supabase
+        .from('cashier_shifts')
+        .select('id, branch_id, cashier_id, approved_by, start_time, end_time, status, expected_cash, actual_cash, opening_float, notes')
+        .gte('start_time', startIso)
+        .lte('start_time', endIso)
+        .order('start_time', { ascending: false });
+
+      if (effectiveBranchId) {
+        shiftsQuery = shiftsQuery.eq('branch_id', effectiveBranchId);
+      }
+
+      const { data: shifts, error: shiftsError } = await shiftsQuery;
+      if (!shiftsError && shifts && shifts.length > 0) {
+        const cashierIds = [...new Set(shifts.map((s: any) => s.cashier_id).filter(Boolean))];
+        const approverIds = [...new Set(shifts.map((s: any) => s.approved_by).filter(Boolean))];
+        const allIds = [...new Set([...cashierIds, ...approverIds])];
+
+        let usersMap: Record<string, any> = {};
+        if (allIds.length > 0) {
+          const { data: users } = await supabase
+            .from('users')
+            .select('id, first_name, last_name')
+            .in('id', allIds);
+          usersMap = (users || []).reduce((acc: any, u: any) => {
+            acc[u.id] = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+            return acc;
+          }, {});
+        }
+
+        const enrichedShifts = shifts.map((shift: any) => {
+          const expected = Number(shift.expected_cash || 0);
+          const actual = Number(shift.actual_cash || 0);
+          const variance = actual - expected;
+          return {
+            ...shift,
+            cashier_name: usersMap[shift.cashier_id] || 'Unknown',
+            approved_by_name: shift.approved_by ? (usersMap[shift.approved_by] || 'Unknown') : null,
+            expected_cash: expected,
+            actual_cash: actual,
+            variance,
+            variance_pct: expected > 0 ? (variance / expected) * 100 : 0,
+            has_discrepancy: Math.abs(variance) > 10,
+          };
+        });
+
+        cashierClearance = {
+          shifts: enrichedShifts,
+          summary: {
+            total_shifts: enrichedShifts.length,
+            pending: enrichedShifts.filter((s: any) => s.status === 'open' || s.status === 'pending').length,
+            approved: enrichedShifts.filter((s: any) => s.status === 'closed' || s.status === 'approved').length,
+            with_discrepancy: enrichedShifts.filter((s: any) => s.has_discrepancy).length,
+            total_expected: enrichedShifts.reduce((sum: number, s: any) => sum + s.expected_cash, 0),
+            total_actual: enrichedShifts.reduce((sum: number, s: any) => sum + s.actual_cash, 0),
+            total_variance: enrichedShifts.reduce((sum: number, s: any) => sum + s.variance, 0),
+          }
+        };
+      }
+    } catch (clearanceErr: any) {
+      // Non-fatal: sold items analysis can still return without clearance data
+      console.warn('[SoldItems] Could not load cashier clearance:', clearanceErr?.message);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return {
       summary,
       analysis: enrichedAnalysis,
       fast_moving_items: enrichedAnalysis.filter((item: any) => item.movement_tier === 'fast').slice(0, 15),
-      slow_moving_items: [...enrichedAnalysis].filter((item: any) => item.movement_tier === 'slow').sort((a: any, b: any) => Number(a.quantity || 0) - Number(b.quantity || 0)).slice(0, 15)
+      slow_moving_items: [...enrichedAnalysis].filter((item: any) => item.movement_tier === 'slow').sort((a: any, b: any) => Number(a.quantity || 0) - Number(b.quantity || 0)).slice(0, 15),
+      cashier_clearance: cashierClearance
     };
 };
 
@@ -3263,8 +3608,6 @@ export const getDailyLogsStatus = async (req: Request, res: Response, next: Next
       .select(`
         *,
         branch:branches!branch_id(id, name, code),
-        creator:users!created_by(id, first_name, last_name, email),
-        verifier:users!verified_by(id, first_name, last_name, email),
         lines:finance_daily_log_lines(*)
       `)
       .order('log_date', { ascending: false });
@@ -3292,8 +3635,8 @@ export const getDailyLogsStatus = async (req: Request, res: Response, next: Next
       total_expenses: log.total_expenses,
       notes: log.notes,
       status: log.status,
-      creator_name: log.creator ? `${log.creator.first_name} ${log.creator.last_name}` : 'Unknown',
-      creator_email: log.creator?.email,
+      creator_name: 'Unknown',
+      creator_email: null,
       verified_by: log.verified_by,
       verified_at: log.verified_at,
       rejection_reason: log.rejection_reason,

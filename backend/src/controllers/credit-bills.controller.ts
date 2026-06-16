@@ -31,11 +31,13 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 amount,
                 description,
                 bill_date: date || new Date().toISOString().split('T')[0],
-                status: 'pending',
+                status: 'accountant_confirmed',
                 balance: amount,
                 paid_amount: 0,
                 shift_id: currentShift?.id || (req.body as any).shift_id,
-                branch_id: branch_id || (req.body as any).branch_id
+                branch_id: branch_id || (req.body as any).branch_id,
+                approved_at: new Date().toISOString(),
+                approved_by: cashier_id
             })
             .select()
             .single();
@@ -105,7 +107,7 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         // Fetch staff names separately to avoid schema cache FK issues
         const staffIds = [...new Set((data || []).map((b: any) => b.staff_id).filter(Boolean))];
         const { data: staffProfiles } = staffIds.length > 0
-            ? await supabase.from('staff_profiles').select('id, role, position, department, id_number, national_id, first_name, last_name, user_id').in('id', staffIds)
+            ? await supabase.from('staff_profiles').select('id, role, position, department, employee_number, national_id, first_name, last_name, user_id').in('id', staffIds)
             : { data: [] };
         const userIds = (staffProfiles || []).map((s: any) => s.user_id).filter(Boolean);
         const { data: users } = userIds.length > 0

@@ -154,7 +154,7 @@ router.get('/:id',
 );
 
 router.put('/:id',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   updateStaffMember
 );
 

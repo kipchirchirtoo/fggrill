@@ -35,6 +35,7 @@ const RELEASE_ROLES = [
 ];
 
 router.get('/', authorize(VIEW_ROLES), ctrl.listPayments);
+router.get('/:id/receipt.pdf', authorize(VIEW_ROLES), ctrl.downloadPaymentReceipt);
 router.get('/:id', authorize(VIEW_ROLES), ctrl.getPayment);
 router.post('/', authorize(INITIATE_ROLES), ctrl.createPayment);
 router.put('/:id/approve', authorize(APPROVE_ROLES), ctrl.approvePayment);

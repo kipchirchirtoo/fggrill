@@ -196,6 +196,30 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/pos/outlet-stock',
+        builder: (context, state) => const BranchStorekeeperDashboard(
+          initialSection: BranchStorekeeperSection.posOutletAssembly,
+        ),
+      ),
+      GoRoute(
+        path: '/pos/production-assembly',
+        builder: (context, state) => const BranchStorekeeperDashboard(
+          initialSection: BranchStorekeeperSection.posOutletAssembly,
+        ),
+      ),
+      GoRoute(
+        path: '/pos/shift-opening-closing',
+        builder: (context, state) => const BranchStorekeeperDashboard(
+          initialSection: BranchStorekeeperSection.posOutletAssembly,
+        ),
+      ),
+      GoRoute(
+        path: '/pos/variance',
+        builder: (context, state) => const BranchStorekeeperDashboard(
+          initialSection: BranchStorekeeperSection.inventoryLedger,
+        ),
+      ),
+      GoRoute(
           path: '/bar-pos', builder: (context, state) => const BarPOSScreen()),
       GoRoute(
           path: '/restaurant',
@@ -1233,6 +1257,11 @@ const _auditorSectionRouteSpecs = <MapEntry<String, AdminSection>>[
   MapEntry('/auditor/staff-audit', AdminSection.staffFinancials),
   MapEntry('/auditor/payroll-approvals', AdminSection.auditorPayrollApprovals),
   MapEntry('/auditor/approvals', AdminSection.stockRequestApprovals),
+  MapEntry('/auditor/request-review', AdminSection.stockRequestApprovals),
+  MapEntry('/auditor/approval-queue', AdminSection.stockRequestApprovals),
+  MapEntry('/auditor/rejection-return', AdminSection.stockRequestApprovals),
+  MapEntry('/auditor/audit-log-review', AdminSection.auditLogs),
+  MapEntry('/auditor/variance-review', AdminSection.auditorDiscrepancies),
   MapEntry('/auditor/leakage-control', AdminSection.auditReports),
   MapEntry('/auditor/audit-reports', AdminSection.auditReports),
   MapEntry('/auditor/branch-audit', AdminSection.auditLogs),
@@ -1352,8 +1381,21 @@ const _branchStorekeeperSectionRouteSpecs =
     <MapEntry<String, BranchStorekeeperSection>>[
   MapEntry('/branch-store/stock', BranchStorekeeperSection.stock),
   MapEntry('/store/stock', BranchStorekeeperSection.stock),
+  MapEntry('/branch-store/inventory-ledger',
+      BranchStorekeeperSection.inventoryLedger),
+  MapEntry('/store/inventory-ledger', BranchStorekeeperSection.inventoryLedger),
+  MapEntry('/branch-store/control-centre',
+      BranchStorekeeperSection.inventoryControl),
+  MapEntry('/branch-store/outlet-production',
+      BranchStorekeeperSection.inventoryControl),
+  MapEntry(
+      '/store/outlet-production', BranchStorekeeperSection.inventoryControl),
   MapEntry('/branch-store/receive', BranchStorekeeperSection.receive),
   MapEntry('/branch-store/receive-delivery', BranchStorekeeperSection.receive),
+  MapEntry('/branch-store/receipt-verification',
+      BranchStorekeeperSection.receiptVerification),
+  MapEntry('/store/receipt-verification',
+      BranchStorekeeperSection.receiptVerification),
   MapEntry('/store/receive', BranchStorekeeperSection.receive),
   MapEntry('/store/receive-goods', BranchStorekeeperSection.receive),
   MapEntry('/branch-store/suppliers', BranchStorekeeperSection.suppliers),
@@ -1364,8 +1406,15 @@ const _branchStorekeeperSectionRouteSpecs =
       '/branch-store/purchase-orders', BranchStorekeeperSection.purchaseOrders),
   MapEntry('/store/purchase-orders', BranchStorekeeperSection.purchaseOrders),
   MapEntry('/branch-store/requests', BranchStorekeeperSection.requests),
+  MapEntry(
+      '/branch-store/branch-requisition', BranchStorekeeperSection.requests),
+  MapEntry('/store/branch-requisition', BranchStorekeeperSection.requests),
   MapEntry('/store/store-requisitions', BranchStorekeeperSection.requests),
   MapEntry('/store/requests', BranchStorekeeperSection.requests),
+  MapEntry('/branch-store/department-requests',
+      BranchStorekeeperSection.departmentRequestLogging),
+  MapEntry('/store/department-requests',
+      BranchStorekeeperSection.departmentRequestLogging),
   MapEntry('/branch-store/kitchen-requisitions',
       BranchStorekeeperSection.kitchenRequisitions),
   MapEntry('/store/kitchen-requisitions',
@@ -1375,8 +1424,15 @@ const _branchStorekeeperSectionRouteSpecs =
   MapEntry('/store/kitchen-usage', BranchStorekeeperSection.kitchenUsage),
   MapEntry('/branch-store/stock-out', BranchStorekeeperSection.stockOut),
   MapEntry('/store/stock-out', BranchStorekeeperSection.stockOut),
+  MapEntry('/branch-store/pos-outlet-assembly',
+      BranchStorekeeperSection.inventoryControl),
+  MapEntry(
+      '/store/pos-outlet-assembly', BranchStorekeeperSection.inventoryControl),
   MapEntry('/branch-store/reports', BranchStorekeeperSection.reports),
   MapEntry('/store/reports', BranchStorekeeperSection.reports),
+  MapEntry(
+      '/branch-store/notifications', BranchStorekeeperSection.notifications),
+  MapEntry('/store/notifications', BranchStorekeeperSection.notifications),
 ];
 
 const _centralStoreSectionRouteSpecs = <MapEntry<String, AdminSection>>[
@@ -1393,9 +1449,14 @@ const _centralStoreSectionRouteSpecs = <MapEntry<String, AdminSection>>[
   MapEntry('/central-store/requests', AdminSection.requisitions),
   MapEntry('/central-store/requests/:id', AdminSection.requisitions),
   MapEntry('/central-store/packing', AdminSection.packing),
+  MapEntry('/central-store/packing-queue', AdminSection.packing),
   MapEntry('/central-store/dispatch', AdminSection.dispatchNotes),
   MapEntry('/central-store/dispatch-notes', AdminSection.dispatchNotes),
+  MapEntry('/central-store/dispatch-document', AdminSection.dispatchNotes),
   MapEntry('/central-store/dispatch/new', AdminSection.dispatchNotes),
+  MapEntry('/central-store/zero-stock-queue', AdminSection.requisitions),
+  MapEntry(
+      '/central-store/partially-fulfilled-requests', AdminSection.requisitions),
   MapEntry(
       '/central-store/suppliers/purchase-orders', AdminSection.purchaseOrders),
   MapEntry('/central-store/purchase-orders', AdminSection.purchaseOrders),

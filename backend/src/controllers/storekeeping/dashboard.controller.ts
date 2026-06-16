@@ -4,14 +4,27 @@ import { logger } from '../../utils/logger';
 
 export const getWarehouseDashboard = async (req: Request, res: Response) => {
   try {
-    // Get Central Warehouse ID
-    const { data: centralBranch, error: branchError } = await supabase
+    // Kyogong is the central warehouse branch.
+    const { data: kyogongBranch, error: kyogongError } = await supabase
+      .from('branches')
+      .select('id, code, name')
+      .eq('id', 1)
+      .maybeSingle();
+
+    let centralId: number | null =
+      kyogongBranch && (kyogongBranch.code === 'KYO' || String(kyogongBranch.name || '').toLowerCase() === 'kyogong')
+        ? kyogongBranch.id
+        : null;
+
+    const { data: centralBranch, error: branchError } = centralId
+      ? { data: null, error: null } as any
+      : await supabase
       .from('branches')
       .select('id')
       .eq('is_central_warehouse', true)
       .maybeSingle();
 
-    let centralId: number | null = centralBranch?.id ?? null;
+    centralId = centralId ?? centralBranch?.id ?? null;
 
     // Fallback: use the main branch if no central warehouse is designated
     if (!centralId) {
@@ -25,7 +38,7 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
       centralId = mainBranch?.id ?? null;
     }
 
-    if (branchError || !centralId) {
+    if (kyogongError || branchError || !centralId) {
       logger.error('Central warehouse not found');
       return res.status(500).json({ success: false, message: 'Central warehouse configuration missing' });
     }

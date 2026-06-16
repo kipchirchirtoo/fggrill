@@ -834,7 +834,7 @@ export const startShift = async (
 
         // Generate shift number
         const { data: shiftNumber, error: numberError } = await supabase
-            .rpc('generate_shift_number');
+            .rpc('generate_shift_number', { p_branch_id: targetBranchId });
 
         if (numberError) throw numberError;
 

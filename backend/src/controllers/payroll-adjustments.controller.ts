@@ -19,9 +19,9 @@ export const getAdjustments = async (req: Request, res: Response, next: NextFunc
 
         if (staff_id) query = query.eq('staff_id', staff_id);
         if (status) query = query.eq('status', status);
-        if (type) query = query.eq('type', type);
-        if (month) query = query.eq('month', month);
-        if (year) query = query.eq('year', year);
+        if (type) query = query.eq('adj_type', type);
+        if (month) query = query.eq('period_month', Number(month));
+        if (year) query = query.eq('period_year', Number(year));
 
         const { data, error } = await query;
         if (error) throw error;
@@ -37,9 +37,10 @@ export const createAdjustment = async (req: Request, res: Response, next: NextFu
     try {
         const { staff_id, type, category, amount, description, month, year, status } = req.body;
         const created_by = req.user?.id;
+        const branch_id = (req as any).user?.branch_id;
         const normalizedStatus = normalizeStatus(status) || 'pending';
 
-        if (!staff_id || !type || !category || amount === undefined || amount === null || !month || !year) {
+        if (!staff_id || !type || amount === undefined || amount === null) {
             throw new AppError('Missing required fields for adjustment', 400);
         }
 
@@ -51,21 +52,20 @@ export const createAdjustment = async (req: Request, res: Response, next: NextFu
             throw new AppError('Invalid adjustment status', 400);
         }
 
+        // Map frontend fields to actual DB column names
         const payload: Record<string, any> = {
             staff_id,
-            type,
-            category,
+            branch_id,
+            adj_type: type,
             amount: Number(amount),
-            description,
-            month: String(month),
-            year: Number(year),
-            created_by,
+            reason: description || category || '',
             status: normalizedStatus
         };
+        if (month) payload.period_month = Number(month);
+        if (year) payload.period_year = Number(year);
 
         if (normalizedStatus === 'approved') {
             payload.approved_by = created_by;
-            payload.approved_at = new Date().toISOString();
         }
 
         const { data, error } = await supabase

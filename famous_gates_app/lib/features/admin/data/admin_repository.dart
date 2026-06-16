@@ -1038,6 +1038,11 @@ class AdminRepository {
     await _dio.put('/procurement/grn/$id/approve');
   }
 
+  Future<Map<String, dynamic>> backfillGRNStock() async {
+    final response = await _dio.post('/procurement/grn/backfill-stock');
+    return _parseMap(response.data);
+  }
+
   Future<List<Map<String, dynamic>>> getSupplierInvoices({
     String? status,
     String? supplierId,

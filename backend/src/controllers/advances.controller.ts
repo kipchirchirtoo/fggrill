@@ -54,7 +54,7 @@ export const getAdvances = async (req: Request, res: Response, next: NextFunctio
 
         const staffIds = [...new Set((data || []).map((a: any) => a.staff_id).filter(Boolean))];
         const { data: staffProfiles, error: staffError } = staffIds.length > 0
-            ? await supabase.from('staff_profiles').select('id, role, position, department, id_number, national_id, first_name, last_name, user_id').in('id', staffIds)
+            ? await supabase.from('staff_profiles').select('id, role, position, department, employee_number, national_id, first_name, last_name, user_id').in('id', staffIds)
             : { data: [], error: null };
         if (staffError) throw staffError;
         

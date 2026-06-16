@@ -159,6 +159,9 @@ enum AdminSection {
 final adminSectionProvider =
     StateProvider<AdminSection>((ref) => AdminSection.overview);
 
+/// PO ID to pre-load when navigating to the GRN / Goods Receiving screen.
+final grnPreloadPoIdProvider = StateProvider<String?>((ref) => null);
+
 final adminDashboardProvider =
     FutureProvider.autoDispose<AdminDashboard>((ref) async {
   final repo = ref.read(adminRepositoryProvider);
@@ -246,19 +249,9 @@ final centralBarItemsProvider =
 
 final centralStationeryProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final items =
-      await ref.read(adminRepositoryProvider).getStoreItems(limit: 500);
-  return items.where((item) {
-    final category =
-        '${item['category'] ?? item['category_code'] ?? ''}'.toLowerCase();
-    final description =
-        '${item['description'] ?? item['item_name'] ?? ''}'.toLowerCase();
-    return category.contains('stationery') ||
-        category.contains('office') ||
-        description.contains('stationery') ||
-        description.contains('envelope') ||
-        description.contains('marker');
-  }).toList();
+  return ref
+      .read(adminRepositoryProvider)
+      .getStoreItems(storeType: 'stationery', limit: 500);
 });
 
 final centralStoreSuppliersProvider =

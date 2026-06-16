@@ -537,23 +537,18 @@ export const getBudgets = async (
       .from('budgets')
       .select(`
         *,
-        branch:branches(id, name),
-        department:departments(id, name)
+        branch:branches(id, name)
       `)
-      .order('fiscal_year', { ascending: false });
+      .order('budget_year', { ascending: false });
 
     query = applyBranchFilter(query, req);
 
     if (fiscal_year) {
-      query = query.eq('fiscal_year', fiscal_year);
+      query = query.eq('budget_year', fiscal_year);
     }
 
     if (branch_id) {
       query = query.eq('branch_id', branch_id);
-    }
-
-    if (department_id) {
-      query = query.eq('department_id', department_id);
     }
 
     const { data, error } = await query;
@@ -630,8 +625,7 @@ export const getExpenses = async (
       .from('expenses')
       .select(`
         *,
-        branch:branches(id, name),
-        department:departments(id, name)
+        branch:branches(id, name)
       `)
       .order('created_at', { ascending: false });
 
@@ -1661,8 +1655,6 @@ export const getDailyLogs = async (req: Request, res: Response, next: NextFuncti
       .from('finance_daily_logs')
       .select(`
         *,
-        created_by_user:users!created_by(id, first_name, last_name),
-        verified_by_user:users!verified_by(id, first_name, last_name),
         lines:finance_daily_log_lines(*)
       `)
       .order('log_date', { ascending: false });

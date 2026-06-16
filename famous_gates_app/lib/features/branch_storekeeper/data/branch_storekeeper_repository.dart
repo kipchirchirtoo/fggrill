@@ -24,6 +24,20 @@ class BranchStorekeeperRepository {
     return await storage.read(key: AuthRepository.branchIdKey) ?? '';
   }
 
+  Future<Options> get _authOptions async {
+    final storage = _ref.read(secureStorageProvider);
+    final token =
+        (await storage.read(key: AuthRepository.jwtKey))?.trim() ?? '';
+    if (token.isEmpty || token.toLowerCase() == 'null') {
+      return Options();
+    }
+    return Options(headers: {'Authorization': 'Bearer $token'});
+  }
+
+  Future<Options> _requestOptions({ResponseType? responseType}) async {
+    return (await _authOptions).copyWith(responseType: responseType);
+  }
+
   Map<String, dynamic> _map(dynamic data) {
     if (data is Map<String, dynamic>) return data;
     if (data is Map) return Map<String, dynamic>.from(data);
@@ -65,6 +79,7 @@ class BranchStorekeeperRepository {
     final response = await _dio.get(
       '/store/dashboard/branch',
       queryParameters: await _branchQuery(),
+      options: await _authOptions,
     );
     return _unwrapMap(response.data);
   }
@@ -79,6 +94,7 @@ class BranchStorekeeperRepository {
         if (search != null && search.isNotEmpty) 'search': search,
         if (category != null && category != 'all') 'category': category,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -87,6 +103,7 @@ class BranchStorekeeperRepository {
     final response = await _dio.get(
       '/store/branch-stock/low',
       queryParameters: await _branchQuery(),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -96,11 +113,15 @@ class BranchStorekeeperRepository {
     String? category,
     int limit = 500,
   }) async {
-    final response = await _dio.get('/store/master-catalog', queryParameters: {
-      if (search != null && search.isNotEmpty) 'search': search,
-      if (category != null && category != 'all') 'category': category,
-      'limit': limit,
-    });
+    final response = await _dio.get(
+      '/store/master-catalog',
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (category != null && category != 'all') 'category': category,
+        'limit': limit,
+      },
+      options: await _authOptions,
+    );
     return _unwrapList(response.data);
   }
 
@@ -108,42 +129,59 @@ class BranchStorekeeperRepository {
     String? search,
     int limit = 500,
   }) async {
-    final response = await _dio.get('/store/items', queryParameters: {
-      if (search != null && search.isNotEmpty) 'search': search,
-      'limit': limit,
-    });
+    final response = await _dio.get(
+      '/store/items',
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+        'limit': limit,
+      },
+      options: await _authOptions,
+    );
     return _unwrapList(response.data);
   }
 
   Future<void> createItem(Map<String, dynamic> data) async {
-    await _dio.post('/store/items', data: data);
+    await _dio.post('/store/items', data: data, options: await _authOptions);
   }
 
   Future<void> adjustBranchStock(Map<String, dynamic> data) async {
-    await _dio.post('/store/branch-stock/adjustment', data: {
-      ...data,
-      ...await _branchQuery(),
-    });
+    await _dio.post(
+      '/store/branch-stock/adjustment',
+      data: {
+        ...data,
+        ...await _branchQuery(),
+      },
+      options: await _authOptions,
+    );
   }
 
   Future<void> recordStockOut(Map<String, dynamic> data) async {
-    await _dio.post('/store/branch-stock/out', data: {
-      ...data,
-      ...await _branchQuery(),
-    });
+    await _dio.post(
+      '/store/branch-stock/out',
+      data: {
+        ...data,
+        ...await _branchQuery(),
+      },
+      options: await _authOptions,
+    );
   }
 
-  Future<void> recordDepartmentIssue(Map<String, dynamic> data) async {
-    await _dio.post('/store/department-issues', data: {
-      ...data,
-      ...await _branchQuery(),
-    });
+  Future<Map<String, dynamic>> recordDepartmentIssue(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/store/department-issues',
+        data: {
+          ...data,
+          ...await _branchQuery(),
+        },
+        options: await _authOptions);
+    return _unwrapMap(response.data);
   }
 
   Future<List<Map<String, dynamic>>> departmentAccounts() async {
     final response = await _dio.get(
       '/store/department-accounts',
       queryParameters: await _branchQuery(),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -161,6 +199,7 @@ class BranchStorekeeperRepository {
         if (departmentCode != null && departmentCode.isNotEmpty)
           'department_code': departmentCode,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -178,6 +217,7 @@ class BranchStorekeeperRepository {
         if (startDate != null) 'start_date': startDate,
         if (endDate != null) 'end_date': endDate,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -186,6 +226,7 @@ class BranchStorekeeperRepository {
     final response = await _dio.get(
       '/store/department-issue-journals/$id',
       queryParameters: await _branchQuery(),
+      options: await _authOptions,
     );
     return _unwrapMap(response.data);
   }
@@ -200,6 +241,7 @@ class BranchStorekeeperRepository {
         if (startDate != null) 'start_date': startDate,
         if (endDate != null) 'end_date': endDate,
       }),
+      options: await _authOptions,
     );
     return _unwrapMap(response.data);
   }
@@ -212,27 +254,171 @@ class BranchStorekeeperRepository {
       queryParameters: await _branchQuery({
         if (movementType != null) 'movement_type': movementType,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> inventoryTruthLocations({
+    String? type,
+  }) async {
+    final response = await _dio.get(
+      '/inventory-foundation/locations',
+      queryParameters: await _branchQuery({
+        if (type != null && type.isNotEmpty) 'type': type,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> inventoryTruthBalances({
+    String? search,
+    int limit = 200,
+  }) async {
+    final response = await _dio.get(
+      '/inventory-foundation/balances',
+      queryParameters: await _branchQuery({
+        if (search != null && search.isNotEmpty) 'search': search,
+        'limit': limit,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> inventoryTruthMovements({
+    String? movementType,
+    int limit = 80,
+  }) async {
+    final response = await _dio.get(
+      '/inventory-foundation/movements',
+      queryParameters: await _branchQuery({
+        if (movementType != null && movementType.isNotEmpty)
+          'movement_type': movementType,
+        'limit': limit,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> outletStock({
+    String? search,
+    int limit = 250,
+  }) async {
+    final response = await _dio.get(
+      '/inventory-foundation/outlet-stock',
+      queryParameters: await _branchQuery({
+        if (search != null && search.isNotEmpty) 'search': search,
+        'limit': limit,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> posOutlets({
+    String? outletType,
+  }) async {
+    final response = await _dio.get(
+      '/pos/outlets',
+      queryParameters: await _branchQuery({
+        if (outletType != null && outletType.isNotEmpty)
+          'outlet_type': outletType,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> posOutletItems(String outletId) async {
+    final response = await _dio.get(
+      '/pos/outlets/$outletId/items',
+      queryParameters: {'include_related': 'false'},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createProductionRun(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post(
+      '/inventory-foundation/production-runs',
+      data: {
+        ...data,
+        ...await _branchQuery(),
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> inventoryTruthReservations({
+    String? state,
+    int limit = 80,
+  }) async {
+    final response = await _dio.get(
+      '/inventory-foundation/reservations',
+      queryParameters: await _branchQuery({
+        if (state != null && state.isNotEmpty) 'state': state,
+        'limit': limit,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> inventoryTruthAlerts({
+    String status = 'open',
+    int limit = 80,
+  }) async {
+    final response = await _dio.get(
+      '/inventory-foundation/alerts',
+      queryParameters: await _branchQuery({
+        if (status.isNotEmpty) 'status': status,
+        'limit': limit,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> recomputeInventoryTruth() async {
+    await _dio.post(
+      '/inventory-foundation/balances/recompute',
+      data: await _branchQuery(),
+      options: await _authOptions,
+    );
   }
 
   Future<List<Map<String, dynamic>>> incomingDispatches() async {
     final response = await _dio.get(
       '/store/incoming-dispatches',
       queryParameters: await _branchQuery(),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
 
-  Future<void> confirmDispatch(String dispatchId, Map<String, dynamic> data) {
-    return _dio.put('/store/dispatch-notes/$dispatchId/confirm', data: data);
+  Future<void> confirmDispatch(
+      String dispatchId, Map<String, dynamic> data) async {
+    await _dio.put(
+      '/store/dispatch-notes/$dispatchId/confirm',
+      data: data,
+      options: await _authOptions,
+    );
   }
 
-  Future<void> receiveFromSupplier(Map<String, dynamic> data) async {
-    await _dio.post('/store/branch-stock/receive-supplier', data: {
-      ...data,
-      ...await _branchQuery(),
-    });
+  Future<Map<String, dynamic>> receiveFromSupplier(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post('/store/branch-stock/receive-supplier',
+        data: {
+          ...data,
+          ...await _branchQuery(),
+        },
+        options: await _authOptions);
+    return _unwrapMap(response.data);
   }
 
   Future<List<Map<String, dynamic>>> suppliers({
@@ -240,24 +426,33 @@ class BranchStorekeeperRepository {
     String? status,
     String? search,
   }) async {
-    final response = await _dio.get('/store/suppliers', queryParameters: {
-      'scope': scope,
-      if (status != null && status != 'ALL') 'status': status,
-      if (search != null && search.isNotEmpty) 'search': search,
-    });
+    final response = await _dio.get(
+      '/store/suppliers',
+      queryParameters: {
+        'scope': scope,
+        if (status != null && status != 'ALL') 'status': status,
+        if (search != null && search.isNotEmpty) 'search': search,
+      },
+      options: await _authOptions,
+    );
     return _unwrapList(response.data);
   }
 
   Future<void> createSupplier(Map<String, dynamic> data) async {
-    await _dio.post('/store/suppliers', data: data);
+    await _dio.post('/store/suppliers',
+        data: data, options: await _authOptions);
   }
 
   Future<void> updateSupplier(String id, Map<String, dynamic> data) async {
-    await _dio.put('/store/suppliers/$id', data: data);
+    await _dio.put(
+      '/store/suppliers/$id',
+      data: data,
+      options: await _authOptions,
+    );
   }
 
   Future<void> deleteSupplier(String id) async {
-    await _dio.delete('/store/suppliers/$id');
+    await _dio.delete('/store/suppliers/$id', options: await _authOptions);
   }
 
   Future<List<Map<String, dynamic>>> stockTakes({
@@ -268,6 +463,7 @@ class BranchStorekeeperRepository {
       queryParameters: await _branchQuery({
         if (storeType != 'all') 'store_type': storeType,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -278,42 +474,59 @@ class BranchStorekeeperRepository {
     String? outletCode,
     List<String>? itemSkus,
   }) async {
-    final response = await _dio.post('/stock-takes', data: {
-      ...await _branchQuery(),
-      'count_type': countType,
-      'store_type': storeType,
-      if (outletCode != null && outletCode.isNotEmpty)
-        'outlet_code': outletCode,
-      if (itemSkus != null && itemSkus.isNotEmpty) 'item_skus': itemSkus,
-    });
+    final response = await _dio.post('/stock-takes',
+        data: {
+          ...await _branchQuery(),
+          'count_type': countType,
+          'store_type': storeType,
+          if (outletCode != null && outletCode.isNotEmpty)
+            'outlet_code': outletCode,
+          if (itemSkus != null && itemSkus.isNotEmpty) 'item_skus': itemSkus,
+        },
+        options: await _authOptions);
     return _unwrapMap(response.data);
   }
 
   Future<Map<String, dynamic>> stockTake(String id) async {
-    final response = await _dio.get('/stock-takes/$id');
+    final response =
+        await _dio.get('/stock-takes/$id', options: await _authOptions);
     return _unwrapMap(response.data);
   }
 
   Future<List<Map<String, dynamic>>> stockTakeItems(String id) async {
-    final response = await _dio.get('/stock-takes/$id/items');
+    final response =
+        await _dio.get('/stock-takes/$id/items', options: await _authOptions);
     return _unwrapList(response.data);
   }
 
-  Future<void> updateStockTake(String id, List<Map<String, dynamic>> items) {
-    return _dio.put('/stock-takes/$id', data: {'items': items});
+  Future<void> updateStockTake(
+      String id, List<Map<String, dynamic>> items) async {
+    await _dio.put(
+      '/stock-takes/$id',
+      data: {'items': items},
+      options: await _authOptions,
+    );
   }
 
   Future<void> updateStockTakeItem(
     String itemId,
     Map<String, dynamic> data,
-  ) {
-    return _dio.put('/store/stock-take-items/$itemId', data: data);
+  ) async {
+    await _dio.put(
+      '/store/stock-take-items/$itemId',
+      data: data,
+      options: await _authOptions,
+    );
   }
 
-  Future<void> completeStockTake(String id, {String? notes}) {
-    return _dio.post('/store/stock-takes/$id/submit-accountant', data: {
-      if (notes != null && notes.isNotEmpty) 'notes': notes,
-    });
+  Future<void> completeStockTake(String id, {String? notes}) async {
+    await _dio.post(
+      '/store/stock-takes/$id/submit-accountant',
+      data: {
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      },
+      options: await _authOptions,
+    );
   }
 
   Future<File> downloadStockTakeWorksheet({
@@ -367,10 +580,14 @@ class BranchStorekeeperRepository {
   Future<List<Map<String, dynamic>>> purchaseOrders({
     String? status,
   }) async {
-    final response = await _dio.get('/store/purchase-orders', queryParameters: {
-      'source_module': 'branch_store',
-      if (status != null && status != 'ALL') 'status': status,
-    });
+    final response = await _dio.get(
+      '/store/purchase-orders',
+      queryParameters: {
+        'source_module': 'branch_store',
+        if (status != null && status != 'ALL') 'status': status,
+      },
+      options: await _authOptions,
+    );
     return _unwrapList(response.data);
   }
 
@@ -379,6 +596,7 @@ class BranchStorekeeperRepository {
       '/store/purchase-orders',
       queryParameters: {'source_module': 'branch_store'},
       data: data,
+      options: await _authOptions,
     );
   }
 
@@ -386,6 +604,7 @@ class BranchStorekeeperRepository {
     final response = await _dio.get(
       '/store/purchase-orders/$id',
       queryParameters: {'source_module': 'branch_store'},
+      options: await _authOptions,
     );
     return _unwrapMap(response.data);
   }
@@ -395,6 +614,7 @@ class BranchStorekeeperRepository {
       '/store/purchase-orders/$id',
       queryParameters: {'source_module': 'branch_store'},
       data: data,
+      options: await _authOptions,
     );
   }
 
@@ -402,6 +622,7 @@ class BranchStorekeeperRepository {
     await _dio.delete(
       '/store/purchase-orders/$id',
       queryParameters: {'source_module': 'branch_store'},
+      options: await _authOptions,
     );
   }
 
@@ -409,6 +630,7 @@ class BranchStorekeeperRepository {
     await _dio.post(
       '/store/purchase-orders/$id/approve',
       queryParameters: {'source_module': 'branch_store'},
+      options: await _authOptions,
     );
   }
 
@@ -416,6 +638,7 @@ class BranchStorekeeperRepository {
     await _dio.post(
       '/store/purchase-orders/$id/receive',
       queryParameters: {'source_module': 'branch_store'},
+      options: await _authOptions,
     );
   }
 
@@ -423,6 +646,7 @@ class BranchStorekeeperRepository {
     await _dio.post(
       '/store/purchase-orders/$id/cancel',
       queryParameters: {'source_module': 'branch_store'},
+      options: await _authOptions,
     );
   }
 
@@ -432,25 +656,33 @@ class BranchStorekeeperRepository {
       queryParameters: await _branchQuery({
         if (status != null && status != 'ALL') 'status': status,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
 
   Future<void> createStockRequest(Map<String, dynamic> data) async {
     final branchId = await _branchId;
-    await _dio.post('/store/stock-requests', data: {
-      ...data,
-      if (branchId.isNotEmpty) 'requesting_branch_id': int.tryParse(branchId),
-    });
+    await _dio.post('/store/stock-requests',
+        data: {
+          ...data,
+          if (branchId.isNotEmpty)
+            'requesting_branch_id': int.tryParse(branchId),
+        },
+        options: await _authOptions);
   }
 
   Future<List<Map<String, dynamic>>> kitchenRequisitions({
     String? status,
   }) async {
-    final response = await _dio.get('/kitchen/requisitions', queryParameters: {
-      ...await _branchQuery(),
-      if (status != null && status != 'ALL') 'status': status,
-    });
+    final response = await _dio.get(
+      '/kitchen/requisitions',
+      queryParameters: {
+        ...await _branchQuery(),
+        if (status != null && status != 'ALL') 'status': status,
+      },
+      options: await _authOptions,
+    );
     return _unwrapList(response.data);
   }
 
@@ -458,22 +690,36 @@ class BranchStorekeeperRepository {
     String id,
     List<Map<String, dynamic>> issuedQuantities,
   ) async {
-    await _dio.post('/kitchen/requisitions/$id/fulfill', data: {
-      'issued_quantities': issuedQuantities,
-    });
+    await _dio.post('/kitchen/requisitions/$id/fulfill',
+        data: {
+          'issued_quantities': issuedQuantities,
+        },
+        options: await _authOptions);
   }
 
   Future<void> rejectKitchenRequisition(String id, String reason) async {
-    await _dio.post('/kitchen/requisitions/$id/reject', data: {
-      'reason': reason,
-      'rejection_reason': reason,
-    });
+    await _dio.post('/kitchen/requisitions/$id/reject',
+        data: {
+          'reason': reason,
+          'rejection_reason': reason,
+        },
+        options: await _authOptions);
+  }
+
+  Future<Map<String, dynamic>> getKitchenRequisitionRelatedActivity(
+      String id) async {
+    final response = await _dio.get(
+      '/kitchen/requisitions/$id/related-activity',
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
   }
 
   Future<List<Map<String, dynamic>>> trackableItems() async {
     final response = await _dio.get(
       '/store/kitchen-usage/trackable-items',
       queryParameters: await _branchQuery(),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -486,36 +732,51 @@ class BranchStorekeeperRepository {
       queryParameters: await _branchQuery({
         if (status != null && status != 'ALL') 'status': status,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
 
   Future<void> createKitchenUsageRecord(Map<String, dynamic> data) async {
-    await _dio.post('/store/kitchen-usage', data: {
-      ...data,
-      ...await _branchQuery(),
-    });
+    await _dio.post('/store/kitchen-usage',
+        data: {
+          ...data,
+          ...await _branchQuery(),
+        },
+        options: await _authOptions);
   }
 
   Future<List<Map<String, dynamic>>> kitchenUsageEntries(String id) async {
-    final response = await _dio.get('/store/kitchen-usage/$id/entries');
+    final response = await _dio.get(
+      '/store/kitchen-usage/$id/entries',
+      options: await _authOptions,
+    );
     return _unwrapList(response.data);
   }
 
   Future<void> addKitchenUsageEntry(
       String id, Map<String, dynamic> data) async {
-    await _dio.post('/store/kitchen-usage/$id/entries', data: data);
+    await _dio.post(
+      '/store/kitchen-usage/$id/entries',
+      data: data,
+      options: await _authOptions,
+    );
   }
 
   Future<void> closeKitchenUsageRecord(
       String id, Map<String, dynamic> data) async {
-    await _dio.put('/store/kitchen-usage/$id/close', data: data);
+    await _dio.put(
+      '/store/kitchen-usage/$id/close',
+      data: data,
+      options: await _authOptions,
+    );
   }
 
   Future<List<Map<String, dynamic>>> branchStaff() async {
     final response = await _dio.get(
       '/store/kitchen-usage/staff',
       queryParameters: await _branchQuery(),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -530,6 +791,7 @@ class BranchStorekeeperRepository {
         if (startDate != null) 'start_date': startDate,
         if (endDate != null) 'end_date': endDate,
       }),
+      options: await _authOptions,
     );
     return _unwrapList(response.data);
   }
@@ -544,6 +806,7 @@ class BranchStorekeeperRepository {
         if (startDate != null) 'start_date': startDate,
         if (endDate != null) 'end_date': endDate,
       }),
+      options: await _authOptions,
     );
     return _unwrapMap(response.data);
   }
@@ -604,11 +867,13 @@ class BranchStorekeeperRepository {
     String reportType,
     Map<String, dynamic> filters,
   ) async {
-    final response = await _dio.post('/reports/generate/async', data: {
-      'reportType': reportType,
-      'filters': filters,
-      'useRealData': true,
-    });
+    final response = await _dio.post('/reports/generate/async',
+        data: {
+          'reportType': reportType,
+          'filters': filters,
+          'useRealData': true,
+        },
+        options: await _authOptions);
     final init = _unwrapMap(response.data);
     final jobId = init['jobId'] ?? init['id'];
     if (jobId == null || '$jobId'.isEmpty) {
@@ -618,7 +883,10 @@ class BranchStorekeeperRepository {
     Map<String, dynamic> job = {};
     for (var attempt = 0; attempt < 60; attempt++) {
       await Future<void>.delayed(const Duration(seconds: 2));
-      final statusResponse = await _dio.get('/reports/jobs/$jobId/status');
+      final statusResponse = await _dio.get(
+        '/reports/jobs/$jobId/status',
+        options: await _authOptions,
+      );
       job = _unwrapMap(statusResponse.data);
       final status = '${job['status'] ?? ''}'.toLowerCase();
       if (status == 'completed') break;
@@ -640,10 +908,41 @@ class BranchStorekeeperRepository {
           )
         : await _dio.get<List<int>>(
             url,
-            options: Options(responseType: ResponseType.bytes),
+            options: await _requestOptions(responseType: ResponseType.bytes),
           );
     return _saveBytes(
         responseBytes.data ?? const <int>[], '${reportType}_${_today()}.pdf');
+  }
+
+  Future<List<Map<String, dynamic>>> departmentRequestLogs({
+    String? status,
+  }) async {
+    final response = await _dio.get(
+      '/store/department-requests',
+      queryParameters: await _branchQuery({
+        if (status != null && status != 'ALL') 'status': status,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createDepartmentRequestLog(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post(
+      '/store/department-requests',
+      data: data,
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<void> issueDepartmentRequest(String id, {String? notes}) async {
+    await _dio.post(
+      '/store/department-requests/$id/issue',
+      data: {if (notes != null && notes.isNotEmpty) 'notes': notes},
+      options: await _authOptions,
+    );
   }
 
   Future<File> _downloadGet(
@@ -654,7 +953,7 @@ class BranchStorekeeperRepository {
     final response = await _dio.get<List<int>>(
       endpoint,
       queryParameters: queryParameters,
-      options: Options(responseType: ResponseType.bytes),
+      options: await _requestOptions(responseType: ResponseType.bytes),
     );
     return _saveBytes(response.data ?? const <int>[], filename);
   }
@@ -667,7 +966,7 @@ class BranchStorekeeperRepository {
     final response = await _dio.post<List<int>>(
       endpoint,
       data: data,
-      options: Options(responseType: ResponseType.bytes),
+      options: await _requestOptions(responseType: ResponseType.bytes),
     );
     return _saveBytes(response.data ?? const <int>[], filename);
   }
@@ -683,4 +982,163 @@ class BranchStorekeeperRepository {
   }
 
   String _today() => DateTime.now().toIso8601String().split('T').first;
+
+  // ── Outlet Item Control ───────────────────────────────────────────────────
+
+  Future<void> patchOutletItemTrackStock({
+    required String outletId,
+    required String itemId,
+    required bool trackStock,
+  }) async {
+    await _dio.patch(
+      '/pos/outlets/$outletId/items/$itemId',
+      data: {'track_stock': trackStock},
+      options: await _authOptions,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getMenuItems() async {
+    final response = await _dio.get(
+      '/restaurant/menu/items',
+      options: await _authOptions,
+    );
+    final data = response.data;
+    if (data is Map && data['data'] is List) {
+      return List<Map<String, dynamic>>.from(data['data'] as List);
+    }
+    return [];
+  }
+
+  // ── Recipe / Food Control ──────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getRecipes() async {
+    final response = await _dio.get(
+      '/kitchen/recipes',
+      options: await _authOptions,
+    );
+    final data = response.data;
+    if (data is Map && data['data'] is List) {
+      return List<Map<String, dynamic>>.from(data['data'] as List);
+    }
+    return [];
+  }
+
+  Future<void> createRecipe({
+    required String menuItemName,
+    required int portionsPerRecipe,
+    required List<Map<String, dynamic>> ingredients,
+    String? menuItemId,
+  }) async {
+    await _dio.post(
+      '/kitchen/recipes',
+      data: {
+        'menu_item_name': menuItemName,
+        if (menuItemId != null) 'menu_item_id': menuItemId,
+        'portions_per_recipe': portionsPerRecipe,
+        'ingredients': ingredients,
+      },
+      options: await _authOptions,
+    );
+  }
+
+  Future<void> updateRecipe({
+    required String id,
+    required String menuItemName,
+    required int portionsPerRecipe,
+    required List<Map<String, dynamic>> ingredients,
+  }) async {
+    await _dio.put(
+      '/kitchen/recipes/$id',
+      data: {
+        'menu_item_name': menuItemName,
+        'portions_per_recipe': portionsPerRecipe,
+        'ingredients': ingredients,
+      },
+      options: await _authOptions,
+    );
+  }
+
+  // ── Kitchen Production Sessions ─────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getProductionSessions({
+    String? status,
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/production-sessions',
+      queryParameters: {
+        'branch_id': branchId,
+        if (status != null) 'status': status,
+        if (dateFrom != null) 'date_from': dateFrom,
+        if (dateTo != null) 'date_to': dateTo,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getProductionRecipes() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/production-sessions/recipes',
+      queryParameters: {'branch_id': branchId},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createProductionSession({
+    required String staffName,
+    String? staffId,
+    String? notes,
+    required List<Map<String, dynamic>> issues,
+    required List<Map<String, dynamic>> plannedItems,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/kitchen/production-sessions',
+      data: {
+        'branch_id': branchId,
+        'staff_name': staffName,
+        if (staffId != null) 'staff_id': staffId,
+        if (notes != null) 'notes': notes,
+        'issues': issues,
+        'planned_items': plannedItems,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> completeProductionSession({
+    required String sessionId,
+    required List<Map<String, dynamic>> entries,
+  }) async {
+    final response = await _dio.put(
+      '/kitchen/production-sessions/$sessionId/complete',
+      data: {'entries': entries},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> getProductionSessionDetail(String id) async {
+    final response = await _dio.get(
+      '/kitchen/production-sessions/$id',
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getStaffList() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/staff',
+      queryParameters: {'branch_id': branchId, 'limit': '200'},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
 }

@@ -19,8 +19,7 @@ export default function StationeryPage() {
     const fetchItems = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Using 'office_supplies' as the category for stationery
-            const response = await storeAPI.getItems({ category: 'office_supplies' });
+            const response = await storeAPI.getItems({ store_type: 'stationery' });
             if (response.success) setItems(response.data || []);
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }

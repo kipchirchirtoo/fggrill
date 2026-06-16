@@ -303,8 +303,8 @@ export const createDispatchNote = async (
             userId
         });
 
-        // Handle creation from request ID
-        if (finalRequestId && (!items || items.length === 0)) {
+        // Handle creation from request ID — always prefer this path when request_id is supplied
+        if (finalRequestId) {
             // 1. Get Central Warehouse
             const central = await BranchInventoryService.getCentralWarehouse();
             if (!central) {
@@ -312,10 +312,10 @@ export const createDispatchNote = async (
                 throw new AppError('Central warehouse not configured', 500);
             }
 
-            // 2. Get Request Details
+            // 2. Get Request Details (simple select — no embedded join on view)
             const { data: request, error: requestError } = await supabase
                 .from('stock_requests')
-                .select('*, requesting_branch:branches!requesting_branch_id(code)')
+                .select('*')
                 .eq('id', finalRequestId)
                 .maybeSingle();
 
@@ -328,7 +328,16 @@ export const createDispatchNote = async (
                 throw new AppError('Stock request not found', 404);
             }
 
-            // 3. Get Request Items
+            // 3. Resolve requesting branch code separately
+            const destBranchId = request.requesting_branch_id || request.branch_id;
+            const { data: branchData } = await supabase
+                .from('branches')
+                .select('code')
+                .eq('id', destBranchId)
+                .maybeSingle();
+            const branchCode = branchData?.code || `BR${destBranchId}`;
+
+            // 4. Get Request Items from DB (ignore any client-provided items)
             const { data: requestItems, error: itemsError } = await supabase
                 .from('stock_request_items')
                 .select('*')
@@ -350,12 +359,12 @@ export const createDispatchNote = async (
                 status: 'PENDING'
             }));
 
-            // 4. Create Dispatch
+            // 5. Create Dispatch
             const dispatch = await BranchInventoryService.createDispatchFromRequest(
                 finalRequestId,
                 central.id,
-                request.requesting_branch_id,
-                request.requesting_branch.code,
+                destBranchId,
+                branchCode,
                 userId,
                 dispatchItems,
                 vehicle_number,

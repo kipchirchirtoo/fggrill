@@ -47,14 +47,14 @@ export const getStaffPerformance = async (
             (staff || []).map(async (member) => {
                 // Attendance data
                 const { data: attendance } = await supabase
-                    .from('attendance')
+                    .from('staff_attendance')
                     .select('*')
                     .eq('staff_id', member.id)
-                    .gte('date', startDate);
+                    .gte('attendance_date', startDate);
 
                 const totalDays = periodDays;
                 const presentDays = attendance?.filter(a => a.status === 'present').length || 0;
-                const lateDays = attendance?.filter(a => a.is_late).length || 0;
+                const lateDays = attendance?.filter(a => a.status === 'late').length || 0;
                 const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
                 const punctualityScore = presentDays > 0 ? ((presentDays - lateDays) / presentDays) * 100 : 100;
 
@@ -175,15 +175,15 @@ export const getStaffKPIs = async (
 
         // Attendance details
         const { data: attendance } = await supabase
-            .from('attendance')
+            .from('staff_attendance')
             .select('*')
             .eq('staff_id', id)
-            .gte('date', startDate)
-            .order('date', { ascending: false });
+            .gte('attendance_date', startDate)
+            .order('attendance_date', { ascending: false });
 
         const presentDays = attendance?.filter(a => a.status === 'present').length || 0;
         const absentDays = attendance?.filter(a => a.status === 'absent').length || 0;
-        const lateDays = attendance?.filter(a => a.is_late).length || 0;
+        const lateDays = attendance?.filter(a => a.status === 'late').length || 0;
         const onTimeDays = presentDays - lateDays;
 
         // Task performance
@@ -329,13 +329,13 @@ export const getPerformanceLeaderboard = async (
         const performanceData = await Promise.all(
             (staff || []).map(async (member) => {
                 const { data: attendance } = await supabase
-                    .from('attendance')
+                    .from('staff_attendance')
                     .select('*')
                     .eq('staff_id', member.id)
-                    .gte('date', startDate);
+                    .gte('attendance_date', startDate);
 
                 const presentDays = attendance?.filter(a => a.status === 'present').length || 0;
-                const lateDays = attendance?.filter(a => a.is_late).length || 0;
+                const lateDays = attendance?.filter(a => a.status === 'late').length || 0;
                 const attendanceRate = periodDays > 0 ? (presentDays / periodDays) * 100 : 0;
                 const punctualityScore = presentDays > 0 ? ((presentDays - lateDays) / presentDays) * 100 : 100;
 

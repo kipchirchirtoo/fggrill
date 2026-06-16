@@ -28,6 +28,10 @@ function fmt(n: number | null | undefined): string {
   return `KES ${(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function fmtNum(n: number | null | undefined): string {
+  return (n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -1358,11 +1362,11 @@ export async function generateGRNPDF(grn: any, items: any[]): Promise<Buffer> {
     const cols = [
       { label: '#', x: 44, width: 18 },
       { label: 'Item Description', x: 70, width: 168 },
-      { label: 'SKU', x: 242, width: 112 },
-      { label: 'Ordered', x: 358, width: 46, align: 'right' },
-      { label: 'Received', x: 408, width: 50, align: 'right' },
-      { label: 'Unit Price', x: 462, width: 55, align: 'right' },
-      { label: 'Total', x: 521, width: 54, align: 'right' },
+      { label: 'SKU', x: 242, width: 90 },
+      { label: 'Ordered', x: 336, width: 46, align: 'right' },
+      { label: 'Received', x: 386, width: 50, align: 'right' },
+      { label: 'Unit Price (KES)', x: 440, width: 58, align: 'right' },
+      { label: 'Total (KES)', x: 501, width: 54, align: 'right' },
     ];
 
     y = drawTableHeader(doc, y, cols);
@@ -1379,18 +1383,19 @@ export async function generateGRNPDF(grn: any, items: any[]): Promise<Buffer> {
       const detail = row.item || {};
       const qtyReceived = Number(row.quantity_received || row.quantity_accepted || 0);
       const unitPrice = Number(row.unit_price || 0);
-      const lineTotal = Number(row.total_value || (qtyReceived * unitPrice));
-      const itemName = detail.item_name || detail.description || row.item_name || row.item_id || '—';
+      const lineTotal = Number(row.line_total || row.total_value || (qtyReceived * unitPrice));
+      const itemName = row.item_name || detail.name || detail.item_name || detail.description || '—';
+      const itemSku = row.sku || detail.item_code || detail.sku || '—';
 
       if (index % 2 === 0) doc.rect(40, y, doc.page.width - 80, rowHeight).fill(ROW_BG);
       doc.fillColor(PRIMARY).fontSize(7.8).font('Helvetica');
       doc.text(String(index + 1), 44, y + 5, { width: 18 });
       doc.text(itemName, 70, y + 5, { width: 168, ellipsis: true });
-      doc.text(row.item_id || detail.sku || '—', 242, y + 5, { width: 112, ellipsis: true });
-      doc.text(String(row.quantity_ordered || 0), 358, y + 5, { width: 46, align: 'right' });
-      doc.text(String(qtyReceived), 408, y + 5, { width: 50, align: 'right' });
-      doc.text(fmt(unitPrice), 462, y + 5, { width: 55, align: 'right' });
-      doc.text(fmt(lineTotal), 521, y + 5, { width: 54, align: 'right' });
+      doc.text(itemSku, 242, y + 5, { width: 90, ellipsis: true });
+      doc.text(String(row.quantity_ordered || 0), 336, y + 5, { width: 46, align: 'right' });
+      doc.text(String(qtyReceived), 386, y + 5, { width: 50, align: 'right' });
+      doc.text(fmtNum(unitPrice), 440, y + 5, { width: 58, align: 'right' });
+      doc.text(fmtNum(lineTotal), 501, y + 5, { width: 54, align: 'right' });
       doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, y + rowHeight).lineTo(doc.page.width - 40, y + rowHeight).stroke();
       y += rowHeight;
     });
@@ -1417,6 +1422,237 @@ export async function generateGRNPDF(grn: any, items: any[]): Promise<Buffer> {
  * GENERATE STOCK TAKE WORKSHEET PDF
  * A branded worksheet for physical inventory counting
  */
+type TradingStockRow = {
+  index: number;
+  itemCode: string;
+  itemName: string;
+  reorderLevel: number;
+  costPrice: number;
+  opening: number;
+  added: number;
+  total: number;
+  issued: number;
+  spoilages: number;
+  stockOut: number;
+  physicalBal: number | null;
+  variance: number | null;
+};
+
+function firstStockNumber(row: any, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = row?.[key] ?? row?.item?.[key];
+    if (value === null || value === undefined || `${value}`.trim() === "")
+      continue;
+    if (typeof value === "number") return value;
+    const parsed = Number(`${value}`.replace(/,/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function stockTextValue(row: any, keys: string[], fallback = "—"): string {
+  for (const key of keys) {
+    const value = row?.[key] ?? row?.item?.[key];
+    if (
+      value !== null &&
+      value !== undefined &&
+      `${value}`.trim() !== "" &&
+      `${value}` !== "null"
+    ) {
+      return `${value}`;
+    }
+  }
+  return fallback;
+}
+
+function formatStockQty(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function formatStockMoney(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return "—";
+  return value.toLocaleString("en-KE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function toTradingStockRow(item: any, index: number): TradingStockRow {
+  const opening =
+    firstStockNumber(item, ["opening_quantity", "opening_stock", "opening"]) ??
+    firstStockNumber(item, ["system_quantity", "current_stock", "quantity"]) ?? 0;
+  const added =
+    (firstStockNumber(item, ["added_quantity", "adds", "additions"]) ?? 0) +
+    (firstStockNumber(item, ["transfers_in", "received_quantity"]) ?? 0);
+  const total = opening + added;
+  const issued = firstStockNumber(item, ["issued_quantity", "issued_stock"]) ?? 0;
+  const spoilages = firstStockNumber(item, ["spoilage_quantity", "spoilages", "spoiled_quantity"]) ?? 0;
+  const stockOut = firstStockNumber(item, ["stock_out_quantity", "stock_out", "sold_quantity", "sold"]) ?? 0;
+  const physicalBal = firstStockNumber(item, [
+    "counted_quantity", "physical_quantity", "physical_balance",
+    "closing_stock", "closing_quantity",
+  ]);
+  const expectedBal = total - issued - spoilages - stockOut;
+  const variance = physicalBal !== null ? physicalBal - expectedBal : null;
+
+  return {
+    index,
+    itemCode: stockTextValue(item, ["item_sku", "sku", "item_code"], ""),
+    itemName: stockTextValue(item, ["item_name", "name", "description", "item_sku", "sku"]),
+    reorderLevel: firstStockNumber(item, ["reorder_level"]) ?? 0,
+    costPrice: firstStockNumber(item, ["cost_price", "unit_cost", "buying_price", "cost"]) ?? 0,
+    opening,
+    added,
+    total,
+    issued,
+    spoilages,
+    stockOut,
+    physicalBal,
+    variance,
+  };
+}
+
+function drawTradingStockSheet(
+  doc: PDFKit.PDFDocument,
+  startY: number,
+  title: string,
+  subtitle: string,
+  items: any[],
+  options: { inputClosing?: boolean } = {},
+) {
+  // Column layout — 13 columns across A3 landscape (~1110 usable pts from x=42)
+  const cols = [
+    { label: "#",             x: 42,   width: 24,  align: "left"  },
+    { label: "Item Code",     x: 66,   width: 88,  align: "left"  },
+    { label: "Item Name",     x: 154,  width: 148, align: "left"  },
+    { label: "Reorder Lvl",  x: 302,  width: 70,  align: "right" },
+    { label: "Cost Price",    x: 372,  width: 74,  align: "right" },
+    { label: "Opening Stock", x: 446,  width: 76,  align: "right" },
+    { label: "Adds",          x: 522,  width: 62,  align: "right" },
+    { label: "Total Stock",   x: 584,  width: 76,  align: "right" },
+    { label: "Issued Stock",  x: 660,  width: 76,  align: "right" },
+    { label: "Spoilages",     x: 736,  width: 70,  align: "right" },
+    { label: "Stock Out",     x: 806,  width: 70,  align: "right" },
+    { label: "Physical Bal",  x: 876,  width: 82,  align: "right" },
+    { label: "Variance",      x: 958,  width: 80,  align: "right" },
+  ];
+
+  const rows = items.map((item, index) => toTradingStockRow(item, index + 1));
+  let y = drawTableHeader(doc, startY, cols);
+
+  const repeatHeader = () => {
+    drawFooter(doc);
+    doc.addPage();
+    const nextY = drawBrandedHeader(doc, `${title} (cont.)`, subtitle);
+    y = drawTableHeader(doc, nextY, cols);
+  };
+
+  const fmtQty = (v: number | null) => v === null ? "—" : formatStockQty(v);
+  const fmtVariance = (v: number | null) => {
+    if (v === null) return "—";
+    return (v >= 0 ? "" : "") + formatStockQty(v);
+  };
+
+  rows.forEach((row, i) => {
+    if (y > doc.page.height - 88) repeatHeader();
+    const rowY = y;
+    if (i % 2 === 0) doc.rect(40, rowY, doc.page.width - 80, 22).fill(ROW_BG);
+    doc.fillColor(PRIMARY).fontSize(7.2).font("Helvetica");
+
+    // #
+    doc.text(String(row.index), 42, rowY + 7, { width: 22 });
+
+    // Item Code
+    doc.font("Helvetica").fontSize(7).fillColor(SECONDARY)
+      .text(row.itemCode, 66, rowY + 7, { width: 84, ellipsis: true });
+
+    // Item Name
+    doc.font("Helvetica-Bold").fontSize(7.2).fillColor(PRIMARY)
+      .text(row.itemName, 154, rowY + 7, { width: 144, height: 9, ellipsis: true });
+
+    doc.font("Helvetica").fontSize(7.2).fillColor(PRIMARY);
+
+    // Reorder Level
+    doc.text(formatStockQty(row.reorderLevel), 302, rowY + 7, { width: 66, align: "right" });
+
+    // Cost Price
+    doc.text(formatStockMoney(row.costPrice), 372, rowY + 7, { width: 70, align: "right" });
+
+    // Opening Stock
+    doc.text(formatStockQty(row.opening), 446, rowY + 7, { width: 72, align: "right" });
+
+    // Adds
+    doc.text(formatStockQty(row.added), 522, rowY + 7, { width: 58, align: "right" });
+
+    // Total Stock
+    doc.font("Helvetica-Bold")
+      .text(formatStockQty(row.total), 584, rowY + 7, { width: 72, align: "right" });
+    doc.font("Helvetica");
+
+    // Issued Stock
+    doc.text(formatStockQty(row.issued), 660, rowY + 7, { width: 72, align: "right" });
+
+    // Spoilages
+    doc.text(formatStockQty(row.spoilages), 736, rowY + 7, { width: 66, align: "right" });
+
+    // Stock Out
+    doc.text(formatStockQty(row.stockOut), 806, rowY + 7, { width: 66, align: "right" });
+
+    // Physical Bal — blank input box when doing a live stock take
+    if (options.inputClosing && row.physicalBal === null) {
+      doc.rect(880, rowY + 4, 70, 14).stroke(BORDER);
+    } else {
+      doc.text(fmtQty(row.physicalBal), 876, rowY + 7, { width: 78, align: "right" });
+    }
+
+    // Variance — colour-coded: red for negative, green for positive
+    if (row.variance !== null) {
+      doc.fillColor(row.variance < 0 ? "#dc2626" : row.variance > 0 ? "#16a34a" : PRIMARY)
+        .font("Helvetica-Bold")
+        .text(fmtVariance(row.variance), 958, rowY + 7, { width: 76, align: "right" });
+      doc.fillColor(PRIMARY).font("Helvetica");
+    } else {
+      doc.text("—", 958, rowY + 7, { width: 76, align: "right" });
+    }
+
+    // bottom border
+    doc.strokeColor(BORDER).lineWidth(0.4)
+      .moveTo(42, rowY + 22).lineTo(doc.page.width - 42, rowY + 22).stroke();
+
+    y += 22;
+  });
+
+  // totals row
+  if (rows.length > 0) {
+    const totOpening  = rows.reduce((s, r) => s + r.opening,   0);
+    const totAdded    = rows.reduce((s, r) => s + r.added,     0);
+    const totTotal    = rows.reduce((s, r) => s + r.total,     0);
+    const totIssued   = rows.reduce((s, r) => s + r.issued,    0);
+    const totSpoil    = rows.reduce((s, r) => s + r.spoilages, 0);
+    const totOut      = rows.reduce((s, r) => s + r.stockOut,  0);
+    const totPhys     = rows.filter(r => r.physicalBal !== null).reduce((s, r) => s + (r.physicalBal ?? 0), 0);
+    const totVar      = rows.filter(r => r.variance !== null).reduce((s, r) => s + (r.variance ?? 0), 0);
+
+    if (y > doc.page.height - 60) repeatHeader();
+    doc.rect(40, y, doc.page.width - 80, 22).fill(GOLD);
+    doc.fillColor("#1a1a1a").font("Helvetica-Bold").fontSize(7.4);
+    doc.text("TOTALS", 66, y + 7, { width: 230 });
+    doc.text(formatStockQty(totOpening),  446, y + 7, { width: 72, align: "right" });
+    doc.text(formatStockQty(totAdded),    522, y + 7, { width: 58, align: "right" });
+    doc.text(formatStockQty(totTotal),    584, y + 7, { width: 72, align: "right" });
+    doc.text(formatStockQty(totIssued),   660, y + 7, { width: 72, align: "right" });
+    doc.text(formatStockQty(totSpoil),    736, y + 7, { width: 66, align: "right" });
+    doc.text(formatStockQty(totOut),      806, y + 7, { width: 66, align: "right" });
+    doc.text(formatStockQty(totPhys),     876, y + 7, { width: 78, align: "right" });
+    doc.fillColor(totVar < 0 ? "#dc2626" : totVar > 0 ? "#16a34a" : "#1a1a1a")
+      .text(fmtVariance(totVar),          958, y + 7, { width: 76, align: "right" });
+    y += 22;
+  }
+
+  return y;
+
+}
+
 export async function generateStockTakeWorksheetPDF(
   res: Response,
   data: {
@@ -1424,56 +1660,24 @@ export async function generateStockTakeWorksheetPDF(
     branchName: string;
     items: any[];
     generatedBy: string;
-  }
+  },
 ) {
   const { title, branchName, items, generatedBy } = data;
-  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const doc = new PDFDocument({ margin: 40, size: "A3", layout: "landscape" });
 
-  res.setHeader('Content-Type', 'application/pdf');
-  const safeTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
-  res.setHeader('Content-Disposition', `attachment; filename=FG_Worksheet_${safeTitle}_${new Date().toISOString().split('T')[0]}.pdf`);
+  res.setHeader("Content-Type", "application/pdf");
+  const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=FG_Worksheet_${safeTitle}_${new Date().toISOString().split("T")[0]}.pdf`,
+  );
   doc.pipe(res);
 
   const subtitle = `Branch: ${branchName} | Generated By: ${generatedBy}`;
   let y = drawBrandedHeader(doc, title.toUpperCase(), subtitle);
-
-  const cols = [
-    { label: '#',           x: 42,  width: 25 },
-    { label: 'Item Name',   x: 67,  width: 170 },
-    { label: 'SKU',         x: 237, width: 150 },
-    { label: 'System Qty',  x: 387, width: 60, align: 'right' },
-    { label: 'Physical Count', x: 447, width: 106, align: 'right' },
-  ];
-
-  y = drawTableHeader(doc, y, cols);
-
-  items.forEach((item, i) => {
-    if (y > doc.page.height - 70) {
-      drawFooter(doc);
-      doc.addPage();
-      y = drawBrandedHeader(doc, title.toUpperCase() + ' (cont.)', subtitle);
-      y = drawTableHeader(doc, y, cols);
-    }
-
-    const rowY = y;
-    if (i % 2 === 0) doc.rect(40, rowY, doc.page.width - 80, 20).fill(ROW_BG);
-    
-    doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
-    doc.text(String(i + 1), 42, rowY + 6, { width: 25 });
-    doc.text(item.name || item.item?.name || '—', 67, rowY + 6, { width: 170, ellipsis: true });
-    doc.text(item.item_sku || item.item_code || '—', 237, rowY + 6, { width: 150, ellipsis: true });
-    doc.text(String(item.system_quantity || item.current_stock || 0), 387, rowY + 6, { width: 60, align: 'right' });
-    
-    // Draw an input box for physical count
-    doc.rect(455, rowY + 3, 90, 14).stroke(BORDER);
-
-    doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, rowY + 20).lineTo(doc.page.width - 40, rowY + 20).stroke();
-    y = rowY + 20;
+  drawTradingStockSheet(doc, y, title.toUpperCase(), subtitle, items, {
+    inputClosing: true,
   });
-
-  if (items.length === 0) {
-    doc.fontSize(10).fillColor(SECONDARY).text('No items found for this worksheet.', 40, y + 20);
-  }
 
   drawFooter(doc);
   doc.end();
@@ -1485,56 +1689,26 @@ export async function generateStockTakeWorksheetPDF(
  */
 export async function generateCentralStockTakePDF(
   session: any,
-  items: any[]
+  items: any[],
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const doc = new PDFDocument({
+      margin: 40,
+      size: "A3",
+      layout: "landscape",
+    });
     const chunks: Buffer[] = [];
 
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
 
-    const title = `CENTRAL STORE STOCK TAKE - ${session.store_type?.toUpperCase() || 'STOCK'}`;
+    const title = `CENTRAL STORE STOCK TAKE - ${session.store_type?.toUpperCase() || "STOCK"}`;
     const subtitle = `Session: ${session.session_number} | Date: ${new Date().toLocaleDateString()}`;
     let y = drawBrandedHeader(doc, title, subtitle);
-
-    const cols = [
-      { label: '#', x: 42, width: 25 },
-      { label: 'Item Name', x: 67, width: 170 },
-      { label: 'SKU', x: 237, width: 150 },
-      { label: 'System Qty', x: 387, width: 60, align: 'right' },
-      { label: 'Physical Count', x: 447, width: 106, align: 'right' },
-    ];
-
-    y = drawTableHeader(doc, y, cols);
-
-    items.forEach((item, i) => {
-      if (y > doc.page.height - 70) {
-        drawFooter(doc);
-        doc.addPage();
-        y = drawBrandedHeader(doc, title + ' (cont.)', subtitle);
-        y = drawTableHeader(doc, y, cols);
-      }
-
-      const rowY = y;
-      if (i % 2 === 0) doc.rect(40, rowY, doc.page.width - 80, 20).fill(ROW_BG);
-
-      doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
-      doc.text(String(i + 1), 42, rowY + 6, { width: 25 });
-      doc.text(item.item?.item_name || item.item?.description || item.item_sku || '—', 67, rowY + 6, { width: 170, ellipsis: true });
-      doc.text(item.item_sku || '—', 237, rowY + 6, { width: 150, ellipsis: true });
-      doc.text(String(item.system_quantity || 0), 387, rowY + 6, { width: 60, align: 'right' });
-
-      doc.rect(455, rowY + 3, 90, 14).stroke(BORDER);
-
-      doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, rowY + 20).lineTo(doc.page.width - 40, rowY + 20).stroke();
-      y = rowY + 20;
+    drawTradingStockSheet(doc, y, title, subtitle, items, {
+      inputClosing: true,
     });
-
-    if (items.length === 0) {
-      doc.fontSize(10).fillColor(SECONDARY).text('No items found for this worksheet.', 40, y + 20);
-    }
 
     drawFooter(doc);
     doc.end();
@@ -1553,92 +1727,24 @@ export async function generateBranchStockTakeWorksheetPDF(
     takeNumber: string;
     items: any[];
     generatedBy: string;
-  }
+  },
 ) {
   const { title, branchName, takeNumber, items, generatedBy } = data;
-  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const doc = new PDFDocument({ margin: 40, size: "A3", layout: "landscape" });
 
-  res.setHeader('Content-Type', 'application/pdf');
-  const safeTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
-  res.setHeader('Content-Disposition', `attachment; filename=FG_BranchStockTake_${safeTitle}_${new Date().toISOString().split('T')[0]}.pdf`);
+  res.setHeader("Content-Type", "application/pdf");
+  const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=FG_BranchStockTake_${safeTitle}_${new Date().toISOString().split("T")[0]}.pdf`,
+  );
   doc.pipe(res);
 
   const subtitle = `Branch: ${branchName} | Ref: ${takeNumber} | Generated By: ${generatedBy}`;
   let y = drawBrandedHeader(doc, title.toUpperCase(), subtitle);
-
-  const cols = [
-    { label: '#',           x: 42,  width: 25 },
-    { label: 'Item Name',   x: 67,  width: 170 },
-    { label: 'SKU',         x: 237, width: 150 },
-    { label: 'System Qty',  x: 387, width: 60, align: 'right' },
-    { label: 'Counted Qty', x: 447, width: 60, align: 'right' },
-    { label: 'Variance',    x: 507, width: 46, align: 'right' },
-  ];
-
-  // Group items by category
-  const groupedItems = items.reduce((acc: Record<string, any[]>, item) => {
-    const category = item.item?.category || item.category || 'Uncategorized';
-    if (!acc[category]) acc[category] = [];
-    acc[category].push(item);
-    return acc;
-  }, {});
-
-  const categories = Object.keys(groupedItems).sort();
-  let globalIndex = 0;
-
-  categories.forEach((category) => {
-    const categoryItems = groupedItems[category];
-
-    // Check if we need a new page for category header
-    if (y > doc.page.height - 100) {
-      drawFooter(doc);
-      doc.addPage();
-      y = drawBrandedHeader(doc, title.toUpperCase() + ' (cont.)', subtitle);
-    }
-
-    // Draw category header
-    y += 10;
-    doc.fillColor(PRIMARY).fontSize(10).font('Helvetica-Bold').text(category.toUpperCase(), 40, y);
-    y += 15;
-    doc.strokeColor(BORDER).lineWidth(0.5).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke();
-    y += 5;
-
-    y = drawTableHeader(doc, y, cols);
-
-    categoryItems.forEach((item) => {
-      if (y > doc.page.height - 70) {
-        drawFooter(doc);
-        doc.addPage();
-        y = drawBrandedHeader(doc, title.toUpperCase() + ' (cont.)', subtitle);
-        y = drawTableHeader(doc, y, cols);
-      }
-
-      const rowY = y;
-      if (globalIndex % 2 === 0) doc.rect(40, rowY, doc.page.width - 80, 20).fill(ROW_BG);
-
-      globalIndex++;
-      doc.fillColor(PRIMARY).fontSize(8.5).font('Helvetica');
-      doc.text(String(globalIndex), 42, rowY + 6, { width: 25 });
-      doc.text(item.item?.name || item.item_name || item.item_sku || '—', 67, rowY + 6, { width: 170, ellipsis: true });
-      doc.text(item.item_sku || '—', 237, rowY + 6, { width: 150, ellipsis: true });
-      doc.text(String(item.system_quantity || 0), 387, rowY + 6, { width: 60, align: 'right' });
-      doc.text(item.counted_quantity !== null ? String(item.counted_quantity) : '—', 447, rowY + 6, { width: 60, align: 'right' });
-
-      const variance = item.variance || 0;
-      doc.fillColor(variance === 0 ? SECONDARY : variance > 0 ? '#16a34a' : '#dc2626')
-         .text(variance !== 0 ? (variance > 0 ? '+' : '') + String(variance) : '—', 507, rowY + 6, { width: 46, align: 'right' });
-
-      doc.strokeColor(BORDER).lineWidth(0.3).moveTo(40, rowY + 20).lineTo(doc.page.width - 40, rowY + 20).stroke();
-      y = rowY + 20;
-    });
-
-    // Add spacing after category
-    y += 10;
+  drawTradingStockSheet(doc, y, title.toUpperCase(), subtitle, items, {
+    inputClosing: true,
   });
-
-  if (items.length === 0) {
-    doc.fontSize(10).fillColor(SECONDARY).text('No items found for this stock take.', 40, y + 20);
-  }
 
   drawFooter(doc);
   doc.end();

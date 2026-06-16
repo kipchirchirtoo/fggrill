@@ -133,7 +133,7 @@ export default function BranchReceivePage() {
 
   const stats = useMemo(() => {
     const total = dispatches.length;
-    const inTransit = dispatches.filter(d => d.status === 'IN_TRANSIT').length;
+    const inTransit = dispatches.filter(d => d.status === 'IN_TRANSIT' || d.status === 'in_transit').length;
     const totalItems = dispatches.reduce((acc, d) => acc + (d.items?.length || 0), 0);
     return { total, inTransit, totalItems };
   }, [dispatches]);
@@ -373,7 +373,7 @@ export default function BranchReceivePage() {
                             <p className="text-xs text-gray-400">Items: {dispatch.items?.length || 0}</p>
                           </div>
                         </div>
-                        {dispatch.status === 'IN_TRANSIT' ? (
+                        {(dispatch.status === 'IN_TRANSIT' || dispatch.status === 'in_transit') ? (
                           <>
                             {user?.role === UserRole.AUDITOR && (
                               <IOSBadge variant="light" color="warning">In Transit</IOSBadge>

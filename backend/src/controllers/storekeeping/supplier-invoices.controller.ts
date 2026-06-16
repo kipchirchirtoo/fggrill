@@ -3,6 +3,140 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 
+const toNumber = (value: any): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const userBranchId = (req: Request): number | null => {
+    const raw = (req.query.branch_id ?? req.user?.branch_id ?? (req.user as any)?.branchId) as any;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const inactiveInvoiceStatuses = new Set(['cancelled', 'canceled', 'rejected', 'void']);
+
+// @desc    Get GRNs that are physically received but not yet billed
+// @route   GET /api/procurement/ready-to-bill
+// @access  Private (Branch Accountant / Procurement)
+export const getReadyToBillGRNs = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const branchId = userBranchId(req);
+        const supplierId = req.query.supplier_id ? String(req.query.supplier_id) : null;
+
+        let grnQuery = supabase
+            .from('store_grn')
+            .select(`
+                *,
+                supplier:store_suppliers(id, name, supplier_code, branch_id, phone, email),
+                purchase_order:store_purchase_orders(id, po_number, branch_id, status, total_amount, source_module)
+            `)
+            .order('created_at', { ascending: false });
+
+        if (supplierId) grnQuery = grnQuery.eq('supplier_id', supplierId);
+
+        const { data: grns, error: grnError } = await grnQuery;
+        if (grnError) throw grnError;
+
+        const activeGrns = (grns || []).filter((grn: any) => String(grn.status || '').toLowerCase() !== 'cancelled');
+        const branchGrns = activeGrns.filter((grn: any) => {
+            if (!branchId) return true;
+            const poBranch = Number(grn.purchase_order?.branch_id);
+            const supplierBranch = Number(grn.supplier?.branch_id);
+            return poBranch === branchId || (!Number.isFinite(poBranch) && supplierBranch === branchId);
+        });
+
+        if (branchGrns.length === 0) {
+            res.status(200).json({ success: true, count: 0, data: [] });
+            return;
+        }
+
+        const grnIds = branchGrns.map((grn: any) => grn.id);
+        const { data: invoices, error: invoiceError } = await supabase
+            .from('store_supplier_invoices')
+            .select('id, grn_id, po_id, invoice_number, status, total_amount, amount_paid, balance_due')
+            .in('grn_id', grnIds);
+        if (invoiceError) throw invoiceError;
+
+        const invoicedGrnIds = new Set(
+            (invoices || [])
+                .filter((invoice: any) => !inactiveInvoiceStatuses.has(String(invoice.status || '').toLowerCase()))
+                .map((invoice: any) => invoice.grn_id)
+        );
+        const readyGrns = branchGrns.filter((grn: any) =>
+            !invoicedGrnIds.has(grn.id) &&
+            String(grn.payment_status || '').toLowerCase() !== 'paid'
+        );
+
+        if (readyGrns.length === 0) {
+            res.status(200).json({ success: true, count: 0, data: [] });
+            return;
+        }
+
+        const readyIds = readyGrns.map((grn: any) => grn.id);
+        const { data: items, error: itemError } = await supabase
+            .from('store_grn_items')
+            .select('*')
+            .in('grn_id', readyIds);
+        if (itemError) throw itemError;
+
+        const skus = [...new Set((items || []).map((item: any) => item.item_id).filter(Boolean))];
+        const { data: itemDetails, error: detailError } = skus.length > 0
+            ? await supabase
+                .from('simple_items')
+                .select('sku, item_name, description, unit_of_measure')
+                .in('sku', skus)
+            : { data: [], error: null } as any;
+        if (detailError) throw detailError;
+
+        const itemMap = new Map((itemDetails || []).map((item: any) => [item.sku, item]));
+        const rows = readyGrns.map((grn: any) => {
+            const grnItems = (items || [])
+                .filter((item: any) => item.grn_id === grn.id)
+                .map((item: any) => {
+                    const detail: any = itemMap.get(item.item_id) || {};
+                    const quantity = toNumber(item.quantity_accepted ?? item.accepted_quantity ?? item.quantity_received);
+                    const unitPrice = toNumber(item.unit_price);
+                    return {
+                        ...item,
+                        item_name: detail.item_name || detail.description || item.item_id,
+                        unit_of_measure: detail.unit_of_measure || item.unit_of_measure || 'units',
+                        quantity,
+                        line_total: quantity * unitPrice
+                    };
+                });
+
+            const totalValue = toNumber(grn.total_value) || grnItems.reduce((sum: number, item: any) => sum + toNumber(item.line_total), 0);
+            return {
+                ...grn,
+                po_id: grn.po_id,
+                po_number: grn.purchase_order?.po_number || grn.po_number || '',
+                supplier_id: grn.supplier_id,
+                supplier_name: grn.supplier?.name || '',
+                supplier_code: grn.supplier?.supplier_code || '',
+                received_date: grn.grn_date || grn.created_at,
+                items: grnItems,
+                item_count: grnItems.length,
+                total_value: totalValue,
+                finance_status: 'Ready to Bill'
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            count: rows.length,
+            data: rows
+        });
+    } catch (error) {
+        logger.error('Error fetching ready-to-bill GRNs:', error);
+        next(error);
+    }
+};
+
 // @desc    Get all supplier invoices
 // @route   GET /api/storekeeping/invoices
 // @access  Private
@@ -155,7 +289,7 @@ export const createInvoice = async (
 
         // Calculate totals from items
         const calculated_vat_amount = (items || []).reduce((sum: number, item: any) =>
-            sum + ((item.quantity * item.unit_price) * (item.vat_rate || 16.00) / 100), 0);
+            sum + ((item.quantity * item.unit_price) * ((item.vat_rate ?? 16.00) / 100)), 0);
         const calculated_subtotal = (items || []).reduce((sum: number, item: any) =>
             sum + (item.quantity * item.unit_price), 0);
         const calculated_total_amount = calculated_subtotal + calculated_vat_amount;
@@ -201,9 +335,9 @@ export const createInvoice = async (
                 quantity: item.quantity,
                 unit_price: item.unit_price,
                 subtotal: item.quantity * item.unit_price,
-                vat_rate: item.vat_rate || 16.00,
-                vat_amount: (item.quantity * item.unit_price) * (item.vat_rate || 16.00) / 100,
-                total_amount: (item.quantity * item.unit_price) * (1 + (item.vat_rate || 16.00) / 100)
+                vat_rate: item.vat_rate ?? 16.00,
+                vat_amount: (item.quantity * item.unit_price) * ((item.vat_rate ?? 16.00) / 100),
+                total_amount: (item.quantity * item.unit_price) * (1 + ((item.vat_rate ?? 16.00) / 100))
             }));
 
             const { error: itemsError } = await supabase

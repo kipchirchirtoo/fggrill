@@ -1,7 +1,11 @@
 import express from 'express';
 import {
+  getAuditorDashboard,
+  getAuditTools,
   startNightAudit,
   completeNightAudit,
+  completeLatestNightAudit,
+  getNightAuditStatus,
   getNightAudits,
   createException,
   resolveException,
@@ -13,6 +17,9 @@ import {
   getSalesVerification,
   getFinancialReconciliation,
   getRevenueOversight,
+  getInvoiceVerification,
+  getCreditBillsForAudit,
+  getAuditorDeliveriesAlias,
   getExpenditureVerification,
   getStockLevelsVerification,
   exportStockLedger,
@@ -49,6 +56,17 @@ const router = express.Router();
 
 router.use(protect);
 
+// Dashboard / compatibility endpoints used by the Flutter auditor console.
+router.get('/dashboard',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  getAuditorDashboard
+);
+
+router.get('/audit-tools',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  getAuditTools
+);
+
 // Night Audit
 router.post('/night-audit/start',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT]),
@@ -65,6 +83,21 @@ router.get('/night-audit',
   getNightAudits
 );
 
+router.get('/night-audit/status',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  getNightAuditStatus
+);
+
+router.post('/night-audit/complete',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  completeLatestNightAudit
+);
+
+router.get('/night-audit/exceptions',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  getExceptions
+);
+
 // Exceptions
 router.post('/exceptions',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
@@ -77,6 +110,11 @@ router.put('/exceptions/:id/resolve',
 );
 
 router.get('/exceptions',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
+  getExceptions
+);
+
+router.get('/discrepancies',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.AUDITOR]),
   getExceptions
 );
@@ -159,6 +197,10 @@ router.get('/payroll/variances',
 router.get('/verify/sales', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getSalesVerification);
 router.get('/verify/finances', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getFinancialReconciliation);
 router.get('/verify/revenue', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getRevenueOversight);
+router.get('/revenue-checks', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getRevenueOversight);
+router.get('/invoice-verification', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), getInvoiceVerification);
+router.get('/credit-bills', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]), getCreditBillsForAudit);
+router.get('/deliveries', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.ACCOUNTANT]), getAuditorDeliveriesAlias);
 router.get('/verify/expenditure', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getExpenditureVerification);
 router.get('/verify/stock-levels', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getStockLevelsVerification);
 router.get('/verify/stock-levels/export', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), exportStockLedger);

@@ -20,7 +20,7 @@ export const getVehicles = async (
     let query = supabase
       .from('vehicles')
       .select('*')
-      .order('vehicle_number', { ascending: true });
+      .order('registration_number', { ascending: true });
 
     if (status) {
       query = query.eq('status', status);

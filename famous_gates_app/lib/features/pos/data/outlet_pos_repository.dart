@@ -366,6 +366,7 @@ class OutletPosItem {
     required this.itemGroupLabel,
     required this.outletName,
     required this.outletType,
+    this.trackStock = true,
   });
 
   final String id;
@@ -379,6 +380,7 @@ class OutletPosItem {
   final String itemGroupLabel;
   final String outletName;
   final String outletType;
+  final bool trackStock;
 
   factory OutletPosItem.fromJson(
     Map<String, dynamic> json, {
@@ -418,6 +420,7 @@ class OutletPosItem {
       outletName:
           '${json['outlet_name'] ?? outletMap['name'] ?? fallbackOutlet?.name ?? ''}',
       outletType: outletType,
+      trackStock: json['track_stock'] != false,
     );
   }
 }

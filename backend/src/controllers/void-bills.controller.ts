@@ -16,16 +16,7 @@ export const getVoidBills = async (
 
         let query = supabase
             .from('void_bills_audit')
-            .select(`
-                *,
-                waiter:staff_profiles!waiter_id(
-                    id,
-                    first_name,
-                    last_name,
-                    user:users!user_id(id, first_name, last_name)
-                ),
-                voided_by_user:users!voided_by(id, first_name, last_name)
-            `)
+            .select('*')
             .order('created_at', { ascending: false });
 
         if (reviewed !== undefined) {
@@ -42,7 +33,6 @@ export const getVoidBills = async (
         }
 
         const { data, error } = await query;
-
         if (error) throw error;
 
         res.status(200).json({

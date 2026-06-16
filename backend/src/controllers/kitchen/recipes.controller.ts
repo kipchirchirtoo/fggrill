@@ -20,12 +20,10 @@ export const createRecipe = async (req: Request, res: Response) => {
             .from('recipes')
             .insert({
                 menu_item_id,
-                menu_item_name,
-                portion_size,
-                portions_per_recipe: portions_per_recipe || 1,
-                selling_price,
-                cooking_instructions,
-                created_by: userId
+                name: menu_item_name,
+                output_quantity: portions_per_recipe || 1,
+                output_unit: 'portion',
+                metadata: { portion_size, selling_price, cooking_instructions }
             })
             .select()
             .single();
@@ -44,21 +42,17 @@ export const createRecipe = async (req: Request, res: Response) => {
                     recipe_id: recipe.id,
                     item_sku: ingredient.item_sku,
                     item_name: ingredient.item_name,
-                    quantity_per_portion: ingredient.quantity_per_portion,
-                    unit_of_measure: ingredient.unit_of_measure,
-                    unit_cost: ingredient.unit_cost,
-                    total_cost: itemCost,
-                    notes: ingredient.notes
+                    quantity_required: ingredient.quantity_per_portion,
+                    unit: ingredient.unit_of_measure
                 });
         }
 
-        // Update recipe with calculated cost
+        // Update recipe metadata with calculated cost
         const foodCostPercentage = selling_price > 0 ? (totalCost / selling_price * 100) : 0;
         await supabase
             .from('recipes')
             .update({
-                standard_cost: totalCost,
-                food_cost_percentage: foodCostPercentage
+                metadata: { portion_size, selling_price, cooking_instructions, standard_cost: totalCost, food_cost_percentage: foodCostPercentage }
             })
             .eq('id', recipe.id);
 
@@ -171,11 +165,8 @@ export const updateRecipe = async (req: Request, res: Response) => {
                         recipe_id: id,
                         item_sku: ingredient.item_sku,
                         item_name: ingredient.item_name,
-                        quantity_per_portion: ingredient.quantity_per_portion,
-                        unit_of_measure: ingredient.unit_of_measure,
-                        unit_cost: ingredient.unit_cost,
-                        total_cost: itemCost,
-                        notes: ingredient.notes
+                        quantity_required: ingredient.quantity_per_portion,
+                        unit: ingredient.unit_of_measure
                     });
             }
 
@@ -246,7 +237,7 @@ export async function deductIngredientsForItem(params: {
 
     // Deduct each ingredient
     for (const ingredient of recipe.ingredients) {
-        const totalQuantity = Number(ingredient.quantity_per_portion) * Number(quantity);
+        const totalQuantity = Number(ingredient.quantity_required) * Number(quantity);
 
         // Create usage entry
         await supabase
@@ -258,7 +249,7 @@ export async function deductIngredientsForItem(params: {
                 item_sku: ingredient.item_sku,
                 item_name: ingredient.item_name,
                 quantity: totalQuantity,
-                unit_of_measure: ingredient.unit_of_measure,
+                unit_of_measure: ingredient.unit,
                 linked_order_id: order_id,
                 linked_menu_item_id: menu_item_id,
                 recipe_id: recipe.id

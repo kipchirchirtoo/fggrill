@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, UserRole } from '@/lib/auth-context';
+import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
@@ -80,12 +80,12 @@ export default function PackingPage() {
             if (response.success) {
                 toast.success('Items packed and ready for dispatch');
                 setPackingModalOpen(false);
-                fetchApprovedRequests();
-
-                toast.info('Redirecting to Dispatch Station...');
-                setTimeout(() => {
-                    router.push('/dashboard/central-store/dispatch');
-                }, 1500);
+                toast.info('Opening Dispatch & Notes...');
+                const dispatchId = response.data?.id;
+                router.push(dispatchId
+                    ? `/dashboard/central-store/dispatch?dispatch_id=${encodeURIComponent(dispatchId)}`
+                    : '/dashboard/central-store/dispatch'
+                );
             } else {
                 toast.error(response.message || 'Failed to create dispatch');
             }

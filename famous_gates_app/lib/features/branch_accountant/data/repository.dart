@@ -205,6 +205,175 @@ class BranchAccountantRepository {
     );
   }
 
+  // ── Financial Close ──────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> submitWorkspaceClose(Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/finance/workspace/close', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      ...data,
+    });
+    return (res.data as Map<String, dynamic>? ?? {});
+  }
+
+  Future<Map<String, dynamic>> submitVarianceExplanation(String submissionId, Map<String, dynamic> data) async {
+    final res = await _dio.post('/finance/workspace/submissions/$submissionId/explain', data: data);
+    return (res.data as Map<String, dynamic>? ?? {});
+  }
+
+  Future<List<Map<String, dynamic>>> getWorkspaceSubmissions({String? status, String? from, String? to}) async {
+    final branchId = await getBranchId();
+    return _getList('/finance/workspace/submissions', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null) 'status': status,
+      if (from != null) 'from': from,
+      if (to != null) 'to': to,
+    });
+  }
+
+  Future<Map<String, dynamic>> getDailySystemSnapshot(String date) async {
+    final branchId = await getBranchId();
+    return _getMap('/finance/snapshot/$branchId/$date');
+  }
+
+  Future<Map<String, dynamic>> getBranchProfitability({String? from, String? to}) async {
+    final branchId = await getBranchId();
+    return _getMap('/finance/branch-profitability', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (from != null) 'from': from,
+      if (to != null) 'to': to,
+    });
+  }
+
+  // ── Branch Payroll ────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getPayrollBatches({String? status}) async {
+    final branchId = await getBranchId();
+    return _getList('/finance/payroll/batches', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null) 'status': status,
+    });
+  }
+
+  Future<Map<String, dynamic>> getPayrollBatch(String id) async {
+    return _getMap('/finance/payroll/batches/$id');
+  }
+
+  Future<Map<String, dynamic>> generatePayrollBatch({required int month, required int year}) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/finance/payroll/batches/generate', data: {
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+      'period_month': month,
+      'period_year': year,
+    });
+    return (res.data as Map<String, dynamic>? ?? {});
+  }
+
+  Future<void> submitPayrollBatch(String id) async {
+    await _dio.post('/finance/payroll/batches/$id/submit');
+  }
+
+  Future<File> downloadPayrollBatchPdf(String id, String periodLabel) async {
+    final res = await _dio.get(
+      '/finance/payroll/batches/$id/pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final safe = periodLabel.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+    return _saveBytes(res.data ?? const <int>[], 'FG_Payroll_$safe.pdf');
+  }
+
+  Future<Map<String, dynamic>> createPayrollAdjustment({
+    required String staffId,
+    required String type,
+    required String category,
+    required double amount,
+    required String description,
+    required int month,
+    required int year,
+  }) async {
+    final res = await _dio.post('/payroll-adjustments', data: {
+      'staff_id': staffId,
+      'type': type,
+      'category': category,
+      'amount': amount,
+      'description': description,
+      'month': month.toString(),
+      'year': year,
+      'status': 'pending',
+    });
+    return (res.data as Map<String, dynamic>? ?? {});
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollAdjustmentsForStaff({
+    required String staffId,
+    String? month,
+    String? year,
+  }) async {
+    final res = await _dio.get('/payroll-adjustments', queryParameters: {
+      'staff_id': staffId,
+      if (month != null) 'month': month,
+      if (year != null) 'year': year,
+    });
+    final body = res.data;
+    List<dynamic>? list;
+    if (body is List) {
+      list = body;
+    } else if (body is Map) {
+      final inner = body['data'] ?? body['items'];
+      if (inner is List) list = inner;
+    }
+    return (list ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollAdjustments({
+    String? staffId,
+    int? month,
+    int? year,
+    String? status,
+  }) async {
+    final res = await _dio.get('/payroll-adjustments', queryParameters: {
+      if (staffId != null) 'staff_id': staffId,
+      if (month != null) 'month': month.toString(),
+      if (year != null) 'year': year.toString(),
+      if (status != null) 'status': status,
+    });
+    final body = res.data;
+    List<dynamic>? list;
+    if (body is List) {
+      list = body;
+    } else if (body is Map) {
+      final inner = body['data'] ?? body['items'] ?? body['records'];
+      if (inner is List) list = inner;
+    }
+    return (list ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<void> voidPayrollAdjustment(String id) async {
+    await _dio.patch('/payroll-adjustments/$id/void');
+  }
+
+  /// Step 2 of financial close: Accountant clicks "Post".
+  /// Sends workspace to BOTH Auditor AND Director simultaneously.
+  Future<Map<String, dynamic>> postWorkspace(
+    String submissionId, {
+    String? explanationReason,
+    String? explanationNotes,
+  }) async {
+    final res = await _dio.post(
+      '/finance/workspace/submissions/$submissionId/post',
+      data: {
+        if (explanationReason != null && explanationReason.isNotEmpty)
+          'explanation_reason': explanationReason,
+        if (explanationNotes != null && explanationNotes.isNotEmpty)
+          'explanation_notes': explanationNotes,
+      },
+    );
+    final data = res.data;
+    return data is Map<String, dynamic>
+        ? data
+        : (data is Map ? Map<String, dynamic>.from(data) : {});
+  }
+
   Future<List<Map<String, dynamic>>> getDirectorTasks() {
     return _getList('/finance/director/tasks', query: {
       'status': 'PENDING',
@@ -272,6 +441,26 @@ class BranchAccountantRepository {
 
   Future<void> releaseBranchPayment(String id) async {
     await _dio.put('/branch-payments/$id/release');
+  }
+
+  Future<File> downloadBranchPaymentReceipt(
+    String id, {
+    String? paymentNumber,
+  }) async {
+    final res = await _dio.get<List<int>>(
+      '/branch-payments/$id/receipt.pdf',
+      options: Options(
+        responseType: ResponseType.bytes,
+        extra: {'disable_retry': true},
+      ),
+    );
+    final label = (paymentNumber ?? '').trim().isNotEmpty
+        ? paymentNumber!.trim()
+        : id;
+    return _saveBytes(
+      res.data ?? const <int>[],
+      'FG_Supplier_Receipt_$label.pdf',
+    );
   }
 
   Future<Map<String, dynamic>> getProfitLoss({
@@ -558,6 +747,27 @@ class BranchAccountantRepository {
       'status': 'active',
       'limit': 500,
     });
+  }
+
+  Future<Map<String, dynamic>> updateStaffDeductionSettings(
+    String staffId, {
+    required bool nssfEnabled,
+    required bool shifEnabled,
+    required bool housingFundEnabled,
+    double? nssfAmount,
+    double? shifAmount,
+    double? housingFundAmount,
+  }) async {
+    final data = <String, dynamic>{
+      'nssf_enabled': nssfEnabled,
+      'shif_enabled': shifEnabled,
+      'housing_fund_enabled': housingFundEnabled,
+    };
+    if (nssfAmount != null) data['nssf_amount'] = nssfAmount;
+    if (shifAmount != null) data['shif_amount'] = shifAmount;
+    if (housingFundAmount != null) data['housing_fund_amount'] = housingFundAmount;
+    final res = await _dio.put('/staff/$staffId', data: data);
+    return _asMap(res.data);
   }
 
   Future<List<Map<String, dynamic>>> getPayrollCreditBills({
@@ -891,6 +1101,10 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getStockTakeItems(String id) async {
+    return _getList('/stock-takes/$id/items');
+  }
+
   Future<Map<String, dynamic>> createStockTake({
     String countType = 'monthly',
     String? notes,
@@ -1051,6 +1265,26 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getReadyToBillGRNs({
+    String? supplierId,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/procurement/ready-to-bill', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (supplierId != null && supplierId.isNotEmpty)
+        'supplier_id': supplierId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierGRNs({
+    String? supplierId,
+  }) {
+    return _getList('/procurement/grn', query: {
+      if (supplierId != null && supplierId.isNotEmpty)
+        'supplier_id': supplierId,
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getSupplierPayments({
     String? supplierId,
     String? status,
@@ -1085,6 +1319,10 @@ class BranchAccountantRepository {
 
   Future<Map<String, dynamic>> getInvoiceDetail(String id) {
     return _getMap('/procurement/invoices/$id');
+  }
+
+  Future<Map<String, dynamic>> getGRNDetail(String id) {
+    return _getMap('/procurement/grn/$id');
   }
 
   Future<Map<String, dynamic>> createPurchaseOrder(

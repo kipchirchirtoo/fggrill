@@ -220,7 +220,7 @@ export const getEnhancedPayroll = async (req: Request, res: Response) => {
       .from('payroll')
       .select(`
         *,
-        staff:users!payroll_staff_id_fkey(id, first_name, last_name, employee_id, role)
+        staff:staff_profiles!payroll_staff_id_fkey(id, first_name, last_name, employee_number, role, department, position)
       `)
       .order('created_at', { ascending: false });
 
@@ -262,11 +262,11 @@ export const generatePayslip = async (req: Request, res: Response) => {
       .from('payroll')
       .select(`
         *,
-        staff:users!payroll_staff_id_fkey(
-          id, 
-          first_name, 
-          last_name, 
-          employee_id, 
+        staff:staff_profiles!payroll_staff_id_fkey(
+          id,
+          first_name,
+          last_name,
+          employee_number,
           role,
           department,
           position
@@ -287,7 +287,7 @@ export const generatePayslip = async (req: Request, res: Response) => {
     // Format payslip data
     const payslip = {
       payrollId: payroll.id,
-      employeeId: payroll.staff?.employee_id,
+      employeeId: payroll.staff?.employee_number,
       employeeName: `${payroll.staff?.first_name} ${payroll.staff?.last_name}`,
       department: payroll.staff?.department,
       position: payroll.staff?.position,

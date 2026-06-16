@@ -11,6 +11,42 @@ import {
   getCategoryCode
 } from '../../services/sku.service';
 
+/**
+ * Finds or auto-creates the inventory location for a branch.
+ * Kyogong is the central store; other main branches still use branch_store.
+ */
+export async function ensureInventoryLocation(sb: typeof supabase, branchId: number | undefined): Promise<string> {
+  if (!branchId) throw new Error('branch_id required to resolve inventory location');
+
+  // Determine location type from branch flags, not hardcoded ID
+  const { data: branchRow } = await sb
+    .from('branches')
+    .select('is_central_warehouse, is_main_branch')
+    .eq('id', branchId)
+    .maybeSingle();
+  const locType = (branchId === 1 || branchRow?.is_central_warehouse)
+    ? 'central_store'
+    : 'branch_store';
+
+  const { data: existing } = await sb
+    .from('inventory_locations')
+    .select('id')
+    .eq('branch_id', branchId)
+    .eq('location_type', locType)
+    .maybeSingle();
+  if (existing?.id) return existing.id;
+
+  // Auto-create if missing
+  const locationCode = `${locType.toUpperCase().replace('_', '-')}-${branchId}`;
+  const { data: created, error } = await sb
+    .from('inventory_locations')
+    .insert({ branch_id: branchId, location_code: locationCode, name: locType === 'central_store' ? 'Central Store' : 'Branch Store', location_type: locType })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return created.id;
+}
+
 // @desc    Get all items
 // @route   GET /api/store/items
 // @access  Private
@@ -21,90 +57,80 @@ export const getItems = async (
 ): Promise<void> => {
   try {
     const { search, ordering, category, store_type } = req.query;
+    const branchId = (req as any).user?.branch_id;
+
+    // Find this branch's inventory location (creates it if missing)
+    let locationId: string | null = null;
+    if (branchId) {
+      try {
+        locationId = await ensureInventoryLocation(supabase, Number(branchId));
+      } catch (err: any) {
+        logger.warn(`getItems: could not resolve inventory location for branch ${branchId}: ${err.message}`);
+      }
+    }
 
     let query = supabase
-      .from('simple_items')
-      .select('*')
+      .from('inventory_items')
+      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, is_active, store_type, metadata, created_at, updated_at')
       .eq('is_active', true);
 
-    // Filter by category if provided
-    if (category) {
-      query = query.eq('category', category);
-    }
-
-    // Filter by store_type if provided
-    if (store_type) {
-      query = query.eq('store_type', store_type);
-    }
+    if (category) query = query.eq('category', category);
+    if (store_type) query = query.eq('store_type', store_type);
 
     if (search) {
-      const searchTerm = String(search).trim();
-      query = query.or(`description.ilike.%${searchTerm}%,item_name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`);
+      const s = String(search).trim();
+      query = query.or(`description.ilike.%${s}%,item_name.ilike.%${s}%,sku.ilike.%${s}%`);
     }
 
     if (ordering) {
       const orderStr = String(ordering);
-      // Check for negative sign for descending
       const isDesc = orderStr.startsWith('-');
       const field = isDesc ? orderStr.substring(1) : orderStr;
-
-      // Special case for quantity if needed, but basic sort works
-      query = query.order(field, { ascending: !isDesc });
+      query = query.order(field === 'last_updated' ? 'updated_at' : field, { ascending: !isDesc });
     } else {
-      query = query.order('last_updated', { ascending: false });
+      query = query.order('updated_at', { ascending: false });
     }
 
-    // Pagination
     const page = parseInt(req.query.page as string) || 1;
-    // Default limit 200 to ensure all items are visible by default
     const limit = parseInt(req.query.limit as string) || 200;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Get stats for the cards - fetch all items to calculate accurate stats
-    let statsQuery = supabase
-      .from('simple_items')
-      .select('sku, quantity, reorder_level')
-      .eq('is_active', true);
+    query = query.range(from, to);
+    const { data: rawItems, error } = await query;
+    if (error) throw error;
 
-    if (store_type) {
-      statsQuery = statsQuery.eq('store_type', store_type);
+    // Merge quantities from inventory_balances
+    let data: any[] = rawItems || [];
+    if (locationId && data.length > 0) {
+      const itemIds = data.map((i: any) => i.id);
+      // Fetch all balances for this location (no IN filter — avoids URL length limit with 400+ items)
+      const { data: balances, error: balErr } = await supabase
+        .from('inventory_balances')
+        .select('item_id, current_quantity')
+        .eq('location_id', locationId);
+      if (balErr) logger.warn(`getItems: balances query error: ${balErr.message}`);
+      const balMap = new Map((balances || []).map((b: any) => [b.item_id, Number(b.current_quantity)]));
+      data = data.map((item: any) => ({ ...item, unit_of_measure: item.unit, cost_price: item.default_unit_cost, retail_price: item.default_selling_price, quantity: balMap.get(item.id) ?? 0, last_updated: item.updated_at }));
+    } else {
+      data = data.map((item: any) => ({ ...item, unit_of_measure: item.unit, cost_price: item.default_unit_cost, retail_price: item.default_selling_price, quantity: 0, last_updated: item.updated_at }));
     }
 
-    const { data: allItems, error: statsError } = await statsQuery;
-
-    if (statsError) throw statsError;
-
-    const total = allItems?.length || 0;
-    const outOfStock = allItems?.filter(item => (item.quantity || 0) === 0).length || 0;
-    const lowStock = allItems?.filter(item => {
+    const total = data.length;
+    const outOfStock = data.filter((item: any) => (item.quantity || 0) === 0).length;
+    const lowStock = data.filter((item: any) => {
       const qty = item.quantity || 0;
       const reorder = item.reorder_level || 10;
       return qty > 0 && qty <= reorder;
-    }).length || 0;
-    const inStock = total - outOfStock;
-
-    const stats = {
-      total,
-      lowStock,
-      outOfStock,
-      inStock
-    };
-
-    // Apply range
-    query = query.range(from, to);
-
-    const { data, error } = await query;
-
-    if (error) throw error;
+    }).length;
 
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
-      total: stats.total,
+      count: data.length,
+      total,
       page,
-      pages: Math.ceil((stats.total || 0) / limit),
-      stats,
+      pages: Math.ceil(total / limit),
+      stats: { total, lowStock, outOfStock, inStock: total - outOfStock },
       data
     });
   } catch (error) {
@@ -534,60 +560,49 @@ export const addStock = async (
       return;
     }
 
-    // Get current item
+    const branchId = (req as any).user?.branch_id;
+
+    // Look up item by SKU
     const { data: currentItem, error: fetchError } = await supabase
-      .from('simple_items')
-      .select('*')
-      .or(`sku.eq.${sku},barcode.eq.${sku}`)
-      .single();
+      .from('inventory_items')
+      .select('id, sku, item_name, reorder_level, is_active')
+      .eq('sku', sku)
+      .maybeSingle();
 
     if (fetchError || !currentItem) {
-      res.status(404).json({
-        success: false,
-        message: 'Item not found'
-      });
+      res.status(404).json({ success: false, message: 'Item not found' });
       return;
     }
 
-    const newQuantity = (currentItem.quantity || 0) + parseInt(quantity);
+    // Find or create the branch's inventory location
+    const locationId = await ensureInventoryLocation(supabase, branchId);
 
-    // Update item quantity
-    const { data, error: updateError } = await supabase
-      .from('simple_items')
-      .update({
-        quantity: newQuantity,
-        last_updated: new Date().toISOString()
-      })
-      .eq('sku', currentItem.sku)
-      .select()
-      .single();
+    // Get current balance
+    const { data: existing } = await supabase
+      .from('inventory_balances')
+      .select('id, current_quantity')
+      .eq('item_id', currentItem.id)
+      .eq('location_id', locationId)
+      .is('batch_id', null)
+      .maybeSingle();
 
-    if (updateError) throw updateError;
+    const prevQty = Number(existing?.current_quantity || 0);
+    const newQuantity = prevQty + parseInt(quantity);
 
-    // Generate order number for this stock-in
-    const orderNum = await generateOrderNumber('STKIN');
-
-    // Log stock history with order number
-    const { error: historyError } = await supabase.from('stock_history').insert({
-      item_sku: currentItem.sku,
-      change_type: 'IN',
-      quantity_change: parseInt(quantity),
-      previous_quantity: currentItem.quantity || 0,
-      new_quantity: newQuantity,
-      reason: 'STOCK_IN',
-      reference: orderNum,
-      notes: notes || reference || null,
-      user_id: req.user?.id || null
-    });
-
-    if (historyError) {
-
-      console.error('Database error:', historyError);
-
-      throw historyError;
-
+    if (existing) {
+      const { error: updateError } = await supabase
+        .from('inventory_balances')
+        .update({ current_quantity: newQuantity })
+        .eq('id', existing.id);
+      if (updateError) throw updateError;
+    } else {
+      const { error: insertError } = await supabase
+        .from('inventory_balances')
+        .insert({ item_id: currentItem.id, location_id: locationId, current_quantity: newQuantity });
+      if (insertError) throw insertError;
     }
 
+    const orderNum = await generateOrderNumber('STKIN');
     logger.info(`Stock added: ${currentItem.sku} +${quantity} (now ${newQuantity}) [${orderNum}]`);
 
     res.status(200).json({
@@ -595,8 +610,9 @@ export const addStock = async (
       message: `Added ${quantity} units. New stock: ${newQuantity}`,
       orderNumber: orderNum,
       data: {
-        ...data,
-        previousQuantity: currentItem.quantity || 0,
+        ...currentItem,
+        quantity: newQuantity,
+        previousQuantity: prevQty,
         addedQuantity: parseInt(quantity),
         newQuantity,
         orderNumber: orderNum
@@ -797,6 +813,11 @@ export const getCentralValuation = async (
         total_quantity: 0,
         total_value: 0
       },
+      stationery: {
+        item_count: 0,
+        total_quantity: 0,
+        total_value: 0
+      },
       grand_total: {
         item_count: 0,
         total_quantity: 0,
@@ -805,7 +826,11 @@ export const getCentralValuation = async (
     };
 
     (items || []).forEach(item => {
-      const type = item.store_type === 'bar_store' ? 'bar_store' : 'foodstuffs';
+      const type = item.store_type === 'bar_store'
+        ? 'bar_store'
+        : item.store_type === 'stationery'
+          ? 'stationery'
+          : 'foodstuffs';
       const qty = Number(item.quantity || 0);
       const cost = Number(item.cost_price || 0);
       const val = qty * cost;

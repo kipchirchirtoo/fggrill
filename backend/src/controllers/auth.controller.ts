@@ -467,6 +467,14 @@ export const login = async (
       allRoles = [{ role: userProfile.role, branch_id: userProfile.branch_id, is_primary: true }];
     }
 
+    // If users.branch_id is null, derive it from user_branch_roles (primary or first assignment)
+    if (!userProfile.branch_id && allRoles.length > 0) {
+      const primary = allRoles.find((r: any) => r.is_primary) || allRoles[0];
+      if (primary?.branch_id) {
+        userProfile = { ...userProfile, branch_id: primary.branch_id, branchId: primary.branch_id };
+      }
+    }
+
     const isUniversal = UNIVERSAL_ROLES.includes(userProfile.role);
     const requiresContextSelection = !isUniversal && allRoles.length > 1;
 
@@ -726,12 +734,12 @@ export const getMe = async (
     try {
       const { data: staffProfile } = await supabase
         .from('staff_profiles')
-        .select('id_number')
+        .select('national_id')
         .eq('user_id', req.user.id)
         .maybeSingle();
 
       if (staffProfile) {
-        idNumber = staffProfile.id_number;
+        idNumber = staffProfile.national_id;
       }
     } catch (staffErr) {
       logger.warn('getMe: Failed to fetch staff_profile, continuing without it', staffErr);
@@ -978,14 +986,37 @@ export const posLogin = async (
       return;
     }
 
-    // Find user by PIN
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('pos_pin', pin)
-      .single();
+    // Find user by PIN — check direct column first, fall back to metadata->>'pos_pin'
+    // (metadata fallback handles rows migrated from old DB before migration 0011 ran)
+    let user: any = null;
+    {
+      const { data: byCol } = await supabase
+        .from('users')
+        .select('*')
+        .eq('pos_pin', pin)
+        .limit(1)
+        .maybeSingle();
+      if (byCol) {
+        user = byCol;
+      } else {
+        const { data: byMeta } = await supabase
+          .from('users')
+          .select('*')
+          .filter('metadata->>pos_pin', 'eq', pin)
+          .limit(1)
+          .maybeSingle();
+        if (byMeta) {
+          user = byMeta;
+          // Backfill the column so future logins use the fast path
+          await supabase
+            .from('users')
+            .update({ pos_pin: pin, updated_at: new Date().toISOString() })
+            .eq('id', byMeta.id);
+        }
+      }
+    }
 
-    if (userError || !user) {
+    if (!user) {
       res.status(401).json({
         success: false,
         message: 'Invalid PIN'

@@ -975,7 +975,18 @@ class _GoodsReceivingSectionState extends ConsumerState<GoodsReceivingSection> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _focusScanner());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusScanner();
+      _checkPreloadPo();
+    });
+  }
+
+  void _checkPreloadPo() {
+    final poId = ref.read(grnPreloadPoIdProvider);
+    if (poId != null && poId.isNotEmpty) {
+      ref.read(grnPreloadPoIdProvider.notifier).state = null;
+      _applyPo(poId);
+    }
   }
 
   void _focusScanner() {
@@ -1717,6 +1728,141 @@ class CentralMasterInventorySection extends ConsumerWidget {
   }
 }
 
+// ── Search state lives here so _InventoryListSection stays a ConsumerWidget ──
+class _InventorySearchBody extends StatefulWidget {
+  const _InventorySearchBody({
+    required this.allItems,
+    required this.title,
+    required this.emptyMessage,
+    required this.onExportPdf,
+    required this.onSyncStock,
+    required this.onAddItem,
+    required this.onEditItem,
+    required this.onDeleteItem,
+    required this.valuation,
+    this.showValuationCards = false,
+  });
+
+  final List<Map<String, dynamic>> allItems;
+  final String title;
+  final String emptyMessage;
+  final VoidCallback onExportPdf;
+  final VoidCallback onSyncStock;
+  final VoidCallback onAddItem;
+  final void Function(Map<String, dynamic>) onEditItem;
+  final void Function(Map<String, dynamic>) onDeleteItem;
+  final Map<String, dynamic> valuation;
+  final bool showValuationCards;
+
+  @override
+  State<_InventorySearchBody> createState() => _InventorySearchBodyState();
+}
+
+class _InventorySearchBodyState extends State<_InventorySearchBody> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(
+        () => setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase()));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_searchQuery.isEmpty) return widget.allItems;
+    return widget.allItems.where((item) {
+      final name = _text(item, ['item_name', 'name', 'description']).toLowerCase();
+      final sku = _text(item, ['sku']).toLowerCase();
+      final cat = _text(item, ['category']).toLowerCase();
+      return name.contains(_searchQuery) || sku.contains(_searchQuery) || cat.contains(_searchQuery);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allItems = widget.allItems;
+    final items = _filtered;
+    final low = allItems
+        .where((i) => _num(i, ['quantity']) <= _num(i, ['reorder_level', 'min_stock']))
+        .length;
+    final totalValue = allItems.fold<double>(
+        0, (s, i) => s + (_num(i, ['quantity']) * _num(i, ['cost_price', 'unit_price'])));
+    final v = widget.valuation;
+    final foodValue = _num(v, ['foodstuffs_value', 'foodstuffsStoreValue', 'foodstuffs_store_value']);
+    final barValue = _num(v, ['bar_store_value', 'barStoreValue', 'bar_value']);
+    final grandValue = _num(v, ['grand_total', 'grandTotal', 'total_value', 'totalValue']);
+
+    return Column(children: [
+      Row(children: [
+        Expanded(child: _StatCard(label: 'Total Items', value: '${allItems.length}', icon: PhosphorIcons.package(), color: AppColors.kPrimary)),
+        const SizedBox(width: 12),
+        Expanded(child: _StatCard(label: 'Low Stock', value: '$low', icon: PhosphorIcons.warning(), color: Colors.orange)),
+        const SizedBox(width: 12),
+        Expanded(child: _StatCard(label: 'Stock Value', value: _money(totalValue), icon: PhosphorIcons.currencyDollar(), color: Colors.green)),
+      ]),
+      if (widget.showValuationCards) ...[
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _StatCard(label: 'Foodstuffs Store', value: _money(foodValue), icon: PhosphorIcons.cookingPot(), color: Colors.teal)),
+          const SizedBox(width: 12),
+          Expanded(child: _StatCard(label: 'Bar Store', value: _money(barValue), icon: PhosphorIcons.wine(), color: Colors.indigo)),
+          const SizedBox(width: 12),
+          Expanded(child: _StatCard(label: 'Grand Valuation', value: _money(grandValue == 0 ? totalValue : grandValue), icon: PhosphorIcons.currencyDollar(), color: AppColors.kAccent)),
+        ]),
+      ],
+      const SizedBox(height: 20),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          controller: _searchCtrl,
+          decoration: InputDecoration(
+            hintText: 'Search by name, SKU or category…',
+            prefixIcon: const Icon(Icons.search, size: 18),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(icon: const Icon(Icons.clear, size: 16), onPressed: () => _searchCtrl.clear())
+                : null,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      _RowsCard(
+        title: _searchQuery.isEmpty ? widget.title : '${items.length} of ${allItems.length} items',
+        rows: items.take(200).toList(),
+        emptyMessage: _searchQuery.isEmpty ? widget.emptyMessage : 'No items match "$_searchQuery"',
+        trailing: Wrap(
+          spacing: 8,
+          children: [
+            OutlinedButton.icon(onPressed: widget.onExportPdf, icon: const Icon(Icons.picture_as_pdf, size: 14), label: const Text('PDF / Print')),
+            OutlinedButton.icon(onPressed: widget.onSyncStock, icon: const Icon(Icons.sync, size: 14), label: const Text('Sync Stock')),
+            ElevatedButton.icon(onPressed: widget.onAddItem, icon: const Icon(Icons.add, size: 14), label: const Text('Add Item')),
+          ],
+        ),
+        builder: (item) => _rowTile(
+          icon: PhosphorIcons.package(),
+          title: _text(item, ['item_name', 'name', 'description']),
+          subtitle: '${_text(item, ['sku'])} • ${_text(item, ['category'])} • ${_text(item, ['unit_of_measure', 'unit'])}',
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('${_num(item, ['quantity']).toStringAsFixed(0)} in stock',
+                style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 8),
+            IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => widget.onEditItem(item)),
+            IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), color: Colors.red, onPressed: () => widget.onDeleteItem(item)),
+          ]),
+        ),
+      ),
+    ]);
+  }
+}
+
 class _InventoryListSection extends ConsumerWidget {
   const _InventoryListSection({
     required this.title,
@@ -1745,135 +1891,33 @@ class _InventoryListSection extends ConsumerWidget {
         icon: icon,
         child: _LiveRows(
           value: itemsAsync,
-          data: (items) {
-            final low = items
-                .where((item) =>
-                    _num(item, ['quantity']) <=
-                    _num(item, ['reorder_level', 'min_stock']))
-                .length;
-            final totalValue = items.fold<double>(
-              0,
-              (sum, item) =>
-                  sum +
-                  (_num(item, ['quantity']) *
-                      _num(item, ['cost_price', 'unit_price'])),
+          data: (allItems) {
+            return _InventorySearchBody(
+              allItems: allItems,
+              title: title,
+              emptyMessage: emptyMessage,
+              valuation: valuationAsync?.valueOrNull ?? const {},
+              showValuationCards: valuationAsync != null,
+              onExportPdf: () => _exportPdf(context, allItems),
+              onSyncStock: () async {
+                try {
+                  final result = await ref.read(adminRepositoryProvider).backfillGRNStock();
+                  final created = result['created'] ?? 0;
+                  final updated = result['updated'] ?? 0;
+                  if (context.mounted) {
+                    AppNotifier.show(context, 'Stock synced — $created new, $updated updated');
+                    _refresh(ref);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    AppNotifier.show(context, apiErrorMessage(e, fallback: 'Sync failed'), isError: true);
+                  }
+                }
+              },
+              onAddItem: () => _showItemDialog(context, ref),
+              onEditItem: (item) => _showItemDialog(context, ref, item: item),
+              onDeleteItem: (item) => _deleteItem(context, ref, item),
             );
-            final valuation = valuationAsync?.valueOrNull ?? const {};
-            final foodValue = _num(valuation, [
-              'foodstuffs_value',
-              'foodstuffsStoreValue',
-              'foodstuffs_store_value'
-            ]);
-            final barValue = _num(
-                valuation, ['bar_store_value', 'barStoreValue', 'bar_value']);
-            final grandValue = _num(valuation,
-                ['grand_total', 'grandTotal', 'total_value', 'totalValue']);
-            return Column(children: [
-              Row(children: [
-                Expanded(
-                    child: _StatCard(
-                        label: 'Total Items',
-                        value: '${items.length}',
-                        icon: PhosphorIcons.package(),
-                        color: AppColors.kPrimary)),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: _StatCard(
-                        label: 'Low Stock',
-                        value: '$low',
-                        icon: PhosphorIcons.warning(),
-                        color: Colors.orange)),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: _StatCard(
-                        label: 'Stock Value',
-                        value: _money(totalValue),
-                        icon: PhosphorIcons.currencyDollar(),
-                        color: Colors.green)),
-              ]),
-              if (valuationAsync != null) ...[
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(
-                      child: _StatCard(
-                          label: 'Foodstuffs Store',
-                          value: _money(foodValue),
-                          icon: PhosphorIcons.cookingPot(),
-                          color: Colors.teal)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: _StatCard(
-                          label: 'Bar Store',
-                          value: _money(barValue),
-                          icon: PhosphorIcons.wine(),
-                          color: Colors.indigo)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: _StatCard(
-                          label: 'Grand Valuation',
-                          value:
-                              _money(grandValue == 0 ? totalValue : grandValue),
-                          icon: PhosphorIcons.currencyDollar(),
-                          color: AppColors.kAccent)),
-                ]),
-              ],
-              const SizedBox(height: 20),
-              _RowsCard(
-                title: title,
-                rows: items.take(100).toList(),
-                emptyMessage: emptyMessage,
-                trailing: Wrap(
-                  spacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _exportPdf(context, items),
-                      icon: const Icon(Icons.picture_as_pdf, size: 14),
-                      label: const Text('PDF / Print'),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => _showItemDialog(context, ref),
-                      icon: const Icon(Icons.add, size: 14),
-                      label: const Text('Add Item'),
-                    ),
-                  ],
-                ),
-                builder: (item) => _rowTile(
-                  icon: PhosphorIcons.package(),
-                  title: _text(item, ['item_name', 'name', 'description']),
-                  subtitle: '${_text(item, ['sku'])} • ${_text(item, [
-                        'category'
-                      ])} • ${_text(item, ['unit_of_measure', 'unit'])}',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${_num(item, [
-                              'quantity'
-                            ]).toStringAsFixed(0)} in stock',
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.kTextSecondary,
-                            fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        tooltip: 'Edit',
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        onPressed: () =>
-                            _showItemDialog(context, ref, item: item),
-                      ),
-                      IconButton(
-                        tooltip: 'Delete',
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        color: Colors.red,
-                        onPressed: () => _deleteItem(context, ref, item),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ]);
           },
         ),
       );
@@ -2023,7 +2067,7 @@ class _InventoryListSection extends ConsumerWidget {
     try {
       final repo = ref.read(adminRepositoryProvider);
       if (isEdit) {
-        await repo.updateStoreItem(_text(item, ['sku', 'id']), body);
+        await repo.updateStoreItem(_text(item!, ['sku', 'id']), body); // item non-null when isEdit=true
       } else {
         await repo.createStoreItem(body);
       }
@@ -2628,7 +2672,7 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                     subtitle: '${_text(row, [
                           'supplier_name'
                         ])} • ${_date(row['created_at'] ?? row['order_date'])}',
-                    trailingMaxWidth: 520,
+                    trailingMaxWidth: 560,
                     trailing: _purchaseOrderActions(context, ref, row, status),
                   );
                 },
@@ -2653,8 +2697,8 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
     return Wrap(
       alignment: WrapAlignment.end,
       crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 8,
-      runSpacing: 6,
+      spacing: 4,
+      runSpacing: 4,
       children: [
         _poStatusPill(status),
         _poActionButton(
@@ -2699,8 +2743,12 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           _poActionButton(
             label: 'Receive',
             width: 82,
-            onPressed: () => ref.read(adminSectionProvider.notifier).state =
-                AdminSection.goodsReceiving,
+            primary: true,
+            onPressed: () {
+              ref.read(grnPreloadPoIdProvider.notifier).state = _id(row);
+              ref.read(adminSectionProvider.notifier).state =
+                  AdminSection.goodsReceiving;
+            },
           ),
         if (canReject)
           _poActionButton(
@@ -4949,14 +4997,14 @@ class _CentralStockTakesSectionState
     final items = _list(detail['items']);
     final counted =
         items.where((item) => _stockActualIncludingDraft(item) != null).length;
-    final variances =
-        items.where((item) => _stockVarianceIncludingDraft(item) != 0).length;
-    final varianceValue = items.fold<double>(
-        0,
-        (sum, item) =>
-            sum +
-            (_stockVarianceIncludingDraft(item) *
-                _num(item, ['unit_cost', 'cost_price', 'cost'])));
+    final salesUnits =
+        items.fold<double>(0, (sum, item) => sum + _tradingSoldQuantity(item));
+    final salesRevenue =
+        items.fold<double>(0, (sum, item) => sum + _tradingRevenue(item));
+    final closingSales =
+        items.fold<double>(0, (sum, item) => sum + _tradingClosingSales(item));
+    final addedStockValue =
+        items.fold<double>(0, (sum, item) => sum + _tradingAddedStock(item));
     final status = _text(detail, ['status'], 'in_progress');
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
@@ -4995,31 +5043,45 @@ class _CentralStockTakesSectionState
       Row(children: [
         Expanded(
             child: _StatCard(
-                label: 'Worksheet Items',
+                label: 'Items',
                 value: '${items.length}',
                 icon: PhosphorIcons.package(),
                 color: AppColors.kPrimary)),
         const SizedBox(width: 12),
         Expanded(
             child: _StatCard(
-                label: 'Counted',
+                label: 'Counted C/s',
                 value: '$counted',
                 icon: PhosphorIcons.checkCircle(),
                 color: Colors.green)),
         const SizedBox(width: 12),
         Expanded(
             child: _StatCard(
-                label: 'Variances',
-                value: '$variances',
-                icon: PhosphorIcons.warning(),
+                label: 'Sales Units',
+                value: _plainNum(salesUnits),
+                icon: PhosphorIcons.trendUp(),
                 color: Colors.orange)),
         const SizedBox(width: 12),
         Expanded(
             child: _StatCard(
-                label: 'Variance Value',
-                value: _money(varianceValue),
+                label: 'Sales Revenue',
+                value: _money(salesRevenue),
                 icon: PhosphorIcons.coins(),
-                color: varianceValue == 0 ? Colors.green : Colors.red)),
+                color: Colors.teal)),
+        const SizedBox(width: 12),
+        Expanded(
+            child: _StatCard(
+                label: 'Closing Sales',
+                value: _money(closingSales),
+                icon: PhosphorIcons.buildings(),
+                color: AppColors.kPrimary)),
+        const SizedBox(width: 12),
+        Expanded(
+            child: _StatCard(
+                label: 'Added Stock',
+                value: _money(addedStockValue),
+                icon: PhosphorIcons.truck(),
+                color: Colors.indigo)),
       ]),
       const SizedBox(height: 16),
       _stockCountWorksheetCard(ref, detail, items, counted),
@@ -5062,6 +5124,61 @@ class _CentralStockTakesSectionState
     return actual - _num(item, ['system_closing_stock', 'system_quantity']);
   }
 
+  double _tradingOpening(Map<String, dynamic> item) {
+    final explicit =
+        _num(item, ['opening_stock', 'opening_quantity', 'opening']);
+    if (explicit != 0) return explicit;
+    return _num(item, [
+      'system_closing_stock',
+      'system_quantity',
+      'current_stock',
+      'quantity'
+    ]);
+  }
+
+  double _tradingAdded(Map<String, dynamic> item) =>
+      _num(item, ['adds', 'added_quantity', 'additions']) +
+      _num(item, ['transfers_in', 'received_quantity']) +
+      _num(item, ['production_quantity', 'produced_quantity']);
+
+  double _tradingTotal(Map<String, dynamic> item) =>
+      _tradingOpening(item) + _tradingAdded(item);
+
+  double _tradingClosing(Map<String, dynamic> item) {
+    final actual = _stockActualIncludingDraft(item);
+    if (actual != null) return actual;
+    final explicit = _num(item, [
+      'closing_stock',
+      'closing_quantity',
+      'counted_quantity',
+      'actual_quantity',
+      'physical_quantity'
+    ]);
+    if (explicit != 0) return explicit;
+    return _tradingTotal(item);
+  }
+
+  double _tradingSoldQuantity(Map<String, dynamic> item) =>
+      _tradingTotal(item) - _tradingClosing(item);
+
+  double _tradingSellingPrice(Map<String, dynamic> item) =>
+      _num(item, ['selling_price', 'unit_price', 'price', 'retail_price']);
+
+  double _tradingBuyingPrice(Map<String, dynamic> item) =>
+      _num(item, ['buying_price', 'cost_price', 'unit_cost', 'cost']);
+
+  double _tradingRevenue(Map<String, dynamic> item) =>
+      _tradingSoldQuantity(item) * _tradingSellingPrice(item);
+
+  double _tradingOpeningSales(Map<String, dynamic> item) =>
+      _tradingOpening(item) * _tradingSellingPrice(item);
+
+  double _tradingClosingSales(Map<String, dynamic> item) =>
+      _tradingClosing(item) * _tradingSellingPrice(item);
+
+  double _tradingAddedStock(Map<String, dynamic> item) =>
+      _tradingAdded(item) * _tradingBuyingPrice(item);
+
   String _stockReasonIncludingDraft(Map<String, dynamic> item) {
     final draft =
         '${_draftReasons[_worksheetItemKey(item)] ?? item['_draft_variance_reason'] ?? ''}'
@@ -5103,7 +5220,7 @@ class _CentralStockTakesSectionState
                           fontWeight: FontWeight.w800, fontSize: 15)),
                   const SizedBox(height: 3),
                   const Text(
-                    'Enter physical counts directly here, then save all counts once.',
+                    'Trading stock sheet: opening plus adds, closing count, sales, revenue, and stock values.',
                     style: TextStyle(
                         color: AppColors.kTextSecondary, fontSize: 12),
                   ),
@@ -5137,7 +5254,7 @@ class _CentralStockTakesSectionState
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              width: 1560,
+              width: 2170,
               child: Column(children: [
                 _stockWorksheetHeaderRow(),
                 ...items.map((item) => _stockWorksheetInputRow(item)),
@@ -5158,33 +5275,68 @@ class _CentralStockTakesSectionState
       color: AppColors.kSurface,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: const Row(children: [
-        SizedBox(width: 360, child: Text('ITEM', style: style)),
-        SizedBox(width: 24),
-        SizedBox(width: 230, child: Text('SKU', style: style)),
+        SizedBox(width: 320, child: Text('ITEM', style: style)),
         SizedBox(width: 24),
         SizedBox(
-            width: 120,
-            child: Text('SYSTEM', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(width: 170, child: Text('ACTUAL COUNT', style: style)),
+            width: 82,
+            child: Text('O/S', textAlign: TextAlign.right, style: style)),
         SizedBox(width: 24),
         SizedBox(
-            width: 130,
-            child: Text('VARIANCE', textAlign: TextAlign.right, style: style)),
+            width: 82,
+            child: Text('ADDS', textAlign: TextAlign.right, style: style)),
         SizedBox(width: 24),
-        SizedBox(width: 370, child: Text('VARIANCE NOTES', style: style)),
+        SizedBox(
+            width: 88,
+            child: Text('TOTAL', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(width: 150, child: Text('C/S COUNT', style: style)),
+        SizedBox(width: 24),
+        SizedBox(
+            width: 88,
+            child: Text('SALES', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(
+            width: 108,
+            child:
+                Text('UNIT PRICE', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(
+            width: 118,
+            child: Text('AMOUNT', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(
+            width: 108,
+            child:
+                Text('BUYING PRICE', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(
+            width: 126,
+            child: Text('OPENING SALES',
+                textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(
+            width: 126,
+            child: Text('CLOSING SALES',
+                textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(
+            width: 118,
+            child:
+                Text('ADDED STOCK', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 24),
+        SizedBox(width: 280, child: Text('NOTES', style: style)),
       ]),
     );
   }
 
   Widget _stockWorksheetInputRow(Map<String, dynamic> item) {
-    final system = _num(item, ['system_closing_stock', 'system_quantity']);
     final actual = _stockActualIncludingDraft(item);
     final variance = _stockVarianceIncludingDraft(item);
     final needsReason = actual != null && variance != 0;
+    final sold = _tradingSoldQuantity(item);
     final rowColor = actual == null
         ? Colors.transparent
-        : variance == 0
+        : variance == 0 && sold >= 0
             ? Colors.green.withValues(alpha: .035)
             : Colors.orange.withValues(alpha: .055);
     return Container(
@@ -5198,7 +5350,7 @@ class _CentralStockTakesSectionState
       ),
       child: Row(children: [
         SizedBox(
-          width: 360,
+          width: 320,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(
@@ -5209,7 +5361,10 @@ class _CentralStockTakesSectionState
             ),
             const SizedBox(height: 2),
             Text(
-              _text(item, ['category', 'store_type'], ''),
+              [
+                _text(item, ['item_sku', 'sku'], ''),
+                _text(item, ['category', 'store_type'], '')
+              ].where((value) => value.isNotEmpty && value != '—').join(' • '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -5219,23 +5374,26 @@ class _CentralStockTakesSectionState
         ),
         const SizedBox(width: 24),
         SizedBox(
-          width: 230,
-          child: Text(
-            _text(item, ['item_sku', 'sku']),
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12),
-          ),
+          width: 82,
+          child: Text(_plainNum(_tradingOpening(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
         ),
         const SizedBox(width: 24),
         SizedBox(
-          width: 120,
-          child: Text(_plainNum(system),
+          width: 82,
+          child: Text(_plainNum(_tradingAdded(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 88,
+          child: Text(_plainNum(_tradingTotal(item)),
               textAlign: TextAlign.right,
               style: const TextStyle(fontWeight: FontWeight.w800)),
         ),
         const SizedBox(width: 24),
         SizedBox(
-          width: 170,
+          width: 150,
           child: _InlineStockInput(
             key: ValueKey('${_id(item)}-central-count'),
             initialValue: _stockActual(item) == null
@@ -5251,17 +5409,54 @@ class _CentralStockTakesSectionState
         ),
         const SizedBox(width: 24),
         SizedBox(
-          width: 130,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: _varianceBadge(
-              actual == null ? null : variance,
-            ),
-          ),
+          width: 88,
+          child: Text(_plainNum(sold),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: sold < 0 ? Colors.deepOrange : AppColors.kTextPrimary,
+              )),
         ),
         const SizedBox(width: 24),
         SizedBox(
-          width: 370,
+          width: 108,
+          child: Text(_money(_tradingSellingPrice(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 118,
+          child: Text(_money(_tradingRevenue(item)),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+        ),
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 108,
+          child: Text(_money(_tradingBuyingPrice(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 126,
+          child: Text(_money(_tradingOpeningSales(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 126,
+          child: Text(_money(_tradingClosingSales(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 118,
+          child: Text(_money(_tradingAddedStock(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 280,
           child: _InlineStockInput(
             key: ValueKey('${_id(item)}-central-note'),
             initialValue: _stockReasonIncludingDraft(item),
@@ -5273,46 +5468,6 @@ class _CentralStockTakesSectionState
           ),
         ),
       ]),
-    );
-  }
-
-  Widget _varianceBadge(double? variance) {
-    if (variance == null) {
-      return const Text(
-        '-',
-        textAlign: TextAlign.right,
-        style: TextStyle(
-          color: AppColors.kTextSecondary,
-          fontWeight: FontWeight.w800,
-        ),
-      );
-    }
-    final isZero = variance == 0;
-    final isPositive = variance > 0;
-    final color = isZero
-        ? Colors.green
-        : isPositive
-            ? Colors.blue
-            : Colors.deepOrange;
-    final label =
-        isZero ? '0' : '${isPositive ? '+' : ''}${_plainNum(variance)}';
-    return Container(
-      constraints: const BoxConstraints(minWidth: 68),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .10),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: .35)),
-      ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w900,
-          fontSize: 12,
-        ),
-      ),
     );
   }
 

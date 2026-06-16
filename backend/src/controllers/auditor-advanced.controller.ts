@@ -506,34 +506,28 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             .eq('status', 'pending');
 
         // 2. Fetch pending credit bills — filter at DB level
-        const billsQuery = supabase
+        let billsQuery = supabase
             .from('staff_credit_bills')
-            .select('*, staff:staff_profiles(branch_id)')
+            .select('*')
             .eq('status', 'pending');
-
-        const { data: bills, error: billsError } = effectiveBranchId
-            ? await billsQuery.eq('staff_profiles.branch_id', effectiveBranchId)
-            : await billsQuery;
+        if (effectiveBranchId) billsQuery = billsQuery.eq('branch_id', effectiveBranchId);
+        const { data: bills, error: billsError } = await billsQuery;
 
         // 3. Fetch pending staff advances — filter at DB level via branch_id column
-        const advancesQuery = supabase
+        let advancesQuery = supabase
             .from('staff_advances')
-            .select('*, staff:staff_profiles(branch_id)')
+            .select('*')
             .eq('status', 'pending');
-
-        const { data: advances, error: advancesError } = effectiveBranchId
-            ? await advancesQuery.eq('branch_id', effectiveBranchId)
-            : await advancesQuery;
+        if (effectiveBranchId) advancesQuery = advancesQuery.eq('branch_id', effectiveBranchId);
+        const { data: advances, error: advancesError } = await advancesQuery;
 
         // 4. Fetch pending staff loans — filter at DB level via branch_id column
-        const loansQuery = supabase
+        let loansQuery = supabase
             .from('staff_loans')
-            .select('*, staff:staff_profiles(branch_id)')
+            .select('*')
             .eq('status', 'pending_approval');
-
-        const { data: loans, error: loansError } = effectiveBranchId
-            ? await loansQuery.eq('branch_id', effectiveBranchId)
-            : await loansQuery;
+        if (effectiveBranchId) loansQuery = loansQuery.eq('branch_id', effectiveBranchId);
+        const { data: loans, error: loansError } = await loansQuery;
 
         // 5. Fetch pending stock counts — always filtered by branch
         const stockCountsQuery = supabase

@@ -171,34 +171,56 @@ async function processStaffPayroll(
     const netPay = grossSalary - totalDeductions;
 
     // ── Step 6: Upsert payroll record ─────────────────────────────────────────
-    const { data: payroll, error: payrollError } = await supabase
-        .from('staff_payroll')
-        .upsert({
-            staff_id: staffId,
-            month: String(month),
-            year,
-            basic_salary: basicSalary,
-            allowances: totalAllowances,
-            bonuses: totalBonuses,
-            nssf,
-            nssf_deduction: nssf,
-            shif_deduction: shif,
-            housing_levy: housingLevy,
-            housing_levy_deduction: housingLevy,
-            paye,
-            nhif: 0,
-            total_advances: totalAdvances,
-            loan_deduction: totalLoanDeductions,
-            total_credit_bills: totalCreditBills,
-            total_deductions: totalDeductions,
-            net_pay: netPay,
-            status: 'draft',
-            generated_at: new Date().toISOString(),
-        }, { onConflict: 'staff_id, month, year' })
-        .select()
-        .single();
+    const payrollPayload = {
+        staff_id: staffId,
+        month: String(month),
+        year,
+        basic_salary: basicSalary,
+        allowances: totalAllowances,
+        bonuses: totalBonuses,
+        nssf,
+        nssf_deduction: nssf,
+        shif_deduction: shif,
+        housing_levy: housingLevy,
+        housing_levy_deduction: housingLevy,
+        paye,
+        nhif: 0,
+        total_advances: totalAdvances,
+        loan_deduction: totalLoanDeductions,
+        total_credit_bills: totalCreditBills,
+        total_deductions: totalDeductions,
+        net_pay: netPay,
+        status: 'draft',
+        generated_at: new Date().toISOString(),
+    };
 
-    if (payrollError) throw payrollError;
+    const { data: existingPayroll } = await supabase
+        .from('staff_payroll')
+        .select('id')
+        .eq('staff_id', staffId)
+        .eq('month', String(month))
+        .eq('year', year)
+        .maybeSingle();
+
+    let payroll: any;
+    if (existingPayroll?.id) {
+        const { data: updated, error: updateError } = await supabase
+            .from('staff_payroll')
+            .update(payrollPayload)
+            .eq('id', existingPayroll.id)
+            .select()
+            .single();
+        if (updateError) throw updateError;
+        payroll = updated;
+    } else {
+        const { data: inserted, error: insertError } = await supabase
+            .from('staff_payroll')
+            .insert(payrollPayload)
+            .select()
+            .single();
+        if (insertError) throw insertError;
+        payroll = inserted;
+    }
 
     // ── Step 7: Mark all source records as deducted ───────────────────────────
     const markPromises: PromiseLike<any>[] = [];
@@ -276,7 +298,7 @@ export const generatePayroll = async (req: Request, res: Response, next: NextFun
         let staffQuery = supabase
             .from('staff_profiles')
             .select('id, basic_salary, branch_id')
-            .eq('status', 'active');
+            .eq('employment_status', 'active');
 
         if (staff_id) staffQuery = staffQuery.eq('id', staff_id);
         if (branch_id) staffQuery = staffQuery.eq('branch_id', branch_id);
@@ -753,7 +775,7 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         const { data: staffProfiles, error: staffError } = staffIds.length
             ? await supabase
                 .from('staff_profiles')
-                .select('id, first_name, last_name, user_id, role, position, employee_id, staff_code, branch_id')
+                .select('id, first_name, last_name, user_id, role, position, employee_number, branch_id')
                 .in('id', staffIds)
             : { data: [], error: null };
 

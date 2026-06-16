@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { logger } from '../utils/logger';
 import alertsService from './alerts.service';
 import reportsService from './reports.service';
+import { runDailyFinancialEngine } from './daily-financial-engine.service';
 
 class SchedulerService {
   private jobs: Map<string, cron.ScheduledTask> = new Map();
@@ -61,6 +62,18 @@ class SchedulerService {
    * Schedule daily tasks - runs at 1 AM everyday
    */
   private scheduleDaily() {
+    // Run Daily Financial Engine at 00:05 AM — generates system baseline snapshots for all branches
+    const dailyFinancialEngine = cron.schedule('5 0 * * *', async () => {
+      try {
+        logger.info('[Scheduler] Running Daily Financial Engine (midnight snapshots)');
+        await runDailyFinancialEngine();
+        logger.info('[Scheduler] Daily Financial Engine completed');
+      } catch (error) {
+        logger.error('[Scheduler] Daily Financial Engine failed:', error);
+      }
+    });
+    this.jobs.set('daily-financial-engine', dailyFinancialEngine);
+
     // Run daily performance reports at 1:00 AM
     const dailyReports = cron.schedule('0 1 * * *', async () => {
       try {

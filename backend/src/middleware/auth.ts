@@ -107,9 +107,25 @@ export const protect = async (
 
           // Base user from DB
           const effectiveRole = decoded.active_role || user.role;
-          const effectiveBranchId = (decoded.active_branch_id !== undefined && decoded.active_branch_id !== null)
+          let effectiveBranchId = (decoded.active_branch_id !== undefined && decoded.active_branch_id !== null)
             ? decoded.active_branch_id
             : user.branch_id;
+
+          // Fallback: if users.branch_id is null, check user_branch_roles for a primary assignment
+          if (!effectiveBranchId) {
+            try {
+              const { data: primaryRole } = await supabase
+                .from('user_branch_roles')
+                .select('branch_id')
+                .eq('user_id', user.id)
+                .order('is_primary', { ascending: false })
+                .limit(1)
+                .single();
+              if (primaryRole?.branch_id) effectiveBranchId = primaryRole.branch_id;
+            } catch {
+              // ignore — effectiveBranchId stays null
+            }
+          }
 
           req.user = {
             id: user.id,

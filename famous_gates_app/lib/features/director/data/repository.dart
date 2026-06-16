@@ -85,21 +85,21 @@ class DirectorRepository {
   Future<Map<String, dynamic>> createDiscrepancyFlag(
       Map<String, dynamic> data) async {
     final res = await _dio.post('/finance/discrepancies', data: data);
-    return _asMap(res.data);
+    return _checkedMap(res.data);
   }
 
   Future<Map<String, dynamic>> respondToDiscrepancy(
       String id, String response) async {
     final res = await _dio.patch('/finance/discrepancies/$id/respond',
         data: {'accountant_response': response});
-    return _asMap(res.data);
+    return _checkedMap(res.data);
   }
 
   Future<Map<String, dynamic>> finalizeDiscrepancy(
       String id, String decision, String status) async {
     final res = await _dio.patch('/finance/discrepancies/$id/finalize',
         data: {'decision': decision, 'status': status});
-    return _asMap(res.data);
+    return _checkedMap(res.data);
   }
 
   Future<List<Map<String, dynamic>>> getTasks({
@@ -117,21 +117,21 @@ class DirectorRepository {
 
   Future<Map<String, dynamic>> createTask(Map<String, dynamic> data) async {
     final res = await _dio.post('/finance/director/tasks', data: data);
-    return _asMap(res.data);
+    return _checkedMap(res.data);
   }
 
   Future<Map<String, dynamic>> respondToTask(
       String id, String responseNotes) async {
     final res = await _dio.patch('/finance/director/tasks/$id/respond',
         data: {'response_notes': responseNotes});
-    return _asMap(res.data);
+    return _checkedMap(res.data);
   }
 
   Future<Map<String, dynamic>> closeTask(
       String id, String status, String directorNotes) async {
     final res = await _dio.patch('/finance/director/tasks/$id/close',
         data: {'status': status, 'director_notes': directorNotes});
-    return _asMap(res.data);
+    return _checkedMap(res.data);
   }
 
   Future<Map<String, dynamic>> getDrillDownData({
@@ -210,6 +210,15 @@ class DirectorRepository {
         : (data is Map ? Map<String, dynamic>.from(data) : {});
   }
 
+  Map<String, dynamic> _checkedMap(dynamic data) {
+    final map = _asMap(data);
+    if (map['success'] == false) {
+      throw Exception(
+          map['message'] ?? 'Director request could not be completed');
+    }
+    return map;
+  }
+
   Map<String, dynamic> _rangeQuery(
     DateTime? startDate,
     DateTime? endDate, {
@@ -242,4 +251,45 @@ class DirectorRepository {
 
   String _date(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  // ── Branch Payroll Intelligence ───────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getPayrollDirectorSummary({int? month, int? year}) async {
+    final now = DateTime.now();
+    return _getMap('/finance/payroll/director-summary', queryParameters: {
+      'period_month': month ?? now.month,
+      'period_year': year ?? now.year,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPayrollBatches({String? status}) async {
+    return _getList('/finance/payroll/batches', queryParameters: {
+      if (status != null) 'status': status,
+    });
+  }
+
+  Future<void> approvePayrollBatch(String id, String action, {String? notes}) async {
+    await _dio.patch('/finance/payroll/batches/$id/approve', data: {
+      'action': action,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+  }
+
+  // ── Financial Close Intelligence ──────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getBranchProfitability({String? from, String? to, String? branchId}) async {
+    return _getMap('/finance/branch-profitability', queryParameters: {
+      if (branchId != null) 'branch_id': branchId,
+      if (from != null) 'from': from,
+      if (to != null) 'to': to,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getWorkspaceSubmissions({String? status, String? branchId}) async {
+    return _getList('/finance/workspace/submissions', queryParameters: {
+      if (branchId != null) 'branch_id': branchId,
+      if (status != null) 'status': status,
+      'limit': '90',
+    });
+  }
 }

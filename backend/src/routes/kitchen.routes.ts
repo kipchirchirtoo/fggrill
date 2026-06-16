@@ -16,7 +16,8 @@ import {
     getRequisition,
     approveRequisition,
     rejectRequisition,
-    fulfillRequisition
+    fulfillRequisition,
+    getRequisitionRelatedActivity
 } from '../controllers/kitchen/requisitions.controller';
 
 import {
@@ -75,6 +76,14 @@ import {
     getPendingVerifications
 } from '../controllers/kitchen/expected-portions.controller';
 
+import {
+    listProductionSessions,
+    createProductionSession,
+    getProductionSession,
+    completeProductionSession,
+    getRecipesWithIngredients,
+} from '../controllers/kitchen/kitchen-production.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -88,14 +97,18 @@ const kitchenStaff = [
     UserRole.RESTAURANT,
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
-    UserRole.BRANCH_MANAGER
+    UserRole.BRANCH_MANAGER,
+    UserRole.BRANCH_STOREKEEPER,
+    UserRole.CENTRAL_STOREKEEPER,
 ];
 
 const kitchenManagers = [
     UserRole.SUPER_ADMIN,
     UserRole.GENERAL_MANAGER,
     UserRole.BRANCH_MANAGER,
-    UserRole.KITCHEN_OPERATIONS
+    UserRole.KITCHEN_OPERATIONS,
+    UserRole.BRANCH_STOREKEEPER,
+    UserRole.CENTRAL_STOREKEEPER,
 ];
 
 const storekeepers = [
@@ -127,8 +140,12 @@ router.post('/requisitions', authorize(kitchenStaff), createRequisition);
 router.get('/requisitions', authorize([...kitchenStaff, ...storekeepers]), getRequisitions);
 router.get('/requisitions/:id', authorize([...kitchenStaff, ...storekeepers]), getRequisition);
 router.put('/requisitions/:id/approve', authorize(kitchenManagers), approveRequisition);
-router.put('/requisitions/:id/reject', authorize(kitchenManagers), rejectRequisition);
+router.post('/requisitions/:id/approve', authorize(kitchenManagers), approveRequisition);
+router.put('/requisitions/:id/reject', authorize([...kitchenManagers, ...storekeepers]), rejectRequisition);
+router.post('/requisitions/:id/reject', authorize([...kitchenManagers, ...storekeepers]), rejectRequisition);
 router.post('/requisitions/:id/fulfill', authorize(storekeepers), fulfillRequisition);
+router.put('/requisitions/:id/fulfill', authorize(storekeepers), fulfillRequisition);
+router.get('/requisitions/:id/related-activity', authorize([...kitchenStaff, ...storekeepers]), getRequisitionRelatedActivity);
 
 // =====================================================
 // RECIPE/BOM ROUTES
@@ -196,5 +213,14 @@ router.get('/expected-portions/pending', authorize(kitchenStaff), getPendingVeri
 router.get('/expected-portions/variance/summary', authorize([...kitchenManagers, UserRole.AUDITOR]), getVarianceSummary);
 router.get('/expected-portions/:id', authorize(kitchenStaff), getExpectedPortion);
 router.put('/expected-portions/:id/verify', authorize(kitchenStaff), verifyActualPortions);
+
+// =====================================================
+// KITCHEN PRODUCTION SESSIONS (STOREKEEPER FLOW)
+// =====================================================
+router.get('/production-sessions/recipes', authorize(storekeepers), getRecipesWithIngredients);
+router.get('/production-sessions', authorize([...storekeepers, ...kitchenStaff]), listProductionSessions);
+router.post('/production-sessions', authorize(storekeepers), createProductionSession);
+router.get('/production-sessions/:id', authorize([...storekeepers, ...kitchenStaff]), getProductionSession);
+router.put('/production-sessions/:id/complete', authorize(storekeepers), completeProductionSession);
 
 export default router;

@@ -8,7 +8,9 @@ import '../domain/providers.dart';
 import '../domain/models.dart';
 import '../data/repository.dart';
 import 'branch_orders_tab.dart';
+import 'auditor_sections.dart';
 import '../../lina/presentation/lina_screen.dart';
+import '../../shared/widgets/inventory_control_center_screen.dart';
 import '../../../core/widgets/branch_sales_payments_view.dart';
 
 class AuditorDashboard extends ConsumerStatefulWidget {
@@ -33,7 +35,8 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
         DashboardTab(
             label: 'Audit Control',
             icon: PhosphorIcons.shieldCheck(),
-            content: _AuditorOverviewTab(onGoToApprovals: () => setState(() => _tab = 2))),
+            content: _AuditorOverviewTab(
+                onGoToApprovals: () => setState(() => _tab = 2))),
         DashboardTab(
             label: 'Sales & Payments',
             icon: PhosphorIcons.creditCard(),
@@ -50,11 +53,102 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
         DashboardTab(
             label: 'Financial Sync',
             icon: PhosphorIcons.creditCard(),
-            content: const _CashierReportsTab()),
+            content: const AuditorFinancialVerificationSection()),
         DashboardTab(
             label: 'Reconciliation',
             icon: PhosphorIcons.arrowsClockwise(),
             content: const _ReconciliationTab()),
+        DashboardTab(
+            label: 'Revenue Audit',
+            icon: PhosphorIcons.chartLine(),
+            content: const AuditorSalesAuditSection()),
+        DashboardTab(
+            label: 'Revenue Oversight',
+            icon: PhosphorIcons.chartPie(),
+            content: const AuditorRevenueOversightSection()),
+        DashboardTab(
+            label: 'Invoices',
+            icon: PhosphorIcons.receipt(),
+            content: const AuditorInvoicesSection()),
+        DashboardTab(
+            label: 'Credit Bills',
+            icon: PhosphorIcons.creditCard(),
+            content: const AuditorCreditBillsSection()),
+        DashboardTab(
+            label: 'Cashier Logbooks',
+            icon: PhosphorIcons.notebook(),
+            content: const AuditorCashierLogbooksSection()),
+        DashboardTab(
+            label: 'Void Bills',
+            icon: PhosphorIcons.prohibit(),
+            content: const AuditorVoidBillsSection()),
+        DashboardTab(
+            label: 'Stock Audit',
+            icon: PhosphorIcons.warehouse(),
+            content: const AuditorStockAuditSection()),
+        DashboardTab(
+            label: 'Sold Items',
+            icon: PhosphorIcons.shoppingCart(),
+            content: const AuditorSoldItemsSection()),
+        DashboardTab(
+            label: 'Purchases',
+            icon: PhosphorIcons.shoppingBag(),
+            content: const AuditorPurchasesSection()),
+        DashboardTab(
+            label: 'Deliveries',
+            icon: PhosphorIcons.truck(),
+            content: const AuditorDeliveriesSection()),
+        DashboardTab(
+            label: 'Staff Audit',
+            icon: PhosphorIcons.users(),
+            content: const AuditorStaffAuditSection()),
+        DashboardTab(
+            label: 'Payroll Audit',
+            icon: PhosphorIcons.money(),
+            content: const AuditorPayrollApprovalsSection()),
+        DashboardTab(
+            label: 'Auditor Approvals',
+            icon: PhosphorIcons.checkCircle(),
+            content: const AuditorApprovalsSection()),
+        DashboardTab(
+            label: 'Kitchen Usage',
+            icon: PhosphorIcons.cookingPot(),
+            content: const AuditorKitchenUsageSection()),
+        DashboardTab(
+            label: 'Kitchen Wastage',
+            icon: PhosphorIcons.trash(),
+            content: const AuditorKitchenWastageSection()),
+        DashboardTab(
+            label: 'Kitchen Ledger',
+            icon: PhosphorIcons.listChecks(),
+            content: const AuditorKitchenLedgerSection()),
+        DashboardTab(
+            label: 'Banking Review',
+            icon: PhosphorIcons.bank(),
+            content: const AuditorBankingLogsSection()),
+        DashboardTab(
+            label: 'Discrepancies',
+            icon: PhosphorIcons.warning(),
+            content: const AuditorDiscrepanciesSection()),
+        const DashboardTab(
+            label: 'Outlet & Production',
+            icon: Icons.fact_check_outlined,
+            content: InventoryControlCenterScreen(
+              title: 'Outlet & Production',
+              subtitle:
+                  'Audit outlet stock, production output, consumption movement and variance controls.',
+              role: 'auditor',
+              initialTab: InventoryControlInitialTab.outletProduction,
+              allowGovernanceReview: true,
+            )),
+        DashboardTab(
+            label: 'Central Store',
+            icon: PhosphorIcons.warehouse(),
+            content: const _CentralStoreInventoryTab()),
+        DashboardTab(
+            label: 'Reports',
+            icon: PhosphorIcons.fileArrowDown(),
+            content: const AuditorReportExportsSection()),
         DashboardTab(
             label: 'Lina AI',
             icon: PhosphorIcons.sparkle(),
@@ -391,124 +485,6 @@ class _AuditLogsTab extends ConsumerWidget {
   }
 }
 
-final _cashierReportFiltersProvider =
-    StateProvider<Map<String, String?>>((ref) => const {});
-
-class _CashierReportsTab extends ConsumerWidget {
-  const _CashierReportsTab();
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filters = ref.watch(_cashierReportFiltersProvider);
-    final clearancesAsync =
-        ref.watch(auditorCashierClearancesProvider(filters));
-    return Padding(
-      padding: ScreenSize.p(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Cashier Reports',
-              style: Theme.of(context).textTheme.displaySmall),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await showDateRangePicker(
-                      context: context,
-                      firstDate: DateTime(2024),
-                      lastDate: DateTime(2027));
-                  if (picked != null) {
-                    ref.read(_cashierReportFiltersProvider.notifier).state = {
-                      ...filters,
-                      'start_date':
-                          '${picked.start.year}-${picked.start.month.toString().padLeft(2, '0')}-${picked.start.day.toString().padLeft(2, '0')}',
-                      'end_date':
-                          '${picked.end.year}-${picked.end.month.toString().padLeft(2, '0')}-${picked.end.day.toString().padLeft(2, '0')}',
-                    };
-                  }
-                },
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(filters['start_date'] != null
-                    ? '${filters['start_date']} → ${filters['end_date']}'
-                    : 'Date Range'),
-              ),
-              const SizedBox(width: 12),
-              if (filters['start_date'] != null)
-                TextButton(
-                    onPressed: () => ref
-                        .read(_cashierReportFiltersProvider.notifier)
-                        .state = const {},
-                    child: const Text('Clear')),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: clearancesAsync.when(
-              data: (rows) => rows.isEmpty
-                  ? const EmptyState(message: 'No cashier clearances found')
-                  : ListView.separated(
-                      itemCount: rows.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final c = rows[i];
-                        final amount = (c['amount'] ?? c['total_amount'] ?? 0);
-                        final status = (c['status'] ?? '').toString();
-                        final statusColor = status == 'approved'
-                            ? AppColors.kSuccess
-                            : status == 'pending'
-                                ? AppColors.kWarning
-                                : AppColors.kTextSecondary;
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor:
-                                AppColors.kSuccess.withValues(alpha: 0.1),
-                            child: Icon(PhosphorIcons.receipt(),
-                                color: AppColors.kSuccess, size: 18),
-                          ),
-                          title: Text(
-                              (c['cashier_name'] ?? c['staff_name'] ?? '—')
-                                  .toString(),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text(
-                              'Shift: ${c['shift'] ?? '—'}  •  Date: ${(c['date'] ?? c['created_at'] ?? '').toString().split('T').first}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                  'KES ${amount is num ? amount.toStringAsFixed(0) : amount}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.kSuccess)),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8)),
-                                child: Text(status,
-                                    style: TextStyle(
-                                        fontSize: 11, color: statusColor)),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-              loading: () => const LoadingSkeleton(type: SkeletonType.list),
-              error: (e, _) => ErrorState(
-                  message: '$e',
-                  onRetry: () => ref
-                      .invalidate(auditorCashierClearancesProvider(filters))),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 final _reconciliationFiltersProvider =
     StateProvider<Map<String, String?>>((ref) => const {});
 
@@ -656,6 +632,470 @@ class _AuditStatCard extends StatelessWidget {
                     color: color.withValues(alpha: 0.8),
                     fontSize: 12,
                     fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────── CENTRAL STORE INVENTORY TAB ────────────────────────
+
+class _CentralStoreInventoryTab extends ConsumerStatefulWidget {
+  const _CentralStoreInventoryTab();
+
+  @override
+  ConsumerState<_CentralStoreInventoryTab> createState() =>
+      _CentralStoreInventoryTabState();
+}
+
+class _CentralStoreInventoryTabState
+    extends ConsumerState<_CentralStoreInventoryTab> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = false;
+  String _error = '';
+  String _search = '';
+  String _categoryFilter = 'all';
+
+  static const _categories = [
+    'all',
+    'Foodstuffs',
+    'Beverages',
+    'Perishable goods',
+    'Vegetables',
+    'Fruits',
+    'Cleaning',
+    'Stationery',
+    'Gas',
+    'Other',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    try {
+      final repo = ref.read(auditorRepositoryProvider);
+      final data = await repo.getCentralStoreInventory();
+      if (mounted) setState(() => _items = data);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  num _toNum(dynamic v) {
+    if (v is num) return v;
+    return num.tryParse('$v') ?? 0;
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    final q = _search.toLowerCase();
+    return _items.where((item) {
+      final cat = '${item['category'] ?? ''}';
+      if (_categoryFilter != 'all' && cat != _categoryFilter) return false;
+      if (q.isEmpty) return true;
+      return '${item['item_name'] ?? item['name'] ?? ''}'.toLowerCase().contains(q) ||
+          '${item['sku'] ?? ''}'.toLowerCase().contains(q) ||
+          cat.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered;
+    final total = _items.length;
+    final outOfStock = _items.where((i) => _toNum(i['quantity']) <= 0).length;
+    final lowStock = _items
+        .where((i) =>
+            _toNum(i['quantity']) > 0 &&
+            _toNum(i['quantity']) <=
+                _toNum(i['reorder_level'] ?? i['min_quantity'] ?? 0))
+        .length;
+    final inStock = total - outOfStock - lowStock;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              const Icon(Icons.warehouse_outlined,
+                  color: AppColors.kPrimary, size: 24),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Central Store Inventory',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text(
+                      'Read-only view of central warehouse stock levels. '
+                      'Branch requests are fulfilled from this store.',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton.filled(
+                onPressed: _load,
+                icon: _loading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_error.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Text(_error,
+                  style: TextStyle(color: Colors.red.shade800)),
+            ),
+          // Stats row
+          Row(
+            children: [
+              _CentralStat(
+                  label: 'Total SKUs',
+                  value: '$total',
+                  icon: Icons.inventory_2_outlined,
+                  color: AppColors.kPrimary),
+              const SizedBox(width: 8),
+              _CentralStat(
+                  label: 'In Stock',
+                  value: '$inStock',
+                  icon: Icons.check_circle_outline,
+                  color: Colors.green),
+              const SizedBox(width: 8),
+              _CentralStat(
+                  label: 'Low Stock',
+                  value: '$lowStock',
+                  icon: Icons.warning_amber_outlined,
+                  color: Colors.orange),
+              const SizedBox(width: 8),
+              _CentralStat(
+                  label: 'Out of Stock',
+                  value: '$outOfStock',
+                  icon: Icons.cancel_outlined,
+                  color: Colors.red),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Search + filter
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  onChanged: (v) => setState(() => _search = v),
+                  decoration: const InputDecoration(
+                    hintText: 'Search by name, SKU or category…',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 200,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: _categoryFilter,
+                  decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      labelText: 'Category'),
+                  items: _categories
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) =>
+                      v != null ? setState(() => _categoryFilter = v) : null,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Table
+          if (_loading && _items.isEmpty)
+            const Center(
+                child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator()))
+          else
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade200),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  // Table header
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.kPrimary,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(8)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Expanded(
+                            flex: 3,
+                            child: Text('Item',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                        Expanded(
+                            flex: 2,
+                            child: Text('SKU',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                        Expanded(
+                            child: Text('Category',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                        Expanded(
+                            child: Text('Unit',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                        SizedBox(
+                            width: 110,
+                            child: Text('In Stock',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                        SizedBox(
+                            width: 90,
+                            child: Text('Cost Price',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                        SizedBox(
+                            width: 80,
+                            child: Text('Status',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                      ],
+                    ),
+                  ),
+                  if (filtered.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(
+                          child: Text('No items found',
+                              style: TextStyle(color: Colors.grey))),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(height: 1, color: Colors.grey.shade100),
+                      itemBuilder: (ctx, i) {
+                        final item = filtered[i];
+                        final qty = _toNum(item['quantity'] ?? 0);
+                        final reorder = _toNum(
+                            item['reorder_level'] ?? item['min_quantity'] ?? 0);
+                        final isZero = qty <= 0;
+                        final isLow = !isZero && qty <= reorder;
+                        final cost = _toNum(
+                            item['cost_price'] ?? item['unit_cost'] ?? 0);
+                        final unit = item['unit_of_measure'] ??
+                            item['unit'] ??
+                            'units';
+                        return Container(
+                          color: isZero
+                              ? Colors.red.shade50
+                              : isLow
+                                  ? Colors.orange.shade50
+                                  : (i.isEven
+                                      ? Colors.white
+                                      : Colors.grey.shade50),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  '${item['item_name'] ?? item['name'] ?? item['sku']}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  '${item['sku'] ?? '—'}',
+                                  style: const TextStyle(
+                                      fontSize: 11, color: Colors.grey),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  '${item['category'] ?? '—'}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  unit,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 110,
+                                child: Text(
+                                  '${qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2)} $unit',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: isZero
+                                        ? Colors.red
+                                        : isLow
+                                            ? Colors.orange
+                                            : AppColors.kPrimary,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 90,
+                                child: Text(
+                                  cost > 0
+                                      ? 'KES ${cost.toStringAsFixed(0)}'
+                                      : '—',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.teal.shade700),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 80,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isZero
+                                          ? Colors.red.shade100
+                                          : isLow
+                                              ? Colors.orange.shade100
+                                              : Colors.green.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      isZero
+                                          ? 'ZERO'
+                                          : isLow
+                                              ? 'LOW'
+                                              : 'OK',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: isZero
+                                            ? Colors.red.shade800
+                                            : isLow
+                                                ? Colors.orange.shade800
+                                                : Colors.green.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CentralStat extends StatelessWidget {
+  const _CentralStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: color)),
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.kTextSecondary)),
+              ],
+            ),
           ],
         ),
       ),

@@ -879,6 +879,13 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
+        href="/dashboard/branch-accounting/payroll-policies"
+        icon={SlidersHorizontal}
+        label="Payroll Policies"
+        active={pathname === '/dashboard/branch-accounting/payroll-policies'}
+      />
+
+      <NavItem
         href="/dashboard/communications"
         icon={MessageCircle}
         label="Communications"

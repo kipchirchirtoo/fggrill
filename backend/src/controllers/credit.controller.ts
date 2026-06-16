@@ -128,7 +128,7 @@ export const getPendingConfirmations = async (req: Request, res: Response, next:
         const { data: staffProfiles, error: staffError } = staffIds.length
             ? await supabase
                 .from('staff_profiles')
-                .select('id, first_name, last_name, user_id, id_number, position, branch_id')
+                .select('id, first_name, last_name, user_id, national_id, position, branch_id')
                 .in('id', staffIds)
             : { data: [], error: null };
 

@@ -31,6 +31,20 @@ const toNumber = (value: any): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const isOptionalDirectorDataError = (error: any): boolean => {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    error?.code === '42P01' ||
+    error?.code === '42703' ||
+    error?.code === 'PGRST116' ||
+    error?.code === 'PGRST200' ||
+    error?.code === 'PGRST205' ||
+    message.includes('schema cache') ||
+    message.includes('could not find') ||
+    message.includes('does not exist')
+  );
+};
+
 const REVENUE_STREAM_KEYS = [
   'restaurant',
   'bar',
@@ -104,6 +118,20 @@ export class DirectorEnhancedController {
   static async getComprehensiveDashboard(req: Request, res: Response) {
     try {
       const { startDate, endDate, branchId } = req.query;
+      const safeMetric = async <T>(label: string, loader: Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await loader;
+        } catch (error: any) {
+          if (isOptionalDirectorDataError(error)) {
+            console.warn(`Director dashboard optional data unavailable: ${label}`, {
+              code: error?.code,
+              message: error?.message,
+            });
+            return fallback;
+          }
+          throw error;
+        }
+      };
       
       const [
         financialData,
@@ -113,12 +141,29 @@ export class DirectorEnhancedController {
         discrepancyData,
         submissionData
       ] = await Promise.all([
-        DirectorEnhancedController.getFinancialMetrics(startDate as string, endDate as string, branchId as string),
-        DirectorEnhancedController.getOccupancyMetrics(startDate as string, endDate as string, branchId as string),
-        DirectorEnhancedController.getStaffMetrics(branchId as string),
-        DirectorEnhancedController.getInventoryMetrics(branchId as string),
-        DirectorEnhancedController.getDiscrepancyMetrics(branchId as string),
-        DirectorEnhancedController.getBranchSubmissions(startDate as string, endDate as string)
+        safeMetric('financial', DirectorEnhancedController.getFinancialMetrics(startDate as string, endDate as string, branchId as string), {
+          totalRevenue: 0, totalExpenses: 0, totalCogs: 0, netProfit: 0, profitMargin: 0,
+          invoiceCount: 0, expenseCount: 0, monthlyAdjustmentCount: 0, monthlyAdjustmentsTotal: 0,
+          dailyRecordCount: 0, revenueByBranch: [], revenueByDepartment: {}, branchDepartmentBreakdown: [],
+          paymentMethodTotals: { cash: 0, mpesa: 0, swipe: 0, card: 0, other: 0 },
+          bankingTotals: { expectedCash: 0, totalBanked: 0, totalUnbanked: 0, recordsWithVariance: 0 },
+          statusBreakdown: {}, trendByDate: [],
+          paidInvoices: 0, pendingInvoices: 0
+        }),
+        safeMetric('occupancy', DirectorEnhancedController.getOccupancyMetrics(startDate as string, endDate as string, branchId as string), {
+          totalRooms: 0, occupiedRooms: 0, availableRooms: 0, occupancyRate: 0,
+          totalBookings: 0, confirmedBookings: 0, occupancyByBranch: []
+        }),
+        safeMetric('staff', DirectorEnhancedController.getStaffMetrics(branchId as string), {
+          totalStaff: 0, activeStaff: 0, inactiveStaff: 0, attendanceRate: 0, staffByBranch: []
+        }),
+        safeMetric('inventory', DirectorEnhancedController.getInventoryMetrics(branchId as string), {
+          totalItems: 0, lowStockItems: 0, totalValue: 0, stockHealthRate: 100
+        }),
+        safeMetric('discrepancies', DirectorEnhancedController.getDiscrepancyMetrics(branchId as string), {
+          totalFlags: 0, pendingFlags: 0, criticalFlags: 0, resolvedFlags: 0, resolutionRate: 100
+        }),
+        safeMetric('submissions', DirectorEnhancedController.getBranchSubmissions(startDate as string, endDate as string), [])
       ]);
 
       return res.status(200).json({
@@ -172,10 +217,11 @@ export class DirectorEnhancedController {
 
     const { data: monthlyAdjustments } = await monthlyQuery;
 
+    // invoices table does not exist — use payments as the revenue source fallback
     let invoiceQuery = supabase
-      .from('invoices')
-      .select('total_amount, status, created_at, branch_id, branches(name)');
-    
+      .from('payments')
+      .select('amount, status, created_at, branch_id, branches(name)');
+
     if (startDate && endDate) {
       invoiceQuery = invoiceQuery.gte('created_at', startDate).lte('created_at', endDate);
     }
@@ -212,7 +258,7 @@ export class DirectorEnhancedController {
       totalExpenses = directExpenses + totalCogs + monthlyAdjustmentTotal;
       netProfit = totalRevenue - totalExpenses;
     } else {
-      totalRevenue = invoices?.reduce((sum, inv) => sum + toNumber(inv.total_amount), 0) || 0;
+      totalRevenue = invoices?.reduce((sum, inv) => sum + toNumber(inv.amount), 0) || 0;
       totalExpenses = expenses?.reduce((sum, exp) => sum + toNumber(exp.amount), 0) || 0;
       netProfit = totalRevenue - totalExpenses;
     }
@@ -320,7 +366,7 @@ export class DirectorEnhancedController {
         revenueByBranch[branchName] = { name: branchName, revenue: 0, count: 0, profit: 0, expenses: 0, cogs: 0 };
       }
       if (!dailyRecords?.some(r => (r.branches as any)?.name === branchName)) {
-        revenueByBranch[branchName].revenue += toNumber(inv.total_amount);
+        revenueByBranch[branchName].revenue += toNumber(inv.amount);
         revenueByBranch[branchName].count += 1;
       }
     });
@@ -364,10 +410,10 @@ export class DirectorEnhancedController {
 
     let bookingQuery = supabase
       .from('bookings')
-      .select('id, status, check_in, check_out, branch_id, branches(name)');
-    
+      .select('id, status, check_in_date, check_out_date, branch_id, branches(name)');
+
     if (startDate && endDate) {
-      bookingQuery = bookingQuery.gte('check_in', startDate).lte('check_out', endDate);
+      bookingQuery = bookingQuery.gte('check_in_date', startDate).lte('check_out_date', endDate);
     }
     if (branchId) {
       bookingQuery = bookingQuery.eq('branch_id', branchId);
@@ -405,8 +451,8 @@ export class DirectorEnhancedController {
    */
   private static async getStaffMetrics(branchId?: string) {
     let staffQuery = supabase
-      .from('staff')
-      .select('id, status, branch_id, branches(name), position');
+      .from('staff_profiles')
+      .select('id, employment_status, branch_id, branches(name), position');
     
     if (branchId) {
       staffQuery = staffQuery.eq('branch_id', branchId);
@@ -415,9 +461,9 @@ export class DirectorEnhancedController {
     const { data: staff } = await staffQuery;
 
     let attendanceQuery = supabase
-      .from('attendance')
-      .select('id, status, date')
-      .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+      .from('staff_attendance')
+      .select('id, status, attendance_date')
+      .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
     
     if (branchId) {
       attendanceQuery = attendanceQuery.eq('branch_id', branchId);
@@ -426,7 +472,7 @@ export class DirectorEnhancedController {
     const { data: attendance } = await attendanceQuery;
 
     const totalStaff = staff?.length || 0;
-    const activeStaff = staff?.filter(s => s.status === 'active').length || 0;
+    const activeStaff = staff?.filter(s => s.employment_status === 'active').length || 0;
     const attendanceRate = (attendance && attendance.length > 0) 
       ? (attendance.filter(a => a.status === 'present').length / attendance.length) * 100 
       : 0;
@@ -702,12 +748,13 @@ export class DirectorEnhancedController {
 
       const { data: dailyRecords } = await dailyQuery;
 
+      // bank_transactions has debit/credit/txn_date columns — use banking_transactions which has amount/txn_type
       let txnQuery = supabase
-        .from('bank_transactions')
-        .select('id, amount, type, status, transaction_date, branch_id, branches(name)');
+        .from('banking_transactions')
+        .select('id, amount, txn_type, reconciled, txn_date, reference, branch_id, branches(name)');
 
       if (startDate && endDate) {
-        txnQuery = txnQuery.gte('transaction_date', startDate).lte('transaction_date', endDate);
+        txnQuery = txnQuery.gte('txn_date', startDate).lte('txn_date', endDate);
       }
       if (branchId) {
         txnQuery = txnQuery.eq('branch_id', branchId);
@@ -806,29 +853,30 @@ export class DirectorEnhancedController {
           }
 
           const amount = toNumber(txn.amount);
-          if (txn.type === 'deposit') {
+          const txnType = String(txn.txn_type || '').toLowerCase();
+          if (txnType === 'deposit' || txnType === 'credit' || txnType === 'in') {
             byBranch[branchName].deposits += amount;
             byBranch[branchName].totalBanked += amount;
             totals.totalBanked += amount;
             history.push({
               branch: branchName,
-              date: txn.transaction_date,
+              date: txn.txn_date,
               amount,
               account: '',
-              reference: '',
+              reference: txn.reference || '',
               method: 'bank_deposit',
               expectedCash: 0
             });
-          } else if (txn.type === 'withdrawal') {
+          } else if (txnType === 'withdrawal' || txnType === 'debit' || txnType === 'out') {
             byBranch[branchName].withdrawals += amount;
           }
 
-          if (txn.status === 'pending') {
+          if (!txn.reconciled) {
             byBranch[branchName].pending += amount;
             byBranch[branchName].totalUnbanked += amount;
             byBranch[branchName].discrepancyCount += 1;
             totals.totalUnbanked += amount;
-          } else if (txn.status === 'reconciled') {
+          } else {
             byBranch[branchName].reconciled += amount;
           }
         });
@@ -841,7 +889,7 @@ export class DirectorEnhancedController {
           history: history.sort((a, b) => String(a.date).localeCompare(String(b.date))),
           totals,
           totalTransactions: (dailyRecords?.length || 0) + (transactions?.length || 0),
-          source: dailyRecords && dailyRecords.length > 0 ? 'daily_records' : 'bank_transactions'
+          source: dailyRecords && dailyRecords.length > 0 ? 'daily_records' : 'banking_transactions'
         }
       });
     } catch (error: any) {
@@ -1074,7 +1122,10 @@ export class DirectorEnhancedController {
    */
   static async getDrillDownData(req: Request, res: Response) {
     try {
-      const { branch_id, date, stream } = req.query as Record<string, string>;
+      const query = req.query as Record<string, string | undefined>;
+      const branch_id = query.branch_id || query.branchId || query.branch;
+      const date = query.date || query.record_date || query.recordDate;
+      const stream = query.stream || query.type || query.category;
 
       if (!branch_id || !date || !stream) {
         return res.status(400).json({ success: false, message: 'branch_id, date, and stream are required' });
@@ -1088,7 +1139,22 @@ export class DirectorEnhancedController {
         .eq('record_date', date)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        if (isOptionalDirectorDataError(error)) {
+          return res.status(200).json({
+            success: true,
+            data: {
+              rows: [],
+              summary: {},
+              branchName: `Branch ${branch_id}`,
+              date,
+              stream,
+              hasRecord: false
+            }
+          });
+        }
+        throw error;
+      }
 
       const branchName = (record?.branches as any)?.name || `Branch ${branch_id}`;
 

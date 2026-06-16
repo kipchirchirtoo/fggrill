@@ -17,8 +17,9 @@ class AuthInterceptor extends Interceptor {
     final jwt = await storage.read(key: AuthRepository.jwtKey);
     final branchId = await storage.read(key: AuthRepository.branchIdKey);
 
-    if (jwt != null) {
-      options.headers['Authorization'] = 'Bearer $jwt';
+    final normalizedJwt = jwt?.trim() ?? '';
+    if (normalizedJwt.isNotEmpty && normalizedJwt.toLowerCase() != 'null') {
+      options.headers['Authorization'] = 'Bearer $normalizedJwt';
     }
     final normalizedBranchId = branchId?.trim() ?? '';
     final normalizedBranchIdLower = normalizedBranchId.toLowerCase();
@@ -35,10 +36,24 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     ensureStableWorkingDirectory();
     if (err.response?.statusCode == 401) {
-      final storage = _ref.read(secureStorageProvider);
-      await storage.delete(key: AuthRepository.jwtKey);
-      await storage.delete(key: AuthRepository.refreshKey);
+      final message = _responseMessage(err.response?.data).toLowerCase();
+      final hadToken =
+          '${err.requestOptions.headers['Authorization'] ?? ''}'.isNotEmpty;
+      final tokenRejected = message.contains('invalid') ||
+          message.contains('expired') ||
+          message.contains('force logout') ||
+          message.contains('token no longer valid');
+      if (hadToken && tokenRejected) {
+        final storage = _ref.read(secureStorageProvider);
+        await storage.delete(key: AuthRepository.jwtKey);
+        await storage.delete(key: AuthRepository.refreshKey);
+      }
     }
     return handler.next(err);
+  }
+
+  String _responseMessage(Object? data) {
+    if (data is Map) return '${data['message'] ?? data['error'] ?? ''}';
+    return '$data';
   }
 }

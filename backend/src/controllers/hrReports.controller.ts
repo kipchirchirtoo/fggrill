@@ -58,7 +58,7 @@ export const generateKRAP10 = async (req: Request, res: Response, next: NextFunc
         const { month, year } = req.query;
 
         const { data: records, error } = await supabase
-            .from('payroll_records')
+            .from('payroll')
             .select(`
         *,
         employee:staff_profiles!staff_id(
@@ -111,7 +111,7 @@ export const generateNSSFReport = async (req: Request, res: Response, next: Next
     try {
         const { month, year } = req.query;
         const { data: records, error } = await supabase
-            .from('payroll_records')
+            .from('payroll')
             .select('*, employee:staff_profiles!staff_id(*, user:users!user_id(*))')
             .eq('month', month)
             .eq('year', year);
@@ -146,7 +146,7 @@ export const generateSHIFReport = async (req: Request, res: Response, next: Next
     try {
         const { month, year } = req.query;
         const { data: records, error } = await supabase
-            .from('payroll_records')
+            .from('payroll')
             .select('*, employee:staff_profiles!staff_id(*, user:users!user_id(*))')
             .eq('month', month)
             .eq('year', year);
@@ -178,7 +178,7 @@ export const generateHousingLevyReport = async (req: Request, res: Response, nex
     try {
         const { month, year } = req.query;
         const { data: records, error } = await supabase
-            .from('payroll_records')
+            .from('payroll')
             .select('*, employee:staff_profiles!staff_id(*, user:users!user_id(*))')
             .eq('month', month)
             .eq('year', year);

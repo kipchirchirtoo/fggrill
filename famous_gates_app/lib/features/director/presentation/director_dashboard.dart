@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -11,7 +10,12 @@ import '../../../core/widgets/branch_sales_payments_view.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart' hide DataColumn, DataRow;
 import '../data/repository.dart';
+import '../../auditor/presentation/auditor_dashboard.dart';
+import '../../branch_accountant/presentation/branch_accountant_dashboard.dart';
+import '../../hr/presentation/hr_dashboard.dart';
 import '../../lina/presentation/lina_screen.dart';
+import '../../procurement/presentation/procurement_dashboard.dart';
+import '../../shared/widgets/inventory_control_center_screen.dart';
 
 enum DirectorSection {
   overview,
@@ -19,6 +23,7 @@ enum DirectorSection {
   payments,
   banking,
   discrepancies,
+  inventoryGovernance,
   drillDown,
   tasks,
   auditor,
@@ -81,32 +86,65 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
 
   Future<_DirectorSnapshot> _load() async {
     final repo = ref.read(directorRepositoryProvider);
+    Future<T> guarded<T>(Future<T> future, T fallback, String label) async {
+      try {
+        return await future;
+      } catch (error) {
+        debugPrint('Director portal: $label failed: $error');
+        return fallback;
+      }
+    }
+
     final results = await Future.wait<dynamic>([
-      repo.getComprehensiveDashboard(
-        startDate: _startDate,
-        endDate: _endDate,
-        branchId: _branchId,
+      guarded<Map<String, dynamic>>(
+        repo.getComprehensiveDashboard(
+          startDate: _startDate,
+          endDate: _endDate,
+          branchId: _branchId,
+        ),
+        const {},
+        'overview',
       ),
-      repo.getBranches(),
-      repo.getPaymentBreakdown(
-        startDate: _startDate,
-        endDate: _endDate,
-        branchId: _branchId,
+      guarded<List<Map<String, dynamic>>>(
+        repo.getBranches(),
+        const [],
+        'branches',
       ),
-      repo.getBankingReconciliation(
-        startDate: _startDate,
-        endDate: _endDate,
-        branchId: _branchId,
+      guarded<Map<String, dynamic>>(
+        repo.getPaymentBreakdown(
+          startDate: _startDate,
+          endDate: _endDate,
+          branchId: _branchId,
+        ),
+        const {},
+        'payments',
       ),
-      repo.getDiscrepancies(
-        status: _discrepancyStatus,
-        severity: _discrepancySeverity,
-        branchId: _branchId,
+      guarded<Map<String, dynamic>>(
+        repo.getBankingReconciliation(
+          startDate: _startDate,
+          endDate: _endDate,
+          branchId: _branchId,
+        ),
+        const {},
+        'banking',
       ),
-      repo.getTasks(
-        status: _taskStatus,
-        priority: _taskPriority,
-        assignedToRole: _taskRole,
+      guarded<List<Map<String, dynamic>>>(
+        repo.getDiscrepancies(
+          status: _discrepancyStatus,
+          severity: _discrepancySeverity,
+          branchId: _branchId,
+        ),
+        const [],
+        'discrepancies',
+      ),
+      guarded<List<Map<String, dynamic>>>(
+        repo.getTasks(
+          status: _taskStatus,
+          priority: _taskPriority,
+          assignedToRole: _taskRole,
+        ),
+        const [],
+        'review tasks',
       ),
     ]);
     return _DirectorSnapshot(
@@ -128,13 +166,9 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
   void _selectSection(DirectorSection section) {
     switch (section) {
       case DirectorSection.auditor:
-        context.go('/auditor');
       case DirectorSection.hr:
-        context.go('/auditor/hr');
       case DirectorSection.branchAccounting:
-        context.go('/branch-accountant/financial-workspace');
       case DirectorSection.procurement:
-        context.go('/procurement');
       case DirectorSection.lina:
         setState(() => _section = section);
       default:
@@ -180,6 +214,12 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
           section: DirectorSection.discrepancies,
           label: 'Discrepancies',
           icon: Icons.report_problem_outlined,
+          group: 'Controls',
+        ),
+        MasterNavItem(
+          section: DirectorSection.inventoryGovernance,
+          label: 'Inventory Governance',
+          icon: Icons.fact_check_outlined,
           group: 'Controls',
         ),
         MasterNavItem(
@@ -310,6 +350,15 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
           onExport: _exportDiscrepancies,
           onRefresh: _refresh,
         );
+      case DirectorSection.inventoryGovernance:
+        return const InventoryControlCenterScreen(
+          title: 'Inventory Governance',
+          subtitle:
+              'Company-wide inventory exceptions, alerts, document evidence and review controls.',
+          role: 'director',
+          initialTab: InventoryControlInitialTab.governance,
+          allowGovernanceReview: true,
+        );
       case DirectorSection.drillDown:
         return _DrillDownSection(
           branches: data.branches,
@@ -341,7 +390,7 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
               _drillFuture = ref
                   .read(directorRepositoryProvider)
                   .getDrillDownData(
-                    branchId: _id(_selectedBranch),
+                    branchId: _branchIdOf(_selectedBranch),
                     date: _selectedDate ?? DateTime.now(),
                     stream: stream,
                   )
@@ -375,10 +424,15 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
           onRefresh: _refresh,
         );
       case DirectorSection.auditor:
-      case DirectorSection.hr:
+        return const AuditorDashboard();
       case DirectorSection.branchAccounting:
+        return const BranchAccountantDashboard(
+          initialSection: BranchAccountantSection.financialWorkspace,
+        );
+      case DirectorSection.hr:
+        return const HRDashboard();
       case DirectorSection.procurement:
-        return const SizedBox.shrink();
+        return const ProcurementDashboard();
       case DirectorSection.lina:
         return const LinaScreen();
     }
@@ -419,7 +473,7 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
       _drillFuture = ref
           .read(directorRepositoryProvider)
           .getDrillDownData(
-            branchId: _id(_selectedBranch),
+            branchId: _branchIdOf(_selectedBranch),
             date: _selectedDate!,
             stream: _selectedStream!,
           )
@@ -2150,6 +2204,7 @@ class _QuickActions extends StatelessWidget {
       MapEntry(DirectorSection.payments, 'Payment Intelligence'),
       MapEntry(DirectorSection.banking, 'Banking Control'),
       MapEntry(DirectorSection.discrepancies, 'Discrepancy Control'),
+      MapEntry(DirectorSection.inventoryGovernance, 'Inventory Governance'),
       MapEntry(DirectorSection.drillDown, 'Deep Drill-Down'),
       MapEntry(DirectorSection.tasks, 'Review Tasks'),
       MapEntry(DirectorSection.auditor, 'Auditor Portal'),
@@ -2620,6 +2675,8 @@ List<Map<String, dynamic>> _rows(dynamic value) {
 
 String _id(dynamic value) => _text(value, ['id']);
 
+String _branchIdOf(dynamic value) => _text(value, ['id', 'branch_id']);
+
 String _text(dynamic value, List<String> keys, {String fallback = ''}) {
   final map = _map(value);
   for (final key in keys) {
@@ -2630,7 +2687,15 @@ String _text(dynamic value, List<String> keys, {String fallback = ''}) {
 }
 
 String _nestedText(Map<String, dynamic> map, String parent, String key) {
-  return _text(_map(map[parent]), [key]);
+  final value = _text(_map(map[parent]), [key]);
+  if (value.isNotEmpty) return value;
+  if (parent == 'branches' && key == 'name') {
+    final branchId = _text(map, ['branch_name', 'branch_id', 'branchId']);
+    if (branchId.isNotEmpty) {
+      return branchId.startsWith('Branch ') ? branchId : 'Branch $branchId';
+    }
+  }
+  return '';
 }
 
 double _num(Map<String, dynamic> map, List<String> keys) {

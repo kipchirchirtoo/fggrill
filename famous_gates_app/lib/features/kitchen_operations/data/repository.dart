@@ -228,6 +228,11 @@ class KitchenOpsRepository {
     return _unwrapMap(response.data);
   }
 
+  Future<Map<String, dynamic>> getRequisitionRelatedActivity(String id) async {
+    final response = await _dio.get('/kitchen/requisitions/$id/related-activity');
+    return _unwrapMap(response.data);
+  }
+
   Future<void> createRequisition(Map<String, dynamic> data) async {
     await _dio.post('/kitchen/requisitions', data: data);
   }

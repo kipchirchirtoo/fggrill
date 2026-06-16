@@ -66,20 +66,57 @@ export const getRevenueOversight = async (
             conferenceQuery = conferenceQuery.eq('branch_id', branch_id);
         }
 
-        const [roomsRes, restaurantRes, barRes, conferenceRes] = await Promise.all([
+        // POS outlets for this branch (need outlet IDs first, then filter pos_shift_orders)
+        let posOutletIds: any[] = [];
+        if (branch_id && branch_id !== '0') {
+            const { data: posOutlets } = await supabase
+                .from('pos_outlets')
+                .select('id, outlet_type')
+                .eq('branch_id', branch_id);
+            posOutletIds = posOutlets || [];
+        }
+
+        const posOutletIdList = posOutletIds.map((o: any) => o.id);
+        const posOrdersQuery = posOutletIdList.length > 0
+            ? supabase.from('pos_shift_orders')
+                .select('id, outlet_id, total_amount, created_at')
+                .in('outlet_id', posOutletIdList)
+                .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)')
+                .gte('created_at', `${startDate}T00:00:00`)
+                .lte('created_at', `${endDate}T23:59:59`)
+            : Promise.resolve({ data: [], error: null });
+
+        const [roomsRes, restaurantRes, barRes, conferenceRes, posOrdersRes] = await Promise.all([
             roomsQuery,
             restaurantQuery,
             barQuery,
-            conferenceQuery
+            conferenceQuery,
+            posOrdersQuery
         ]);
 
-        // Calculate revenue by category
-        const roomsRevenue = roomsRes.data?.reduce((sum, r) => sum + Number(r.total_amount || 0), 0) || 0;
-        const restaurantRevenue = restaurantRes.data?.reduce((sum, r) => sum + Number(r.total_amount || 0), 0) || 0;
-        const barRevenue = barRes.data?.reduce((sum, b) => sum + Number(b.total || 0), 0) || 0;
-        const conferenceRevenue = conferenceRes.data?.reduce((sum, c) => sum + Number(c.total_amount || 0), 0) || 0;
+        // Map outlet_id → outlet_type for POS orders
+        const posOutletTypeMap = new Map(posOutletIds.map((o: any) => [String(o.id), String(o.outlet_type || 'pos')]));
 
-        const totalRevenue = roomsRevenue + restaurantRevenue + barRevenue + conferenceRevenue;
+        // POS revenue broken down by outlet_type
+        let posRestaurantRevenue = 0;
+        let posBarRevenue = 0;
+        let posPosRevenue = 0;
+        (posOrdersRes.data || []).forEach((order: any) => {
+            const amount = Number(order.total_amount || 0);
+            const oType = posOutletTypeMap.get(String(order.outlet_id)) || 'pos';
+            if (oType === 'restaurant') posRestaurantRevenue += amount;
+            else if (oType === 'bar') posBarRevenue += amount;
+            else posPosRevenue += amount;
+        });
+
+        // Calculate revenue by category — merge legacy + POS outlet sources
+        const roomsRevenue = roomsRes.data?.reduce((sum, r) => sum + Number(r.total_amount || 0), 0) || 0;
+        const restaurantRevenue = (restaurantRes.data?.reduce((sum, r) => sum + Number(r.total_amount || 0), 0) || 0) + posRestaurantRevenue;
+        const barRevenue = (barRes.data?.reduce((sum, b) => sum + Number(b.total || 0), 0) || 0) + posBarRevenue;
+        const conferenceRevenue = conferenceRes.data?.reduce((sum, c) => sum + Number(c.total_amount || 0), 0) || 0;
+        const posOutletRevenue = posPosRevenue; // POS-type outlets (general)
+
+        const totalRevenue = roomsRevenue + restaurantRevenue + barRevenue + conferenceRevenue + posOutletRevenue;
         const variance = totalRevenue - totalTarget;
         const variancePercentage = totalTarget > 0 ? (variance / totalTarget) * 100 : 0;
 
@@ -140,6 +177,20 @@ export const getRevenueOversight = async (
             dailyData[date].total += Number(item.total_amount || 0);
         });
 
+        // POS outlet orders in daily trend — bucketed by outlet_type
+        (posOrdersRes.data || []).forEach((item: any) => {
+            const date = (item.created_at || '').split('T')[0];
+            if (!date) return;
+            if (!dailyData[date]) {
+                dailyData[date] = { date, rooms: 0, restaurant: 0, bar: 0, conference: 0, total: 0 };
+            }
+            const amount = Number(item.total_amount || 0);
+            const oType = posOutletTypeMap.get(String(item.outlet_id)) || 'pos';
+            if (oType === 'restaurant') dailyData[date].restaurant += amount;
+            else if (oType === 'bar') dailyData[date].bar += amount;
+            dailyData[date].total += amount;
+        });
+
         const dailyTrend = Object.values(dailyData).sort((a: any, b: any) => 
             new Date(a.date).getTime() - new Date(b.date).getTime()
         );
@@ -156,21 +207,27 @@ export const getRevenueOversight = async (
                 category: 'Restaurant',
                 revenue: restaurantRevenue,
                 percentage: totalRevenue > 0 ? (restaurantRevenue / totalRevenue) * 100 : 0,
-                transactions: restaurantRes.data?.length || 0
+                transactions: (restaurantRes.data?.length || 0) + posOutletIds.filter((o: any) => o.outlet_type === 'restaurant').length
             },
             {
                 category: 'Bar',
                 revenue: barRevenue,
                 percentage: totalRevenue > 0 ? (barRevenue / totalRevenue) * 100 : 0,
-                transactions: barRes.data?.length || 0
+                transactions: (barRes.data?.length || 0) + posOutletIds.filter((o: any) => o.outlet_type === 'bar').length
             },
             {
                 category: 'Conference',
                 revenue: conferenceRevenue,
                 percentage: totalRevenue > 0 ? (conferenceRevenue / totalRevenue) * 100 : 0,
                 transactions: conferenceRes.data?.length || 0
-            }
-        ].sort((a, b) => b.revenue - a.revenue);
+            },
+            ...(posOutletRevenue > 0 ? [{
+                category: 'POS Outlets',
+                revenue: posOutletRevenue,
+                percentage: totalRevenue > 0 ? (posOutletRevenue / totalRevenue) * 100 : 0,
+                transactions: (posOrdersRes.data || []).filter((o: any) => (posOutletTypeMap.get(String(o.outlet_id)) || 'pos') === 'pos').length
+            }] : [])
+        ].filter(c => c.revenue > 0).sort((a, b) => b.revenue - a.revenue);
 
         // Calculate growth rate (compare with previous period)
         const previousStartDate = new Date(new Date(startDate).getTime() - periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];

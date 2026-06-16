@@ -56,7 +56,7 @@ export const getLoans = async (req: Request, res: Response, next: NextFunction) 
 
         const staffIds = [...new Set((data || []).map((l: any) => l.staff_id).filter(Boolean))];
         const { data: staffProfiles } = staffIds.length > 0
-            ? await supabase.from('staff_profiles').select('id, role, position, department, id_number, national_id, first_name, last_name, user_id').in('id', staffIds)
+            ? await supabase.from('staff_profiles').select('id, role, position, department, employee_number, national_id, first_name, last_name, user_id').in('id', staffIds)
             : { data: [] };
         const userIds = (staffProfiles || []).map((s: any) => s.user_id).filter(Boolean);
         const { data: users } = userIds.length > 0

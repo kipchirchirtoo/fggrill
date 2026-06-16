@@ -8,6 +8,7 @@ import {
   assertPosStockAvailable,
   postPosInventorySale
 } from '../services/enterprise-inventory.service';
+import { closeOutletVariance } from '../services/inventory-operations.service';
 import {
   assignedOutletIds,
   canAccessPosOutlet,
@@ -64,6 +65,46 @@ const categoryText = (value: unknown): string => {
   }
   const text = String(value).trim();
   return text === 'null' || text === 'undefined' ? '' : text;
+};
+
+const normaliseName = (value: unknown): string =>
+  categoryText(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+const removeCrossBranchOutletLeaks = async (
+  outlets: Array<Record<string, any>>
+): Promise<Array<Record<string, any>>> => {
+  if (!outlets.length) return outlets;
+
+  try {
+    const { data: branches, error } = await supabase
+      .from('branches')
+      .select('id,name');
+    if (error || !branches?.length) return outlets;
+
+    const branchNames = (branches as Array<Record<string, any>>)
+      .map((branch) => ({
+        id: Number(branch.id),
+        name: normaliseName(branch.name)
+      }))
+      .filter((branch) => Number.isFinite(branch.id) && branch.name.length >= 4);
+    const branchNameById = new Map(branchNames.map((branch) => [branch.id, branch.name]));
+
+    return outlets.filter((outlet) => {
+      const outletBranchId = Number(outlet.branch_id);
+      const ownBranchName = branchNameById.get(outletBranchId) || '';
+      const outletName = normaliseName(outlet.name);
+      const nameWithoutOwnBranch = ownBranchName
+        ? outletName.replace(ownBranchName, '').trim()
+        : outletName;
+
+      return !branchNames.some((branch) =>
+        branch.id !== outletBranchId && nameWithoutOwnBranch.includes(branch.name)
+      );
+    });
+  } catch (error) {
+    logger.warn('Failed to apply cross-branch POS outlet name filter', error);
+    return outlets;
+  }
 };
 
 const isGenericOutletCategory = (category: string, group: 'restaurant' | 'bar' | 'other'): boolean => {
@@ -156,7 +197,9 @@ const MANAGE_OUTLET_ROLES = new Set([
   'bar_manager',
   'finance_manager',
   'accountant',
-  'branch_accountant'
+  'branch_accountant',
+  'branch_storekeeper',
+  'central_storekeeper',
 ]);
 
 const PROFIT_VIEW_ROLES = new Set([
@@ -189,8 +232,9 @@ const numberValue = (value: unknown): number => {
 
 const branchIdFor = (req: Request): number | null => {
   const raw = req.user?.branch_id ?? req.user?.branchId ?? req.query.branch_id;
+  if (raw === null || raw === undefined || raw === '') return null;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
 const roleFor = (req: Request): string => String(req.user?.role ?? '').toLowerCase();
@@ -571,17 +615,18 @@ const updateStockForItems = async (
 
     const { data: outletItem, error: itemError } = await supabase
       .from('pos_outlet_items')
-      .select('current_stock, outlet_id')
+      .select('current_stock, outlet_id, track_stock')
       .eq('id', outletItemId)
       .maybeSingle();
 
     if (itemError) throw itemError;
     if (!outletItem) continue;
+    if (outletItem.track_stock === false) continue;
 
     await supabase
       .from('pos_outlet_items')
       .update({
-        current_stock: numberValue(outletItem.current_stock) - direction * quantity,
+        current_stock: Math.max(0, numberValue(outletItem.current_stock) - direction * quantity),
         updated_at: new Date().toISOString()
       })
       .eq('id', outletItemId)
@@ -682,7 +727,7 @@ const seedOutletItemsFromExistingMenus = async (
   if (outletType === 'restaurant') {
     let query = supabase
       .from('restaurant_menu_items')
-      .select('id, name, price, category_id, category:restaurant_menu_categories(id, name), is_available, branch_id')
+      .select('id, name, selling_price, category_id, category:restaurant_menu_categories(id, name), is_available, branch_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
@@ -697,10 +742,10 @@ const seedOutletItemsFromExistingMenus = async (
       category: categoryText(item.category) || 'Restaurant',
       unit: 'each',
       cost_price: 0,
-      selling_price: item.price || 0,
+      selling_price: item.selling_price || 0,
       opening_stock: 0,
       current_stock: 0,
-      track_stock: false,
+      track_stock: true,
       is_active: true
     }));
   }
@@ -1085,7 +1130,11 @@ export const getOutlets = async (req: Request, res: Response, next: NextFunction
     if (outlet_type) query = query.eq('outlet_type', outlet_type as OutletType);
     if (!isGlobalUser(req)) {
       const branchId = branchIdFor(req);
-      if (branchId) query = query.eq('branch_id', branchId);
+      if (branchId === null) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+      query = query.eq('branch_id', branchId);
     } else if (req.query.branch_id) {
       query = query.eq('branch_id', Number(req.query.branch_id));
     }
@@ -1104,6 +1153,7 @@ export const getOutlets = async (req: Request, res: Response, next: NextFunction
         roleOutletTypes.includes(String(outlet.outlet_type || '').toLowerCase())
       );
     }
+    rows = await removeCrossBranchOutletLeaks(rows);
 
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -1170,11 +1220,15 @@ export const getOutletStaff = async (req: Request, res: Response, next: NextFunc
 
     let query = supabase
       .from('staff_profiles')
-      .select('id, first_name, last_name, id_number, role, department, branch_id')
+      .select('id, first_name, last_name, national_id, employee_number, role, department, branch_id')
       .order('first_name', { ascending: true })
       .limit(100);
 
-    if (!isGlobalUser(req) && branchId) {
+    if (!isGlobalUser(req)) {
+      if (branchId === null) {
+        res.json({ success: true, data: [] });
+        return;
+      }
       query = query.eq('branch_id', branchId);
     } else if (req.query.branch_id) {
       query = query.eq('branch_id', Number(req.query.branch_id));
@@ -1189,7 +1243,8 @@ export const getOutletStaff = async (req: Request, res: Response, next: NextFunc
         const text = [
           staff.first_name,
           staff.last_name,
-          staff.id_number,
+          staff.national_id,
+          staff.employee_number,
           staff.role,
           staff.department
         ].join(' ').toLowerCase();
@@ -1197,8 +1252,9 @@ export const getOutletStaff = async (req: Request, res: Response, next: NextFunc
       })
       .map((staff) => ({
         id: staff.id,
-        name: `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || staff.id_number || staff.id,
-        id_number: staff.id_number,
+        name: `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || staff.employee_number || staff.id,
+        id_number: staff.national_id,
+        employee_number: staff.employee_number,
         role: staff.role,
         department: staff.department,
         branch_id: staff.branch_id
@@ -1799,9 +1855,16 @@ export const getPendingPosVoidRequests = async (req: Request, res: Response, nex
       .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
-    const branchId = req.query.branch_id ?? branchIdFor(req);
-    if (branchId && !isGlobalUser(req)) query = query.eq('branch_id', Number(branchId));
-    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    if (!isGlobalUser(req)) {
+      if (branchId === null) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+      query = query.eq('branch_id', branchId);
+    } else if (req.query.branch_id) {
+      query = query.eq('branch_id', Number(req.query.branch_id));
+    }
 
     const { data, error } = await query;
     if (error) throw error;
@@ -2256,6 +2319,8 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
         .eq('id', row.outlet_item_id)
         .eq('outlet_id', shift.outlet_id);
     }
+
+    await closeOutletVariance(shiftId, req.user.id);
 
     const summary = await calculateShiftSummary(shiftId);
     const expectedCash = numberValue(summary.expected_cash);

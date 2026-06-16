@@ -7,30 +7,41 @@ import { generateBrandedPayrollSummaryV2 } from '../services/native-pdf-reports.
 
 // HELPER: Ensure a draft run exists
 async function getOrCreateDraftRun(month: number, year: number, reqUser: any) {
+  const periodFrom = new Date(year, month - 1, 1).toISOString().slice(0, 10);
+  const periodTo   = new Date(year, month, 0).toISOString().slice(0, 10);
+  const branchId   = reqUser?.branch_id || reqUser?.branchId || null;
+
   const { data: existingRun } = await supabase
     .from('payroll_runs')
     .select('*')
-    .eq('month', month)
-    .eq('year', year)
+    .eq('pay_period_from', periodFrom)
+    .eq('pay_period_to', periodTo)
+    .eq('status', 'draft')
     .maybeSingle();
 
   if (existingRun) return existingRun;
 
+  const runNumber = `RUN-${year}${String(month).padStart(2, '0')}-${Date.now()}`;
   const { data: newRun, error } = await supabase
     .from('payroll_runs')
-    .insert([{ month, year, created_by: reqUser?.id }])
+    .insert([{
+      pay_period_from: periodFrom,
+      pay_period_to: periodTo,
+      run_number: runNumber,
+      branch_id: branchId,
+      status: 'draft',
+      prepared_by: reqUser?.id || null,
+    }])
     .select()
     .single();
 
-  // Handle race condition: another request may have inserted concurrently
   if (error) {
     if (error.code === '23505') {
-      // Duplicate key — fetch the row that was just inserted by the other request
       const { data: racedRun, error: fetchError } = await supabase
         .from('payroll_runs')
         .select('*')
-        .eq('month', month)
-        .eq('year', year)
+        .eq('pay_period_from', periodFrom)
+        .eq('pay_period_to', periodTo)
         .single();
       if (fetchError) throw fetchError;
       return racedRun;
@@ -65,8 +76,8 @@ export const getDraftPayroll = async (
     if (run.status !== 'draft') {
       let query = supabase
         .from('payroll_records')
-        .select(`*, employee:users!staff_id(id, first_name, last_name, email)`)
-        .eq('payroll_run_id', run.id);
+        .select(`*, employee:staff_profiles!staff_id(id, first_name, last_name, employee_number, role)`)
+        .eq('run_id', run.id);
         
       if (branch_id) query = query.eq('branch_id', branch_id);
       
@@ -81,7 +92,7 @@ export const getDraftPayroll = async (
     let staffQuery = supabase
       .from('staff_profiles')
       .select('*')
-      .eq('status', 'active');
+      .eq('employment_status', 'active');
     if (branch_id) staffQuery = staffQuery.eq('branch_id', branch_id);
     const { data: rawStaffList } = await staffQuery;
     const staffList = rawStaffList || [];
@@ -91,7 +102,7 @@ export const getDraftPayroll = async (
     const { data: existingRecords } = await supabase
       .from('payroll_records')
       .select('*')
-      .eq('payroll_run_id', run.id);
+      .eq('run_id', run.id);
 
     const existingMap = new Map(existingRecords?.map(r => [r.staff_id, r]) || []);
 
@@ -112,78 +123,43 @@ export const getDraftPayroll = async (
           existing.additions, existing.deductions
         );
 
+        const periodStart = new Date(year, month - 1, 1).toISOString().slice(0, 10);
+        const periodEnd   = new Date(year, month, 0).toISOString().slice(0, 10);
         recordsToUpsert.push({
-          payroll_run_id: run.id,
+          run_id: run.id,
           staff_id: staff.id,
           branch_id: staff.branch_id,
-          employee_name: `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || 'Unknown',
-          employee_code: staff.employee_id || staff.id_number || staff.id || 'N/A',
-          national_id: staff.national_id || staff.id_number || 'N/A',
+          pay_period_from: periodStart,
+          pay_period_to: periodEnd,
           basic_salary: calculatedInfo.basic_salary,
-          shif: calculatedInfo.deductions.filter((d: any) => d.category?.toLowerCase() === 'shif').reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0),
-          nssf: calculatedInfo.deductions.filter((d: any) => d.category?.toLowerCase() === 'nssf').reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0),
-          additions: calculatedInfo.additions,
-          deductions: calculatedInfo.deductions,
-          total_additions: calculatedInfo.total_additions,
           total_deductions: calculatedInfo.total_deductions,
           gross_pay: calculatedInfo.gross_pay,
           net_pay: calculatedInfo.net_pay,
+          status: 'draft',
         });
       }
     }
 
-    // 5. Bulk Upsert Draft Records in chunks of 50
+    // 5. Bulk Save Draft Records: delete existing then insert fresh (no ON CONFLICT needed)
     if (recordsToUpsert.length > 0) {
+      // Delete all existing draft records for this run first
+      await supabase.from('payroll_records').delete().eq('run_id', run.id).eq('status', 'draft');
+
       const CHUNK = 50;
       const upsertedRecords: any[] = [];
       for (let i = 0; i < recordsToUpsert.length; i += CHUNK) {
         const chunk = recordsToUpsert.slice(i, i + CHUNK);
-        const { data: chunkData, error: upsertError } = await supabase
+        const { data: chunkData, error: insertError } = await supabase
           .from('payroll_records')
-          .upsert(chunk, { onConflict: 'payroll_run_id, staff_id' })
+          .insert(chunk)
           .select();
-        if (upsertError) throw upsertError;
+        if (insertError) throw insertError;
         upsertedRecords.push(...(chunkData || []));
       }
-      logger.info(`Upserted ${upsertedRecords.length} payroll records for run ${run.id}`);
+      logger.info(`Saved ${upsertedRecords.length} payroll records for run ${run.id}`);
 
       // 5.1. Save Traceable Items (staff_payroll_items)
-      const payrollItems: any[] = [];
-      for (const rec of upsertedRecords || []) {
-        const sourceData = recordsToUpsert.find(r => r.staff_id === rec.staff_id);
-        if (sourceData) {
-          // Flatten additions and deductions into items table
-          [...sourceData.additions, ...sourceData.deductions].forEach(item => {
-            payrollItems.push({
-              payroll_id: rec.id, // Reference to the record we just saved
-              category: item.category || item.type,
-              amount: item.amount,
-              source_table: item.source_table || null,
-              source_id: item.source_id || null,
-              policy_id: item.policy_id || null,
-              reference: item.reference,
-              approval_status: item.audit_ref ? 'audited' : 'system_calculated'
-            });
-          });
-        }
-      }
-
-      if (payrollItems.length > 0) {
-        // Delete old items for these records first to avoid duplicates on recalculation
-        const recordIds = (upsertedRecords || []).map(r => r.id);
-        const { error } = await supabase.from('staff_payroll_items').delete().in('payroll_id', recordIds);
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
-        
-        const { error: itemsError } = await supabase.from('staff_payroll_items').insert(payrollItems);
-        if (error) {
-          console.error('Database error:', error);
-          throw error;
-        }
-        if (itemsError) logger.error(`Error saving payroll items: ${itemsError.message}`);
-      }
+      // staff_payroll_items is keyed to staff_payroll.id, not payroll_records.id — skip itemised insert
     } else {
       logger.warn(`No staff to upsert for payroll run ${run.id} (month=${month}, year=${year})`);
     }
@@ -191,8 +167,8 @@ export const getDraftPayroll = async (
     // 6. Return Draft Response
     let finalQuery = supabase
       .from('payroll_records')
-      .select(`*, items:staff_payroll_items(*)`)
-      .eq('payroll_run_id', run.id);
+      .select(`*, employee:staff_profiles!staff_id(id, first_name, last_name, employee_number, role, department, position)`)
+      .eq('run_id', run.id);
 
     if (branch_id) finalQuery = finalQuery.eq('branch_id', branch_id);
 
@@ -210,35 +186,13 @@ export const getDraftPayroll = async (
     }), { basic: 0, gross: 0, deductions: 0, net: 0 }) || { basic: 0, gross: 0, deductions: 0, net: 0 };
 
     const { error } = await supabase.from('payroll_runs').update({
-      total_basic_salary: totals.basic,
-      total_gross_pay: totals.gross,
+      total_gross: totals.gross,
       total_deductions: totals.deductions,
-      total_net_pay: totals.net,
+      total_net: totals.net,
     }).eq('id', run.id);
 
 
-    if (error) {
-
-
-      console.error('Database error:', error);
-
-
-      throw error;
-
-
-    }
-
-
-    if (error) {
-
-
-      console.error('Database error:', error);
-
-
-      throw error;
-
-
-    }
+    if (error) logger.warn('Failed to update run totals:', error.message);
 
     const updatedRun = { ...run, ...totals };
 
@@ -262,14 +216,16 @@ export const approvePayroll = async (
 
     // Fallback: If runId is missing but we have month/year/branch, find the draft
     if (!runId && month && year) {
+      const pfrom = new Date(parseInt(year), parseInt(month) - 1, 1).toISOString().slice(0, 10);
+      const pto   = new Date(parseInt(year), parseInt(month), 0).toISOString().slice(0, 10);
       const { data: foundRun } = await supabase
         .from('payroll_runs')
         .select('id')
-        .eq('month', month)
-        .eq('year', year)
+        .eq('pay_period_from', pfrom)
+        .eq('pay_period_to', pto)
         .eq('status', 'draft')
         .maybeSingle();
-      
+
       if (foundRun) runId = foundRun.id;
     }
 
@@ -312,7 +268,7 @@ export const approvePayroll = async (
     const { data: recordsData } = await supabase
       .from('payroll_records')
       .select('id, staff_id, net_pay')
-      .eq('payroll_run_id', runId);
+      .eq('run_id', runId);
     
     const records = recordsData || [];
     const validRecordIds = records.filter(r => parseFloat(r.net_pay || 0) > 0).map(r => r.id);
@@ -329,7 +285,7 @@ export const approvePayroll = async (
 
           // Update the source record status based on table type
           if (item.source_table === 'staff_credit_bills') {
-            const { error } = await supabase.from('staff_credit_bills').update({ status: 'deducted', paid_via_payroll_run_id: runId }).eq('id', item.source_id);
+            const { error } = await supabase.from('staff_credit_bills').update({ status: 'paid' }).eq('id', item.source_id);
             if (error) {
               console.error('Database error:', error);
               throw error;
@@ -397,18 +353,20 @@ export const addAdjustment = async (
 
     // 1. If recordId is missing but we have staff info, find it
     if (!recordId && staff_id && month && year) {
+        const pFromAdj2 = new Date(parseInt(year), parseInt(month) - 1, 1).toISOString().slice(0, 10);
+        const pToAdj2   = new Date(parseInt(year), parseInt(month), 0).toISOString().slice(0, 10);
         const { data: run } = await supabase
           .from('payroll_runs')
           .select('id')
-          .eq('month', parseInt(month as string))
-          .eq('year', parseInt(year as string))
+          .eq('pay_period_from', pFromAdj2)
+          .eq('pay_period_to', pToAdj2)
           .single();
         
         if (run) {
           const { data: rec } = await supabase
             .from('payroll_records')
             .select('id')
-            .eq('payroll_run_id', run.id)
+            .eq('run_id', run.id)
             .eq('staff_id', staff_id)
             .single();
           if (rec) recordId = rec.id;
@@ -485,11 +443,13 @@ export const getAdjustments = async (
     }
 
     // 1. Find the payroll run for this period
+    const pfromAdj = new Date(parseInt(year as string), parseInt(month as string) - 1, 1).toISOString().slice(0, 10);
+    const ptoAdj   = new Date(parseInt(year as string), parseInt(month as string), 0).toISOString().slice(0, 10);
     const { data: run } = await supabase
       .from('payroll_runs')
       .select('id')
-      .eq('month', parseInt(month as string))
-      .eq('year', parseInt(year as string))
+      .eq('pay_period_from', pfromAdj)
+      .eq('pay_period_to', ptoAdj)
       .single();
 
     if (!run) {
@@ -501,7 +461,7 @@ export const getAdjustments = async (
     const { data: record, error } = await supabase
       .from('payroll_records')
       .select('additions, deductions')
-      .eq('payroll_run_id', run.id)
+      .eq('run_id', run.id)
       .eq('staff_id', staff_id)
       .single();
 
@@ -543,10 +503,10 @@ export const generatePayslip = async (req: Request, res: Response, next: NextFun
       .from('payroll_records')
       .select(`
         *,
-        run:payroll_runs!payroll_run_id(month, year, status),
+        run:payroll_runs!run_id(pay_period_from, pay_period_to, status),
         staff:staff_profiles!staff_id(
-          id, id_number, national_id, phone, department, role, position,
-          bank_name, account_number, kra_pin, employment_type,
+          id, national_id, phone, department, role, position,
+          bank_name, account_number, employee_number,
           first_name, last_name, email
         )
       `)
@@ -559,33 +519,32 @@ export const generatePayslip = async (req: Request, res: Response, next: NextFun
     }
 
     const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const monthName = MONTHS[(record.run?.month || 1) - 1];
-
-    // Extract deduction amounts by type
-    const deductions: any[] = record.deductions || [];
-    const getAmt = (type: string) => deductions.filter(d => d.type === type).reduce((s: number, d: any) => s + parseFloat(d.amount || 0), 0);
+    const periodDate = record.run?.pay_period_from ? new Date(record.run.pay_period_from) : new Date();
+    const periodMonth = periodDate.getMonth() + 1;
+    const periodYear = periodDate.getFullYear();
+    const monthName = MONTHS[periodMonth - 1];
 
     const pdfBuffer = await generatePayslipPDF({
       month: monthName,
-      year: record.run?.year || new Date().getFullYear(),
+      year: periodYear,
       base_salary: parseFloat(record.basic_salary || 0),
       overtime_pay: 0,
-      allowances: parseFloat(record.total_additions || 0),
+      allowances: 0,
       gross_pay: parseFloat(record.gross_pay || 0),
-      nssf_deduction: getAmt('nssf'),
-      shif_deduction: getAmt('shif'),
+      nssf_deduction: 0,
+      shif_deduction: 0,
       total_deductions: parseFloat(record.total_deductions || 0),
       net_salary: parseFloat(record.net_pay || 0),
       employee: {
-        national_id: record.staff?.national_id || record.national_id || 'N/A',
-        kra_pin: record.staff?.kra_pin || 'N/A',
-        employee_type: record.staff?.employment_type || record.staff?.role || 'Staff',
+        national_id: record.staff?.national_id || 'N/A',
+        kra_pin: 'N/A',
+        employee_type: record.staff?.role || 'Staff',
         department: record.staff?.department || 'General',
         bank_name: record.staff?.bank_name || 'N/A',
         bank_account_number: record.staff?.account_number || 'N/A',
         user: {
-          first_name: record.staff?.first_name || record.employee_name?.split(' ')[0] || '',
-          last_name: record.staff?.last_name || record.employee_name?.split(' ').slice(1).join(' ') || '',
+          first_name: record.staff?.first_name || '',
+          last_name: record.staff?.last_name || '',
         }
       },
       company: 'Famous Gates Hotels',
@@ -593,7 +552,7 @@ export const generatePayslip = async (req: Request, res: Response, next: NextFun
       company_address: 'Bomet, Kenya'
     });
 
-    const filename = `Payslip_${record.employee_name?.replace(/\s+/g, '_')}_${monthName}_${record.run?.year}.pdf`;
+    const filename = `Payslip_${record.staff?.first_name || 'Staff'}_${monthName}_${periodYear}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(pdfBuffer);
@@ -623,7 +582,7 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
     let query = supabase
       .from('payroll_records')
       .select('*')
-      .eq('payroll_run_id', runId);
+      .eq('run_id', runId);
     
     if (branch_id && branch_id !== '0') {
       query = query.eq('branch_id', branch_id);
@@ -641,16 +600,19 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
     const staffIds = records.map(r => r.staff_id).filter(Boolean);
     const { data: staffProfiles } = await supabase
       .from('staff_profiles')
-      .select('id, national_id, phone, department, role, bank_name, account_number, kra_pin, employment_type')
+      .select('id, national_id, phone, department, role, bank_name, account_number, employee_number')
       .in('id', staffIds);
     const staffMap = new Map((staffProfiles || []).map(s => [s.id, s]));
 
     const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const monthName = MONTHS[(run.month || 1) - 1];
+    const runPeriodDate = run.pay_period_from ? new Date(run.pay_period_from) : new Date();
+    const runMonth = runPeriodDate.getMonth() + 1;
+    const runYear = runPeriodDate.getFullYear();
+    const monthName = MONTHS[runMonth - 1];
 
     const archiver = require('archiver');
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="Payslips_${monthName}_${run.year}.zip"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Payslips_${monthName}_${runYear}.zip"`);
 
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', (err: any) => { if (!res.headersSent) res.status(500).json({ success: false, message: err.message }); });
@@ -664,7 +626,7 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
 
         const pdfBuffer = await generatePayslipPDF({
           month: monthName,
-          year: run.year,
+          year: runYear,
           base_salary: parseFloat(record.basic_salary || 0),
           overtime_pay: 0,
           allowances: parseFloat(record.total_additions || 0),
@@ -675,8 +637,8 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
           net_salary: parseFloat(record.net_pay || 0),
           employee: {
             national_id: staff?.national_id || record.national_id || 'N/A',
-            kra_pin: staff?.kra_pin || 'N/A',
-            employee_type: staff?.employment_type || staff?.role || 'Staff',
+            kra_pin: 'N/A',
+            employee_type: staff?.role || 'Staff',
             department: staff?.department || 'General',
             bank_name: staff?.bank_name || 'N/A',
             bank_account_number: staff?.account_number || 'N/A',
@@ -690,7 +652,7 @@ export const downloadPayslipsZip = async (req: Request, res: Response, next: Nex
           company_address: 'Bomet, Kenya'
         });
 
-        const filename = `Payslip_${record.employee_name?.replace(/\s+/g, '_')}_${monthName}_${run.year}.pdf`;
+        const filename = `Payslip_${(record.employee_name || 'Staff')?.replace(/\s+/g, '_')}_${monthName}_${runYear}.pdf`;
         archive.append(pdfBuffer, { name: filename });
       } catch (pdfErr) {
         logger.error(`Failed to generate PDF for ${record.employee_name}:`, pdfErr);
@@ -748,7 +710,7 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
     let query = supabase
       .from('payroll_records')
       .select('*')
-      .eq('payroll_run_id', runId);
+      .eq('run_id', runId);
     if (branch_id && branch_id !== '0') {
       query = query.eq('branch_id', branch_id);
     }
@@ -761,7 +723,7 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
     if (staffUserIds.length > 0) {
       const { data } = await supabase
         .from('staff_profiles')
-        .select('id, role, position, department, id_number')
+        .select('id, role, position, department, national_id, employee_number')
         .in('id', staffUserIds);
       staffProfiles = data || [];
     }
@@ -772,7 +734,7 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
       return {
         ...r,
         role: profile?.position || profile?.role || profile?.department || r.role || 'Staff',
-        employee_id: profile?.id_number || r.employee_id || r.id_number || '',
+        employee_id: profile?.employee_number || profile?.national_id || r.employee_id || r.id_number || '',
       };
     }).sort((a, b) => (a.employee_id || '').localeCompare(b.employee_id || '', undefined, { numeric: true, sensitivity: 'base' }));
 
@@ -836,7 +798,7 @@ export const forceGeneratePayroll = async (
     }
 
     // 2. Delete existing draft records for this run (force recalculation)
-    const deleteQuery = supabase.from('payroll_records').delete().eq('payroll_run_id', run.id);
+    const deleteQuery = supabase.from('payroll_records').delete().eq('run_id', run.id);
     const { error: deleteError } = await deleteQuery;
     if (deleteError) {
       logger.error('Error deleting existing draft records:', deleteError);
@@ -848,7 +810,7 @@ export const forceGeneratePayroll = async (
     let staffQuery = supabase
       .from('staff_profiles')
       .select('*')
-      .eq('status', 'active');
+      .eq('employment_status', 'active');
     if (parsedBranch) staffQuery = staffQuery.eq('branch_id', parsedBranch);
 
     const { data: rawStaffList, error: staffError } = await staffQuery;
@@ -878,22 +840,19 @@ export const forceGeneratePayroll = async (
           staff, parsedMonth, parsedYear, batchData, policies, [], []
         );
 
+        const periodStart2 = new Date(parsedYear, parsedMonth - 1, 1).toISOString().slice(0, 10);
+        const periodEnd2   = new Date(parsedYear, parsedMonth, 0).toISOString().slice(0, 10);
         recordsToUpsert.push({
-          payroll_run_id: run.id,
+          run_id: run.id,
           staff_id: staff.id,
           branch_id: staff.branch_id,
-          employee_name: `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || 'Unknown',
-          employee_code: staff.employee_id || staff.id_number || staff.id || 'N/A',
-          national_id: staff.national_id || staff.id_number || 'N/A',
+          pay_period_from: periodStart2,
+          pay_period_to: periodEnd2,
           basic_salary: calculatedInfo.basic_salary,
-          shif: calculatedInfo.deductions.filter((d: any) => d.category?.toLowerCase() === 'shif').reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0),
-          nssf: calculatedInfo.deductions.filter((d: any) => d.category?.toLowerCase() === 'nssf').reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0),
-          additions: calculatedInfo.additions,
-          deductions: calculatedInfo.deductions,
-          total_additions: calculatedInfo.total_additions,
           total_deductions: calculatedInfo.total_deductions,
           gross_pay: calculatedInfo.gross_pay,
           net_pay: calculatedInfo.net_pay,
+          status: 'draft',
         });
       } catch (err: any) {
         logger.error(`Payroll calc failed for staff ${staff.id}:`, err);
@@ -922,10 +881,9 @@ export const forceGeneratePayroll = async (
     }), { basic: 0, gross: 0, deductions: 0, net: 0 });
 
     await supabase.from('payroll_runs').update({
-      total_basic_salary: totals.basic,
-      total_gross_pay: totals.gross,
+      total_gross: totals.gross,
       total_deductions: totals.deductions,
-      total_net_pay: totals.net,
+      total_net: totals.net,
     }).eq('id', run.id);
 
     res.status(200).json({

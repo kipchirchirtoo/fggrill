@@ -170,6 +170,7 @@ export const migratePendingBills = async (branchId?: number) => {
                         if (itemWaiter?.id) {
                             await supabase.from('notifications').insert({
                                 user_id: itemWaiter.id,
+                                module: 'credit_bills',
                                 type: 'pending_bill_migrated',
                                 title: 'Order Migrated to Unpaid Bills',
                                 message: `${target.typeLabel} ${number} (${location}) has been migrated to unpaid bills - KES ${amount?.toLocaleString()}`,
@@ -212,7 +213,6 @@ async function recordVoidBills() {
                 room_number,
                 total_amount,
                 cancelled_at,
-                cancelled_by,
                 cancellation_reason,
                 waiter:users!created_by(first_name, last_name)
             `)
@@ -245,7 +245,7 @@ async function recordVoidBills() {
                         room_number: order.room_number,
                         total_amount: order.total_amount,
                         voided_at: order.cancelled_at,
-                        voided_by: order.cancelled_by,
+                        voided_by: null,
                         void_reason: order.cancellation_reason,
                         reviewed_by_auditor: false
                     };

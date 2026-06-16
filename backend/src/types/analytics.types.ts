@@ -105,7 +105,7 @@ export interface TransactionRecord {
   order_type?: OrderType;
   total_amount: number;
   status: string;
-  source: 'booking' | 'restaurant' | 'bar' | 'shift_transaction';
+  source: 'booking' | 'restaurant' | 'bar' | 'shift_transaction' | 'pos';
   code?: string | null;
   short_code?: string | null;
   waiter_name?: string | null;

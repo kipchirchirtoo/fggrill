@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AppError } from '../../middleware/errorHandler';
 import * as EnterpriseInventoryService from '../../services/enterprise-inventory.service';
+import { isGlobalRole } from '../../utils/branchIsolation';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
 
@@ -23,6 +24,13 @@ const userIdFor = (req: Request): string => {
 
 const branchIdFor = (req: Request): number => {
   const user = (req as any).user;
+  if (!isGlobalRole(user?.role)) {
+    const userBranch = user?.branch_id ?? user?.branchId;
+    const parsedUserBranch = Number(userBranch);
+    if (!Number.isFinite(parsedUserBranch)) throw new AppError('Branch is required', 400);
+    return parsedUserBranch;
+  }
+
   const raw = req.body.branch_id ?? req.query.branch_id ?? user?.branch_id ?? user?.branchId;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) throw new AppError('Branch is required', 400);
@@ -71,6 +79,56 @@ export const recordDepartmentIssue = asyncHandler(async (req: Request, res: Resp
   });
 
   res.status(201).json({ success: true, data: result });
+});
+
+export const createDepartmentRequestLog = asyncHandler(async (req: Request, res: Response) => {
+  const branchId = branchIdFor(req);
+  const result = await EnterpriseInventoryService.createDepartmentRequestLog({
+    branchId,
+    departmentCode: String(req.body.department_code || req.body.departmentCode || ''),
+    requestorName: String(req.body.requestor_name || req.body.requestorName || ''),
+    requestorContact: req.body.requestor_contact || req.body.requestorContact || null,
+    shiftCode: req.body.shift_code || req.body.shiftCode || null,
+    eventName: req.body.event_name || req.body.eventName || null,
+    eventDate: req.body.event_date || req.body.eventDate || null,
+    paxCount: req.body.pax_count ?? req.body.paxCount ?? null,
+    purpose: req.body.purpose || null,
+    remarks: req.body.remarks || req.body.notes || null,
+    attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
+    items: Array.isArray(req.body.items) ? req.body.items : [],
+    actorId: userIdFor(req),
+    metadata: req.body.metadata || {}
+  });
+
+  res.status(201).json({ success: true, data: result });
+});
+
+export const getDepartmentRequestLogs = asyncHandler(async (req: Request, res: Response) => {
+  const branchId = branchIdFor(req);
+  const data = await EnterpriseInventoryService.listDepartmentRequestLogs({
+    branchId,
+    status: req.query.status as string || null,
+    search: req.query.search as string || null,
+    limit: Number(req.query.limit || 100)
+  });
+  res.json({ success: true, data });
+});
+
+export const getDepartmentRequestLog = asyncHandler(async (req: Request, res: Response) => {
+  const branchId = branchIdFor(req);
+  const data = await EnterpriseInventoryService.getDepartmentRequestLog(branchId, req.params.id);
+  res.json({ success: true, data });
+});
+
+export const issueDepartmentRequestLog = asyncHandler(async (req: Request, res: Response) => {
+  const branchId = branchIdFor(req);
+  const data = await EnterpriseInventoryService.issueDepartmentRequest({
+    branchId,
+    requestId: req.params.id,
+    actorId: userIdFor(req),
+    notes: req.body.notes || req.body.remarks || null
+  });
+  res.json({ success: true, data });
 });
 
 export const listPosInventoryMappings = asyncHandler(async (req: Request, res: Response) => {

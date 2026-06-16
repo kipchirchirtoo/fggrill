@@ -20,7 +20,15 @@
     "test:full": "./scripts/test.sh",
     "deploy": "./scripts/deploy.sh",
     "migrate": "node scripts/migrate.js",
-    "schema:inspect": "node scripts/inspect-live-schema.js"
+    "schema:inspect": "node scripts/inspect-live-schema.js",
+    "schema:audit:dual": "node scripts/dual-db-schema-audit.js",
+    "clean-db:audit": "node scripts/clean-db-rebuild.js audit",
+    "clean-db:apply-schema": "node scripts/clean-db-rebuild.js apply-schema",
+    "clean-db:run-etl": "node scripts/clean-db-rebuild.js run-etl",
+    "clean-db:reconcile": "node scripts/clean-db-rebuild.js reconcile",
+    "clean-db:map-active": "node scripts/map-and-stage-active-db-data.js map",
+    "clean-db:stage-active": "node scripts/map-and-stage-active-db-data.js stage",
+    "clean-db:staging-summary": "node scripts/map-and-stage-active-db-data.js summary"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.99.0",

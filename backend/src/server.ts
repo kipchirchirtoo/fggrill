@@ -45,6 +45,50 @@ process.on('uncaughtException', (err: Error) => {
   process.exit(1);
 });
 
+// ── DNS RESILIENCE PATCH ──────────────────────────────────────────────────────
+// Guards against intermittent local DNS (127.0.0.53) failures for *.supabase.co.
+// Intercepts dns.lookup for supabase hostnames: tries Google DNS first, then
+// falls through to the system resolver as a safety net.
+import dns from 'dns';
+{
+  const _resolver = new dns.Resolver();
+  _resolver.setServers(['8.8.8.8', '8.8.4.4']);
+  const _orig = dns.lookup.bind(dns);
+
+  (dns as any).lookup = (
+    hostname: string,
+    optsOrCb: any,
+    cb?: any
+  ) => {
+    if (typeof hostname !== 'string' || !hostname.includes('supabase')) {
+      return _orig(hostname, optsOrCb, cb);
+    }
+
+    const callback: Function = typeof optsOrCb === 'function' ? optsOrCb : cb!;
+    if (typeof callback !== 'function') {
+      return _orig(hostname, optsOrCb, cb);
+    }
+
+    // Detect `all: true` option — expects callback(null, [{address, family}])
+    const wantsAll = optsOrCb && typeof optsOrCb === 'object' && optsOrCb.all === true;
+
+    _resolver.resolve4(hostname, (err, addrs) => {
+      const addr = !err && Array.isArray(addrs) && addrs.length > 0 ? addrs[0] : null;
+      if (addr && typeof addr === 'string') {
+        if (wantsAll) {
+          callback(null, [{ address: addr, family: 4 }]);
+        } else {
+          callback(null, addr, 4);
+        }
+      } else {
+        // Google DNS failed — fall back to system resolver
+        _orig(hostname, optsOrCb, cb);
+      }
+    });
+  };
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

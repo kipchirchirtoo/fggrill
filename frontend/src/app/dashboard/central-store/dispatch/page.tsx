@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth, UserRole } from '@/lib/auth-context';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { UserRole } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { storeAPI } from '@/lib/api';
@@ -30,6 +30,8 @@ interface DispatchNote {
 }
 
 export default function DispatchPage() {
+    const [focusedDispatchId, setFocusedDispatchId] = useState<string | null>(null);
+    const autoOpenedDispatchIdRef = useRef<string | null>(null);
     const [dispatches, setDispatches] = useState<DispatchNote[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -47,6 +49,10 @@ export default function DispatchPage() {
     const [filterBranch, setFilterBranch] = useState('');
 
     const [dispatchStoreTypeFilter, setDispatchStoreTypeFilter] = useState<'all' | 'foodstuffs' | 'bar_store'>('all');
+
+    useEffect(() => {
+        setFocusedDispatchId(new URLSearchParams(window.location.search).get('dispatch_id'));
+    }, []);
 
     // Map our UI tab to actual DB status (DELIVERED tab shows CONFIRMED + DELIVERED + DISPUTED)
     const getApiStatus = (tab: string) => {
@@ -80,12 +86,25 @@ export default function DispatchPage() {
                     data = data.filter((d: DispatchNote) => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
                 }
                 setDispatches(data);
+                if (
+                    statusTab === 'READY' &&
+                    focusedDispatchId &&
+                    autoOpenedDispatchIdRef.current !== focusedDispatchId
+                ) {
+                    const focusedDispatch = data.find((dispatch: DispatchNote) => dispatch.id === focusedDispatchId);
+                    if (focusedDispatch) {
+                        autoOpenedDispatchIdRef.current = focusedDispatchId;
+                        setSelectedDispatch(focusedDispatch);
+                        setDispatchFormData({ vehicle_id: '', driver_id: '' });
+                        setDispatchModalOpen(true);
+                    }
+                }
             }
             if (vehiclesRes.success) setVehicles(vehiclesRes.data || []);
             if (driversRes.success) setDrivers(driversRes.data || []);
         } catch (error) { console.error('Error:', error); }
         finally { setIsLoading(false); }
-    }, [statusTab, dispatchStoreTypeFilter]);
+    }, [statusTab, dispatchStoreTypeFilter, focusedDispatchId]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -198,7 +217,7 @@ export default function DispatchPage() {
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
-                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Dispatch & Logistics</h1>
+                            <h1 className="text-[26px] font-semibold text-stone-900 tracking-[-0.02em]">Dispatch & Notes</h1>
                             <p className="text-stone-500 mt-0.5">Manage branch deliveries and fleet transport tracking</p>
                         </div>
                         <div className="flex items-center gap-2">

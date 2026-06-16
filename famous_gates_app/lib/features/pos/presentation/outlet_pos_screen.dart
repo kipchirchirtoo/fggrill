@@ -1356,48 +1356,78 @@ class _ItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final outOfStock = item.trackStock && item.currentStock <= 0;
     return SizedBox(
       width: 190,
       height: 150,
-      child: Card(
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Opacity(
+        opacity: outOfStock ? 0.45 : 1.0,
+        child: Card(
+          child: InkWell(
+            onTap: outOfStock ? null : onTap,
+            child: Stack(
               children: [
-                Text(item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                const Spacer(),
-                Text(item.category,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall),
-                if (item.itemGroupLabel.trim().isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    item.outletName.trim().isEmpty
-                        ? item.itemGroupLabel
-                        : '${item.itemGroupLabel} - ${item.outletName}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall,
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                      const Spacer(),
+                      Text(item.category,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall),
+                      if (item.itemGroupLabel.trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item.outletName.trim().isEmpty
+                              ? item.itemGroupLabel
+                              : '${item.itemGroupLabel} - ${item.outletName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(formatKes(item.sellingPrice),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900, fontSize: 16)),
+                          ),
+                          if (!outOfStock) const Icon(Icons.add_circle_outline),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(formatKes(item.sellingPrice),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 16)),
-                    ),
-                    const Icon(Icons.add_circle_outline),
-                  ],
                 ),
+                if (outOfStock)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade700,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'Out of Stock',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

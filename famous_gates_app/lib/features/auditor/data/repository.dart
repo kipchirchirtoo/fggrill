@@ -36,6 +36,20 @@ class AuditorRepository {
     return {'items': data};
   }
 
+  List<Map<String, dynamic>> _unwrapList(dynamic data) {
+    List<dynamic>? list;
+    if (data is List) {
+      list = data;
+    } else if (data is Map) {
+      final inner = data['data'] ?? data['items'] ?? data['rows'];
+      if (inner is List) list = inner;
+    }
+    return (list ?? [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
   List<T> _parseList<T>(
       dynamic data, T Function(Map<String, dynamic>) fromJson) {
     final list =
@@ -139,6 +153,11 @@ class AuditorRepository {
   }) async {
     final branchId = await _branchId;
     if (endpoint == '/auditor/invoice-verification') {
+      final backend = await _getOptional(endpoint, {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        ...queryParameters,
+      }, branchId);
+      if (_hasRows(backend)) return backend;
       return _getInvoiceVerification(
         branchId: branchId,
         queryParameters: queryParameters,
@@ -146,6 +165,11 @@ class AuditorRepository {
     }
     if (endpoint == '/auditor/credit-bills' ||
         endpoint == '/credit/pending/auditor') {
+      final backend = await _getOptional('/auditor/credit-bills', {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        ...queryParameters,
+      }, branchId);
+      if (_hasRows(backend)) return backend;
       return _getCreditBillsForAudit(
         branchId: branchId,
         queryParameters: queryParameters,
@@ -400,6 +424,8 @@ class AuditorRepository {
     return <Map<String, dynamic>>[];
   }
 
+  bool _hasRows(dynamic responseData) => _listFromResponse(responseData).isNotEmpty;
+
   Options? _branchOptions(String branchId) {
     if (branchId.isEmpty) return null;
     return Options(headers: {'x-branch-id': branchId});
@@ -547,5 +573,54 @@ class AuditorRepository {
       'limit': limit,
     });
     return _parseList(response.data, AuditLogEntry.fromJson);
+  }
+
+  // ── Financial Close Audit Queue ───────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getWorkspaceAuditQueue() async {
+    final res = await _dio.get('/finance/workspace/audit-queue');
+    return _unwrapList(res.data);
+  }
+
+  Future<Map<String, dynamic>> getWorkspaceSubmission(String id) async {
+    final res = await _dio.get('/finance/workspace/submissions/$id');
+    return _unwrap(res.data);
+  }
+
+  Future<void> reviewWorkspaceSubmission(String id, String action, {String? notes}) async {
+    await _dio.patch('/finance/workspace/submissions/$id/review', data: {
+      'action': action,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+  }
+
+  // ── Payroll Audit ─────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getPayrollBatchesForReview() async {
+    final res = await _dio.get('/finance/payroll/batches', queryParameters: {'status': 'auditor_review'});
+    return _unwrapList(res.data);
+  }
+
+  Future<Map<String, dynamic>> getPayrollBatch(String id) async {
+    final res = await _dio.get('/finance/payroll/batches/$id');
+    return _unwrap(res.data) as Map<String, dynamic>? ?? {};
+  }
+
+  Future<void> reviewPayrollBatch(String id, String action, {String? notes}) async {
+    await _dio.patch('/finance/payroll/batches/$id/review', data: {
+      'action': action,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getCentralStoreInventory({
+    String? category,
+    String? search,
+  }) async {
+    final res = await _dio.get('/store/master-catalog', queryParameters: {
+      if (category != null && category != 'all') 'category': category,
+      if (search != null && search.isNotEmpty) 'search': search,
+    });
+    return _unwrapList(res.data);
   }
 }

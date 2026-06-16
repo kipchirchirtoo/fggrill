@@ -123,6 +123,7 @@ class Room {
   const Room({
     required this.id,
     required this.number,
+    this.roomNumber,
     this.type,
     this.floor,
     this.status = 'available',
@@ -134,6 +135,7 @@ class Room {
 
   final String id;
   final int number;
+  final String? roomNumber;
   final String? type;
   final int? floor;
   final String status;
@@ -145,9 +147,20 @@ class Room {
   factory Room.fromJson(Map<String, dynamic> json) {
     final type =
         json['type'] is Map ? Map<String, dynamic>.from(json['type']) : null;
+    final room =
+        json['room'] is Map ? Map<String, dynamic>.from(json['room']) : null;
+    final rawRoomNumber = json['room_number'] ??
+        json['roomNumber'] ??
+        json['room_no'] ??
+        json['name'] ??
+        json['number'] ??
+        room?['room_number'] ??
+        room?['roomNumber'] ??
+        room?['number'];
     return Room(
       id: '${json['id']}',
-      number: _int(json['number'] ?? json['room_number']) ?? 0,
+      number: _int(rawRoomNumber) ?? 0,
+      roomNumber: _string(rawRoomNumber),
       type: _string(json['room_type'] ?? json['type'] ?? type?['name']),
       floor: _int(json['floor'] ?? json['floor_number']),
       status: '${json['status'] ?? 'available'}',
@@ -163,6 +176,10 @@ class Room {
   int? get maxOccupancy => _int(raw['max_occupancy'] ?? raw['maxOccupancy']);
   bool? get isClean => raw['is_clean'] == true || raw['clean'] == true;
   String? get roomTypeId => _string(raw['room_type_id'] ?? raw['type_id']);
+  String get displayNumber =>
+      (roomNumber != null && roomNumber!.trim().isNotEmpty)
+          ? roomNumber!.trim()
+          : number.toString();
 }
 
 class Guest {

@@ -12,7 +12,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
 
     let query = supabase
       .from('suppliers')
-      .select('*, supplier_products(count)')
+      .select('*')
       .order('name', { ascending: true });
 
     const branchId = userBranchId && !Number.isNaN(userBranchId) ? Number(userBranchId) : null;
@@ -108,7 +108,7 @@ export const getSupplierById = async (req: Request, res: Response) => {
 
     let query = supabase
       .from('suppliers')
-      .select('*, supplier_products(*)')
+      .select('*')
       .eq('id', id);
 
     // Branch scoping for single fetch

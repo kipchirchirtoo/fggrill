@@ -88,7 +88,7 @@ export const getRequisitions = async (req: Request, res: Response) => {
         *,
         items:kitchen_requisition_items(*)
       `)
-            .order('requested_at', { ascending: false });
+            .order('created_at', { ascending: false });
 
         if (targetBranchId) {
             query = query.eq('branch_id', targetBranchId);
@@ -314,6 +314,111 @@ export const fulfillRequisition = async (req: Request, res: Response) => {
         res.json({ success: true, data: grn });
     } catch (error: any) {
         console.error('Error fulfilling requisition:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Get related activity for a kitchen requisition
+ * GET /api/kitchen/requisitions/:id/related-activity
+ */
+export const getRequisitionRelatedActivity = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        // Get requisition with items
+        const { data: requisition, error: reqError } = await supabase
+            .from('kitchen_requisitions')
+            .select('*, items:kitchen_requisition_items(*)')
+            .eq('id', id)
+            .single();
+
+        if (reqError || !requisition) {
+            return res.status(404).json({ success: false, message: 'Requisition not found' });
+        }
+
+        const skus = (requisition.items || []).map((i: any) => i.item_sku).filter(Boolean);
+        const branchId = requisition.branch_id;
+        const reqDate = requisition.requested_at || requisition.created_at;
+
+        // Get GRN created from this requisition
+        const { data: grns } = await supabase
+            .from('kitchen_grn')
+            .select('*, items:kitchen_grn_items(*)')
+            .eq('requisition_id', id)
+            .order('created_at', { ascending: false });
+
+        // Get kitchen stock ledger entries referencing these GRNs
+        let ledgerEntries: any[] = [];
+        if (grns && grns.length > 0) {
+            const grnNumbers = grns.map((g: any) => g.grn_number).filter(Boolean);
+            if (grnNumbers.length > 0) {
+                const { data: ledger } = await supabase
+                    .from('kitchen_stock_ledger')
+                    .select('*')
+                    .eq('reference_type', 'GRN')
+                    .in('reference_id', grnNumbers)
+                    .order('transaction_date', { ascending: false });
+                ledgerEntries = ledger || [];
+            }
+        }
+
+        // Get usage entries for the same SKUs after requisition date
+        let usageEntries: any[] = [];
+        if (skus.length > 0) {
+            let usageQuery = supabase
+                .from('kitchen_usage')
+                .select('*')
+                .eq('branch_id', branchId)
+                .in('item_sku', skus);
+            if (reqDate) {
+                usageQuery = usageQuery.gte('usage_date', reqDate.split('T')[0]);
+            }
+            const { data: usage } = await usageQuery.order('usage_date', { ascending: false }).limit(50);
+            usageEntries = usage || [];
+        }
+
+        // Get wastage entries for the same SKUs after requisition date
+        let wastageEntries: any[] = [];
+        if (skus.length > 0) {
+            let wastageQuery = supabase
+                .from('kitchen_wastage')
+                .select('*')
+                .eq('branch_id', branchId)
+                .in('item_sku', skus);
+            if (reqDate) {
+                wastageQuery = wastageQuery.gte('wastage_date', reqDate.split('T')[0]);
+            }
+            const { data: wastage } = await wastageQuery.order('wastage_date', { ascending: false }).limit(50);
+            wastageEntries = wastage || [];
+        }
+
+        // Get department issue journals for the same SKUs
+        let issueEntries: any[] = [];
+        if (skus.length > 0) {
+            const { data: issues } = await supabase
+                .from('department_issue_journals')
+                .select('*')
+                .eq('branch_id', branchId)
+                .in('item_sku', skus)
+                .order('issued_at', { ascending: false })
+                .limit(30);
+            issueEntries = issues || [];
+        }
+
+        res.json({
+            success: true,
+            data: {
+                requisition,
+                grns: grns || [],
+                ledgerEntries,
+                usageEntries,
+                wastageEntries,
+                issueEntries,
+            }
+        });
+    } catch (error: any) {
+        console.error('Error fetching requisition related activity:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };

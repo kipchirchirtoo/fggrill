@@ -500,16 +500,24 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
             });
         }
 
-        // ── 5. Cashier-recorded revenue cross-check (shift_transactions) ────────
-        const { data: shiftTxns } = await supabase
-            .from('shift_transactions')
-            .select('total_amount, is_voided')
-            .eq('branch_id', branchId)
-            .gte('created_at', startTs)
-            .lte('created_at', endTs);
-        const cashierRevenue = (shiftTxns || [])
-            .filter((t: any) => t.is_voided !== true)
-            .reduce((s: number, t: any) => s + n(t.total_amount), 0);
+        // ── 5. Cashier-recorded revenue cross-check (cashier_shifts) ─────────────
+        // Primary: cashier_shifts.actual_cash (what cashiers physically handed over)
+        // Fallback: shift_transactions if cashier_shifts has no data for this branch
+        const [{ data: cashierShiftsData }, { data: shiftTxns }] = await Promise.all([
+            supabase.from('cashier_shifts')
+                .select('actual_cash, expected_cash')
+                .eq('branch_id', branchId)
+                .gte('start_time', startTs)
+                .lte('start_time', endTs),
+            supabase.from('shift_transactions')
+                .select('total_amount, is_voided')
+                .eq('branch_id', branchId)
+                .gte('created_at', startTs)
+                .lte('created_at', endTs),
+        ]);
+        const cashierShiftTotal = (cashierShiftsData || []).reduce((s: number, t: any) => s + n(t.actual_cash || t.expected_cash), 0);
+        const shiftTxnTotal = (shiftTxns || []).filter((t: any) => t.is_voided !== true).reduce((s: number, t: any) => s + n(t.total_amount), 0);
+        const cashierRevenue = cashierShiftTotal > 0 ? cashierShiftTotal : shiftTxnTotal;
 
         // ── 6. Branch operating expenses ────────────────────────────────────────
         const [{ data: expenses }, { data: pettyCash }] = await Promise.all([

@@ -988,7 +988,7 @@ class _RoomsSection extends ConsumerWidget {
     final rooms = data.rooms.where((room) {
       final query = searchController.text.toLowerCase();
       return (query.isEmpty ||
-              '${room.number}'.contains(query) ||
+              room.displayNumber.toLowerCase().contains(query) ||
               (room.guestName ?? '').toLowerCase().contains(query)) &&
           (statusFilter == 'all' || room.status == statusFilter) &&
           (typeFilter == 'all' || room.type == typeFilter);
@@ -1091,8 +1091,8 @@ class _RoomsSection extends ConsumerWidget {
                                 .updateRoomStatus(room.id, status);
                             if (!context.mounted) return;
                             onRefresh();
-                            _snack(
-                                context, 'Room ${room.number} marked $status');
+                            _snack(context,
+                                'Room ${room.displayNumber} marked $status');
                           },
                           onCheckout: room.status == 'occupied'
                               ? () =>
@@ -2623,7 +2623,7 @@ class _RoomsTable extends StatelessWidget {
       columns: const ['Room', 'Type', 'Status', 'Guest', 'Checkout'],
       rows: rooms
           .map((room) => [
-                Text('${room.number}',
+                Text(room.displayNumber,
                     style: const TextStyle(fontWeight: FontWeight.w700)),
                 Text(room.type ?? '-'),
                 _StatusPill(room.status),
@@ -2901,7 +2901,7 @@ class _RoomCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('${room.number}',
+                Text(room.displayNumber,
                     style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
@@ -3906,7 +3906,7 @@ Future<void> _showQuickCheckInDialog(BuildContext context, WidgetRef ref,
     context: context,
     builder: (_) => StatefulBuilder(builder: (context, setState) {
       return AlertDialog(
-        title: Text('Quick Check-in Room ${room.number}'),
+        title: Text('Quick Check-in Room ${room.displayNumber}'),
         content: SizedBox(
           width: 520,
           height: 420,

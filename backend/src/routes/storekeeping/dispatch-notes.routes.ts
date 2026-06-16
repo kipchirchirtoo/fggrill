@@ -28,5 +28,6 @@ router.route('/:id')
 router.put('/:id/status', updateDispatchStatus);
 router.put('/:id/dispatch', dispatchItems);
 router.put('/:id/confirm-delivery', confirmDelivery);
+router.put('/:id/confirm', confirmDelivery);
 
 export default router;

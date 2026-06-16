@@ -190,7 +190,6 @@ export const getStockRequest = async (
             .from('stock_requests')
             .select(`
         *,
-        requesting_branch:branches!requesting_branch_id(id, name, code, contact_person),
         requested_by_user:users!requested_by(id, first_name, last_name, email),
         reviewed_by_user:users!reviewed_by(id, first_name, last_name, email)
       `)
@@ -241,20 +240,9 @@ export const createStockRequest = async (
             throw new AppError('Branch ID and items are required', 400);
         }
 
-        // Get branch code for request number generation
-        const { data: branch } = await supabase
-            .from('branches')
-            .select('code')
-            .eq('id', requesting_branch_id)
-            .single();
-
-        if (!branch) {
-            throw new AppError('Branch not found', 404);
-        }
-
         // Generate request number using database function
         const { data: requestNumberData, error: numberError } = await supabase
-            .rpc('get_next_stock_request_number', { p_branch_code: branch.code });
+            .rpc('get_next_stock_request_number', { p_branch_id: requesting_branch_id });
 
         if (numberError) {
             logger.error('Error generating request number:', numberError);
@@ -268,35 +256,52 @@ export const createStockRequest = async (
             .from('stock_requests')
             .insert({
                 request_number,
+                branch_id: requesting_branch_id,
                 requesting_branch_id,
                 requested_by: userId,
                 request_type: request_type || 'ROUTINE',
-                priority: priority || 'NORMAL',
+                priority: (priority || 'normal').toLowerCase(),
                 reason,
                 needed_by_date,
-                status: 'PENDING_AUDIT'
+                status: 'PENDING_AUDIT',
+                workflow_status: 'submitted_to_auditor',
+                submitted_to_auditor_at: new Date().toISOString(),
+                document_number: request_number,
+                barcode_value: request_number
             })
             .select()
             .single();
 
         if (requestError) throw requestError;
 
-        // Get current branch stock for each item
+        // Get current branch stock and resolve item UUIDs for each item
         const itemsWithStock = await Promise.all(
             items.map(async (item: any) => {
-                const { data: stock } = await supabase
-                    .from('branch_stock')
-                    .select('quantity')
-                    .eq('branch_id', requesting_branch_id)
-                    .eq('item_sku', item.item_sku)
-                    .single();
+                const [stockResult, itemResult] = await Promise.all([
+                    supabase
+                        .from('branch_stock')
+                        .select('quantity')
+                        .eq('branch_id', requesting_branch_id)
+                        .eq('item_sku', item.item_sku)
+                        .maybeSingle(),
+                    supabase
+                        .from('inventory_items')
+                        .select('id, unit')
+                        .eq('sku', item.item_sku)
+                        .maybeSingle()
+                ]);
 
                 return {
+                    branch_requisition_id: newRequest.id,
                     request_id: newRequest.id,
+                    item_id: itemResult.data?.id || null,
                     item_sku: item.item_sku,
+                    unit: itemResult.data?.unit || 'units',
                     requested_quantity: item.requested_quantity,
-                    current_branch_stock: stock?.quantity || 0,
-                    status: 'PENDING_AUDIT'
+                    current_branch_stock: stockResult.data?.quantity || 0,
+                    status: 'PENDING_AUDIT',
+                    workflow_status: 'submitted_to_auditor',
+                    reason: item.reason || reason || null
                 };
             })
         );
@@ -311,10 +316,7 @@ export const createStockRequest = async (
         // Fetch complete request with items
         const { data: completeRequest } = await supabase
             .from('stock_requests')
-            .select(`
-        *,
-        requesting_branch:branches!requesting_branch_id(id, name, code)
-      `)
+            .select('*')
             .eq('id', newRequest.id)
             .single();
 
@@ -326,7 +328,7 @@ export const createStockRequest = async (
         notificationService.notifyRole(
             'auditor',
             'New Stock Request',
-            `Branch ${branch.code} has submitted a new stock request (${request_number}).`,
+            `Branch ${requesting_branch_id} has submitted a new stock request (${request_number}).`,
             {
                 type: 'info',
                 category: 'stock_request',
@@ -801,7 +803,6 @@ export const getApprovedRequests = async (
             .from('stock_requests')
             .select(`
                 *,
-                requesting_branch:branches!requesting_branch_id(id, name, code, contact_person),
                 requested_by_user:users!requested_by(id, first_name, last_name, email),
                 reviewed_by_user:users!reviewed_by(id, first_name, last_name, email)
             `)

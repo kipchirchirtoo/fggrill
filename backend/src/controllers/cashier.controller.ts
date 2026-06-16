@@ -58,7 +58,7 @@ function posOrderLocation(order: any, fallbackStation: string): string {
     return fallbackStation;
 }
 
-const PUBLIC_SHORT_CODE_PATTERN = /^(?:[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}|[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6})$/;
+const PUBLIC_SHORT_CODE_PATTERN = /^(?:[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}|[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}|\d{4,8})$/;
 
 type CashierShortCodeResolution = {
     source: string;
@@ -149,14 +149,14 @@ async function resolveCashierCreditStaffProfile(
 
     let query = supabase
         .from('staff_profiles')
-        .select('id, first_name, last_name, id_number, department, branch_id, user_id')
+        .select('id, first_name, last_name, national_id, department, branch_id, user_id')
         .limit(1);
 
     if (UUID_PATTERN.test(staffKey)) {
         query = query.or(`id.eq.${staffKey},user_id.eq.${staffKey}`);
     } else {
         const safeStaffKey = staffKey.replace(/[(),]/g, '');
-        query = query.eq('id_number', safeStaffKey);
+        query = query.eq('national_id', safeStaffKey);
     }
 
     const { data: staffRows, error: staffError } = await query;
@@ -195,8 +195,8 @@ async function resolveCashierCreditStaffProfile(
 
     return {
         id: staff.id,
-        name: staffName || staff.id_number || 'Staff',
-        employeeId: staff.id_number || null,
+        name: staffName || staff.national_id || 'Staff',
+        employeeId: staff.national_id || null,
         department: staff.department || null,
         branchId: staffBranchId
     };
@@ -2943,10 +2943,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
         // EVERYONE sees these if they match the branch
         let shiftQuery = supabase
             .from('shift_transactions')
-            .select(`
-                *,
-                branch:branches!shift_transactions_branch_id_fkey(name)
-            `)
+            .select('*')
             .eq('payment_method', 'BILL')
             .eq('is_voided', false)
             .order('created_at', { ascending: false });

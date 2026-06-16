@@ -8,6 +8,19 @@ import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 import { isGlobalRole } from '../../utils/branchIsolation';
+import { ensureInventoryLocation } from './items.controller';
+
+type DispatchRequestItemInput = {
+  item_sku?: string;
+  sku?: string;
+  dispatched_quantity?: number | string;
+  quantity?: number | string;
+  approved_quantity?: number | string;
+  requested_quantity?: number | string;
+  batch_number?: string;
+  expiry_date?: string;
+  bin_location?: string;
+};
 
 // ============================================================
 // BRANCH STOCK MANAGEMENT
@@ -446,28 +459,45 @@ export const createDispatch = async (
   try {
     const {
       request_id,
+      stock_request_id,
       to_branch_id,
       items,
       vehicle_number,
       driver_name,
       driver_phone,
+      vehicle_id,
+      driver_id,
       estimated_delivery,
       notes
     } = req.body;
 
-    // Validate required fields
-    if (!request_id) {
-      res.status(400).json({ success: false, message: 'Stock request ID is required' });
-      return;
-    }
+    const normalizedItems: BranchInventoryService.DispatchItem[] = Array.isArray(items)
+      ? (items as DispatchRequestItemInput[]).map((item) => ({
+          item_sku: String(item.item_sku ?? item.sku ?? '').trim(),
+          dispatched_quantity: Number(
+            item.dispatched_quantity ??
+            item.quantity ??
+            item.approved_quantity ??
+            item.requested_quantity ??
+            0
+          ),
+          batch_number: item.batch_number,
+          expiry_date: item.expiry_date,
+          bin_location: item.bin_location
+        }))
+      : [];
+    const finalRequestId = request_id || stock_request_id;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
+    // Validate required fields
+    if (normalizedItems.length === 0) {
       res.status(400).json({ success: false, message: 'At least one item is required for dispatch' });
       return;
     }
 
     // Validate items
-    const invalidItems = items.filter(item => !item.item_sku || !item.dispatched_quantity || item.dispatched_quantity <= 0);
+    const invalidItems = normalizedItems.filter(
+      item => !item.item_sku || !Number.isFinite(item.dispatched_quantity) || item.dispatched_quantity <= 0
+    );
     if (invalidItems.length > 0) {
       res.status(400).json({
         success: false,
@@ -499,11 +529,65 @@ export const createDispatch = async (
       return;
     }
 
+    if (!finalRequestId) {
+      const finalToBranchId = Number(to_branch_id);
+      if (!Number.isFinite(finalToBranchId) || finalToBranchId <= 0) {
+        res.status(400).json({ success: false, message: 'Destination branch ID is required' });
+        return;
+      }
+
+      const { data: toBranch, error: branchError } = await supabase
+        .from('branches')
+        .select('code, name')
+        .eq('id', finalToBranchId)
+        .single();
+
+      if (branchError || !toBranch?.code) {
+        res.status(400).json({ success: false, message: 'Destination branch not found' });
+        return;
+      }
+
+      try {
+        const dispatch = await BranchInventoryService.createDirectDispatch(
+          central.id,
+          finalToBranchId,
+          toBranch.code,
+          req.user.id,
+          normalizedItems,
+          {
+            vehicleNumber: vehicle_number,
+            driverName: driver_name,
+            driverPhone: driver_phone,
+            estimatedDelivery: estimated_delivery,
+            notes,
+            vehicleId: vehicle_id,
+            driverId: driver_id
+          }
+        );
+
+        logger.info(`Direct dispatch note ${dispatch.dispatch_number} created by ${req.user.email} for branch ${toBranch.name}`);
+
+        res.status(201).json({
+          success: true,
+          message: `Dispatch note ${dispatch.dispatch_number} created for ${toBranch.name}`,
+          data: dispatch
+        });
+      } catch (serviceError: unknown) {
+        const message = serviceError instanceof Error ? serviceError.message : String(serviceError);
+        logger.error(`Error creating direct dispatch for branch ${finalToBranchId}:`, serviceError);
+        res.status(500).json({
+          success: false,
+          message: `Failed to create dispatch: ${message}`
+        });
+      }
+      return;
+    }
+
     // Verify the request exists and is in a valid status
     const { data: request, error: requestError } = await supabase
       .from('stock_requests')
       .select('status, requesting_branch_id')
-      .eq('id', request_id)
+      .eq('id', finalRequestId)
       .single();
 
     if (requestError || !request) {
@@ -512,8 +596,8 @@ export const createDispatch = async (
     }
 
     // If to_branch_id is missing, derive it from the request
-    let finalToBranchId = to_branch_id;
-    if (!finalToBranchId) {
+    let finalToBranchId = Number(to_branch_id);
+    if (!Number.isFinite(finalToBranchId) || finalToBranchId <= 0) {
       finalToBranchId = request.requesting_branch_id;
     }
 
@@ -553,12 +637,12 @@ export const createDispatch = async (
 
     try {
       const dispatch = await BranchInventoryService.createDispatchFromRequest(
-        request_id,
+        finalRequestId,
         central.id,
         finalToBranchId,
         toBranch.code,
         req.user.id,
-        items,
+        normalizedItems,
         vehicle_number,
         driver_name,
         driver_phone,
@@ -573,11 +657,12 @@ export const createDispatch = async (
         message: `Dispatch note ${dispatch.dispatch_number} created for ${toBranch.name}`,
         data: dispatch
       });
-    } catch (serviceError: any) {
-      logger.error(`Error creating dispatch for request ${request_id}:`, serviceError);
+    } catch (serviceError: unknown) {
+      const message = serviceError instanceof Error ? serviceError.message : String(serviceError);
+      logger.error(`Error creating dispatch for request ${finalRequestId}:`, serviceError);
       res.status(500).json({
         success: false,
-        message: `Failed to create dispatch: ${serviceError.message}`
+        message: `Failed to create dispatch: ${message}`
       });
     }
   } catch (error: any) {
@@ -886,9 +971,9 @@ export const confirmDelivery = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { received_items, items_received, delivery_notes, discrepancy_notes } = req.body;
+    const { received_items, items_received, delivery_notes, discrepancy_notes, notes: bodyNotes } = req.body;
     const items = items_received || received_items;
-    const notes = discrepancy_notes || delivery_notes;
+    const notes = discrepancy_notes || delivery_notes || bodyNotes;
 
     if (!items || items.length === 0) {
       res.status(400).json({ success: false, message: 'Received items required' });
@@ -1112,8 +1197,8 @@ export const getMasterCatalog = async (
     const { category, search } = req.query;
 
     let query = supabase
-      .from('simple_items')
-      .select('*')
+      .from('inventory_items')
+      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, is_active, store_type, metadata, created_at, updated_at')
       .eq('is_active', true)
       .order('item_name');
 
@@ -1125,12 +1210,45 @@ export const getMasterCatalog = async (
       query = query.or(`item_name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
-    const { data, error } = await query;
+    const { data: rawItems, error } = await query;
     if (error) throw error;
+
+    // Merge central store quantities from inventory_balances
+    let data: any[] = rawItems || [];
+    try {
+      const centralBranch = await BranchInventoryService.getCentralWarehouse();
+      const centralBranchId = centralBranch?.id;
+      if (!centralBranchId) throw new Error('Central warehouse not configured');
+      const centralLocationId = await ensureInventoryLocation(supabase, centralBranchId);
+      const { data: balances, error: balErr } = await supabase
+        .from('inventory_balances')
+        .select('item_id, current_quantity')
+        .eq('location_id', centralLocationId);
+      if (balErr) logger.warn(`getMasterCatalog: balances query error: ${balErr.message}`);
+      const balMap = new Map((balances || []).map((b: any) => [b.item_id, Number(b.current_quantity)]));
+      data = data.map((item: any) => ({
+        ...item,
+        item_sku: item.sku,
+        unit_of_measure: item.unit,
+        cost_price: item.default_unit_cost,
+        retail_price: item.default_selling_price,
+        quantity: balMap.get(item.id) ?? 0,
+      }));
+    } catch (balLookupErr: any) {
+      logger.warn(`getMasterCatalog: could not load central store balances: ${balLookupErr.message}`);
+      data = data.map((item: any) => ({
+        ...item,
+        item_sku: item.sku,
+        unit_of_measure: item.unit,
+        cost_price: item.default_unit_cost,
+        retail_price: item.default_selling_price,
+        quantity: 0,
+      }));
+    }
 
     res.status(200).json({
       success: true,
-      count: data?.length || 0,
+      count: data.length,
       data
     });
   } catch (error) {

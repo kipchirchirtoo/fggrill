@@ -18,6 +18,7 @@ import {
   generateDocumentationPDF,
 } from '../services/native-pdf-reports.service';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
+import PDFDocument from 'pdfkit';
 
 // @desc    Get occupancy report
 // @route   GET /api/reports/occupancy
@@ -642,7 +643,7 @@ const buildPayrollPayload = async (filters: any): Promise<any> => {
   if (staffIds.length) {
     const { data: spRows } = await supabase
       .from('staff_profiles')
-      .select('id,role,branch_id,first_name,last_name,user_id,employee_id,phone')
+      .select('id,role,branch_id,first_name,last_name,user_id,employee_number,phone')
       .in('id', staffIds as string[]);
     (spRows || []).forEach((s: any) => { staffMap[s.id] = s; });
 
@@ -671,7 +672,7 @@ const buildPayrollPayload = async (filters: any): Promise<any> => {
     const last  = user.last_name  || sp.last_name  || '';
     employees.push({
       no:           employees.length + 1,
-      emp_id:       sp.employee_id || '—',
+      emp_id:       sp.employee_number || '—',
       name:         `${first} ${last}`.trim() || 'Unknown',
       phone:        sp.phone || '',
       role:         sp.role  || '—',
@@ -786,6 +787,62 @@ export const exportReport = async (
           await generateLeaveManagementPDF(res, filters ?? {});
         } catch (pdfErr: any) {
           logger.error(`Leave management PDF error: ${pdfErr.message}`, pdfErr);
+          if (!res.headersSent) {
+            res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
+          }
+        }
+        return;
+      }
+      if (reportType === 'dispatches') {
+        try {
+          const branchId = filters?.branch_id;
+          let query = supabase.from('dispatches').select('*, from_branch:branches!source_branch_id(name), to_branch:branches!destination_branch_id(name)');
+          if (branchId) query = query.eq('destination_branch_id', Number(branchId));
+          const { data: dispatches } = await query.order('created_at', { ascending: false });
+
+          const doc = new PDFDocument({ margin: 40, size: 'A4' });
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `attachment; filename=FG_Dispatches_${new Date().toISOString().split('T')[0]}.pdf`);
+          doc.pipe(res);
+
+          const blue = '#1a3c5e';
+          const dark = '#333333';
+          const muted = '#666666';
+          let y = 40;
+
+          doc.font('Helvetica-Bold').fontSize(18).fillColor(blue)
+            .text('FAMOUSGATE HOTELS', 40, y);
+          y += 28;
+          doc.font('Helvetica-Bold').fontSize(14).fillColor(dark)
+            .text('Dispatch Receiving Report', 40, y);
+          y += 20;
+          doc.font('Helvetica').fontSize(9).fillColor(muted)
+            .text(`Generated: ${new Date().toLocaleString('en-KE')} | Branch: ${branchId || 'All'}`, 40, y);
+          y += 30;
+
+          const rows = dispatches || [];
+          if (rows.length === 0) {
+            doc.font('Helvetica').fontSize(11).fillColor(dark).text('No dispatches found.', 40, y);
+          } else {
+            for (const d of rows) {
+              if (y > 720) { doc.addPage(); y = 40; }
+              const status = (d.status || '').toUpperCase();
+              const statusColor = status === 'COMPLETED' || status === 'RECEIVED' ? '#2e7d32'
+                : status === 'IN_TRANSIT' ? '#ed6c02' : dark;
+              doc.font('Helvetica-Bold').fontSize(10).fillColor(blue)
+                .text(`Dispatch #${d.dispatch_number || d.id}`, 40, y);
+              doc.font('Helvetica').fontSize(9).fillColor(statusColor)
+                .text(status, 400, y);
+              y += 16;
+              doc.font('Helvetica').fontSize(9).fillColor(muted)
+                .text(`From: ${d.from_branch?.name || 'Central Store'}  →  To: ${d.to_branch?.name || 'Branch'}  |  Date: ${d.dispatched_at ? new Date(d.dispatched_at).toLocaleDateString('en-KE') : '-'}`, 40, y);
+              y += 22;
+            }
+          }
+          doc.end();
+          logger.info(`Generated native dispatches PDF with ${rows.length} rows`);
+        } catch (pdfErr: any) {
+          logger.error(`Dispatches PDF error: ${pdfErr.message}`, pdfErr);
           if (!res.headersSent) {
             res.status(500).json({ success: false, message: `PDF generation failed: ${pdfErr.message}` });
           }
@@ -955,9 +1012,8 @@ export const getReportTemplates = async (
 ): Promise<void> => {
   try {
     const { data, error } = await supabase
-      .from('reports')
-      .select('*')
-      .eq('is_template', true);
+      .from('report_templates')
+      .select('*');
 
     if (error) throw error;
 

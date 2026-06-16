@@ -9,7 +9,8 @@ class RoomManagementScreen extends ConsumerStatefulWidget {
   const RoomManagementScreen({super.key});
 
   @override
-  ConsumerState<RoomManagementScreen> createState() => _RoomManagementScreenState();
+  ConsumerState<RoomManagementScreen> createState() =>
+      _RoomManagementScreenState();
 }
 
 class _RoomManagementScreenState extends ConsumerState<RoomManagementScreen> {
@@ -67,7 +68,8 @@ class _RoomManagementScreenState extends ConsumerState<RoomManagementScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Room ${room.number} status updated to $newStatus'),
+            content:
+                Text('Room ${room.displayNumber} status updated to $newStatus'),
             backgroundColor: Colors.green,
           ),
         );
@@ -124,10 +126,14 @@ class _RoomManagementScreenState extends ConsumerState<RoomManagementScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _statusBadge('Available', statusCounts['available']!, Colors.green),
-                _statusBadge('Occupied', statusCounts['occupied']!, Colors.blue),
-                _statusBadge('Cleaning', statusCounts['cleaning']!, Colors.orange),
-                _statusBadge('Maintenance', statusCounts['maintenance']!, Colors.red),
+                _statusBadge(
+                    'Available', statusCounts['available']!, Colors.green),
+                _statusBadge(
+                    'Occupied', statusCounts['occupied']!, Colors.blue),
+                _statusBadge(
+                    'Cleaning', statusCounts['cleaning']!, Colors.orange),
+                _statusBadge(
+                    'Maintenance', statusCounts['maintenance']!, Colors.red),
               ],
             ),
           ),
@@ -137,7 +143,8 @@ class _RoomManagementScreenState extends ConsumerState<RoomManagementScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                const Text('Filter by Status', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Filter by Status',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -166,7 +173,8 @@ class _RoomManagementScreenState extends ConsumerState<RoomManagementScreen> {
                         onRefresh: _loadRooms,
                         child: GridView.builder(
                           padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
@@ -297,14 +305,16 @@ class _RoomCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${room.number}',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    room.displayNumber,
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   Icon(_getStatusIcon(), color: statusColor),
                 ],
               ),
               const Spacer(),
-              Text(room.type ?? 'Room', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(room.type ?? 'Room',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -314,7 +324,10 @@ class _RoomCard extends StatelessWidget {
                 ),
                 child: Text(
                   room.status.toUpperCase(),
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor),
                 ),
               ),
             ],
@@ -347,8 +360,9 @@ class _RoomDetailsSheet extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Room ${room.number}',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                'Room ${room.displayNumber}',
+                style:
+                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               IconButton(
                 icon: const Icon(Icons.close),
@@ -362,9 +376,12 @@ class _RoomDetailsSheet extends StatelessWidget {
           _infoRow('Status', room.status.toUpperCase()),
           _infoRow('Price', 'KES ${room.pricePerNight ?? 0}/night'),
           _infoRow('Max Occupancy', '${room.maxOccupancy ?? "-"} guests'),
-          if (room.isClean != null) _infoRow('Clean Status', room.isClean! ? 'Clean' : 'Needs Cleaning'),
+          if (room.isClean != null)
+            _infoRow(
+                'Clean Status', room.isClean! ? 'Clean' : 'Needs Cleaning'),
           const Divider(),
-          const Text('Change Status', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Change Status',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -395,7 +412,8 @@ class _RoomDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _statusButton(BuildContext context, String label, String status, Color color) {
+  Widget _statusButton(
+      BuildContext context, String label, String status, Color color) {
     final isCurrent = room.status == status;
     return ElevatedButton(
       onPressed: isCurrent

@@ -14,14 +14,9 @@ const delay = (ms: number): Promise<void> => {
 // Get all stock takes for a branch
 export const getStockTakes = async (req: Request, res: Response) => {
     try {
-        const { branch_id, status } = req.query;
+        const { status } = req.query;
 
-        let query = supabase
-            .from('stock_takes')
-            .select(`
-                *,
-                branch:branches(name)
-            `);
+        let query = supabase.from('stock_takes').select('*');
 
         query = applyBranchFilter(query, req);
 
@@ -37,7 +32,23 @@ export const getStockTakes = async (req: Request, res: Response) => {
 
         if (error) throw error;
 
-        res.json({ success: true, data });
+        // Enrich with branch names separately to avoid schema cache join issues
+        const branchIds = [...new Set((data || []).map((s: any) => s.branch_id).filter(Boolean))];
+        let branchMap: Record<string, string> = {};
+        if (branchIds.length) {
+            const { data: branches } = await supabase
+                .from('branches')
+                .select('id, name')
+                .in('id', branchIds);
+            branchMap = Object.fromEntries((branches || []).map((b: any) => [String(b.id), b.name]));
+        }
+
+        const enriched = (data || []).map((s: any) => ({
+            ...s,
+            branch: s.branch_id ? { name: branchMap[String(s.branch_id)] || '' } : null,
+        }));
+
+        res.json({ success: true, data: enriched });
     } catch (error: any) {
         console.error('Error fetching stock takes:', error);
         res.status(500).json({ success: false, message: error.message });

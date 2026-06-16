@@ -11,7 +11,9 @@ import '../../data/repository.dart';
 
 final _directorDashboardProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  return ref.read(directorRepositoryProvider).getComprehensiveDashboard();
+  final raw =
+      await ref.read(directorRepositoryProvider).getComprehensiveDashboard();
+  return _payloadMap(raw);
 });
 
 final _directorDiscrepanciesProvider =
@@ -38,9 +40,9 @@ class MobileDirectorScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return MobileShell(
+    return const MobileShell(
       title: 'Director',
-      tabs: const [
+      tabs: [
         MobileTab(
           label: 'Overview',
           icon: Icons.dashboard_outlined,
@@ -92,20 +94,40 @@ class _OverviewTab extends ConsumerWidget {
         ),
       ),
       data: (data) {
-        final revenue = _fmt(data['total_revenue'] ??
-            data['revenue'] ??
-            data['gross_revenue'] ??
-            0);
-        final netProfit = _fmt(data['net_profit'] ??
-            data['net_income'] ??
-            0);
-        final occupancy =
-            '${data['occupancy_rate'] ?? data['occupancy'] ?? 0}%';
-        final activeStaff =
-            '${data['active_staff'] ?? data['staff_count'] ?? 0}';
-        final pendingFlags =
-            '${data['pending_flags'] ?? data['audit_flags'] ?? 0}';
-        final lowStock = '${data['low_stock_count'] ?? data['low_stock'] ?? 0}';
+        final financial = _asMap(data['financial']);
+        final occupancyData = _asMap(data['occupancy']);
+        final staff = _asMap(data['staff']);
+        final inventory = _asMap(data['inventory']);
+        final discrepancies = _asMap(data['discrepancies']);
+        final revenue = _fmt(_firstNum(financial, const [
+          'totalRevenue',
+          'total_revenue',
+          'revenue',
+          'gross_revenue',
+        ]));
+        final netProfit = _fmt(_firstNum(financial, const [
+          'netProfit',
+          'net_profit',
+          'net_income',
+        ]));
+        final occupancy = '${_firstNum(occupancyData, const [
+              'occupancyRate',
+              'occupancy_rate',
+              'occupancy'
+            ]).toStringAsFixed(1)}%';
+        final activeStaff = _firstNum(
+                staff, const ['activeStaff', 'active_staff', 'staff_count'])
+            .toStringAsFixed(0);
+        final pendingFlags = _firstNum(discrepancies, const [
+          'pendingFlags',
+          'pending_flags',
+          'audit_flags'
+        ]).toStringAsFixed(0);
+        final lowStock = _firstNum(inventory, const [
+          'lowStockItems',
+          'low_stock_count',
+          'low_stock'
+        ]).toStringAsFixed(0);
 
         // AdaptiveStatGrid (skill: flutter-build-responsive-layout) —
         // automatically adjusts column count via LayoutBuilder constraints.
@@ -115,18 +137,36 @@ class _OverviewTab extends ConsumerWidget {
             children: [
               AdaptiveStatGrid(
                 stats: [
-                  statDef(label: 'Total Revenue', value: revenue,
-                      icon: Icons.trending_up, color: AppColors.kSuccess),
-                  statDef(label: 'Net Profit', value: netProfit,
-                      icon: Icons.account_balance_wallet, color: AppColors.kPrimary),
-                  statDef(label: 'Occupancy', value: occupancy,
-                      icon: Icons.hotel, color: AppColors.kAccent),
-                  statDef(label: 'Active Staff', value: activeStaff,
-                      icon: Icons.people, color: const Color(0xFF7C3AED)),
-                  statDef(label: 'Audit Flags', value: pendingFlags,
-                      icon: Icons.flag, color: AppColors.kError),
-                  statDef(label: 'Low Stock', value: lowStock,
-                      icon: Icons.inventory_2, color: AppColors.kWarning),
+                  statDef(
+                      label: 'Total Revenue',
+                      value: revenue,
+                      icon: Icons.trending_up,
+                      color: AppColors.kSuccess),
+                  statDef(
+                      label: 'Net Profit',
+                      value: netProfit,
+                      icon: Icons.account_balance_wallet,
+                      color: AppColors.kPrimary),
+                  statDef(
+                      label: 'Occupancy',
+                      value: occupancy,
+                      icon: Icons.hotel,
+                      color: AppColors.kAccent),
+                  statDef(
+                      label: 'Active Staff',
+                      value: activeStaff,
+                      icon: Icons.people,
+                      color: const Color(0xFF7C3AED)),
+                  statDef(
+                      label: 'Audit Flags',
+                      value: pendingFlags,
+                      icon: Icons.flag,
+                      color: AppColors.kError),
+                  statDef(
+                      label: 'Low Stock',
+                      value: lowStock,
+                      icon: Icons.inventory_2,
+                      color: AppColors.kWarning),
                 ],
               ),
               const SizedBox(height: 20),
@@ -138,9 +178,8 @@ class _OverviewTab extends ConsumerWidget {
     );
   }
 
-  String _fmt(dynamic val) {
-    if (val == null) return 'KES 0';
-    final n = (val as num).toDouble();
+  String _fmt(num val) {
+    final n = val.toDouble();
     if (n >= 1000000) {
       return 'KES ${(n / 1000000).toStringAsFixed(1)}M';
     }
@@ -201,7 +240,7 @@ class _QuickBtn extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: AppColors.kPrimary.withOpacity(0.07),
+          color: AppColors.kPrimary.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -235,8 +274,7 @@ class _DiscrepanciesTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_directorDiscrepanciesProvider);
     return async.when(
-      loading: () =>
-          const MobileLoadingView(message: 'Loading discrepancies…'),
+      loading: () => const MobileLoadingView(message: 'Loading discrepancies…'),
       error: (e, _) => MobileEmptyState(
         icon: Icons.error_outline,
         title: 'Could not load',
@@ -281,25 +319,22 @@ class _DiscrepancyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final branch = item['branch_name'] ?? item['branch'] ?? '—';
+    final branch = _branchLabel(item);
     final amount = item['amount'] ?? item['discrepancy_amount'] ?? 0;
-    final severity =
-        (item['severity'] ?? 'LOW').toString().toUpperCase();
+    final severity = (item['severity'] ?? 'LOW').toString().toUpperCase();
     final type = item['flag_type'] ?? item['type'] ?? '—';
     final status = (item['status'] ?? 'OPEN').toString().toUpperCase();
-    final severityColor =
-        _severityColors[severity] ?? AppColors.kWarning;
+    final severityColor = _severityColors[severity] ?? AppColors.kWarning;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.kCardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: severityColor.withOpacity(0.25)),
+        border: Border.all(color: severityColor.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -324,10 +359,9 @@ class _DiscrepancyTile extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: severityColor.withOpacity(0.12),
+                  color: severityColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -356,23 +390,19 @@ class _DiscrepancyTile extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton(
-                onPressed: () =>
-                    _finalize(context, 'RESOLVED'),
+                onPressed: () => _finalize(context, 'RESOLVED'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.kSuccess,
-                  textStyle:
-                      const TextStyle(fontSize: 12),
+                  textStyle: const TextStyle(fontSize: 12),
                 ),
                 child: const Text('Resolve'),
               ),
               const SizedBox(width: 4),
               TextButton(
-                onPressed: () =>
-                    _finalize(context, 'ESCALATED'),
+                onPressed: () => _finalize(context, 'ESCALATED'),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.kError,
-                  textStyle:
-                      const TextStyle(fontSize: 12),
+                  textStyle: const TextStyle(fontSize: 12),
                 ),
                 child: const Text('Escalate'),
               ),
@@ -386,17 +416,20 @@ class _DiscrepancyTile extends StatelessWidget {
   Future<void> _finalize(BuildContext context, String decision) async {
     final id = '${item['id']}';
     try {
-      await ref
-          .read(directorRepositoryProvider)
-          .finalizeDiscrepancy(id, decision, decision);
+      await ref.read(directorRepositoryProvider).finalizeDiscrepancy(
+            id,
+            decision == 'RESOLVED'
+                ? 'Resolved from director mobile review'
+                : 'Escalated from director mobile review',
+            decision,
+          );
       ref.invalidate(_directorDiscrepanciesProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Discrepancy $decision'),
-            backgroundColor: decision == 'RESOLVED'
-                ? AppColors.kSuccess
-                : AppColors.kError,
+            backgroundColor:
+                decision == 'RESOLVED' ? AppColors.kSuccess : AppColors.kError,
           ),
         );
       }
@@ -413,8 +446,7 @@ class _DiscrepancyTile extends StatelessWidget {
   }
 
   String _fmt(dynamic val) {
-    if (val == null) return '0';
-    return (val as num).toStringAsFixed(0);
+    return _toDouble(val).toStringAsFixed(0);
   }
 }
 
@@ -430,7 +462,7 @@ class _TasksTab extends ConsumerStatefulWidget {
 }
 
 class _TasksTabState extends ConsumerState<_TasksTab> {
-  String _filter = 'OPEN';
+  String _filter = 'PENDING';
 
   @override
   Widget build(BuildContext context) {
@@ -442,26 +474,25 @@ class _TasksTabState extends ConsumerState<_TasksTab> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
-            children: ['OPEN', 'COMPLETED', 'DISMISSED'].map((f) {
+            children:
+                ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'DISMISSED'].map((f) {
               final selected = _filter == f;
               return GestureDetector(
                 onTap: () => setState(() => _filter = f),
                 child: Container(
                   margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
                     color: selected
                         ? AppColors.kPrimary
-                        : AppColors.kPrimary.withOpacity(0.08),
+                        : AppColors.kPrimary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     f,
                     style: TextStyle(
-                      color: selected
-                          ? Colors.white
-                          : AppColors.kPrimary,
+                      color: selected ? Colors.white : AppColors.kPrimary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'SF Pro Display',
@@ -474,22 +505,20 @@ class _TasksTabState extends ConsumerState<_TasksTab> {
         ),
         Expanded(
           child: async.when(
-            loading: () =>
-                const MobileLoadingView(message: 'Loading tasks…'),
+            loading: () => const MobileLoadingView(message: 'Loading tasks…'),
             error: (e, _) => MobileEmptyState(
               icon: Icons.error_outline,
               title: 'Could not load tasks',
               subtitle: e.toString(),
               action: TextButton(
-                onPressed: () =>
-                    ref.invalidate(_directorTasksProvider),
+                onPressed: () => ref.invalidate(_directorTasksProvider),
                 child: const Text('Retry'),
               ),
             ),
             data: (tasks) {
               final filtered = tasks
                   .where((t) =>
-                      (t['status'] ?? 'OPEN').toString().toUpperCase() ==
+                      (t['status'] ?? 'PENDING').toString().toUpperCase() ==
                       _filter)
                   .toList();
               if (filtered.isEmpty) {
@@ -502,8 +531,7 @@ class _TasksTabState extends ConsumerState<_TasksTab> {
               return ListView.separated(
                 padding: const EdgeInsets.all(16),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(height: 10),
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, i) =>
                     _TaskTile(task: filtered[i], ref: ref),
               );
@@ -525,8 +553,7 @@ class _TaskTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = task['title'] ?? task['task_title'] ?? '—';
     final role = task['assigned_to_role'] ?? task['role'] ?? '';
-    final priority =
-        (task['priority'] ?? 'NORMAL').toString().toUpperCase();
+    final priority = (task['priority'] ?? 'NORMAL').toString().toUpperCase();
     final dueDate = task['due_date'] ?? task['deadline'] ?? '';
     final priorityColor = priority == 'HIGH' || priority == 'URGENT'
         ? AppColors.kError
@@ -541,7 +568,7 @@ class _TaskTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -564,10 +591,9 @@ class _TaskTile extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: priorityColor.withOpacity(0.12),
+                  color: priorityColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -635,9 +661,7 @@ class _TaskTile extends StatelessWidget {
   Future<void> _closeTask(BuildContext context) async {
     final id = '${task['id']}';
     try {
-      await ref
-          .read(directorRepositoryProvider)
-          .closeTask(id, 'COMPLETED', '');
+      await ref.read(directorRepositoryProvider).closeTask(id, 'COMPLETED', '');
       ref.invalidate(_directorTasksProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -682,19 +706,15 @@ class _FinanceTab extends ConsumerWidget {
         ),
       ),
       data: (data) {
-        final expected = _fmt(data['expected_cash'] ??
-            data['total_expected'] ??
-            0);
-        final banked = _fmt(data['total_banked'] ??
-            data['banked'] ??
-            0);
+        final payload = _payloadMap(data);
+        final expected =
+            _fmt(payload['expected_cash'] ?? payload['total_expected'] ?? 0);
+        final banked = _fmt(payload['total_banked'] ?? payload['banked'] ?? 0);
         final variance =
-            _fmt(data['variance'] ?? data['total_variance'] ?? 0);
-        final unbanked = data['unbanked_branches'] ??
-            data['unbanked_count'] ??
-            0;
-        final branches =
-            data['branches'] as List? ?? [];
+            _fmt(payload['variance'] ?? payload['total_variance'] ?? 0);
+        final unbanked =
+            payload['unbanked_branches'] ?? payload['unbanked_count'] ?? 0;
+        final branches = payload['branches'] as List? ?? [];
 
         return MobileTabBody(
           child: Column(
@@ -702,14 +722,26 @@ class _FinanceTab extends ConsumerWidget {
             children: [
               AdaptiveStatGrid(
                 stats: [
-                  statDef(label: 'Expected Cash', value: expected,
-                      icon: Icons.attach_money, color: AppColors.kPrimary),
-                  statDef(label: 'Total Banked', value: banked,
-                      icon: Icons.account_balance, color: AppColors.kSuccess),
-                  statDef(label: 'Variance', value: variance,
-                      icon: Icons.compare_arrows, color: AppColors.kWarning),
-                  statDef(label: 'Unbanked', value: '$unbanked branches',
-                      icon: Icons.warning_amber, color: AppColors.kError),
+                  statDef(
+                      label: 'Expected Cash',
+                      value: expected,
+                      icon: Icons.attach_money,
+                      color: AppColors.kPrimary),
+                  statDef(
+                      label: 'Total Banked',
+                      value: banked,
+                      icon: Icons.account_balance,
+                      color: AppColors.kSuccess),
+                  statDef(
+                      label: 'Variance',
+                      value: variance,
+                      icon: Icons.compare_arrows,
+                      color: AppColors.kWarning),
+                  statDef(
+                      label: 'Unbanked',
+                      value: '$unbanked branches',
+                      icon: Icons.warning_amber,
+                      color: AppColors.kError),
                 ],
               ),
               if (branches.isNotEmpty) ...[
@@ -726,12 +758,9 @@ class _FinanceTab extends ConsumerWidget {
                 const SizedBox(height: 10),
                 ...branches.map((b) {
                   final bMap = Map<String, dynamic>.from(b as Map);
-                  final name = bMap['branch_name'] ??
-                      bMap['name'] ??
-                      '—';
-                  final bankedStatus = bMap['banking_status'] ??
-                      bMap['status'] ??
-                      '';
+                  final name = bMap['branch_name'] ?? bMap['name'] ?? '—';
+                  final bankedStatus =
+                      bMap['banking_status'] ?? bMap['status'] ?? '';
                   final isBanked =
                       bankedStatus.toString().toUpperCase() == 'BANKED' ||
                           (bMap['is_banked'] == true);
@@ -743,19 +772,16 @@ class _FinanceTab extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isBanked
-                            ? AppColors.kSuccess.withOpacity(0.3)
-                            : AppColors.kError.withOpacity(0.3),
+                            ? AppColors.kSuccess.withValues(alpha: 0.3)
+                            : AppColors.kError.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          isBanked
-                              ? Icons.check_circle
-                              : Icons.cancel_outlined,
-                          color: isBanked
-                              ? AppColors.kSuccess
-                              : AppColors.kError,
+                          isBanked ? Icons.check_circle : Icons.cancel_outlined,
+                          color:
+                              isBanked ? AppColors.kSuccess : AppColors.kError,
                           size: 18,
                         ),
                         const SizedBox(width: 10),
@@ -793,8 +819,7 @@ class _FinanceTab extends ConsumerWidget {
   }
 
   String _fmt(dynamic val) {
-    if (val == null) return 'KES 0';
-    final n = (val as num).toDouble();
+    final n = _toDouble(val);
     if (n >= 1000000) {
       return 'KES ${(n / 1000000).toStringAsFixed(1)}M';
     }
@@ -803,4 +828,38 @@ class _FinanceTab extends ConsumerWidget {
     }
     return 'KES ${n.toStringAsFixed(0)}';
   }
+}
+
+Map<String, dynamic> _payloadMap(dynamic value) {
+  final map = _asMap(value);
+  return _asMap(map['data'] ?? map);
+}
+
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return {};
+}
+
+double _firstNum(Map<String, dynamic> map, List<String> keys) {
+  for (final key in keys) {
+    if (map.containsKey(key)) return _toDouble(map[key]);
+  }
+  return 0;
+}
+
+double _toDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value.replaceAll(',', '')) ?? 0;
+  return 0;
+}
+
+String _branchLabel(Map<String, dynamic> item) {
+  final direct = item['branch_name'] ?? item['branch'];
+  if (direct is String && direct.trim().isNotEmpty) return direct;
+  final branch = _asMap(item['branches']);
+  final name = branch['name'];
+  if (name != null && '$name'.trim().isNotEmpty) return '$name';
+  final id = item['branch_id'] ?? item['branchId'];
+  return id == null || '$id'.isEmpty ? 'Unassigned branch' : 'Branch $id';
 }

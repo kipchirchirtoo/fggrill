@@ -23,13 +23,15 @@ import {
     createGRN,
     approveGRN,
     cancelGRN,
-    printGRN
+    printGRN,
+    backfillGRNStock
 } from '../controllers/storekeeping/grn.controller';
 
 import {
     getInvoices,
     getInvoice,
     createInvoice,
+    getReadyToBillGRNs,
     submitInvoice,
     approveInvoice,
     rejectInvoice
@@ -153,6 +155,8 @@ router.post('/purchase-orders/:id/send',
 // =====================================================
 // GOODS RECEIVED NOTES (GRN)
 // =====================================================
+router.post('/grn/backfill-stock', authorize(allProcurementStaff), backfillGRNStock);
+
 router.route('/grn')
     .get(authorize(allProcurementStaff), getGRNs)
     .post(authorize(storeRoles), createGRN);
@@ -167,6 +171,8 @@ router.put('/grn/:id/cancel', authorize(storeRoles), cancelGRN);
 // =====================================================
 // SUPPLIER INVOICES
 // =====================================================
+router.get('/ready-to-bill', authorize(allProcurementStaff), getReadyToBillGRNs);
+
 router.route('/invoices')
     .get(authorize(allProcurementStaff), getInvoices)
     .post(authorize(procurementRoles), createInvoice);
