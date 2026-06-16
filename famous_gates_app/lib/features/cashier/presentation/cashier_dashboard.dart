@@ -1138,8 +1138,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
           if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
             'staff_credit_bill_id':
                 _text(createdCreditData, ['staff_credit_bill_id']),
-          if (_text(createdCreditData, ['credit_number']).isNotEmpty)
-            'credit_number': _text(createdCreditData, ['credit_number']),
+          if (_text(createdCreditData, ['bill_number', 'credit_number']).isNotEmpty)
+            'credit_number': _text(createdCreditData, ['bill_number', 'credit_number']),
         };
       }
       final isCash = _method == 'cash';
@@ -1160,7 +1160,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 method: _backendPaymentMethod(_method),
                 reference: createdCredit == null
                     ? _referenceController.text.trim()
-                    : _text(_payload(createdCredit), ['credit_number', 'id']),
+                    : _text(_payload(createdCredit), ['bill_number', 'credit_number', 'id']),
                 creditBill: paymentCreditBill,
                 tendered: isCash && _tendered > 0 ? _tendered : null,
                 change: isCash ? _changeDue : null,
@@ -1178,7 +1178,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           department: staff?.department,
           amount: amount,
           items: _receiptItemsFromBill(bill, amount),
-          creditNumber: _text(_payload(createdCredit), ['credit_number', 'id']),
+          creditNumber: _text(_payload(createdCredit), ['bill_number', 'credit_number', 'id']),
           cashierName: nav.user?.name,
           sourceReference: _text(bill, ['bill_number', 'order_number', 'id']),
         );
@@ -1191,7 +1191,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           response: paymentResponse,
           fallbackReference: createdCredit == null
               ? _referenceController.text.trim()
-              : _text(_payload(createdCredit), ['credit_number', 'id']),
+              : _text(_payload(createdCredit), ['bill_number', 'credit_number', 'id']),
           changeGiven: changeGiven,
           amountTendered: isCash ? _tendered : 0,
         );
@@ -1265,7 +1265,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
               .read(cashierRepositoryProvider)
               .createCreditBill(creditBill);
           final createdCreditData = _payload(createdCredit);
-          reference = _text(createdCreditData, ['credit_number', 'id']);
+          reference = _text(createdCreditData, ['bill_number', 'credit_number', 'id']);
           paymentCreditBill = {
             ...creditBill,
             if (_text(createdCreditData, ['id']).isNotEmpty)
@@ -1273,8 +1273,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
             if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
               'staff_credit_bill_id':
                   _text(createdCreditData, ['staff_credit_bill_id']),
-            if (_text(createdCreditData, ['credit_number']).isNotEmpty)
-              'credit_number': _text(createdCreditData, ['credit_number']),
+            if (_text(createdCreditData, ['bill_number', 'credit_number']).isNotEmpty)
+              'credit_number': _text(createdCreditData, ['bill_number', 'credit_number']),
           };
         }
 
@@ -1737,8 +1737,8 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
           if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
             'staff_credit_bill_id':
                 _text(createdCreditData, ['staff_credit_bill_id']),
-          if (_text(createdCreditData, ['credit_number']).isNotEmpty)
-            'credit_number': _text(createdCreditData, ['credit_number']),
+          if (_text(createdCreditData, ['bill_number', 'credit_number']).isNotEmpty)
+            'credit_number': _text(createdCreditData, ['bill_number', 'credit_number']),
         };
       }
       final created =
@@ -5303,7 +5303,7 @@ String _creditCodeForReceipt(
     Map<String, dynamic> row, Map<String, dynamic> created, String reference) {
   bool looksLikeUuid(String s) =>
       RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-').hasMatch(s);
-  final cn = _text(created, ['credit_number']);
+  final cn = _text(created, ['bill_number', 'credit_number']);
   if (cn.isNotEmpty && !looksLikeUuid(cn)) return cn;
   final short = _text(row, ['short_code', 'scan_reference']);
   if (short.isNotEmpty) return short;
