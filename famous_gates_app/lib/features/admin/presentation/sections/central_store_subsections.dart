@@ -111,6 +111,60 @@ const _poValidUnits = {
   'DZ',
 };
 
+// ── Category classification — mirrors actual inventory_items seed data ────────
+const _foodstuffsCategories = <String>[
+  'DRY GOODS',
+  'CLEANING MATERIALS',
+];
+
+const _barCategories = <String>[
+  'BEERS',
+  'CANNED BEERS',
+  'SOFT DRINKS',
+  'WHISKY',
+  'VODKA',
+  'UDV',
+  'SPIRITS',
+  'LIQUERS',
+  'WINES',
+];
+
+const _stationeryCategories = <String>[
+  'STATIONERY',
+  'OFFICE SUPPLIES',
+  'PRINTING MATERIALS',
+];
+
+const _categoryEmojis = <String, String>{
+  'BEERS': '🍺',
+  'CANNED BEERS': '🥫',
+  'SOFT DRINKS': '🥤',
+  'WHISKY': '🥃',
+  'VODKA': '🍸',
+  'SPIRITS': '🍹',
+  'UDV': '🥃',
+  'LIQUERS': '🍶',
+  'WINES': '🍷',
+  'DRY GOODS': '🌾',
+  'CLEANING MATERIALS': '🧹',
+  'STATIONERY': '✏️',
+  'OFFICE SUPPLIES': '📎',
+  'PRINTING MATERIALS': '🖨️',
+};
+
+List<String> _knownCategoriesForStoreType(String? storeType) {
+  switch (storeType) {
+    case 'foodstuffs':
+      return _foodstuffsCategories;
+    case 'bar_store':
+      return _barCategories;
+    case 'stationery':
+      return _stationeryCategories;
+    default:
+      return const [];
+  }
+}
+
 class _ParsedPurchaseOrderItem {
   _ParsedPurchaseOrderItem({
     required this.key,
@@ -1741,6 +1795,7 @@ class _InventorySearchBody extends StatefulWidget {
     required this.onDeleteItem,
     required this.valuation,
     this.showValuationCards = false,
+    this.storeType,
   });
 
   final List<Map<String, dynamic>> allItems;
@@ -1753,6 +1808,7 @@ class _InventorySearchBody extends StatefulWidget {
   final void Function(Map<String, dynamic>) onDeleteItem;
   final Map<String, dynamic> valuation;
   final bool showValuationCards;
+  final String? storeType;
 
   @override
   State<_InventorySearchBody> createState() => _InventorySearchBodyState();
@@ -1761,6 +1817,7 @@ class _InventorySearchBody extends StatefulWidget {
 class _InventorySearchBodyState extends State<_InventorySearchBody> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  String? _selectedCategory;
 
   @override
   void initState() {
@@ -1775,9 +1832,29 @@ class _InventorySearchBodyState extends State<_InventorySearchBody> {
     super.dispose();
   }
 
+  // Categories present in this item list, in the known store-type order first.
+  List<String> get _availableCategories {
+    final known = _knownCategoriesForStoreType(widget.storeType);
+    final fromItems = widget.allItems
+        .map((i) => _text(i, ['category']).trim().toUpperCase())
+        .where((c) => c.isNotEmpty && c != '—')
+        .toSet();
+    final result = known.where(fromItems.contains).toList();
+    for (final c in fromItems) {
+      if (!result.contains(c)) result.add(c);
+    }
+    return result;
+  }
+
   List<Map<String, dynamic>> get _filtered {
-    if (_searchQuery.isEmpty) return widget.allItems;
-    return widget.allItems.where((item) {
+    var items = widget.allItems;
+    if (_selectedCategory != null) {
+      items = items
+          .where((i) => _text(i, ['category']).trim().toUpperCase() == _selectedCategory)
+          .toList();
+    }
+    if (_searchQuery.isEmpty) return items;
+    return items.where((item) {
       final name = _text(item, ['item_name', 'name', 'description']).toLowerCase();
       final sku = _text(item, ['sku']).toLowerCase();
       final cat = _text(item, ['category']).toLowerCase();
@@ -1785,10 +1862,30 @@ class _InventorySearchBodyState extends State<_InventorySearchBody> {
     }).toList();
   }
 
+  // Items grouped by category in known-order, used for the "All" grouped view.
+  Map<String, List<Map<String, dynamic>>> get _groupedFiltered {
+    final order = _availableCategories;
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final item in _filtered) {
+      final cat = _text(item, ['category']).trim().toUpperCase();
+      final key = (cat.isEmpty || cat == '—') ? 'OTHER' : cat;
+      map.putIfAbsent(key, () => []).add(item);
+    }
+    final sorted = <String, List<Map<String, dynamic>>>{};
+    for (final k in order.where(map.containsKey)) {
+      sorted[k] = map[k]!;
+    }
+    for (final k in map.keys.where((k) => !order.contains(k))) {
+      sorted[k] = map[k]!;
+    }
+    return sorted;
+  }
+
   @override
   Widget build(BuildContext context) {
     final allItems = widget.allItems;
     final items = _filtered;
+    final cats = _availableCategories;
     final low = allItems
         .where((i) => _num(i, ['quantity']) <= _num(i, ['reorder_level', 'min_stock']))
         .length;
@@ -1798,67 +1895,195 @@ class _InventorySearchBodyState extends State<_InventorySearchBody> {
     final foodValue = _num(v, ['foodstuffs_value', 'foodstuffsStoreValue', 'foodstuffs_store_value']);
     final barValue = _num(v, ['bar_store_value', 'barStoreValue', 'bar_value']);
     final grandValue = _num(v, ['grand_total', 'grandTotal', 'total_value', 'totalValue']);
+    // Show grouped category sections when viewing "All" with no search active.
+    final showGrouped =
+        _selectedCategory == null && _searchQuery.isEmpty && cats.length > 1;
 
-    return Column(children: [
+    Widget itemTile(Map<String, dynamic> item) => _rowTile(
+          icon: PhosphorIcons.package(),
+          title: _text(item, ['item_name', 'name', 'description']),
+          subtitle:
+              '${_text(item, ['sku'])} • ${_text(item, ['category'])} • ${_text(item, ['unit_of_measure', 'unit'])}',
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              '${_num(item, ['quantity']).toStringAsFixed(0)} in stock',
+              style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.kTextSecondary,
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+                tooltip: 'Edit',
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                onPressed: () => widget.onEditItem(item)),
+            IconButton(
+                tooltip: 'Delete',
+                icon: const Icon(Icons.delete_outline, size: 18),
+                color: Colors.red,
+                onPressed: () => widget.onDeleteItem(item)),
+          ]),
+        );
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // ── Stat cards ──────────────────────────────────────────────────────────
       Row(children: [
-        Expanded(child: _StatCard(label: 'Total Items', value: '${allItems.length}', icon: PhosphorIcons.package(), color: AppColors.kPrimary)),
+        Expanded(
+            child: _StatCard(
+                label: 'Total Items',
+                value: '${allItems.length}',
+                icon: PhosphorIcons.package(),
+                color: AppColors.kPrimary)),
         const SizedBox(width: 12),
-        Expanded(child: _StatCard(label: 'Low Stock', value: '$low', icon: PhosphorIcons.warning(), color: Colors.orange)),
+        Expanded(
+            child: _StatCard(
+                label: 'Low Stock',
+                value: '$low',
+                icon: PhosphorIcons.warning(),
+                color: Colors.orange)),
         const SizedBox(width: 12),
-        Expanded(child: _StatCard(label: 'Stock Value', value: _money(totalValue), icon: PhosphorIcons.currencyDollar(), color: Colors.green)),
+        Expanded(
+            child: _StatCard(
+                label: 'Stock Value',
+                value: _money(totalValue),
+                icon: PhosphorIcons.currencyDollar(),
+                color: Colors.green)),
       ]),
       if (widget.showValuationCards) ...[
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _StatCard(label: 'Foodstuffs Store', value: _money(foodValue), icon: PhosphorIcons.cookingPot(), color: Colors.teal)),
+          Expanded(
+              child: _StatCard(
+                  label: 'Foodstuffs Store',
+                  value: _money(foodValue),
+                  icon: PhosphorIcons.cookingPot(),
+                  color: Colors.teal)),
           const SizedBox(width: 12),
-          Expanded(child: _StatCard(label: 'Bar Store', value: _money(barValue), icon: PhosphorIcons.wine(), color: Colors.indigo)),
+          Expanded(
+              child: _StatCard(
+                  label: 'Bar Store',
+                  value: _money(barValue),
+                  icon: PhosphorIcons.wine(),
+                  color: Colors.indigo)),
           const SizedBox(width: 12),
-          Expanded(child: _StatCard(label: 'Grand Valuation', value: _money(grandValue == 0 ? totalValue : grandValue), icon: PhosphorIcons.currencyDollar(), color: AppColors.kAccent)),
+          Expanded(
+              child: _StatCard(
+                  label: 'Grand Valuation',
+                  value: _money(grandValue == 0 ? totalValue : grandValue),
+                  icon: PhosphorIcons.currencyDollar(),
+                  color: AppColors.kAccent)),
         ]),
       ],
-      const SizedBox(height: 20),
+      // ── Category filter chips ────────────────────────────────────────────────
+      if (cats.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 38,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text('All (${allItems.length})'),
+                  selected: _selectedCategory == null,
+                  onSelected: (_) =>
+                      setState(() => _selectedCategory = null),
+                  selectedColor:
+                      AppColors.kPrimary.withValues(alpha: 0.15),
+                ),
+              ),
+              ...cats.map((cat) {
+                final count = allItems
+                    .where((i) =>
+                        _text(i, ['category']).trim().toUpperCase() == cat)
+                    .length;
+                final emoji = _categoryEmojis[cat] ?? '';
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(
+                        '${emoji.isEmpty ? '' : '$emoji '}$cat ($count)'),
+                    selected: _selectedCategory == cat,
+                    onSelected: (_) => setState(() => _selectedCategory =
+                        _selectedCategory == cat ? null : cat),
+                    selectedColor:
+                        AppColors.kPrimary.withValues(alpha: 0.15),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ],
+      const SizedBox(height: 12),
+      // ── Search bar ──────────────────────────────────────────────────────────
       Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.only(bottom: 8),
         child: TextField(
           controller: _searchCtrl,
           decoration: InputDecoration(
             hintText: 'Search by name, SKU or category…',
             prefixIcon: const Icon(Icons.search, size: 18),
             suffixIcon: _searchQuery.isNotEmpty
-                ? IconButton(icon: const Icon(Icons.clear, size: 16), onPressed: () => _searchCtrl.clear())
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 16),
+                    onPressed: () => _searchCtrl.clear())
                 : null,
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ),
-      _RowsCard(
-        title: _searchQuery.isEmpty ? widget.title : '${items.length} of ${allItems.length} items',
-        rows: items.take(200).toList(),
-        emptyMessage: _searchQuery.isEmpty ? widget.emptyMessage : 'No items match "$_searchQuery"',
-        trailing: Wrap(
-          spacing: 8,
-          children: [
-            OutlinedButton.icon(onPressed: widget.onExportPdf, icon: const Icon(Icons.picture_as_pdf, size: 14), label: const Text('PDF / Print')),
-            OutlinedButton.icon(onPressed: widget.onSyncStock, icon: const Icon(Icons.sync, size: 14), label: const Text('Sync Stock')),
-            ElevatedButton.icon(onPressed: widget.onAddItem, icon: const Icon(Icons.add, size: 14), label: const Text('Add Item')),
-          ],
-        ),
-        builder: (item) => _rowTile(
-          icon: PhosphorIcons.package(),
-          title: _text(item, ['item_name', 'name', 'description']),
-          subtitle: '${_text(item, ['sku'])} • ${_text(item, ['category'])} • ${_text(item, ['unit_of_measure', 'unit'])}',
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('${_num(item, ['quantity']).toStringAsFixed(0)} in stock',
-                style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 8),
-            IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => widget.onEditItem(item)),
-            IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 18), color: Colors.red, onPressed: () => widget.onDeleteItem(item)),
-          ]),
-        ),
+      // ── Action buttons ───────────────────────────────────────────────────────
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          OutlinedButton.icon(
+              onPressed: widget.onExportPdf,
+              icon: const Icon(Icons.picture_as_pdf, size: 14),
+              label: const Text('PDF / Print')),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+              onPressed: widget.onSyncStock,
+              icon: const Icon(Icons.sync, size: 14),
+              label: const Text('Sync Stock')),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+              onPressed: widget.onAddItem,
+              icon: const Icon(Icons.add, size: 14),
+              label: const Text('Add Item')),
+        ]),
       ),
+      // ── Item list: grouped by category OR flat filtered ──────────────────────
+      if (showGrouped)
+        ..._groupedFiltered.entries.map((entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _RowsCard(
+                title:
+                    '${_categoryEmojis[entry.key] ?? ''}  ${entry.key}  •  ${entry.value.length} items'
+                        .trim(),
+                rows: entry.value,
+                emptyMessage: 'No items in ${entry.key}',
+                builder: itemTile,
+              ),
+            ))
+      else
+        _RowsCard(
+          title: (_searchQuery.isEmpty && _selectedCategory == null)
+              ? widget.title
+              : '${items.length} of ${allItems.length} items',
+          rows: items.take(200).toList(),
+          emptyMessage: _selectedCategory != null
+              ? 'No items in $_selectedCategory'
+              : (_searchQuery.isEmpty
+                  ? widget.emptyMessage
+                  : 'No items match "$_searchQuery"'),
+          builder: itemTile,
+        ),
     ]);
   }
 }
@@ -1898,6 +2123,7 @@ class _InventoryListSection extends ConsumerWidget {
               emptyMessage: emptyMessage,
               valuation: valuationAsync?.valueOrNull ?? const {},
               showValuationCards: valuationAsync != null,
+              storeType: storeType,
               onExportPdf: () => _exportPdf(context, allItems),
               onSyncStock: () async {
                 try {
@@ -1979,21 +2205,35 @@ class _InventoryListSection extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: categoryCtrl,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                  ),
+              TextField(
+                controller: categoryCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Category (subcategory)',
+                  helperText: 'Tap a chip below to fill, or type a custom value',
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: unitCtrl,
-                    decoration: const InputDecoration(labelText: 'Unit'),
-                  ),
+              ),
+              if (storeType != null) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _knownCategoriesForStoreType(storeType!).map((cat) {
+                    final emoji = _categoryEmojis[cat] ?? '';
+                    return ActionChip(
+                      label: Text(
+                          '${emoji.isEmpty ? '' : '$emoji '}$cat',
+                          style: const TextStyle(fontSize: 11)),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => categoryCtrl.text = cat,
+                    );
+                  }).toList(),
                 ),
-              ]),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: unitCtrl,
+                decoration: const InputDecoration(labelText: 'Unit'),
+              ),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(
