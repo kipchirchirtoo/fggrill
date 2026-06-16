@@ -64,33 +64,33 @@ const getLedgerPaymentFallback = async (
     let query = supabase
         .from('store_supplier_ledger')
         .select('*')
-        .gt('credit_amount', 0)
-        .order('transaction_date', { ascending: false })
+        .gt('credit', 0)
+        .order('entry_date', { ascending: false })
         .order('created_at', { ascending: false });
 
     if (supplierId) query = query.eq('supplier_id', supplierId);
     if (scopedSupplierIds) query = query.in('supplier_id', scopedSupplierIds);
-    if (fromDate) query = query.gte('transaction_date', fromDate);
-    if (toDate) query = query.lte('transaction_date', toDate);
+    if (fromDate) query = query.gte('entry_date', fromDate);
+    if (toDate) query = query.lte('entry_date', toDate);
 
     const { data: ledgerRows, error } = await query;
     if (error) throw error;
 
-    const rows = (ledgerRows || []).filter((entry: any) => toNumber(entry.credit_amount) > 0);
+    const rows = (ledgerRows || []).filter((entry: any) => toNumber(entry.credit) > 0);
     const supplierMap = await fetchSuppliersById(rows.map((entry: any) => entry.supplier_id));
 
     return rows.map((entry: any) => ({
-        id: entry.payment_id || entry.id,
+        id: entry.id,
         ledger_entry_id: entry.id,
-        payment_number: entry.reference_number || entry.payment_number || entry.id,
+        payment_number: entry.document_number || entry.id,
         supplier_id: entry.supplier_id,
         supplier: supplierMap.get(entry.supplier_id) || null,
-        payment_date: entry.transaction_date || entry.created_at,
-        payment_method: 'ledger',
-        payment_amount: toNumber(entry.credit_amount),
-        reference_number: entry.reference_number || '',
-        notes: entry.description || entry.notes || '',
-        status: entry.is_posted === false ? 'draft' : 'processed',
+        payment_date: entry.entry_date || entry.created_at,
+        payment_method: entry.entry_type || 'payment',
+        payment_amount: toNumber(entry.credit),
+        reference_number: entry.document_number || '',
+        notes: entry.notes || '',
+        status: 'processed',
         created_at: entry.created_at,
         source: 'store_supplier_ledger',
     }));
