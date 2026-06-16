@@ -19,12 +19,13 @@ import 'models/system_config.dart';
 import 'models/ai_analytics.dart';
 
 final adminRepositoryProvider = Provider<AdminRepository>((ref) {
-  return AdminRepository(ref.read(dioProvider));
+  return AdminRepository(ref.read(dioProvider), ref.read(pythonDioProvider));
 });
 
 class AdminRepository {
   final Dio _dio;
-  AdminRepository(this._dio);
+  final Dio _pythonDio;
+  AdminRepository(this._dio, this._pythonDio);
 
   Map<String, dynamic> _unwrap(dynamic data) {
     if (data is Map && data['success'] == true) {
@@ -764,6 +765,31 @@ class AdminRepository {
 
   Future<void> dispatchStoreItems(String id, Map<String, dynamic>? data) async {
     await _dio.put('/store/dispatch-notes/$id/dispatch', data: data ?? {});
+  }
+
+  /// Download dispatch note PDF from Python services
+  Future<File> downloadDispatchNotePdf(String dispatchId) async {
+    // First fetch the dispatch note details from backend
+    final dispatchResponse = await _dio.get('/storekeeping/dispatch-notes/$dispatchId');
+    final dispatchData = dispatchResponse.data is Map && dispatchResponse.data['success'] == true
+        ? dispatchResponse.data['data']
+        : dispatchResponse.data;
+    
+    // Call Python service to generate PDF
+    final pdfResponse = await _pythonDio.post(
+      '/api/reports/generate/dispatch-note',
+      data: dispatchData,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    
+    final dispatchNumber = dispatchData is Map 
+        ? (dispatchData['dispatch_number'] ?? dispatchId).toString().replaceAll('/', '_')
+        : dispatchId;
+    
+    return _saveBytes(
+      pdfResponse.data ?? const <int>[],
+      'Dispatch_Note_$dispatchNumber.pdf',
+    );
   }
 
   Future<List<Map<String, dynamic>>> getStoreBranches() async {

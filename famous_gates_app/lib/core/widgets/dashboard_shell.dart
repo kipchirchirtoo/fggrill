@@ -102,6 +102,7 @@ class DashboardShell extends ConsumerWidget {
     this.actions,
     this.currentTab,
     this.onTabChanged,
+    this.showBackButton = true,
   });
 
   final String title;
@@ -109,6 +110,7 @@ class DashboardShell extends ConsumerWidget {
   final List<Widget>? actions;
   final int? currentTab;
   final ValueChanged<int>? onTabChanged;
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -124,7 +126,7 @@ class DashboardShell extends ConsumerWidget {
     return Scaffold(
       body: Column(
         children: [
-          _TopBar(title: title, nav: nav, actions: actions),
+          _TopBar(title: title, nav: nav, actions: actions, showBackButton: showBackButton),
           if (tabs.length > 1)
             _TabBar(
               tabs: tabs,
@@ -146,11 +148,12 @@ class DashboardShell extends ConsumerWidget {
 // ─── Top bar ─────────────────────────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.title, required this.nav, this.actions});
+  const _TopBar({required this.title, required this.nav, this.actions, this.showBackButton = true});
 
   final String title;
   final DashboardNavData nav;
   final List<Widget>? actions;
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context) {
@@ -171,8 +174,10 @@ class _TopBar extends StatelessWidget {
       child: Row(
         children: [
           // ── Back button ───────────────────────────────────────────────
-          _BackButton(mobile: mobile),
-          SizedBox(width: mobile ? 6 : 10),
+          if (showBackButton) ...[
+            _BackButton(mobile: mobile),
+            SizedBox(width: mobile ? 6 : 10),
+          ],
 
           // ── FG Logo ───────────────────────────────────────────────────
           _FGLogo(size: mobile ? 28.0 : 36.0, fontSize: mobile ? 9.0 : 11.0),

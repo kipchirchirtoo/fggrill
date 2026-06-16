@@ -95,12 +95,12 @@ export const getStockTake = async (req: Request, res: Response) => {
 
         if (itemsError) throw itemsError;
 
-        // Fetch item names separately
+        // Fetch item details separately
         if (items && items.length > 0) {
             const skus = items.map(i => i.item_sku);
             const { data: inventoryItems } = await supabase
                 .from('inventory_items')
-                .select('item_code, name, unit')
+                .select('item_code, name, unit, category, reorder_level')
                 .in('item_code', skus);
 
             const itemsMap = (inventoryItems || []).reduce((acc, item) => {
@@ -114,7 +114,9 @@ export const getStockTake = async (req: Request, res: Response) => {
                 if (invItem) {
                     item.item = {
                         name: invItem.name,
-                        unit: invItem.unit
+                        unit: invItem.unit,
+                        category: invItem.category,
+                        reorder_level: invItem.reorder_level
                     };
                 }
             });

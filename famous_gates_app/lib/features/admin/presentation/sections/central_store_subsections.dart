@@ -57,6 +57,13 @@ String _date(dynamic value) {
 
 String _money(num value) => 'KES ${_groupedWhole(value)}';
 
+List<Map<String, dynamic>> _listFrom(dynamic data) {
+  if (data is List) {
+    return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+  return const [];
+}
+
 String _groupedWhole(num value) {
   final rounded = value.round();
   final sign = rounded < 0 ? '-' : '';
@@ -111,19 +118,19 @@ const _poValidUnits = {
   'DZ',
 };
 
-// ── Category classification — mirrors actual inventory_items seed data ────────
+// ── Category classification — mirrors actual inventory_items data ─────────────
 const _foodstuffsCategories = <String>[
   'DRY GOODS',
-  'CLEANING MATERIALS',
 ];
 
 const _barCategories = <String>[
   'BEERS',
   'CANNED BEERS',
   'SOFT DRINKS',
+  'ENERGY DRINKS',
   'WHISKY',
+  'COGNAC',
   'VODKA',
-  'UDV',
   'SPIRITS',
   'LIQUERS',
   'WINES',
@@ -131,6 +138,7 @@ const _barCategories = <String>[
 
 const _stationeryCategories = <String>[
   'STATIONERY',
+  'CLEANING MATERIALS',
   'OFFICE SUPPLIES',
   'PRINTING MATERIALS',
 ];
@@ -139,10 +147,11 @@ const _categoryEmojis = <String, String>{
   'BEERS': '🍺',
   'CANNED BEERS': '🥫',
   'SOFT DRINKS': '🥤',
+  'ENERGY DRINKS': '⚡',
   'WHISKY': '🥃',
+  'COGNAC': '🍾',
   'VODKA': '🍸',
   'SPIRITS': '🍹',
-  'UDV': '🥃',
   'LIQUERS': '🍶',
   'WINES': '🍷',
   'DRY GOODS': '🌾',
@@ -996,6 +1005,28 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
+
+Widget _poTh(String label, {bool right = false}) => Padding(
+  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+  child: Text(
+    label,
+    textAlign: right ? TextAlign.right : TextAlign.left,
+    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.grey),
+  ),
+);
+
+Widget _poTd(String text, {bool right = false, bool bold = false, Color? color}) => Padding(
+  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+  child: Text(
+    text,
+    textAlign: right ? TextAlign.right : TextAlign.left,
+    style: TextStyle(
+      fontSize: 13,
+      fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+      color: color,
+    ),
+  ),
+);
 
 class GoodsReceivingSection extends ConsumerStatefulWidget {
   const GoodsReceivingSection({super.key});
@@ -2624,6 +2655,11 @@ class DispatchNotesSection extends ConsumerWidget {
                     ])} • ${_text(row, ['driver_name'], 'No driver')}',
                 trailing: Wrap(spacing: 6, children: [
                   _statusChip(status),
+                  OutlinedButton.icon(
+                    onPressed: () => _printDispatchNote(context, ref, row),
+                    icon: Icon(PhosphorIcons.printer(), size: 14),
+                    label: const Text('Print'),
+                  ),
                   OutlinedButton(
                     onPressed: () => _showMapDetails(
                         context,
@@ -2712,6 +2748,39 @@ class DispatchNotesSection extends ConsumerWidget {
           error: error,
         );
       }
+    }
+  }
+
+  Future<void> _printDispatchNote(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
+    final dispatchId = _id(row);
+    final dispatchNumber = _text(row, ['dispatch_number', 'id']);
+    
+    try {
+      // Show loading indicator
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      );
+      
+      final file = await ref.read(adminRepositoryProvider)
+          .downloadDispatchNotePdf(dispatchId);
+      
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      
+      _snack(context, 'Dispatch note PDF saved to: ${file.path}');
+    } catch (error) {
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      
+      await _showActionError(
+        context,
+        title: 'Print failed',
+        error: error,
+      );
     }
   }
 }
@@ -4121,19 +4190,105 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
       if (!mounted || !context.mounted) return;
       final status = _text(detail, ['status'], _text(row, ['status'], 'draft'));
       final lower = status.toLowerCase();
-      await _showMapDetails(
-        context,
-        'PO ${_text(detail, ['po_number', 'id'])}',
-        detail,
-        actions: [
-          IconButton(
-            tooltip: 'Print',
-            icon: const Icon(Icons.print_outlined),
-            onPressed: () async => _printPurchaseOrderPdf(detail),
+      final items = _listFrom(detail['items']);
+      final total = _num(detail, ['total_amount', 'total', 'grand_total']);
+      final supplierName = _text(detail, ['supplier_name', 'supplier', 'name']);
+      final poNumber = _text(detail, ['po_number', 'id']);
+      final expected = _date(detail['expected_delivery'] ?? detail['expected_delivery_date']);
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'PO: $poNumber',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+              ),
+              _statusChip(status),
+            ],
           ),
-          Builder(
-            builder: (ctx) => PopupMenuButton<String>(
-              tooltip: 'Actions',
+          content: SizedBox(
+            width: 640,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Supplier: $supplierName', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text('Expected: $expected', style: const TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 16),
+                  const Text('ORDER ITEMS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  if (items.isEmpty)
+                    const Text('No items in this PO.')
+                  else
+                    Table(
+                      border: const TableBorder(
+                        horizontalInside: BorderSide(color: Colors.black12),
+                        bottom: BorderSide(color: Colors.black12),
+                      ),
+                      columnWidths: const {
+                        0: FlexColumnWidth(3),
+                        1: FixedColumnWidth(60),
+                        2: FixedColumnWidth(90),
+                        3: FixedColumnWidth(100),
+                      },
+                      children: [
+                        TableRow(
+                          decoration: const BoxDecoration(color: Color(0xFFF5F5F5)),
+                          children: [
+                            _poTh('Item Name'),
+                            _poTh('Qty', right: true),
+                            _poTh('Price', right: true),
+                            _poTh('Total', right: true),
+                          ],
+                        ),
+                        ...items.map((item) {
+                          final name = _text(item.cast<String, dynamic>(), ['item_name', 'name', 'description'], 'Item');
+                          final qty = _num(item.cast<String, dynamic>(), ['quantity', 'qty', 'ordered_quantity']);
+                          final price = _num(item.cast<String, dynamic>(), ['unit_price', 'price', 'cost_price']);
+                          final lineTotal = _num(item.cast<String, dynamic>(), ['total_price', 'total', 'line_total']);
+                          final computedTotal = lineTotal > 0 ? lineTotal : qty * price;
+                          return TableRow(
+                            children: [
+                              _poTd(name),
+                              _poTd('$qty', right: true),
+                              _poTd('KES ${price.toStringAsFixed(2)}', right: true),
+                              _poTd('KES ${computedTotal.toStringAsFixed(2)}', right: true, bold: true),
+                            ],
+                          );
+                        }),
+                        TableRow(
+                          children: [
+                            const SizedBox.shrink(),
+                            const SizedBox.shrink(),
+                            _poTd('Total:', right: true, bold: true),
+                            _poTd('KES ${total.toStringAsFixed(2)}', right: true, bold: true, color: Colors.blue),
+                          ],
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await _printPurchaseOrderPdf(detail);
+              },
+              child: const Text('Print'),
+            ),
+            PopupMenuButton<String>(
               onSelected: (value) {
                 Navigator.of(ctx).pop();
                 switch (value) {
@@ -4168,9 +4323,10 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                   const PopupMenuItem(
                       value: 'receive', child: Text('Receive Goods')),
               ],
+              child: const Text('Actions'),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     } catch (error) {
       if (mounted && context.mounted) {
@@ -5494,7 +5650,7 @@ class _CentralStockTakesSectionState
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              width: 2170,
+              width: 1314,
               child: Column(children: [
                 _stockWorksheetHeaderRow(),
                 ...items.map((item) => _stockWorksheetInputRow(item)),
@@ -5515,56 +5671,39 @@ class _CentralStockTakesSectionState
       color: AppColors.kSurface,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: const Row(children: [
-        SizedBox(width: 320, child: Text('ITEM', style: style)),
-        SizedBox(width: 24),
+        SizedBox(width: 90, child: Text('SKU', style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 200, child: Text('ITEM NAME', style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 100, child: Text('CATEGORY', style: style)),
+        SizedBox(width: 16),
         SizedBox(
-            width: 82,
+            width: 80,
+            child: Text('REORDER', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 16),
+        SizedBox(
+            width: 90,
+            child: Text('COST', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 16),
+        SizedBox(
+            width: 80,
             child: Text('O/S', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
+        SizedBox(width: 16),
         SizedBox(
-            width: 82,
+            width: 80,
             child: Text('ADDS', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
+        SizedBox(width: 16),
         SizedBox(
-            width: 88,
+            width: 90,
             child: Text('TOTAL', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(width: 150, child: Text('C/S COUNT', style: style)),
-        SizedBox(width: 24),
+        SizedBox(width: 16),
         SizedBox(
-            width: 88,
-            child: Text('SALES', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(
-            width: 108,
-            child:
-                Text('UNIT PRICE', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(
-            width: 118,
-            child: Text('AMOUNT', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(
-            width: 108,
-            child:
-                Text('BUYING PRICE', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(
-            width: 126,
-            child: Text('OPENING SALES',
-                textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(
-            width: 126,
-            child: Text('CLOSING SALES',
-                textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(
-            width: 118,
-            child:
-                Text('ADDED STOCK', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 24),
-        SizedBox(width: 280, child: Text('NOTES', style: style)),
+            width: 90,
+            child: Text('SYS CLOSING', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 130, child: Text('PHYS COUNT', style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 200, child: Text('NOTES / REASON', style: style)),
       ]),
     );
   }
@@ -5573,10 +5712,10 @@ class _CentralStockTakesSectionState
     final actual = _stockActualIncludingDraft(item);
     final variance = _stockVarianceIncludingDraft(item);
     final needsReason = actual != null && variance != 0;
-    final sold = _tradingSoldQuantity(item);
+    final sysClosing = _num(item, ['system_closing_stock', 'system_quantity']);
     final rowColor = actual == null
         ? Colors.transparent
-        : variance == 0 && sold >= 0
+        : variance == 0
             ? Colors.green.withValues(alpha: .035)
             : Colors.orange.withValues(alpha: .055);
     return Container(
@@ -5589,8 +5728,23 @@ class _CentralStockTakesSectionState
         ),
       ),
       child: Row(children: [
+        // SKU
         SizedBox(
-          width: 320,
+          width: 90,
+          child: Text(
+            _text(item, ['item_sku', 'sku'], '—'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+                color: AppColors.kTextSecondary),
+          ),
+        ),
+        const SizedBox(width: 16),
+        // Item Name + Category
+        SizedBox(
+          width: 200,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(
@@ -5601,10 +5755,7 @@ class _CentralStockTakesSectionState
             ),
             const SizedBox(height: 2),
             Text(
-              [
-                _text(item, ['item_sku', 'sku'], ''),
-                _text(item, ['category', 'store_type'], '')
-              ].where((value) => value.isNotEmpty && value != '—').join(' • '),
+              _text(item, ['unit', 'unit_of_measure', 'description'], ''),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -5612,28 +5763,65 @@ class _CentralStockTakesSectionState
             ),
           ]),
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: 16),
+        // Category
         SizedBox(
-          width: 82,
+          width: 100,
+          child: Text(
+            _text(item, ['category', 'store_type'], '—'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: AppColors.kPrimary),
+          ),
+        ),
+        const SizedBox(width: 16),
+        // Reorder Level
+        SizedBox(
+          width: 80,
+          child: Text(_plainNum(_num(item, ['reorder_level'])),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 16),
+        // Cost Price
+        SizedBox(
+          width: 90,
+          child: Text(_money(_tradingBuyingPrice(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 16),
+        // O/S
+        SizedBox(
+          width: 80,
           child: Text(_plainNum(_tradingOpening(item)),
               textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: 16),
+        // Adds
         SizedBox(
-          width: 82,
+          width: 80,
           child: Text(_plainNum(_tradingAdded(item)),
               textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: 16),
+        // Total
         SizedBox(
-          width: 88,
+          width: 90,
           child: Text(_plainNum(_tradingTotal(item)),
               textAlign: TextAlign.right,
               style: const TextStyle(fontWeight: FontWeight.w800)),
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: 16),
+        // System Closing Stock
         SizedBox(
-          width: 150,
+          width: 90,
+          child: Text(_plainNum(sysClosing),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+        ),
+        const SizedBox(width: 16),
+        // Physical Count — the ONLY editable field
+        SizedBox(
+          width: 130,
           child: _InlineStockInput(
             key: ValueKey('${_id(item)}-central-count'),
             initialValue: _stockActual(item) == null
@@ -5647,56 +5835,10 @@ class _CentralStockTakesSectionState
             }),
           ),
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: 16),
+        // Notes
         SizedBox(
-          width: 88,
-          child: Text(_plainNum(sold),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: sold < 0 ? Colors.deepOrange : AppColors.kTextPrimary,
-              )),
-        ),
-        const SizedBox(width: 24),
-        SizedBox(
-          width: 108,
-          child: Text(_money(_tradingSellingPrice(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 24),
-        SizedBox(
-          width: 118,
-          child: Text(_money(_tradingRevenue(item)),
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w800)),
-        ),
-        const SizedBox(width: 24),
-        SizedBox(
-          width: 108,
-          child: Text(_money(_tradingBuyingPrice(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 24),
-        SizedBox(
-          width: 126,
-          child: Text(_money(_tradingOpeningSales(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 24),
-        SizedBox(
-          width: 126,
-          child: Text(_money(_tradingClosingSales(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 24),
-        SizedBox(
-          width: 118,
-          child: Text(_money(_tradingAddedStock(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 24),
-        SizedBox(
-          width: 280,
+          width: 200,
           child: _InlineStockInput(
             key: ValueKey('${_id(item)}-central-note'),
             initialValue: _stockReasonIncludingDraft(item),

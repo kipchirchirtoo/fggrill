@@ -4,7 +4,7 @@
 --
 -- ROOT CAUSE
 --   The shared BEFORE UPDATE trigger function update_updated_at_column() does
---   `NEW.updated_at := NOW()`. The 20260415_phase3a migration attached this
+--   `NEW.updated_at := NOW()`. An older migration attached this
 --   trigger to several pre-existing tables via `CREATE TABLE IF NOT EXISTS`
 --   (a no-op on tables that already existed), so the trigger was created but the
 --   `updated_at` column was never actually added. Every UPDATE on those tables

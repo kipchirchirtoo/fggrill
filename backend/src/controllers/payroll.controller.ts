@@ -4,6 +4,8 @@ import { logger } from '../utils/logger';
 import { PayrollService } from '../services/payroll.service';
 import { generatePayslipPDF, generatePayrollSummaryPDF } from '../utils/pdfGenerator';
 import { generateBrandedPayrollSummaryV2 } from '../services/native-pdf-reports.service';
+import axios from 'axios';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 // HELPER: Ensure a draft run exists
 async function getOrCreateDraftRun(month: number, year: number, reqUser: any) {
@@ -757,13 +759,73 @@ export const downloadSummaryPDF = async (req: Request, res: Response, next: Next
       approver_name: approverName,
     };
 
-    // Call the branded A3 landscape generator
-    await generateBrandedPayrollSummaryV2(
-      res,
-      runDataForPDF,
-      enrichedRecords,
-      branchName
-    );
+    // Build period label from run month/year
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const periodLabel = run.month && run.year
+      ? `${MONTHS[(run.month as number) - 1]} ${run.year}`
+      : (run.period_label || '');
+
+    // Map payroll_records to the branded Python template employee format
+    const employees = enrichedRecords.map((r: any, idx: number) => {
+      const ded: any[] = Array.isArray(r.deductions) ? r.deductions : [];
+      const getAmt = (cat: string) => ded
+        .filter((d: any) => (d.category || '').toLowerCase() === cat.toLowerCase())
+        .reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0);
+
+      const nssf        = getAmt('nssf');
+      const shif        = getAmt('shif');
+      const loans       = getAmt('loan');
+      const advances    = getAmt('advance');
+      const creditBills = getAmt('unpaid_bills') + getAmt('credit_bills');
+      const totalDed    = parseFloat(r.total_deductions || 0);
+      const calcParts   = nssf + shif + loans + advances + creditBills;
+      // Assign remainder to PAYE so total deductions and net pay remain correct
+      const paye        = Math.max(0, totalDed - calcParts);
+
+      return {
+        no:           idx + 1,
+        emp_id:       r.employee_code || r.employee_id || '',
+        name:         r.employee_name || '',
+        phone:        '',
+        role:         r.role || 'Staff',
+        branch:       branchName,
+        basic_salary: parseFloat(r.basic_salary || 0),
+        nssf,
+        shif,
+        housing_levy: 0,
+        paye,
+        credit_bills: creditBills,
+        advances,
+        loans,
+      };
+    });
+
+    const payload = {
+      employees,
+      period:          periodLabel,
+      branch:          branchName,
+      generated:       new Date().toLocaleString('en-KE'),
+      status:          (run.status || 'DRAFT').toUpperCase(),
+      company_name:    'FAMOUSGATE HOTELS',
+      company_address: 'Bomet, Kenya',
+      company_email:   'famousgateshotelsbmt@gmail.com',
+      company_phone:   '0706 782 828',
+    };
+
+    try {
+      const response = await axios.post(
+        `${PYTHON_SERVICE_URL}/api/payroll/generate-pdf`,
+        payload,
+        { responseType: 'arraybuffer', timeout: 60000 },
+      );
+      const safeFilename = `Payroll_Summary_${branchName.replace(/\s+/g,'_')}_${periodLabel.replace(/\s+/g,'_')}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+      res.send(Buffer.from(response.data));
+    } catch (pythonErr: any) {
+      logger.warn(`Python payroll PDF failed, falling back to native generator: ${pythonErr.message}`);
+      await generateBrandedPayrollSummaryV2(res, runDataForPDF, enrichedRecords, branchName);
+    }
   } catch (error) {
     next(error);
   }

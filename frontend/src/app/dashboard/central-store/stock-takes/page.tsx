@@ -38,6 +38,8 @@ interface CentralStockTakeItem {
   item_name: string;
   unit?: string;
   category?: string;
+  reorder_level?: number | null;
+  cost_price?: number | null;
   system_quantity: number;
   counted_quantity: number | null;
   variance: number | null;
@@ -370,15 +372,18 @@ export default function CentralStockTakesPage() {
 
             <IOSCard className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[900px]">
                   <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                     <tr>
-                      <th className="px-4 py-3 text-left">Item</th>
-                      <th className="px-4 py-3 text-left">Category</th>
-                      <th className="px-4 py-3 text-right">System Qty</th>
-                      <th className="px-4 py-3 text-right">Counted Qty</th>
-                      <th className="px-4 py-3 text-right">Variance</th>
-                      <th className="px-4 py-3 text-left">Variance Reason</th>
+                      <th className="px-3 py-3 text-left">SKU</th>
+                      <th className="px-3 py-3 text-left">Item Name</th>
+                      <th className="px-3 py-3 text-left">Category</th>
+                      <th className="px-3 py-3 text-right">Reorder</th>
+                      <th className="px-3 py-3 text-right">Cost</th>
+                      <th className="px-3 py-3 text-right">System Closing</th>
+                      <th className="px-3 py-3 text-right">Physical Count</th>
+                      <th className="px-3 py-3 text-right">Variance</th>
+                      <th className="px-3 py-3 text-left">Reason</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -387,29 +392,39 @@ export default function CentralStockTakesPage() {
                       const needsReason = variance !== null && variance !== 0;
                       return (
                         <tr key={item.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <p className="font-medium">{item.item_name}</p>
-                            <p className="text-xs text-gray-500 font-mono">{item.item_sku}</p>
+                          <td className="px-3 py-3">
+                            <p className="text-xs text-gray-600 font-mono">{item.item_sku}</p>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{item.category || '—'}</td>
-                          <td className="px-4 py-3 text-right font-semibold">{item.system_quantity}</td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-3 py-3">
+                            <p className="font-medium">{item.item_name}</p>
+                            <p className="text-xs text-gray-500">{item.unit || 'units'}</p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="inline-block px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">
+                              {item.category || '—'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-right text-sm text-gray-700">{item.reorder_level ?? '—'}</td>
+                          <td className="px-3 py-3 text-right text-sm text-gray-700">{item.cost_price ? item.cost_price.toFixed(2) : '—'}</td>
+                          <td className="px-3 py-3 text-right font-semibold">{item.system_quantity}</td>
+                          <td className="px-3 py-3 text-right">
                             <Input
                               type="number"
                               min={0}
                               value={item.counted_quantity ?? ''}
                               onChange={(e) => handleItemChange(item.id, e.target.value)}
-                              className="w-24 text-right"
+                              className="w-28 text-right"
+                              placeholder="Enter count"
                             />
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-3 py-3 text-right">
                             {variance === null ? '—' : (
                               <span className={variance === 0 ? 'text-emerald-600' : 'text-rose-600'}>
                                 {variance > 0 ? '+' : ''}{variance}
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-3">
                             {needsReason ? (
                               <Input
                                 value={item.variance_reason || ''}

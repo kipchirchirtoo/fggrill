@@ -5,7 +5,7 @@ import { generateCentralStockTakePDF } from '../../services/native-pdf-reports.s
 const ExcelJS = require('exceljs');
 
 const STORE_TYPES = ['foodstuffs', 'bar_store'] as const;
-const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
+const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active, reorder_level, cost_price';
 
 const ensureValidStoreType = (value?: string): value is (typeof STORE_TYPES)[number] =>
   !!value && STORE_TYPES.includes(value as (typeof STORE_TYPES)[number]);
@@ -56,7 +56,9 @@ const attachCatalogItems = async (items: any[]): Promise<any[]> => {
       },
       item_name: catalogItem?.item_name || catalogItem?.description || sku || 'Unknown item',
       unit: 'Unit',
-      category: catalogItem?.store_type || 'uncategorized'
+      category: catalogItem?.store_type || 'uncategorized',
+      reorder_level: catalogItem?.reorder_level ?? null,
+      cost_price: catalogItem?.cost_price ?? item.unit_cost ?? null
     };
   });
 };
@@ -169,7 +171,7 @@ export const createCentralStockTake = async (req: Request, res: Response) => {
 
     const { data: items, error: itemsError } = await supabase
       .from('simple_items')
-      .select('sku, quantity, cost_price, item_name, description, unit_of_measure, category')
+      .select('sku, quantity, cost_price, item_name, description, unit_of_measure, category, reorder_level')
       .eq('is_active', true)
       .eq('store_type', store_type);
 

@@ -284,7 +284,8 @@ export const getStaff = async (
         branch,
         role: s.role || s.position || '',
         employee_id: s.employee_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
-        id_number: s.employee_number || s.employee_id || s.id.substring(0, 8).toUpperCase()
+        employee_number: s.employee_number || s.employee_id || '',
+        id_number: s.national_id || '',
       };
     });
 
@@ -395,7 +396,8 @@ export const getStaffMember = async (
         branch_name: branch?.name || '',
         branch,
         employee_id: staff.employee_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase(),
-        id_number: staff.employee_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase()
+        employee_number: staff.employee_number || staff.employee_id || '',
+        id_number: staff.national_id || '',
       }
     });
   } catch (error: any) {

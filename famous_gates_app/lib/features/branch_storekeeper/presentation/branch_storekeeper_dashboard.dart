@@ -2144,7 +2144,7 @@ class _BranchStorekeeperDashboardState
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: SizedBox(
-          width: 2180,
+          width: 1648,
           child: Column(children: [
             _stockTakeWorksheetHeader(),
             ..._stockTakeItems.map(
@@ -2170,56 +2170,52 @@ class _BranchStorekeeperDashboardState
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Row(children: [
-        SizedBox(width: 320, child: Text('ITEM', style: style)),
-        SizedBox(width: 20),
+        SizedBox(width: 90, child: Text('SKU', style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 200, child: Text('ITEM NAME', style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 100, child: Text('CATEGORY', style: style)),
+        SizedBox(width: 16),
         SizedBox(
-            width: 82,
+            width: 80,
+            child: Text('REORDER', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 16),
+        SizedBox(
+            width: 90,
+            child: Text('COST', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 16),
+        SizedBox(
+            width: 80,
             child: Text('O/S', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
+        SizedBox(width: 16),
         SizedBox(
-            width: 82,
+            width: 80,
             child: Text('ADDS', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
+        SizedBox(width: 16),
         SizedBox(
-            width: 88,
+            width: 90,
             child: Text('TOTAL', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
-        SizedBox(width: 150, child: Text('C/S COUNT', style: style)),
-        SizedBox(width: 20),
+        SizedBox(width: 16),
         SizedBox(
-            width: 88,
+            width: 90,
+            child: Text('SYS CLOSING', textAlign: TextAlign.right, style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 130, child: Text('PHYS COUNT', style: style)),
+        SizedBox(width: 16),
+        SizedBox(
+            width: 80,
             child: Text('SALES', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
+        SizedBox(width: 16),
         SizedBox(
-            width: 108,
+            width: 100,
             child:
                 Text('UNIT PRICE', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
+        SizedBox(width: 16),
         SizedBox(
-            width: 118,
+            width: 100,
             child: Text('AMOUNT', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
-        SizedBox(
-            width: 108,
-            child:
-                Text('BUYING PRICE', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
-        SizedBox(
-            width: 126,
-            child: Text('OPENING SALES',
-                textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
-        SizedBox(
-            width: 126,
-            child: Text('CLOSING SALES',
-                textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
-        SizedBox(
-            width: 118,
-            child:
-                Text('ADDED STOCK', textAlign: TextAlign.right, style: style)),
-        SizedBox(width: 20),
-        SizedBox(width: 280, child: Text('NOTES', style: style)),
+        SizedBox(width: 16),
+        SizedBox(width: 200, child: Text('NOTES / REASON', style: style)),
       ]),
     );
   }
@@ -2242,6 +2238,8 @@ class _BranchStorekeeperDashboardState
         item['item_name'] ??
         item['name'] ??
         item['item_sku'];
+    final sku = '${item['item_sku'] ?? item['sku'] ?? ''}';
+    final category = '${item['category'] ?? itemMap?['category'] ?? ''}';
 
     return Container(
       constraints: const BoxConstraints(minHeight: 58),
@@ -2253,8 +2251,23 @@ class _BranchStorekeeperDashboardState
         ),
       ),
       child: Row(children: [
+        // SKU
         SizedBox(
-          width: 320,
+          width: 90,
+          child: Text(
+            sku.isNotEmpty && sku != 'null' ? sku : '—',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+                color: AppColors.kTextSecondary),
+          ),
+        ),
+        const SizedBox(width: 16),
+        // Item Name
+        SizedBox(
+          width: 200,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('$name',
@@ -2263,27 +2276,50 @@ class _BranchStorekeeperDashboardState
                 style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
             Text(
-                [
-                  '${item['item_sku'] ?? item['sku'] ?? ''}',
-                  '${item['category'] ?? itemMap?['category'] ?? ''}'
-                ]
-                    .where((part) => part.trim().isNotEmpty && part != 'null')
-                    .join(' • '),
+                '${itemMap?['unit'] ?? item['unit'] ?? ''}'.trim(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                     color: AppColors.kTextSecondary, fontSize: 11)),
           ]),
         ),
-        const SizedBox(width: 20),
-        _worksheetNumberCell(_stockTakeOpening(item), width: 82),
-        const SizedBox(width: 20),
-        _worksheetNumberCell(_stockTakeAdded(item), width: 82),
-        const SizedBox(width: 20),
-        _worksheetNumberCell(_stockTakeTotal(item), width: 88, bold: true),
-        const SizedBox(width: 20),
+        const SizedBox(width: 16),
+        // Category
         SizedBox(
-          width: 150,
+          width: 100,
+          child: Text(
+            category.isNotEmpty && category != 'null' ? category : '—',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: AppColors.kPrimary),
+          ),
+        ),
+        const SizedBox(width: 16),
+        // Reorder Level
+        _worksheetNumberCell(_stockTakeFirstNum(item, ['reorder_level']), width: 80),
+        const SizedBox(width: 16),
+        // Cost Price
+        SizedBox(
+          width: 90,
+          child: Text(_money(_stockTakeBuyingPrice(item)),
+              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
+        ),
+        const SizedBox(width: 16),
+        // O/S
+        _worksheetNumberCell(_stockTakeOpening(item), width: 80),
+        const SizedBox(width: 16),
+        // Adds
+        _worksheetNumberCell(_stockTakeAdded(item), width: 80),
+        const SizedBox(width: 16),
+        // Total
+        _worksheetNumberCell(_stockTakeTotal(item), width: 90, bold: true),
+        const SizedBox(width: 16),
+        // System Closing Stock
+        _worksheetNumberCell(system, width: 90, bold: true),
+        const SizedBox(width: 16),
+        // Physical Count — the ONLY editable field
+        SizedBox(
+          width: 130,
           child: _StockTakeInlineInput(
             key:
                 ValueKey('${item['id'] ?? item['item_sku']}-storekeeper-count'),
@@ -2296,9 +2332,10 @@ class _BranchStorekeeperDashboardState
             }),
           ),
         ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 16),
+        // Sales
         SizedBox(
-          width: 88,
+          width: 80,
           child: Text(_qtyText(sold),
               textAlign: TextAlign.right,
               style: TextStyle(
@@ -2306,46 +2343,25 @@ class _BranchStorekeeperDashboardState
                 fontWeight: FontWeight.w800,
               )),
         ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 16),
+        // Unit Price
         SizedBox(
-          width: 108,
+          width: 100,
           child: Text(_money(_stockTakeSellingPrice(item)),
               textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
         ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 16),
+        // Amount
         SizedBox(
-          width: 118,
+          width: 100,
           child: Text(_money(_stockTakeRevenue(item)),
               textAlign: TextAlign.right,
               style: const TextStyle(fontWeight: FontWeight.w800)),
         ),
-        const SizedBox(width: 20),
+        const SizedBox(width: 16),
+        // Notes
         SizedBox(
-          width: 108,
-          child: Text(_money(_stockTakeBuyingPrice(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 20),
-        SizedBox(
-          width: 126,
-          child: Text(_money(_stockTakeOpeningSales(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 20),
-        SizedBox(
-          width: 126,
-          child: Text(_money(_stockTakeClosingSales(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 20),
-        SizedBox(
-          width: 118,
-          child: Text(_money(_stockTakeAddedStock(item)),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 12)),
-        ),
-        const SizedBox(width: 20),
-        SizedBox(
-          width: 280,
+          width: 200,
           child: _StockTakeInlineInput(
             key: ValueKey('${item['id'] ?? item['item_sku']}-storekeeper-note'),
             initialValue: _reasonIncludingDraft(item),
@@ -9130,22 +9146,8 @@ class _PurchaseOrderDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = _poItems(purchaseOrder);
-    final supplier = _poMap(purchaseOrder['supplier']);
     final total = _poTotal(purchaseOrder);
-    final ordered =
-        items.fold<num>(0, (sum, item) => sum + _poOrderedQty(item));
-    final received =
-        items.fold<num>(0, (sum, item) => sum + _poReceivedQty(item));
-    final pending =
-        items.fold<num>(0, (sum, item) => sum + _poPendingQty(item));
     final status = _poStatusLabel(purchaseOrder);
-    final financeStatus = _poStatusTitle(
-      _poText(
-        purchaseOrder,
-        const ['finance_status'],
-        fallback: 'Awaiting Receipt',
-      ),
-    );
 
     return Scaffold(
       appBar: AppBar(
@@ -9206,183 +9208,48 @@ class _PurchaseOrderDetailScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final narrow = constraints.maxWidth < 850;
-                    final cards = [
-                      _PoMetricCard(
-                        label: 'Total Value',
-                        value: _poMoney(total),
-                        icon: PhosphorIcons.currencyDollar(),
-                        color: AppColors.kSuccess,
-                      ),
-                      _PoMetricCard(
-                        label: 'Line Items',
-                        value: '${items.length}',
-                        icon: PhosphorIcons.listChecks(),
-                        color: AppColors.kPrimary,
-                      ),
-                      _PoMetricCard(
-                        label: 'Ordered',
-                        value: _poQty(ordered),
-                        icon: PhosphorIcons.shoppingCart(),
-                        color: Colors.indigo,
-                      ),
-                      _PoMetricCard(
-                        label: 'Pending',
-                        value: _poQty(pending),
-                        icon: PhosphorIcons.clock(),
-                        color: pending > 0 ? Colors.orange : AppColors.kSuccess,
-                      ),
-                      _PoMetricCard(
-                        label: 'Finance',
-                        value: financeStatus,
-                        icon: PhosphorIcons.receipt(),
-                        color: financeStatus.toLowerCase().contains('paid')
-                            ? AppColors.kSuccess
-                            : Colors.blueGrey,
-                      ),
-                    ];
-                    return GridView.count(
-                      crossAxisCount: narrow ? 2 : 5,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: narrow ? 2.8 : 3.2,
-                      children: cards,
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final narrow = constraints.maxWidth < 900;
-                    final supplierPanel = _PoPanel(
-                      title: 'Supplier',
-                      icon: Icons.storefront,
-                      children: [
-                        _PoFact('Name', _poSupplierName(purchaseOrder)),
-                        _PoFact('Code',
-                            _poText(supplier, const ['supplier_code', 'code'])),
-                        _PoFact(
-                            'Contact',
-                            _poText(supplier,
-                                const ['contact_person', 'contact_name'])),
-                        _PoFact(
-                            'Phone',
-                            _poText(
-                                supplier, const ['phone', 'contact_phone'])),
-                        _PoFact('Email', _poText(supplier, const ['email'])),
-                      ],
-                    );
-                    final orderPanel = _PoPanel(
-                      title: 'Order Details',
-                      icon: PhosphorIcons.clipboardText(),
-                      children: [
-                        _PoFact('PO Date', _poDate(purchaseOrder['po_date'])),
-                        _PoFact(
-                          'Expected Delivery',
-                          _poDate(purchaseOrder['expected_delivery'] ??
-                              purchaseOrder['expected_delivery_date']),
-                        ),
-                        _PoFact(
-                          'Payment Terms',
-                          _poStatusTitle(_poText(
-                              purchaseOrder, const ['payment_terms'],
-                              fallback: 'credit 30 days')),
-                        ),
-                        _PoFact(
-                          'Source Module',
-                          _poStatusTitle(_poText(
-                              purchaseOrder, const ['source_module'],
-                              fallback: 'branch store')),
-                        ),
-                        _PoFact(
-                          'Created',
-                          _poDate(purchaseOrder['created_at']),
-                        ),
-                      ],
-                    );
-                    if (narrow) {
-                      return Column(
+                // Clean summary row — supplier + total only
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                              width: double.infinity, child: supplierPanel),
-                          const SizedBox(height: 12),
-                          SizedBox(width: double.infinity, child: orderPanel),
+                          Text(
+                            _poSupplierName(purchaseOrder),
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Expected: ${_poDate(purchaseOrder['expected_delivery'] ?? purchaseOrder['expected_delivery_date'])}',
+                            style: const TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+                          ),
                         ],
-                      );
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Expanded(child: supplierPanel),
-                        const SizedBox(width: 12),
-                        Expanded(child: orderPanel),
+                        Text(
+                          _poMoney(total),
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: Color(0xFF007AFF)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Created by: ${_poText(purchaseOrder, const ['created_by_name', 'created_by'], fallback: 'System')}',
+                          style: const TextStyle(color: AppColors.kTextSecondary, fontSize: 12),
+                        ),
                       ],
-                    );
-                  },
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 _PoPanel(
-                  title: 'Items',
+                  title: 'Order Items',
                   icon: PhosphorIcons.package(),
                   children: [
                     _PoItemsTable(items: items),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final narrow = constraints.maxWidth < 900;
-                    final timeline = _PoPanel(
-                      title: 'Workflow Timeline',
-                      icon: Icons.timeline,
-                      children: [_PoTimeline(po: purchaseOrder)],
-                    );
-                    final totals = _PoPanel(
-                      title: 'Totals',
-                      icon: Icons.calculate,
-                      children: [
-                        _PoFact(
-                            'Subtotal',
-                            _poMoney(
-                                _poNum(purchaseOrder['subtotal'] ?? total))),
-                        _PoFact('VAT / Tax',
-                            _poMoney(_poNum(purchaseOrder['tax_amount']))),
-                        _PoFact('Discount',
-                            _poMoney(_poNum(purchaseOrder['discount_amount']))),
-                        _PoFact('Shipping',
-                            _poMoney(_poNum(purchaseOrder['shipping_cost']))),
-                        const Divider(height: 20),
-                        _PoFact('Grand Total', _poMoney(total), strong: true),
-                        _PoFact('Quantity Received', _poQty(received)),
-                      ],
-                    );
-                    if (narrow) {
-                      return Column(children: [
-                        timeline,
-                        const SizedBox(height: 12),
-                        totals,
-                      ]);
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 2, child: timeline),
-                        const SizedBox(width: 12),
-                        Expanded(child: totals),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                _PoPanel(
-                  title: 'Financial History',
-                  icon: PhosphorIcons.wallet(),
-                  children: [
-                    _PoFinancialHistory(po: purchaseOrder),
                   ],
                 ),
                 if (_poText(
@@ -13099,16 +12966,36 @@ class _NewSessionSheet extends ConsumerStatefulWidget {
 }
 
 class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
-  final _cookNameCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+
+  // Staff search
+  List<Map<String, dynamic>> _staffList = [];
+  bool _staffLoading = false;
+  String _staffName = '';
+  String? _staffId;
 
   // Selected recipes: recipeId → {recipe, qty to produce (text ctrl)}
   final Map<String, _RecipePlan> _plans = {};
   bool _posting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _loadStaff();
+  }
+
+  Future<void> _loadStaff() async {
+    setState(() => _staffLoading = true);
+    try {
+      final list = await ref.read(branchStorekeeperRepositoryProvider).branchStaff();
+      if (mounted) setState(() => _staffList = list);
+    } catch (_) {} finally {
+      if (mounted) setState(() => _staffLoading = false);
+    }
+  }
+
+  @override
   void dispose() {
-    _cookNameCtrl.dispose();
     _notesCtrl.dispose();
     for (final p in _plans.values) p.ctrl.dispose();
     super.dispose();
@@ -13149,9 +13036,9 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
   }
 
   Future<void> _submit() async {
-    if (_cookNameCtrl.text.trim().isEmpty) {
+    if (_staffName.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter cook name'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Select or enter a cook name'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -13173,7 +13060,8 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
       await repo.createProductionSession(
-        staffName: _cookNameCtrl.text.trim(),
+        staffName: _staffName.trim(),
+        staffId: _staffId,
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         issues: needs.values.map((n) => {
           'item_sku': n.sku,
@@ -13233,16 +13121,97 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Cook name
-                  TextField(
-                    controller: _cookNameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Cook / Staff Name *',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
+                  // Cook / Staff — searchable autocomplete from branch staff list
+                  Autocomplete<Map<String, dynamic>>(
+                    optionsBuilder: (TextEditingValue tv) {
+                      if (_staffList.isEmpty) return const [];
+                      if (tv.text.isEmpty) return _staffList;
+                      final q = tv.text.toLowerCase();
+                      return _staffList.where((s) =>
+                          '${s['full_name'] ?? ''}'.toLowerCase().contains(q));
+                    },
+                    displayStringForOption: (s) => '${s['full_name'] ?? ''}',
+                    onSelected: (s) => setState(() {
+                      _staffName = '${s['full_name'] ?? ''}';
+                      _staffId   = '${s['id']}';
+                    }),
+                    fieldViewBuilder: (_, ctrl, fn, onSubmit) {
+                      return TextField(
+                        controller: ctrl,
+                        focusNode: fn,
+                        decoration: InputDecoration(
+                          labelText: _staffLoading
+                              ? 'Loading staff…'
+                              : 'Cook / Staff Name *',
+                          prefixIcon: const Icon(Icons.person_outline),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: _staffLoading
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 16, height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                )
+                              : null,
+                        ),
+                        textCapitalization: TextCapitalization.words,
+                        onChanged: (v) => setState(() {
+                          _staffName = v;
+                          if (_staffId != null &&
+                              _staffList.every((s) => '${s['full_name']}' != v)) {
+                            _staffId = null;
+                          }
+                        }),
+                      );
+                    },
+                    optionsViewBuilder: (_, onSelected, options) => Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(8),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            itemBuilder: (_, i) {
+                              final s = options.elementAt(i);
+                              final initials = '${s['first_name'] ?? '?'}'
+                                  .substring(0, 1)
+                                  .toUpperCase();
+                              return ListTile(
+                                dense: true,
+                                leading: CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor:
+                                      AppColors.kPrimary.withValues(alpha: 0.12),
+                                  child: Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.kPrimary,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  '${s['full_name'] ?? ''}',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                subtitle: Text(
+                                  '${s['role'] ?? ''}',
+                                  style: const TextStyle(
+                                      fontSize: 11, color: Colors.grey),
+                                ),
+                                onTap: () => onSelected(s),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                     ),
-                    textCapitalization: TextCapitalization.words,
-                    onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 12),
                   TextField(

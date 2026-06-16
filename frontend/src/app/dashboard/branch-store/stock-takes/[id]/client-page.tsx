@@ -29,6 +29,8 @@ interface StockTakeItem {
   item?: {
     name: string;
     unit: string;
+    category?: string;
+    reorder_level?: number;
   };
 }
 
@@ -522,45 +524,59 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[1000px]">
                   <thead>
                     <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Item</th>
-                      <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">System Qty</th>
-                      <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Counted Qty</th>
-                      <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Variance</th>
-                      <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Value Impact</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Variance Reason</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Status</th>
+                      <th className="text-left py-3 px-3 text-sm font-medium text-gray-600">SKU</th>
+                      <th className="text-left py-3 px-3 text-sm font-medium text-gray-600">Item Name</th>
+                      <th className="text-left py-3 px-3 text-sm font-medium text-gray-600">Category</th>
+                      <th className="text-right py-3 px-3 text-sm font-medium text-gray-600">Reorder</th>
+                      <th className="text-right py-3 px-3 text-sm font-medium text-gray-600">Cost</th>
+                      <th className="text-right py-3 px-3 text-sm font-medium text-gray-600">System Closing</th>
+                      <th className="text-right py-3 px-3 text-sm font-medium text-gray-600">Physical Count</th>
+                      <th className="text-right py-3 px-3 text-sm font-medium text-gray-600">Variance</th>
+                      <th className="text-right py-3 px-3 text-sm font-medium text-gray-600">Value Impact</th>
+                      <th className="text-left py-3 px-3 text-sm font-medium text-gray-600">Reason</th>
+                      <th className="text-left py-3 px-3 text-sm font-medium text-gray-600">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredItems.map((item) => (
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3">
+                          <p className="text-xs font-mono text-gray-600">{item.item_sku}</p>
+                        </td>
+                        <td className="py-3 px-3">
                           <div className="flex items-center gap-2">
                             <p className="font-medium">{item.item?.name || item.item_sku}</p>
                             {item.is_manually_added && (
                               <IOSBadge className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5">Manual</IOSBadge>
                             )}
                           </div>
-                          <p className="text-xs text-gray-500">{item.item_sku}</p>
-                          {item.variance_reason && (
-                            <p className="text-xs text-orange-600 mt-1">Reason: {item.variance_reason}</p>
-                          )}
-                        </td>
-                        <td className="text-right py-3 px-4">
-                          <p className="font-medium">{item.system_quantity}</p>
                           <p className="text-xs text-gray-500">{item.item?.unit || 'units'}</p>
                         </td>
-                        <td className="text-right py-3 px-4">
+                        <td className="py-3 px-3">
+                          <span className="inline-block px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">
+                            {item.item?.category || '—'}
+                          </span>
+                        </td>
+                        <td className="text-right py-3 px-3">
+                          <p className="text-sm text-gray-700">{item.item?.reorder_level ?? '—'}</p>
+                        </td>
+                        <td className="text-right py-3 px-3">
+                          <p className="text-sm text-gray-700">{item.unit_cost > 0 ? item.unit_cost.toFixed(2) : '—'}</p>
+                        </td>
+                        <td className="text-right py-3 px-3">
+                          <p className="font-medium">{item.system_quantity}</p>
+                        </td>
+                        <td className="text-right py-3 px-3">
                           {(stockTake.status?.toLowerCase() === 'draft' || stockTake.status?.toLowerCase() === 'in_progress') ? (
                             <input
                               type="number"
-                              className="w-24 px-2 py-1 border border-gray-300 rounded-md text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-28 px-2 py-1.5 border border-gray-300 rounded-md text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                               value={editedStocks[item.id] !== undefined ? editedStocks[item.id] : (item.counted_quantity ?? '')}
                               onChange={(e) => handleStockChange(item.id, e.target.value)}
-                              placeholder="0"
+                              placeholder="Enter count"
                             />
                           ) : (
                             <p className="font-medium">
@@ -569,7 +585,7 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                           )}
                         </td>
 
-                        <td className="text-right py-3 px-4">
+                        <td className="text-right py-3 px-3">
                           {(() => {
                             const effectiveVariance = getEffectiveVariance(item);
                             const displayVariance = effectiveVariance !== null ? effectiveVariance : item.variance;
@@ -581,17 +597,17 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                             );
                           })()}
                         </td>
-                        <td className="text-right py-3 px-4">
+                        <td className="text-right py-3 px-3">
                           <p className={`font-bold ${getVarianceColor(item.variance_value)}`}>
                             {item.variance_value >= 0 && '+'}
                             {item.variance_value.toFixed(2)}
                           </p>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3">
                           {(stockTake.status?.toLowerCase() === 'draft' || stockTake.status?.toLowerCase() === 'in_progress') ? (
                             <input
                               type="text"
-                              className="w-48 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-40 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                               value={editedReasons[item.id] !== undefined ? editedReasons[item.id] : (item.variance_reason || '')}
                               onChange={(e) => handleReasonChange(item.id, e.target.value)}
                               placeholder="Required if variance"
@@ -600,7 +616,7 @@ export default function StockTakeDetailClientV2({ id }: { id: string }) {
                             <p className="text-sm text-gray-700">{item.variance_reason || '-'}</p>
                           )}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3">
                           <IOSBadge className={`${item.status === 'COUNTED' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-600'
                             } px-2 py-1 text-xs`}>
                             {item.status}

@@ -17320,12 +17320,13 @@ String _staffNationalId(Map<String, dynamic> row) {
 }
 
 String _staffEmployeeId(Map<String, dynamic> row) {
+  // employee_number / employee_id / staff_code = Employee Number (EMP001, etc.)
+  // id_number and national_id are the National ID — never use them here.
   final direct = _text(row, const [
+    'employee_number',
     'employee_id',
     'staff_code',
     'employee_code',
-    'id_number',
-    'staff_id_number',
   ]);
   if (direct.isNotEmpty) return direct;
   final staff = row['staff'];

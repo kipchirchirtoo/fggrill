@@ -1426,6 +1426,7 @@ type TradingStockRow = {
   index: number;
   itemCode: string;
   itemName: string;
+  category: string;
   reorderLevel: number;
   costPrice: number;
   opening: number;
@@ -1434,6 +1435,7 @@ type TradingStockRow = {
   issued: number;
   spoilages: number;
   stockOut: number;
+  systemClosing: number;
   physicalBal: number | null;
   variance: number | null;
 };
@@ -1492,13 +1494,14 @@ function toTradingStockRow(item: any, index: number): TradingStockRow {
     "counted_quantity", "physical_quantity", "physical_balance",
     "closing_stock", "closing_quantity",
   ]);
-  const expectedBal = total - issued - spoilages - stockOut;
-  const variance = physicalBal !== null ? physicalBal - expectedBal : null;
+  const systemClosing = total - issued - spoilages - stockOut;
+  const variance = physicalBal !== null ? physicalBal - systemClosing : null;
 
   return {
     index,
     itemCode: stockTextValue(item, ["item_sku", "sku", "item_code"], ""),
     itemName: stockTextValue(item, ["item_name", "name", "description", "item_sku", "sku"]),
+    category: stockTextValue(item, ["category", "store_type", "item_category", "department"], "—"),
     reorderLevel: firstStockNumber(item, ["reorder_level"]) ?? 0,
     costPrice: firstStockNumber(item, ["cost_price", "unit_cost", "buying_price", "cost"]) ?? 0,
     opening,
@@ -1507,6 +1510,7 @@ function toTradingStockRow(item: any, index: number): TradingStockRow {
     issued,
     spoilages,
     stockOut,
+    systemClosing,
     physicalBal,
     variance,
   };
@@ -1518,24 +1522,46 @@ function drawTradingStockSheet(
   title: string,
   subtitle: string,
   items: any[],
-  options: { inputClosing?: boolean } = {},
+  options: { inputClosing?: boolean; storeType?: "central" | "branch" } = {},
 ) {
-  // Column layout — 13 columns across A3 landscape (~1110 usable pts from x=42)
-  const cols = [
-    { label: "#",             x: 42,   width: 24,  align: "left"  },
-    { label: "Item Code",     x: 66,   width: 88,  align: "left"  },
-    { label: "Item Name",     x: 154,  width: 148, align: "left"  },
-    { label: "Reorder Lvl",  x: 302,  width: 70,  align: "right" },
-    { label: "Cost Price",    x: 372,  width: 74,  align: "right" },
-    { label: "Opening Stock", x: 446,  width: 76,  align: "right" },
-    { label: "Adds",          x: 522,  width: 62,  align: "right" },
-    { label: "Total Stock",   x: 584,  width: 76,  align: "right" },
-    { label: "Issued Stock",  x: 660,  width: 76,  align: "right" },
-    { label: "Spoilages",     x: 736,  width: 70,  align: "right" },
-    { label: "Stock Out",     x: 806,  width: 70,  align: "right" },
-    { label: "Physical Bal",  x: 876,  width: 82,  align: "right" },
-    { label: "Variance",      x: 958,  width: 80,  align: "right" },
+  const isCentral = options.storeType === "central";
+
+  // ── Column definitions ──────────────────────────────────────────
+  // Central store has NO sales columns; branch keeps them.
+  const centralCols = [
+    { label: "#",               x: 42,   width: 24,  align: "left"  },
+    { label: "SKU",             x: 66,   width: 80,  align: "left"  },
+    { label: "Item Name",       x: 146,  width: 140, align: "left"  },
+    { label: "Category",        x: 286,  width: 86,  align: "left"  },
+    { label: "Reorder Lvl",     x: 372,  width: 62,  align: "right" },
+    { label: "Cost Price",      x: 434,  width: 70,  align: "right" },
+    { label: "Opening",         x: 504,  width: 62,  align: "right" },
+    { label: "Adds",            x: 566,  width: 54,  align: "right" },
+    { label: "Total",           x: 620,  width: 62,  align: "right" },
+    { label: "Sys Closing",     x: 682,  width: 72,  align: "right" },
+    { label: "Physical Count",  x: 754,  width: 76,  align: "right" },
+    { label: "Variance",        x: 830,  width: 68,  align: "right" },
   ];
+
+  const branchCols = [
+    { label: "#",               x: 42,   width: 22,  align: "left"  },
+    { label: "SKU",             x: 64,   width: 70,  align: "left"  },
+    { label: "Item Name",       x: 134,  width: 110, align: "left"  },
+    { label: "Category",        x: 244,  width: 68,  align: "left"  },
+    { label: "Reorder",         x: 312,  width: 52,  align: "right" },
+    { label: "Cost",            x: 364,  width: 58,  align: "right" },
+    { label: "Opening",         x: 422,  width: 54,  align: "right" },
+    { label: "Adds",            x: 476,  width: 46,  align: "right" },
+    { label: "Total",           x: 522,  width: 54,  align: "right" },
+    { label: "Issued",          x: 576,  width: 54,  align: "right" },
+    { label: "Spoilages",       x: 630,  width: 52,  align: "right" },
+    { label: "Stock Out",       x: 682,  width: 52,  align: "right" },
+    { label: "Sys Closing",     x: 734,  width: 64,  align: "right" },
+    { label: "Physical Count",  x: 798,  width: 68,  align: "right" },
+    { label: "Variance",        x: 866,  width: 60,  align: "right" },
+  ];
+
+  const cols = isCentral ? centralCols : branchCols;
 
   const rows = items.map((item, index) => toTradingStockRow(item, index + 1));
   let y = drawTableHeader(doc, startY, cols);
@@ -1553,66 +1579,67 @@ function drawTradingStockSheet(
     return (v >= 0 ? "" : "") + formatStockQty(v);
   };
 
+  // Helper to find column x by label
+  const colX = (label: string) => cols.find(c => c.label.includes(label))?.x ?? 0;
+  const colW = (label: string) => cols.find(c => c.label.includes(label))?.width ?? 40;
+
   rows.forEach((row, i) => {
     if (y > doc.page.height - 88) repeatHeader();
     const rowY = y;
     if (i % 2 === 0) doc.rect(40, rowY, doc.page.width - 80, 22).fill(ROW_BG);
     doc.fillColor(PRIMARY).fontSize(7.2).font("Helvetica");
 
-    // #
-    doc.text(String(row.index), 42, rowY + 7, { width: 22 });
+    // ── Common cells (both layouts) ──
+    doc.text(String(row.index), colX("#"), rowY + 7, { width: colW("#") });
 
-    // Item Code
     doc.font("Helvetica").fontSize(7).fillColor(SECONDARY)
-      .text(row.itemCode, 66, rowY + 7, { width: 84, ellipsis: true });
+      .text(row.itemCode, colX("SKU"), rowY + 7, { width: colW("SKU"), ellipsis: true });
 
-    // Item Name
     doc.font("Helvetica-Bold").fontSize(7.2).fillColor(PRIMARY)
-      .text(row.itemName, 154, rowY + 7, { width: 144, height: 9, ellipsis: true });
+      .text(row.itemName, colX("Item Name"), rowY + 7, { width: colW("Item Name"), height: 9, ellipsis: true });
+
+    doc.font("Helvetica").fontSize(7).fillColor(ACCENT)
+      .text(row.category, colX("Category"), rowY + 7, { width: colW("Category"), ellipsis: true });
 
     doc.font("Helvetica").fontSize(7.2).fillColor(PRIMARY);
-
-    // Reorder Level
-    doc.text(formatStockQty(row.reorderLevel), 302, rowY + 7, { width: 66, align: "right" });
-
-    // Cost Price
-    doc.text(formatStockMoney(row.costPrice), 372, rowY + 7, { width: 70, align: "right" });
-
-    // Opening Stock
-    doc.text(formatStockQty(row.opening), 446, rowY + 7, { width: 72, align: "right" });
-
-    // Adds
-    doc.text(formatStockQty(row.added), 522, rowY + 7, { width: 58, align: "right" });
-
-    // Total Stock
+    doc.text(formatStockQty(row.reorderLevel), colX("Reorder"), rowY + 7, { width: colW("Reorder"), align: "right" });
+    doc.text(formatStockMoney(row.costPrice),  colX("Cost"),     rowY + 7, { width: colW("Cost"),     align: "right" });
+    doc.text(formatStockQty(row.opening),      colX("Opening"),  rowY + 7, { width: colW("Opening"),  align: "right" });
+    doc.text(formatStockQty(row.added),        colX("Adds"),     rowY + 7, { width: colW("Adds"),     align: "right" });
     doc.font("Helvetica-Bold")
-      .text(formatStockQty(row.total), 584, rowY + 7, { width: 72, align: "right" });
+      .text(formatStockQty(row.total),         colX("Total"),    rowY + 7, { width: colW("Total"),    align: "right" });
     doc.font("Helvetica");
 
-    // Issued Stock
-    doc.text(formatStockQty(row.issued), 660, rowY + 7, { width: 72, align: "right" });
-
-    // Spoilages
-    doc.text(formatStockQty(row.spoilages), 736, rowY + 7, { width: 66, align: "right" });
-
-    // Stock Out
-    doc.text(formatStockQty(row.stockOut), 806, rowY + 7, { width: 66, align: "right" });
-
-    // Physical Bal — blank input box when doing a live stock take
-    if (options.inputClosing && row.physicalBal === null) {
-      doc.rect(880, rowY + 4, 70, 14).stroke(BORDER);
-    } else {
-      doc.text(fmtQty(row.physicalBal), 876, rowY + 7, { width: 78, align: "right" });
+    if (!isCentral) {
+      // Branch-only sales columns
+      doc.text(formatStockQty(row.issued),    colX("Issued"),    rowY + 7, { width: colW("Issued"),    align: "right" });
+      doc.text(formatStockQty(row.spoilages), colX("Spoilages"), rowY + 7, { width: colW("Spoilages"), align: "right" });
+      doc.text(formatStockQty(row.stockOut),  colX("Stock Out"), rowY + 7, { width: colW("Stock Out"), align: "right" });
     }
 
-    // Variance — colour-coded: red for negative, green for positive
+    // System Closing (both layouts)
+    doc.text(formatStockQty(row.systemClosing), colX("Sys Closing"), rowY + 7, { width: colW("Sys Closing"), align: "right" });
+
+    // Physical Count — the ONLY editable field on worksheets
+    if (options.inputClosing && row.physicalBal === null) {
+      const pcX = colX("Physical Count");
+      const pcW = colW("Physical Count");
+      doc.rect(pcX + 2, rowY + 3, pcW - 4, 16).stroke(BORDER);
+      doc.fillColor("#cccccc").fontSize(6.5)
+        .text("count", pcX, rowY + 7, { width: pcW, align: "center" });
+      doc.fillColor(PRIMARY).font("Helvetica").fontSize(7.2);
+    } else {
+      doc.text(fmtQty(row.physicalBal), colX("Physical Count"), rowY + 7, { width: colW("Physical Count"), align: "right" });
+    }
+
+    // Variance
     if (row.variance !== null) {
       doc.fillColor(row.variance < 0 ? "#dc2626" : row.variance > 0 ? "#16a34a" : PRIMARY)
         .font("Helvetica-Bold")
-        .text(fmtVariance(row.variance), 958, rowY + 7, { width: 76, align: "right" });
+        .text(fmtVariance(row.variance), colX("Variance"), rowY + 7, { width: colW("Variance"), align: "right" });
       doc.fillColor(PRIMARY).font("Helvetica");
     } else {
-      doc.text("—", 958, rowY + 7, { width: 76, align: "right" });
+      doc.text("—", colX("Variance"), rowY + 7, { width: colW("Variance"), align: "right" });
     }
 
     // bottom border
@@ -1624,33 +1651,36 @@ function drawTradingStockSheet(
 
   // totals row
   if (rows.length > 0) {
-    const totOpening  = rows.reduce((s, r) => s + r.opening,   0);
-    const totAdded    = rows.reduce((s, r) => s + r.added,     0);
-    const totTotal    = rows.reduce((s, r) => s + r.total,     0);
-    const totIssued   = rows.reduce((s, r) => s + r.issued,    0);
-    const totSpoil    = rows.reduce((s, r) => s + r.spoilages, 0);
-    const totOut      = rows.reduce((s, r) => s + r.stockOut,  0);
-    const totPhys     = rows.filter(r => r.physicalBal !== null).reduce((s, r) => s + (r.physicalBal ?? 0), 0);
-    const totVar      = rows.filter(r => r.variance !== null).reduce((s, r) => s + (r.variance ?? 0), 0);
+    const totOpening      = rows.reduce((s, r) => s + r.opening,       0);
+    const totAdded        = rows.reduce((s, r) => s + r.added,         0);
+    const totTotal        = rows.reduce((s, r) => s + r.total,         0);
+    const totIssued       = rows.reduce((s, r) => s + r.issued,          0);
+    const totSpoil        = rows.reduce((s, r) => s + r.spoilages,     0);
+    const totOut          = rows.reduce((s, r) => s + r.stockOut,       0);
+    const totSysClosing   = rows.reduce((s, r) => s + r.systemClosing,  0);
+    const totPhys         = rows.filter(r => r.physicalBal !== null).reduce((s, r) => s + (r.physicalBal ?? 0), 0);
+    const totVar          = rows.filter(r => r.variance !== null).reduce((s, r) => s + (r.variance ?? 0), 0);
 
     if (y > doc.page.height - 60) repeatHeader();
     doc.rect(40, y, doc.page.width - 80, 22).fill(GOLD);
     doc.fillColor("#1a1a1a").font("Helvetica-Bold").fontSize(7.4);
-    doc.text("TOTALS", 66, y + 7, { width: 230 });
-    doc.text(formatStockQty(totOpening),  446, y + 7, { width: 72, align: "right" });
-    doc.text(formatStockQty(totAdded),    522, y + 7, { width: 58, align: "right" });
-    doc.text(formatStockQty(totTotal),    584, y + 7, { width: 72, align: "right" });
-    doc.text(formatStockQty(totIssued),   660, y + 7, { width: 72, align: "right" });
-    doc.text(formatStockQty(totSpoil),    736, y + 7, { width: 66, align: "right" });
-    doc.text(formatStockQty(totOut),      806, y + 7, { width: 66, align: "right" });
-    doc.text(formatStockQty(totPhys),     876, y + 7, { width: 78, align: "right" });
+    doc.text("TOTALS", colX("#"), y + 7, { width: 230 });
+    doc.text(formatStockQty(totOpening),    colX("Opening"),  y + 7, { width: colW("Opening"),  align: "right" });
+    doc.text(formatStockQty(totAdded),      colX("Adds"),     y + 7, { width: colW("Adds"),     align: "right" });
+    doc.text(formatStockQty(totTotal),      colX("Total"),    y + 7, { width: colW("Total"),    align: "right" });
+    if (!isCentral) {
+      doc.text(formatStockQty(totIssued),   colX("Issued"),    y + 7, { width: colW("Issued"),    align: "right" });
+      doc.text(formatStockQty(totSpoil),    colX("Spoilages"), y + 7, { width: colW("Spoilages"), align: "right" });
+      doc.text(formatStockQty(totOut),      colX("Stock Out"), y + 7, { width: colW("Stock Out"), align: "right" });
+    }
+    doc.text(formatStockQty(totSysClosing), colX("Sys Closing"), y + 7, { width: colW("Sys Closing"), align: "right" });
+    doc.text(formatStockQty(totPhys),     colX("Physical Count"), y + 7, { width: colW("Physical Count"), align: "right" });
     doc.fillColor(totVar < 0 ? "#dc2626" : totVar > 0 ? "#16a34a" : "#1a1a1a")
-      .text(fmtVariance(totVar),          958, y + 7, { width: 76, align: "right" });
+      .text(fmtVariance(totVar), colX("Variance"), y + 7, { width: colW("Variance"), align: "right" });
     y += 22;
   }
 
   return y;
-
 }
 
 export async function generateStockTakeWorksheetPDF(
@@ -1677,6 +1707,7 @@ export async function generateStockTakeWorksheetPDF(
   let y = drawBrandedHeader(doc, title.toUpperCase(), subtitle);
   drawTradingStockSheet(doc, y, title.toUpperCase(), subtitle, items, {
     inputClosing: true,
+    storeType: "branch",
   });
 
   drawFooter(doc);
@@ -1708,6 +1739,7 @@ export async function generateCentralStockTakePDF(
     let y = drawBrandedHeader(doc, title, subtitle);
     drawTradingStockSheet(doc, y, title, subtitle, items, {
       inputClosing: true,
+      storeType: "central",
     });
 
     drawFooter(doc);
@@ -1744,6 +1776,7 @@ export async function generateBranchStockTakeWorksheetPDF(
   let y = drawBrandedHeader(doc, title.toUpperCase(), subtitle);
   drawTradingStockSheet(doc, y, title.toUpperCase(), subtitle, items, {
     inputClosing: true,
+    storeType: "branch",
   });
 
   drawFooter(doc);

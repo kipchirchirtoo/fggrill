@@ -20,105 +20,105 @@ export const getWaiterSales = async (
 
         console.log('🔍 [Waiter Sales] Fetching sales:', { branch_id, startDate, targetDate, periodDays });
 
-        // Fetch all waiters (staff with POS PINs starting with R or B)
-        // R = Restaurant waiters, B = Bar staff
-        let waitersQuery = supabase
-            .from('users')
-            .select('id, first_name, last_name, email, branch_id, pos_pin, role')
-            .not('pos_pin', 'is', null)
-            .eq('status', 'active');
+        // Fetch all active users with waiter_id references from pos_shift_orders
+        // This ensures we only get staff who actually have POS sales
+        let ordersQuery = supabase
+            .from('pos_shift_orders')
+            .select('waiter_id, waiter_name, total_amount, items, payment_status, status, created_at, branch_id')
+            .not('waiter_id', 'is', null)
+            .gte('created_at', `${startDate}T00:00:00`)
+            .lte('created_at', `${targetDate}T23:59:59`);
 
         // Filter by branch if specified
         if (branch_id && branch_id !== '0') {
-            waitersQuery = waitersQuery.eq('branch_id', branch_id);
-            console.log(`   - Filtering waiters by branch_id: ${branch_id}`);
+            ordersQuery = ordersQuery.eq('branch_id', parseInt(branch_id as string));
+            console.log(`   - Filtering orders by branch_id: ${branch_id}`);
         }
 
-        const { data: allUsers, error: waitersError } = await waitersQuery;
+        const { data: allOrders, error: ordersError } = await ordersQuery;
 
-        if (waitersError) {
-            console.error('❌ [Waiter Sales] Error fetching waiters:', waitersError);
-            throw waitersError;
+        if (ordersError) {
+            console.error('❌ [Waiter Sales] Error fetching orders:', ordersError);
+            throw ordersError;
         }
 
-        // Filter users with POS PINs starting with R or B
-        const waiters = (allUsers || []).filter(user => {
-            const pin = user.pos_pin?.toUpperCase();
-            return pin && (pin.startsWith('R') || pin.startsWith('B'));
-        });
+        console.log(`✅ [Waiter Sales] Found ${allOrders?.length || 0} total orders`);
 
-        console.log(`✅ [Waiter Sales] Found ${waiters.length} waiters/bar staff (filtered from ${allUsers?.length || 0} users with POS PINs)`);
-        console.log(`   - POS PINs: ${waiters.map(w => w.pos_pin).join(', ')}`);
-
-        // Fetch sales data for each waiter
-        const waiterSales = await Promise.all(
-            (waiters || []).map(async (waiter) => {
-                // Fetch ALL orders (using created_by as the waiter/staff field)
-                // Filter by branch_id if specified, and date range
-                // Include delivered orders and paid orders (payment_status = 'paid')
-                let ordersQuery = supabase
-                    .from('restaurant_orders')
-                    .select('*')
-                    .eq('created_by', waiter.id)
-                    .gte('created_at', `${startDate}T00:00:00`)
-                    .lte('created_at', `${targetDate}T23:59:59`);
-
-                // Add branch filter if specified
-                if (branch_id && branch_id !== '0') {
-                    ordersQuery = ordersQuery.eq('branch_id', branch_id);
-                }
-
-                const { data: allOrders, error: ordersError } = await ordersQuery;
-
-                if (ordersError) {
-                    console.error(`❌ Error fetching orders for waiter ${waiter.id}:`, ordersError);
-                }
-
-                // Filter for completed/paid orders only
-                // Valid statuses: delivered (completed orders) or payment_status = 'paid'
-                const orders = (allOrders || []).filter(order => 
-                    order.status === 'delivered' || order.payment_status === 'paid'
-                );
-
-                const totalOrders = orders?.length || 0;
-                const totalRevenue = orders?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0;
-                const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-                // Calculate tips if available
-                const totalTips = orders?.reduce((sum, o) => sum + Number(o.tip_amount || 0), 0) || 0;
-
-                console.log(`   - ${waiter.first_name} ${waiter.last_name} (${waiter.pos_pin}): ${totalOrders} orders, ${totalRevenue} revenue`);
-
-                // Get order items for analysis
-                const orderIds = orders?.map(o => o.id) || [];
-                let totalItems = 0;
-                if (orderIds.length > 0) {
-                    const { data: items } = await supabase
-                        .from('restaurant_order_items')
-                        .select('quantity')
-                        .in('order_id', orderIds);
-                    
-                    totalItems = items?.reduce((sum, i) => sum + Number(i.quantity || 0), 0) || 0;
-                }
-
-                return {
-                    waiter_id: waiter.id,
-                    waiter_name: `${waiter.first_name} ${waiter.last_name}`,
-                    email: waiter.email,
-                    pos_pin: waiter.pos_pin,
-                    role: waiter.role,
-                    total_orders: totalOrders,
-                    total_revenue: totalRevenue,
-                    average_order_value: averageOrderValue,
-                    total_tips: totalTips,
-                    total_items_sold: totalItems,
-                    items_per_order: totalOrders > 0 ? totalItems / totalOrders : 0,
-                    period_days: periodDays
-                };
-            })
+        // Filter for completed/paid orders only
+        const completedOrders = (allOrders || []).filter(order => 
+            order.payment_status === 'paid' || order.status === 'paid'
         );
 
-        // Sort by revenue
+        console.log(`✅ [Waiter Sales] Found ${completedOrders.length} completed/paid orders`);
+
+        // Group orders by waiter_id
+        const waiterOrdersMap = new Map<string, typeof completedOrders>();
+        
+        completedOrders.forEach(order => {
+            const waiterId = order.waiter_id;
+            if (!waiterOrdersMap.has(waiterId)) {
+                waiterOrdersMap.set(waiterId, []);
+            }
+            waiterOrdersMap.get(waiterId)!.push(order);
+        });
+
+        console.log(`✅ [Waiter Sales] Found ${waiterOrdersMap.size} unique waiters with sales`);
+
+        // Fetch waiter details for all waiters who have orders
+        const waiterIds = Array.from(waiterOrdersMap.keys());
+        const { data: waitersData, error: waitersError } = await supabase
+            .from('users')
+            .select('id, first_name, last_name, email, branch_id, pos_pin, role')
+            .in('id', waiterIds)
+            .eq('status', 'active');
+
+        if (waitersError) {
+            console.error('❌ [Waiter Sales] Error fetching waiter details:', waitersError);
+        }
+
+        // Create waiter lookup map
+        const waiterDetailsMap = new Map(
+            (waitersData || []).map(w => [w.id, w])
+        );
+
+        // Calculate sales data for each waiter
+        const waiterSales = Array.from(waiterOrdersMap.entries()).map(([waiterId, orders]) => {
+            const waiterDetails = waiterDetailsMap.get(waiterId);
+            const totalOrders = orders.length;
+            const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+            const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+            // Calculate total items sold from order items array
+            const totalItems = orders.reduce((sum, o) => {
+                const items = o.items || [];
+                return sum + items.reduce((itemSum: number, item: any) => itemSum + Number(item.quantity || 0), 0);
+            }, 0);
+
+            // Get waiter name from order data or user details
+            const waiterName = orders[0]?.waiter_name || 
+                               (waiterDetails ? `${waiterDetails.first_name} ${waiterDetails.last_name}` : 'Unknown');
+
+            console.log(`   - ${waiterName}: ${totalOrders} orders, KES ${totalRevenue.toFixed(2)} revenue`);
+
+            return {
+                waiter_id: waiterId,
+                waiter_name: waiterName,
+                email: waiterDetails?.email || '',
+                pos_pin: waiterDetails?.pos_pin || '',
+                role: waiterDetails?.role || '',
+                branch_id: waiterDetails?.branch_id || orders[0]?.branch_id || null,
+                total_orders: totalOrders,
+                completed_orders: totalOrders, // All orders in this list are completed
+                total_revenue: totalRevenue,
+                average_order_value: averageOrderValue,
+                total_tips: 0, // Tips not tracked in current schema
+                total_items_sold: totalItems,
+                items_per_order: totalOrders > 0 ? totalItems / totalOrders : 0,
+                period_days: periodDays
+            };
+        });
+
+        // Sort by revenue (descending)
         waiterSales.sort((a, b) => b.total_revenue - a.total_revenue);
 
         // Calculate summary
@@ -127,7 +127,9 @@ export const getWaiterSales = async (
             total_orders: waiterSales.reduce((sum, w) => sum + w.total_orders, 0),
             total_revenue: waiterSales.reduce((sum, w) => sum + w.total_revenue, 0),
             total_tips: waiterSales.reduce((sum, w) => sum + w.total_tips, 0),
-            average_order_value: waiterSales.reduce((sum, w) => sum + w.average_order_value, 0) / waiterSales.length || 0,
+            average_order_value: waiterSales.length > 0 
+                ? waiterSales.reduce((sum, w) => sum + w.average_order_value, 0) / waiterSales.length 
+                : 0,
             top_performer: waiterSales[0] || null,
             period_days: periodDays
         };
@@ -135,7 +137,7 @@ export const getWaiterSales = async (
         console.log('✅ [Waiter Sales] Sales data calculated successfully');
         console.log(`   - Total waiters: ${summary.total_waiters}`);
         console.log(`   - Total orders: ${summary.total_orders}`);
-        console.log(`   - Total revenue: ${summary.total_revenue}`);
+        console.log(`   - Total revenue: KES ${summary.total_revenue.toFixed(2)}`);
         console.log(`   - Branch filter: ${branch_id || 'ALL BRANCHES'}`);
         console.log(`   - Date range: ${startDate} to ${targetDate}`);
 
@@ -188,21 +190,28 @@ export const getWaiterPerformance = async (
             return;
         }
 
-        // Fetch ALL orders (using created_by as the waiter/staff field)
+        // Fetch ALL orders from pos_shift_orders using waiter_id
         const { data: allOrders } = await supabase
-            .from('restaurant_orders')
+            .from('pos_shift_orders')
             .select('*')
-            .eq('created_by', id)
+            .eq('waiter_id', id)
             .gte('created_at', startDate)
             .order('created_at', { ascending: false });
 
         // Filter for completed/paid orders
         const completedOrders = (allOrders || []).filter(o => 
-            o.status === 'delivered' || o.payment_status === 'paid'
+            o.payment_status === 'paid' || o.status === 'paid'
         );
+        
         const totalRevenue = completedOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-        const totalTips = completedOrders.reduce((sum, o) => sum + Number(o.tip_amount || 0), 0);
+        const totalTips = 0; // Tips not tracked in current schema
         const averageOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
+
+        // Calculate total items sold
+        const totalItems = completedOrders.reduce((sum, o) => {
+            const items = o.items || [];
+            return sum + items.reduce((itemSum: number, item: any) => itemSum + Number(item.quantity || 0), 0);
+        }, 0);
 
         // Daily breakdown
         const dailyBreakdown: Record<string, any> = {};
@@ -213,12 +222,18 @@ export const getWaiterPerformance = async (
                     date,
                     orders: 0,
                     revenue: 0,
-                    tips: 0
+                    tips: 0,
+                    items_sold: 0
                 };
             }
             dailyBreakdown[date].orders += 1;
             dailyBreakdown[date].revenue += Number(order.total_amount || 0);
-            dailyBreakdown[date].tips += Number(order.tip_amount || 0);
+            dailyBreakdown[date].tips += 0; // Tips not tracked
+            
+            // Add items count for this order
+            const items = order.items || [];
+            const orderItems = items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+            dailyBreakdown[date].items_sold += orderItems;
         });
 
         const performance = {
@@ -227,22 +242,43 @@ export const getWaiterPerformance = async (
                 name: `${waiter.first_name} ${waiter.last_name}`,
                 email: waiter.email,
                 role: waiter.role,
-                branch_id: waiter.branch_id
+                branch_id: waiter.branch_id,
+                pos_pin: waiter.pos_pin
             },
             summary: {
                 total_orders: completedOrders.length,
                 total_revenue: totalRevenue,
                 total_tips: totalTips,
+                total_items_sold: totalItems,
                 average_order_value: averageOrderValue,
+                items_per_order: completedOrders.length > 0 ? totalItems / completedOrders.length : 0,
                 period_days: periodDays
             },
             daily_breakdown: Object.values(dailyBreakdown).sort((a: any, b: any) => 
                 new Date(b.date).getTime() - new Date(a.date).getTime()
             ),
-            recent_orders: completedOrders.slice(0, 20)
+            recent_orders: completedOrders.slice(0, 20).map(order => ({
+                id: order.id,
+                order_number: order.order_number,
+                short_code: order.short_code,
+                customer_name: order.customer_name,
+                order_type: order.order_type,
+                table_number: order.table_number,
+                room_number: order.room_number,
+                total_amount: order.total_amount,
+                payment_method: order.payment_method,
+                payment_status: order.payment_status,
+                status: order.status,
+                items: order.items,
+                created_at: order.created_at,
+                branch_id: order.branch_id
+            }))
         };
 
         console.log('✅ [Waiter Performance] Performance calculated successfully');
+        console.log(`   - Total orders: ${performance.summary.total_orders}`);
+        console.log(`   - Total revenue: KES ${performance.summary.total_revenue.toFixed(2)}`);
+        console.log(`   - Total items sold: ${performance.summary.total_items_sold}`);
 
         res.status(200).json({
             success: true,

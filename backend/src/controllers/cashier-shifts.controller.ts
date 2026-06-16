@@ -739,6 +739,225 @@ export const getShiftLog = async (
             logger.warn(`Cashier credit bill enrichment failed for shift ${shift.id}:`, creditErr);
         }
 
+        // =====================================================================
+        // STRUCTURED SHIFT RECONCILIATION DATA
+        // Build the exact response shape the Flutter branch-accountant
+        // dashboard expects so every closed shift auto-populates the
+        // reconciliation panel (POS bills, credit bills, revenue, payment
+        // breakdown, cash drawer trace, etc.).
+        // =====================================================================
+        try {
+            const shiftEnd = shift.shift_end || new Date().toISOString();
+            const branchId = shift.branch_id;
+
+            // --- fetch POS evidence created during the shift ---
+            const [
+                { data: restOrders },
+                { data: barOrders },
+                { data: creditBillRecords },
+            ] = await Promise.all([
+                supabase.from('restaurant_orders')
+                    .select('id, total_amount, payment_method, customer_name, guest_name, order_type, created_at')
+                    .eq('branch_id', branchId)
+                    .eq('created_by', shift.cashier_id)
+                    .gte('created_at', shift.shift_start)
+                    .lte('created_at', shiftEnd),
+                supabase.from('bar_orders')
+                    .select('id, total, subtotal, payment_method, customer_name, guest_name, order_type, created_at')
+                    .eq('branch_id', branchId)
+                    .eq('created_by', shift.cashier_id)
+                    .gte('created_at', shift.shift_start)
+                    .lte('created_at', shiftEnd),
+                supabase.from('credit_bills')
+                    .select('id, credit_number, staff_name, customer_name, employee_name, employee_id, department, total_amount, balance_amount, balance, status, approval_status, created_at')
+                    .eq('branch_id', branchId)
+                    .gte('created_at', shift.shift_start)
+                    .lte('created_at', shiftEnd)
+            ]);
+
+            // --- payment breakdown (from shift totals + transaction evidence) ---
+            const totalCash = toNumber(enrichedShift.total_cash_sales);
+            const totalMpesa = toNumber(enrichedShift.total_mpesa_sales);
+            const totalCard = toNumber(enrichedShift.total_card_sales);
+            const totalCreditBill = toNumber(enrichedShift.credit_bills_taken);
+            const totalPaidBills = toNumber(enrichedShift.paid_bills_value);
+            const totalSales = toNumber(enrichedShift.total_sales);
+
+            const paymentBreakdown = [
+                { method: 'cash', amount: totalCash, count: (transactions || []).filter((t: any) => normalizePaymentMethod(t.payment_method) === 'cash').length },
+                { method: 'mpesa', amount: totalMpesa, count: (transactions || []).filter((t: any) => normalizePaymentMethod(t.payment_method) === 'mpesa').length },
+                { method: 'card', amount: totalCard, count: (transactions || []).filter((t: any) => normalizePaymentMethod(t.payment_method) === 'card').length },
+                { method: 'credit_bill', amount: totalCreditBill, count: toNumber(enrichedShift.credit_bills_count) },
+                { method: 'other', amount: Math.max(0, totalSales - totalCash - totalMpesa - totalCard - totalCreditBill), count: 0 },
+            ].filter((row) => row.amount > 0 || ['cash', 'mpesa', 'card', 'credit_bill'].includes(row.method));
+
+            // --- revenue breakdown (from shift revenue fields) ---
+            const revenueBreakdown = [
+                { label: 'Restaurant', amount: toNumber(shift.restaurant_revenue) },
+                { label: 'Bar', amount: toNumber(shift.bar_revenue) },
+                { label: 'Rooms', amount: toNumber(shift.room_booking_revenue) },
+                { label: 'Conference', amount: toNumber(shift.conference_revenue) },
+                { label: 'Pool', amount: toNumber(shift.swimming_pool_revenue) + toNumber(shift.pool_token_revenue) },
+                { label: 'Other', amount: toNumber(shift.other_revenue) + totalPaidBills }
+            ].filter((row) => row.amount > 0);
+
+            // --- transaction history / lines (cleared transactions + POS orders) ---
+            const txLines = (transactions || []).map((t: any) => ({
+                id: t.id,
+                amount: toNumber(t.amount),
+                payment_method: normalizePaymentMethod(t.payment_method),
+                section: 'cleared_transaction',
+                source_table: 'cashier_shift_transactions',
+                source_id: t.id,
+                customer_name: t.customer_name || t.description || `Cleared ${normalizePaymentMethod(t.payment_method)}`,
+                reference: t.transaction_ref || t.reference || t.transaction_id || t.id,
+                created_at: t.transaction_time || t.created_at || shift.shift_start
+            }));
+
+            const posLines = [
+                ...(restOrders || []).map((o: any) => ({
+                    id: o.id,
+                    amount: toNumber(o.total_amount),
+                    payment_method: normalizePaymentMethod(o.payment_method),
+                    section: 'restaurant_sale',
+                    source_table: 'restaurant_orders',
+                    source_id: o.id,
+                    customer_name: o.customer_name || o.guest_name || o.order_type || 'Restaurant order',
+                    reference: o.id,
+                    created_at: o.created_at
+                })),
+                ...(barOrders || []).map((o: any) => ({
+                    id: o.id,
+                    amount: toNumber(o.total ?? o.subtotal),
+                    payment_method: normalizePaymentMethod(o.payment_method),
+                    section: 'bar_sale',
+                    source_table: 'bar_orders',
+                    source_id: o.id,
+                    customer_name: o.customer_name || o.guest_name || o.order_type || 'Bar order',
+                    reference: o.id,
+                    created_at: o.created_at
+                }))
+            ];
+
+            const allLines = [...txLines, ...posLines]
+                .filter((line) => line.amount > 0)
+                .sort((a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+
+            const transactionHistory = allLines;
+
+            // --- credit bills (issued during shift) ---
+            const creditBills = (creditBillRecords || []).map((bill: any) => ({
+                id: bill.id,
+                credit_number: bill.credit_number || null,
+                staff_name: bill.staff_name || bill.customer_name || bill.employee_name || 'Staff',
+                employee_id: bill.employee_id || null,
+                department: bill.department || null,
+                bill_type: 'credit_bill',
+                amount: toNumber(bill.total_amount ?? bill.amount),
+                balance: toNumber(bill.balance_amount ?? bill.balance ?? bill.total_amount ?? bill.amount),
+                status: bill.status || bill.approval_status || 'active',
+                created_at: bill.created_at
+            }));
+            const creditBillsTotal = creditBills.reduce((sum: number, b: any) => sum + toNumber(b.amount), 0);
+
+            // --- paid bills (from shift.paid_bills_details) ---
+            const rawPaidBills = Array.isArray(shift.paid_bills_details) ? shift.paid_bills_details : [];
+            const paidBills = rawPaidBills.map((b: any) => ({
+                staff_id: b.staff_id || null,
+                name: b.name || b.staff_name || b.customer_name || 'Staff',
+                amount: toNumber(b.amount),
+                payment_method: b.payment_method || 'cash',
+                reference: b.reference || b.id || null
+            }));
+
+            // --- cash reconciliation ---
+            const cashDrops = toNumber(shift.cash_deposited);
+            const payouts = toNumber(shift.payouts ?? shift.paid_outs);
+            const openingFloat = toNumber(shift.opening_float);
+            const closingFloat = toNumber(shift.closing_float ?? shift.cash_at_hand);
+            const expectedClosing = toNumber(shift.expected_closing_float);
+            const variance = toNumber(shift.variance);
+
+            // --- sales breakdown (same shape as logbook sales_breakdown) ---
+            const creditBillDetails = Array.isArray(shift.credit_bills_details) ? shift.credit_bills_details : [];
+            const salesBreakdown = {
+                source: 'cashier_shift_logs',
+                shift_id: shift.id,
+                shift_number: shift.shift_number,
+                cashier_name: cashierName,
+                total_cash: totalCash,
+                total_mpesa: totalMpesa,
+                total_card: totalCard,
+                total_sales: totalSales,
+                expected_closing_float: expectedClosing,
+                variance,
+                cash_drops: cashDrops,
+                payouts,
+                transaction_count: toNumber(shift.transaction_count),
+                restaurant_revenue: toNumber(shift.restaurant_revenue),
+                bar_revenue: toNumber(shift.bar_revenue),
+                room_booking_revenue: toNumber(shift.room_booking_revenue),
+                conference_revenue: toNumber(shift.conference_revenue),
+                swimming_pool_revenue: toNumber(shift.swimming_pool_revenue),
+                other_revenue: toNumber(shift.other_revenue),
+                unpaid_bills_value: toNumber(shift.unpaid_bills_value),
+                unpaid_bills_count: toNumber(shift.unpaid_bills_count),
+                paid_bills_value: totalPaidBills,
+                paid_bills_count: toNumber(shift.paid_bills_count),
+                total_credit_bills: totalCreditBill || creditBillDetails.reduce((s: number, b: any) => s + toNumber(b.amount), 0),
+                credit_bills_count: toNumber(shift.credit_bills_count) || creditBillDetails.length,
+                credit_bills_details: creditBillDetails.map((b: any) => ({
+                    staff_id: b.staff_id || null,
+                    name: b.name || b.staff_name || b.customer_name || 'Staff',
+                    amount: toNumber(b.amount),
+                    reference: b.reference || b.id || null
+                })),
+                paid_bills_details: paidBills.map((b: any) => ({
+                    staff_id: b.staff_id || null,
+                    name: b.name || b.staff_name || b.customer_name || 'Staff',
+                    amount: toNumber(b.amount),
+                    payment_method: b.payment_method || 'cash',
+                    reference: b.reference || b.id || null
+                }))
+            };
+
+            enrichedShift = {
+                ...enrichedShift,
+                cash_reconciliation: {
+                    opening_float: openingFloat,
+                    cash_sales: totalCash,
+                    cash_tendered: totalCash,
+                    change_given: toNumber(shift.change_given),
+                    drawer_cash_in: totalCash,
+                    credit_payments_received: totalPaidBills,
+                    cash_drops: cashDrops,
+                    payouts,
+                    expected_closing: expectedClosing,
+                    actual_closing: closingFloat,
+                    variance
+                },
+                payment_breakdown: paymentBreakdown,
+                revenue_breakdown: revenueBreakdown,
+                credit_bills: creditBills,
+                credit_bills_total: creditBillsTotal,
+                paid_bills: paidBills,
+                lines: allLines,
+                transaction_history: transactionHistory,
+                sales_breakdown: salesBreakdown,
+                summary: {
+                    total_sales: totalSales,
+                    transaction_count: toNumber(shift.transaction_count, allLines.length),
+                    paid_bills_value: totalPaidBills,
+                    paid_bills_count: toNumber(shift.paid_bills_count),
+                    unpaid_bills_value: toNumber(shift.unpaid_bills_value),
+                    unpaid_bills_count: toNumber(shift.unpaid_bills_count)
+                }
+            };
+        } catch (structErr) {
+            logger.warn(`Structured shift data build failed for shift ${shift.id}:`, structErr);
+            // Do not fail the request — the raw shift data is still useful.
+        }
+
         res.status(200).json({
             success: true,
             data: enrichedShift

@@ -1497,11 +1497,12 @@ class BranchAccountantRepository {
     for (final profile in staff) {
       final id = _text(profile, const ['id', 'staff_id']);
       if (id.isNotEmpty) byId[id] = profile;
+      // employee_number / employee_id / staff_code are the employee number fields.
+      // national_id and id_number are the national ID — never use them as emp-number keys.
       final employeeId = _text(profile, const [
+        'employee_number',
         'employee_id',
         'staff_code',
-        'id_number',
-        'national_id',
       ]);
       if (employeeId.isNotEmpty) byEmployee[_norm(employeeId)] = profile;
       final name = _staffName(profile);
@@ -1511,10 +1512,9 @@ class BranchAccountantRepository {
     Map<String, dynamic> enrichRow(Map<String, dynamic> row) {
       final profile = byId[_text(row, const ['staff_id', 'id'])] ??
           byEmployee[_norm(_text(row, const [
+            'employee_number',
             'employee_id',
             'staff_code',
-            'id_number',
-            'national_id',
           ]))] ??
           byName[_norm(_text(row, const ['staff_name', 'name']))];
       if (profile == null) return row;
@@ -1533,6 +1533,7 @@ class BranchAccountantRepository {
       }
       merged['basic_salary'] ??= salary > 0 ? salary : null;
 
+      // national_id / id_number = National ID (Kenyan ID card number)
       _fillText(merged, 'national_id', profile, const [
         'national_id',
         'id_number',
@@ -1542,15 +1543,21 @@ class BranchAccountantRepository {
         'id_number',
         'national_id',
       ]);
+      // employee_id / employee_number / staff_code = Employee Number (EMP001, etc.)
       _fillText(merged, 'employee_id', profile, const [
+        'employee_number',
         'employee_id',
         'staff_code',
-        'id_number',
+      ]);
+      _fillText(merged, 'employee_number', profile, const [
+        'employee_number',
+        'employee_id',
+        'staff_code',
       ]);
       _fillText(merged, 'staff_code', profile, const [
         'staff_code',
+        'employee_number',
         'employee_id',
-        'id_number',
       ]);
       _fillText(merged, 'department', profile, const ['department']);
       _fillText(merged, 'role', profile, const ['role', 'position']);
