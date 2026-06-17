@@ -14,13 +14,21 @@ logger = logging.getLogger(__name__)
 
 class FinanceService:
     """Service class for finance operations"""
-    
+
     def __init__(self):
-        self.supabase: Client = create_client(
-            os.getenv('SUPABASE_URL'),
-            os.getenv('SUPABASE_SERVICE_KEY')
-        )
+        self._supabase: Client | None = None
         self.anomaly_detector = PaymentAnomalyDetector()
+
+    @property
+    def supabase(self) -> Client:
+        if self._supabase is None:
+            url = os.getenv('SUPABASE_URL') or os.getenv('SUPABASE_PROJECT_URL')
+            key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+            if not url or not key:
+                logger.error("Supabase credentials missing. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.")
+                raise RuntimeError("Supabase credentials not configured")
+            self._supabase = create_client(url, key)
+        return self._supabase
 
     def _get_aggregated_data(self, branch_id=None, start_date=None, end_date=None):
         """Helper to aggregate revenue and expenses from all tables using payments table"""

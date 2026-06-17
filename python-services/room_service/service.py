@@ -18,13 +18,17 @@ load_dotenv()
 
 class RoomService:
     def __init__(self):
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY")
-        
-        if not supabase_url or not supabase_key:
-            raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
-        
-        self.supabase: Client = create_client(supabase_url, supabase_key)
+        self._supabase: Client | None = None
+
+    @property
+    def supabase(self) -> Client:
+        if self._supabase is None:
+            supabase_url = os.getenv("SUPABASE_URL") or os.getenv("SUPABASE_PROJECT_URL")
+            supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            if not supabase_url or not supabase_key:
+                raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
+            self._supabase = create_client(supabase_url, supabase_key)
+        return self._supabase
 
     # ==================== ROOM AVAILABILITY ====================
     
