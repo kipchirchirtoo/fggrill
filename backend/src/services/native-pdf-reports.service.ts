@@ -2275,3 +2275,207 @@ export async function generateLeaveManagementPDF(
   drawFooter(doc);
   doc.end();
 }
+
+/**
+ * Generate a branded payroll batch PDF using local PDFKit
+ * (replaces the Python-service dependency for batch PDFs).
+ */
+export async function generatePayrollBatchPDF(
+  res: Response,
+  batch: any,
+  lines: any[],
+  branchName: string
+) {
+  const MARGIN = 34;
+  const doc = new PDFDocument({ margin: MARGIN, size: 'A3', layout: 'landscape', autoFirstPage: true, bufferPages: true });
+  const safePeriod = (batch.period_label || '').replace(/[^A-Za-z0-9]/g, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=FG_Payroll_${safePeriod}.pdf`);
+  doc.pipe(res);
+
+  const PAGE_W = doc.page.width;
+  const PAGE_H = doc.page.height;
+  const TABLE_W = PAGE_W - (MARGIN * 2);
+  const FOOTER_TOP = PAGE_H - 46;
+  const ROW_H = 18;
+  const HEADER_H = 22;
+  const ROW_FONT = 7.2;
+  const HEADER_FONT = 7.4;
+  const PADDING_X = 4;
+
+  const money = (value: number) => `KES ${Math.round(value || 0).toLocaleString('en-KE')}`;
+  const moneyOrDash = (value: number) => (value > 0 ? money(value) : '—');
+  const oneLine = (value: unknown, fallback = '—') => {
+    const raw = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return raw && raw !== 'null' && raw !== 'undefined' ? raw : fallback;
+  };
+
+  const drawHeader = (d: PDFKit.PDFDocument, t: string, st?: string) => {
+    const logoPath = getLogoPath();
+    if (fs.existsSync(logoPath)) {
+      d.image(logoPath, MARGIN, 28, { width: 60 });
+    }
+    d.fillColor(PRIMARY).fontSize(18).font('Helvetica-Bold').text(COMPANY_NAME, MARGIN + 70, 30);
+    d.fontSize(9).font('Helvetica').fillColor(SECONDARY).text(COMPANY_ADDRESS, MARGIN + 70, 50);
+    d.fontSize(9).font('Helvetica-Bold').fillColor(PRIMARY).text(t, PAGE_W - MARGIN - 420, 32, { width: 420, align: 'right', lineBreak: false, ellipsis: true });
+    if (st) d.fontSize(8).font('Helvetica').fillColor(SECONDARY).text(st, PAGE_W - MARGIN - 420, 48, { width: 420, align: 'right', lineBreak: false, ellipsis: true });
+    d.strokeColor(BORDER).lineWidth(1).moveTo(MARGIN, 94).lineTo(PAGE_W - MARGIN, 94).stroke();
+    d.rect(MARGIN, 95, TABLE_W, 3).fill(GOLD);
+    return 115;
+  };
+
+  const statusText = (batch.status || 'DRAFT').toUpperCase();
+  const title = `PAYROLL BATCH REPORT — ${statusText}`;
+  const subtitle = `${branchName} · Period: ${batch.period_label || '—'} · Generated: ${new Date().toLocaleString('en-KE')}`;
+  let y = drawHeader(doc, title, subtitle);
+
+  const columnSpecs = [
+    { label: '#', width: 22 },
+    { label: 'Emp ID', width: 54 },
+    { label: 'Staff Name', width: 136 },
+    { label: 'Role', width: 118 },
+    { label: 'Basic', width: 74, align: 'right' },
+    { label: 'Gross', width: 74, align: 'right' },
+    { label: 'NSSF', width: 62, align: 'right' },
+    { label: 'SHIF', width: 62, align: 'right' },
+    { label: 'PAYE', width: 62, align: 'right' },
+    { label: 'Loans', width: 62, align: 'right' },
+    { label: 'Advances', width: 68, align: 'right' },
+    { label: 'Absent', width: 62, align: 'right' },
+    { label: 'Uniform', width: 68, align: 'right' },
+    { label: 'Other Ded.', width: 72, align: 'right' },
+    { label: 'Total Ded.', width: 78, align: 'right' },
+    { label: 'Net Pay', width: 82, align: 'right' },
+  ];
+
+  const specWidth = columnSpecs.reduce((sum, col) => sum + col.width, 0);
+  const scale = TABLE_W / specWidth;
+  let cursorX = MARGIN;
+  const C = columnSpecs.map(col => {
+    const width = col.width * scale;
+    const next = { ...col, x: cursorX, width };
+    cursorX += width;
+    return next;
+  });
+
+  const drawTHeader = (d: PDFKit.PDFDocument, curY: number) => {
+    d.rect(MARGIN, curY, TABLE_W, HEADER_H).fill(HEADER_BG);
+    d.fillColor('white').fontSize(HEADER_FONT).font('Helvetica-Bold');
+    C.forEach(col => {
+      d.text(col.label, col.x + PADDING_X, curY + 7, { width: col.width - (PADDING_X * 2), align: (col.align as any) || 'left', lineBreak: false, ellipsis: true });
+    });
+    return curY + HEADER_H;
+  };
+
+  y = drawTHeader(doc, y);
+
+  let sumBasic = 0, sumGross = 0, sumNssf = 0, sumShif = 0, sumPaye = 0;
+  let sumLoans = 0, sumAdvances = 0, sumAbsent = 0, sumUniform = 0, sumOther = 0, sumTotalDed = 0, sumNet = 0;
+
+  const sorted = [...lines].sort((a, b) => String(a.staff_name || '').localeCompare(String(b.staff_name || '')));
+
+  sorted.forEach((r, i) => {
+    if (y + ROW_H > FOOTER_TOP - 4) {
+      doc.addPage();
+      y = drawHeader(doc, title + ' (cont.)', subtitle);
+      y = drawTHeader(doc, y);
+    }
+
+    const shade = i % 2 === 0;
+    if (shade) doc.rect(MARGIN, y, TABLE_W, ROW_H).fill(ROW_BG);
+    doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica');
+
+    const basic = Number(r.basic_salary || 0);
+    const gross = Number(r.gross_pay || 0);
+    const nssf = Number(r.nssf || 0);
+    const shif = Number(r.sha || 0);
+    const paye = Number(r.paye || 0);
+    const loans = Number(r.loan_deduction || 0);
+    const advances = Number(r.advance_deduction || 0);
+    const absent = Number(r.absent_deduction || 0);
+    const uniform = Number(r.uniform_deduction || 0);
+    const other = Number(r.other_deductions || 0);
+    const totalDed = Number(r.total_deductions || 0);
+    const netPay = Number(r.net_pay || 0);
+
+    sumBasic += basic; sumGross += gross; sumNssf += nssf; sumShif += shif; sumPaye += paye;
+    sumLoans += loans; sumAdvances += advances; sumAbsent += absent; sumUniform += uniform;
+    sumOther += other; sumTotalDed += totalDed; sumNet += netPay;
+
+    const values = [
+      { v: String(i + 1), x: C[0].x, w: C[0].width },
+      { v: oneLine(r.staff_number), x: C[1].x, w: C[1].width },
+      { v: oneLine(r.staff_name), x: C[2].x, w: C[2].width },
+      { v: oneLine(r.designation, 'Staff'), x: C[3].x, w: C[3].width },
+      { v: money(basic), x: C[4].x, w: C[4].width, a: 'right' },
+      { v: money(gross), x: C[5].x, w: C[5].width, a: 'right' },
+      { v: moneyOrDash(nssf), x: C[6].x, w: C[6].width, a: 'right' },
+      { v: moneyOrDash(shif), x: C[7].x, w: C[7].width, a: 'right' },
+      { v: moneyOrDash(paye), x: C[8].x, w: C[8].width, a: 'right' },
+      { v: moneyOrDash(loans), x: C[9].x, w: C[9].width, a: 'right' },
+      { v: moneyOrDash(advances), x: C[10].x, w: C[10].width, a: 'right' },
+      { v: moneyOrDash(absent), x: C[11].x, w: C[11].width, a: 'right' },
+      { v: moneyOrDash(uniform), x: C[12].x, w: C[12].width, a: 'right' },
+      { v: moneyOrDash(other), x: C[13].x, w: C[13].width, a: 'right' },
+      { v: money(totalDed), x: C[14].x, w: C[14].width, a: 'right' },
+      { v: money(netPay), x: C[15].x, w: C[15].width, a: 'right' },
+    ];
+
+    values.forEach(val => {
+      doc.text(val.v, val.x + PADDING_X, y + 5, { width: val.w - (PADDING_X * 2), align: (val.a as any) || 'left', lineBreak: false, ellipsis: true });
+    });
+
+    doc.strokeColor(BORDER).lineWidth(0.2).moveTo(MARGIN, y + ROW_H).lineTo(PAGE_W - MARGIN, y + ROW_H).stroke();
+    y += ROW_H;
+  });
+
+  if (y + 78 > FOOTER_TOP) {
+    doc.addPage();
+    y = drawHeader(doc, title + ' (totals)', subtitle);
+    y = drawTHeader(doc, y);
+  }
+
+  doc.rect(MARGIN, y, TABLE_W, 22).fill('#eef2f7');
+  doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica-Bold');
+  doc.text('TOTALS', C[0].x + PADDING_X, y + 7, { width: (C[0].width + C[1].width + C[2].width + C[3].width) - (PADDING_X * 2), lineBreak: false });
+
+  const sumCols = [
+    { v: money(sumBasic), x: C[4].x, w: C[4].width },
+    { v: money(sumGross), x: C[5].x, w: C[5].width },
+    { v: money(sumNssf), x: C[6].x, w: C[6].width },
+    { v: money(sumShif), x: C[7].x, w: C[7].width },
+    { v: money(sumPaye), x: C[8].x, w: C[8].width },
+    { v: money(sumLoans), x: C[9].x, w: C[9].width },
+    { v: money(sumAdvances), x: C[10].x, w: C[10].width },
+    { v: money(sumAbsent), x: C[11].x, w: C[11].width },
+    { v: money(sumUniform), x: C[12].x, w: C[12].width },
+    { v: money(sumOther), x: C[13].x, w: C[13].width },
+    { v: money(sumTotalDed), x: C[14].x, w: C[14].width },
+    { v: money(sumNet), x: C[15].x, w: C[15].width },
+  ];
+
+  sumCols.forEach(sc => {
+    doc.text(sc.v, sc.x + PADDING_X, y + 7, { width: sc.w - (PADDING_X * 2), align: 'right', lineBreak: false, ellipsis: true });
+  });
+
+  y += 34;
+  if (y + 110 > FOOTER_TOP) {
+    doc.addPage();
+    y = drawHeader(doc, title + ' (summary)', subtitle);
+  }
+
+  drawSummaryBox(doc, y, [
+    { label: 'Gross Salary Total', value: money(sumGross) },
+    { label: 'Total Deductions', value: money(sumTotalDed) },
+    { label: 'Net Pay Total', value: money(sumNet) },
+  ]);
+
+  const totalPages = doc.bufferedPageRange().count;
+  for (let p = 0; p < totalPages; p++) {
+    doc.switchToPage(p);
+    drawFooter(doc);
+  }
+
+  doc.flushPages();
+  doc.end();
+}

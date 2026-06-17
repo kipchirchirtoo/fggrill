@@ -6911,7 +6911,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     .order('created_at', { ascending: false });
                 if (wantsVoidedOrders) {
                     posOrdersQuery = posOrdersQuery
-                        .or('status.eq.voided,payment_status.eq.voided,void_request_status.eq.approved');
+                        .or('status.eq.voided,payment_status.eq.voided,void_request_status.eq.approved,void_request_status.eq.pending');
                 } else {
                     posOrdersQuery = posOrdersQuery
                         .in('payment_status', allowedStatuses)
@@ -7011,7 +7011,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
                 const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
                 const location = posOrderLocation(o, stationName);
-                const isVoided = o.status === 'voided' || o.payment_status === 'voided' || o.void_request_status === 'approved';
+                const isVoided = o.status === 'voided' || o.payment_status === 'voided' || ['approved','pending'].includes(o.void_request_status);
                 return {
                     id: o.id,
                     source: 'pos',
@@ -7131,7 +7131,7 @@ export const getUnpaidPosOrders = async (req: Request, res: Response, next: Next
 
         if (wantsVoidedOrders) {
             posOrdersQuery = posOrdersQuery
-                .or('status.eq.voided,payment_status.eq.voided,void_request_status.eq.approved');
+                .or('status.eq.voided,payment_status.eq.voided,void_request_status.eq.approved,void_request_status.eq.pending');
         } else {
             posOrdersQuery = posOrdersQuery
                 .in('payment_status', allowedStatuses)
@@ -7148,7 +7148,7 @@ export const getUnpaidPosOrders = async (req: Request, res: Response, next: Next
             const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
             const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
             const location = posOrderLocation(o, stationName);
-            const isVoided = o.status === 'voided' || o.payment_status === 'voided' || o.void_request_status === 'approved';
+            const isVoided = o.status === 'voided' || o.payment_status === 'voided' || ['approved','pending'].includes(o.void_request_status);
             return {
                 id: o.id,
                 source: 'pos',
@@ -7249,11 +7249,8 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
             const orderStatus = String((order as any).status || '').toLowerCase();
             const paymentStatus = String((order as any).payment_status || '').toLowerCase();
             const voidRequestStatus = String((order as any).void_request_status || '').toLowerCase();
-            if (orderStatus === 'voided' || paymentStatus === 'voided' || voidRequestStatus === 'approved') {
+            if (orderStatus === 'voided' || paymentStatus === 'voided' || ['approved','pending'].includes(voidRequestStatus)) {
                 throw new AppError('This captain order has been voided and cannot be paid', 400);
-            }
-            if (voidRequestStatus === 'pending') {
-                throw new AppError('This captain order is awaiting branch accountant void approval and cannot be paid', 400);
             }
         }
         const totalAmount = Number((order as any)[amountField] || 0);

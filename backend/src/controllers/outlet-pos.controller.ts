@@ -1510,6 +1510,65 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
     if (error || !order) throw error || new AppError('Failed to record POS order', 500);
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
+    
+    // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR RESTAURANT ============
+    // Only print captain orders for restaurant outlets (not bar outlets)
+    const outletType = String(outlet?.outlet_type || '').toLowerCase();
+    const isRestaurantOutlet = outletType === 'restaurant';
+    
+    if (isRestaurantOutlet) {
+      try {
+        const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
+        
+        // Print captain order asynchronously (don't block response)
+        captainOrderPrintService.printCaptainOrder({
+          order_number: order.order_number,
+          short_code: order.short_code,
+          customer_name: order.customer_name || 'Walk-in',
+          table_number: order.table_number,
+          room_number: order.room_number,
+          order_type: order.order_type || 'dine_in',
+          items: normalizedItems.map((item: any) => ({
+            name: item.name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            line_total: item.line_total,
+            notes: item.notes || item.special_instructions || ''
+          })),
+          total_amount: totalAmount,
+          waiter_name: order.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
+          outlet_name: outlet?.name || 'Restaurant',
+          outlet_type: outlet?.outlet_type,
+          created_at: order.created_at
+        }).then((result) => {
+          if (result.success) {
+            logger.info(`✅ Captain order ${order.order_number} printed to kitchen`);
+            
+            // Update captain_printed_at timestamp
+            supabase
+              .from('pos_shift_orders')
+              .update({ captain_printed_at: new Date().toISOString() })
+              .eq('id', order.id)
+              .then(() => {
+                logger.info(`Updated captain_printed_at for order ${order.order_number}`);
+              });
+          } else {
+            logger.warn(`⚠️ Captain order ${order.order_number} print failed: ${result.error}`);
+          }
+        }).catch((printError) => {
+          logger.error(`❌ Captain order print error for ${order.order_number}:`, printError);
+        });
+        
+        logger.info(`📄 Captain order ${order.order_number} sent to kitchen printer (restaurant outlet)`);
+      } catch (printError) {
+        // Don't block order creation if printing fails
+        logger.error('Captain order printing service error:', printError);
+      }
+    } else {
+      logger.info(`ℹ️ Skipping captain order printing for ${outletType} outlet (only restaurant outlets print to kitchen)`);
+    }
+    // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
+    
     res.status(201).json({ success: true, data: order });
   } catch (error) {
     next(error);
@@ -1746,9 +1805,17 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
     assertUser(req);
     const { shiftId, orderId } = req.params;
     const reason = String(req.body.reason || '').trim();
+    
+    logger.info(`Void request initiated - shiftId: ${shiftId}, orderId: ${orderId}, userId: ${req.user.id}`);
+    
     if (!reason) throw new AppError('Void reason is required', 400);
+    
     const shift = await ensureShiftAccess(req, shiftId);
+    logger.info(`Shift validated - outlet_id: ${shift.outlet_id}, branch_id: ${shift.branch_id}`);
+    
     const order = await loadShiftOrder(shiftId, orderId);
+    logger.info(`Order loaded - order_number: ${order.order_number}, payment_status: ${order.payment_status}, status: ${order.status}`);
+    
     ensureOrderOwnerAccess(req, order);
     ensureEditableOrder(order, 'void');
 
@@ -1758,8 +1825,14 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
       .eq('order_id', orderId)
       .eq('status', 'pending')
       .maybeSingle();
-    if (existingError) throw existingError;
-    if (existing) throw new AppError('A pending void request already exists for this bill', 409);
+    if (existingError) {
+      logger.error('Error checking existing void requests:', existingError);
+      throw existingError;
+    }
+    if (existing) {
+      logger.warn(`Duplicate void request detected for order: ${orderId}`);
+      throw new AppError('A pending void request already exists for this bill', 409);
+    }
 
     const { data: requestRow, error } = await supabase
       .from('pos_void_requests')
@@ -1775,13 +1848,18 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
       })
       .select('*')
       .single();
-    if (error || !requestRow) throw error || new AppError('Failed to create void request', 500);
+    if (error || !requestRow) {
+      logger.error('Failed to create void request:', error);
+      throw error || new AppError('Failed to create void request', 500);
+    }
+    
+    logger.info(`Void request created - request_id: ${requestRow.id}`);
 
     const voidRequestedItems = Array.isArray(order.items)
       ? order.items.map((item: any) => ({ ...item, kitchen_status: 'void_requested' }))
       : order.items;
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('pos_shift_orders')
       .update({
         void_request_status: 'pending',
@@ -1790,6 +1868,13 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId);
+      
+    if (updateError) {
+      logger.error('Failed to update order status:', updateError);
+      throw updateError;
+    }
+    
+    logger.info(`Order status updated - void_request_status: pending, kitchen_status: void_requested`);
 
     await notificationService.notifyRole(
       'branch_accountant',
@@ -1839,9 +1924,12 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
         }
       }
     );
+    
+    logger.info(`Void request completed successfully - request_id: ${requestRow.id}`);
 
     res.status(201).json({ success: true, data: requestRow });
   } catch (error) {
+    logger.error('Void request failed:', error);
     next(error);
   }
 };

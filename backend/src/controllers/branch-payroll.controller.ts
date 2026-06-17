@@ -11,8 +11,7 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
 import crypto from 'crypto';
-import axios from 'axios';
-import { PYTHON_SERVICE_URL } from '../config/pythonService';
+import { generatePayrollBatchPDF } from '../services/native-pdf-reports.service';
 
 const n = (v: any): number => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -557,54 +556,5 @@ export const downloadPayrollBatchPdf = asyncWrap(async (req, res) => {
     if (branchData?.name) branchName = branchData.name;
   }
 
-  // Map batch lines to the branded Python template employee format
-  const employees = rows.map((line: any, idx: number) => {
-    const nssf        = n(line.nssf);
-    const shif        = n(line.sha);
-    const paye        = n(line.paye);
-    const loans       = n(line.loan_deduction);
-    const advances    = n(line.advance_deduction);
-    const creditBills = n(line.absent_deduction) + n(line.uniform_deduction) + n(line.other_deductions);
-    const calcTotal   = nssf + shif + paye + loans + advances + creditBills;
-    const housingLevy = Math.max(0, round2(n(line.total_deductions) - calcTotal));
-    return {
-      no:           idx + 1,
-      emp_id:       line.staff_number || '',
-      name:         line.staff_name   || '',
-      phone:        '',
-      role:         line.designation  || line.department || '',
-      branch:       branchName,
-      basic_salary: n(line.basic_salary),
-      nssf,
-      shif,
-      housing_levy: housingLevy,
-      paye,
-      credit_bills: creditBills,
-      advances,
-      loans,
-    };
-  });
-
-  const payload = {
-    employees,
-    period:          batch.period_label || '',
-    branch:          branchName,
-    generated:       new Date().toLocaleString('en-KE'),
-    status:          (batch.status || 'DRAFT').toUpperCase(),
-    company_name:    'FAMOUSGATE HOTELS',
-    company_address: 'Bomet, Kenya',
-    company_email:   'famousgateshotelsbmt@gmail.com',
-    company_phone:   '0706 782 828',
-  };
-
-  const response = await axios.post(
-    `${PYTHON_SERVICE_URL}/api/payroll/generate-pdf`,
-    payload,
-    { responseType: 'arraybuffer', timeout: 60000 },
-  );
-
-  const safePeriod = (batch.period_label || '').replace(/[^A-Za-z0-9]/g, '_');
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename=FG_Payroll_${safePeriod}.pdf`);
-  res.send(Buffer.from(response.data));
+  await generatePayrollBatchPDF(res, batch, rows, branchName);
 });
