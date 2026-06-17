@@ -7988,9 +7988,89 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
     }
   }
 
+  Future<void> _turnOnAll(BuildContext ctx) async {
+    if (widget.onToggleTrackStock == null || widget.items.isEmpty) return;
+    
+    // Count how many items are currently tracked
+    final trackedCount = widget.items.where((item) => item['track_stock'] != false).length;
+    
+    if (trackedCount == 0) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(
+          content: Text('All items are already set to Always On'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('Turn On All Items'),
+        content: Text(
+          'This will set ALL $trackedCount tracked items to "Always On" mode.\n\n'
+          'Items will be permanently available in POS without requiring production commits or stock tracking.\n\n'
+          'Are you sure you want to continue?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Turn On All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _posting = true);
+      try {
+        // Update all tracked items to Always On
+        int successCount = 0;
+        int failCount = 0;
+        
+        for (final item in widget.items) {
+          final isTracked = item['track_stock'] != false;
+          if (isTracked) {
+            try {
+              await widget.onToggleTrackStock!(item, false); // false = Always On
+              successCount++;
+            } catch (e) {
+              failCount++;
+            }
+          }
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text(
+                failCount == 0
+                    ? '✓ Successfully turned on all $successCount items'
+                    : '✓ Turned on $successCount items, $failCount failed',
+              ),
+              backgroundColor: failCount == 0 ? Colors.green : Colors.orange,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _posting = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) return _EmptyState(widget.emptyText);
+
+    // Count tracked items for the button
+    final trackedCount = widget.items.where((item) => item['track_stock'] != false).length;
 
     return Container(
       decoration: BoxDecoration(
@@ -8002,22 +8082,65 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             color: AppColors.kPrimary,
-            child: const Row(
+            child: Row(
               children: [
-                SizedBox(width: 48, child: Text('#', style: _headerStyle)),
-                Expanded(
+                const SizedBox(width: 48, child: Text('#', style: _headerStyle)),
+                const Expanded(
                     flex: 3, child: Text('Item Name', style: _headerStyle)),
-                Expanded(
+                const Expanded(
                     flex: 2,
                     child: Text('[ Total Registered Production Of The Day ]',
                         style: _headerStyle)),
                 SizedBox(
-                    width: 120,
-                    child: Text('Stock Control', style: _headerStyle)),
-                SizedBox(
+                  width: 120,
+                  child: Row(
+                    children: [
+                      const Text('Stock Control', style: _headerStyle),
+                      const SizedBox(width: 4),
+                      if (trackedCount > 0)
+                        Tooltip(
+                          message: 'Turn on all $trackedCount tracked items',
+                          child: InkWell(
+                            onTap: _posting ? null : () => _turnOnAll(context),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.all_inclusive,
+                                    size: 12,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    'All',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(
                     width: 170,
                     child: Text('Add Qty Produced', style: _headerStyle)),
-                SizedBox(width: 96, child: Text('Action', style: _headerStyle)),
+                const SizedBox(width: 96, child: Text('Action', style: _headerStyle)),
               ],
             ),
           ),
@@ -12599,13 +12722,17 @@ class _KitchenProductionSectionState
   }
 
   Future<void> _openNewSession() async {
-    final result = await showModalBottomSheet<bool>(
+    final result = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _NewSessionSheet(
-        recipes: _recipes,
-        stock: widget.stock,
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(20),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: _NewSessionSheet(
+          recipes: _recipes,
+          stock: widget.stock,
+        ),
       ),
     );
     if (result == true) {
@@ -13030,21 +13157,22 @@ class _NewSessionSheet extends ConsumerStatefulWidget {
 
 class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
   final _notesCtrl = TextEditingController();
-
   String _shiftType = 'shift_a';
 
+  // Staff
   List<Map<String, dynamic>> _staffList = [];
   bool _staffLoading = false;
   String _staffName = '';
   String? _staffId;
-
   final List<Map<String, dynamic>> _extraStaff = [];
   bool _posting = false;
 
-  // All unique ingredients aggregated from ALL recipes (the stock to issue)
-  List<_IngredientNeed> _allIngredients = [];
-  // SKU → qty-to-issue controller
+  // Right panel: recipe → portions controller
+  final Map<String, TextEditingController> _portionCtrl = {};
+
+  // Left panel: sku → qty-to-issue controller
   final Map<String, TextEditingController> _issuanceCtrl = {};
+  List<_IngredientNeed> _allIngredients = [];
 
   @override
   void initState() {
@@ -13056,18 +13184,42 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
   void _buildIngredientList() {
     final map = <String, _IngredientNeed>{};
     for (final recipe in widget.recipes) {
+      _portionCtrl['${recipe['id']}'] = TextEditingController();
       final ingredients = (recipe['ingredients'] as List?) ?? [];
       for (final ing in ingredients.cast<Map<String, dynamic>>()) {
         final sku = '${ing['item_sku']}';
-        final name = '${ing['item_name']}';
-        final unit = '${ing['unit'] ?? 'kg'}';
         if (!map.containsKey(sku)) {
-          map[sku] = _IngredientNeed(sku: sku, name: name, qty: 0, unit: unit);
+          map[sku] = _IngredientNeed(
+            sku: sku,
+            name: '${ing['item_name']}',
+            qty: 0,
+            unit: '${ing['unit'] ?? 'kg'}',
+          );
           _issuanceCtrl[sku] = TextEditingController();
         }
       }
     }
     _allIngredients = map.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  // Auto-compute stock quantities from recipe portions and fill left panel
+  void _syncFromRecipes() {
+    final computed = <String, double>{};
+    for (final recipe in widget.recipes) {
+      final id = '${recipe['id']}';
+      final portions = double.tryParse(_portionCtrl[id]?.text.trim() ?? '') ?? 0;
+      if (portions <= 0) continue;
+      for (final ing in ((recipe['ingredients'] as List?) ?? []).cast<Map<String, dynamic>>()) {
+        final sku = '${ing['item_sku']}';
+        final qpp = double.tryParse('${ing['quantity_required']}') ?? 0;
+        computed[sku] = (computed[sku] ?? 0) + qpp * portions;
+      }
+    }
+    for (final ing in _allIngredients) {
+      final v = computed[ing.sku] ?? 0;
+      _issuanceCtrl[ing.sku]?.text = v > 0 ? v.toStringAsFixed(3) : '';
+    }
+    setState(() {});
   }
 
   Future<void> _loadStaff() async {
@@ -13084,6 +13236,7 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
   void dispose() {
     _notesCtrl.dispose();
     for (final c in _issuanceCtrl.values) c.dispose();
+    for (final c in _portionCtrl.values) c.dispose();
     super.dispose();
   }
 
@@ -13179,33 +13332,39 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
       return;
     }
 
+    // Planned recipes with portions (for system variance computation)
+    final plannedItems = widget.recipes
+        .where((r) => (double.tryParse(_portionCtrl['${r['id']}']?.text.trim() ?? '') ?? 0) > 0)
+        .map((r) {
+          final portions = double.parse(_portionCtrl['${r['id']}']!.text.trim());
+          return {
+            'recipe_id': r['id'],
+            'menu_item_id': r['menu_item_id'],
+            'menu_item_name': r['menu_item_name'] ?? r['recipe_name'],
+            'portions_planned': portions,
+          };
+        })
+        .toList();
+
     setState(() => _posting = true);
     try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
       final allStaff = <Map<String, dynamic>>[
-        {
-          'staff_profile_id': _staffId,
-          'staff_name': _staffName.trim(),
-          'role': 'cook',
-          'is_accountable': true,
-        },
+        {'staff_profile_id': _staffId, 'staff_name': _staffName.trim(), 'role': 'cook', 'is_accountable': true},
         ..._extraStaff,
       ];
-      await repo.createProductionSession(
+      await ref.read(branchStorekeeperRepositoryProvider).createProductionSession(
         staffName: _staffName.trim(),
         staffId: _staffId,
         shiftType: _shiftType,
         sessionStaff: allStaff,
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         issues: issues,
-        plannedItems: const [],
+        plannedItems: plannedItems,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _posting = false);
@@ -13214,366 +13373,461 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
     final issuedCount = _allIngredients
         .where((i) => (double.tryParse(_issuanceCtrl[i.sku]?.text.trim() ?? '') ?? 0) > 0)
         .length;
+    final recipesWithPortions = widget.recipes
+        .where((r) => (double.tryParse(_portionCtrl['${r['id']}']?.text.trim() ?? '') ?? 0) > 0)
+        .length;
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.92,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+    return SizedBox(
+      width: size.width * 0.94,
+      height: size.height * 0.90,
       child: Column(
         children: [
-          const SizedBox(height: 12),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+          // ── Header ──────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.soup_kitchen_outlined, color: AppColors.kPrimary),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('New Kitchen Session', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text('Select shift & staff · Link menu items to auto-compute stock · Issue to kitchen',
+                        style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+              ),
+              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
+            ]),
+          ),
+          // ── Body: two panels ──────────────────────────────────────────
+          Expanded(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.inventory_2_outlined, color: AppColors.kPrimary),
-                const SizedBox(width: 10),
-                const Expanded(child: Text('New Kitchen Session', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
+                // ── LEFT PANEL: Staff + Stock Issuance ─────────────────
+                SizedBox(
+                  width: size.width * 0.94 * 0.42,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        color: Colors.grey.shade50,
+                        child: Row(children: [
+                          const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.kPrimary),
+                          const SizedBox(width: 6),
+                          const Expanded(child: Text('Stock to Issue', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+                          if (issuedCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.teal.shade100, borderRadius: BorderRadius.circular(10)),
+                              child: Text('$issuedCount items', style: const TextStyle(fontSize: 11, color: Colors.teal, fontWeight: FontWeight.w700)),
+                            ),
+                        ]),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Shift selector
+                              Row(children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setState(() => _shiftType = 'shift_a'),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 150),
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: _shiftType == 'shift_a' ? AppColors.kPrimary.withValues(alpha: 0.10) : Colors.grey.shade50,
+                                        border: Border.all(color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey.shade300, width: _shiftType == 'shift_a' ? 2 : 1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Column(children: [
+                                        Icon(Icons.wb_sunny_outlined, size: 18, color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey),
+                                        Text('Shift A', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey.shade700)),
+                                        Text('Morning', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                                      ]),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setState(() => _shiftType = 'shift_b'),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 150),
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: _shiftType == 'shift_b' ? Colors.indigo.withValues(alpha: 0.10) : Colors.grey.shade50,
+                                        border: Border.all(color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey.shade300, width: _shiftType == 'shift_b' ? 2 : 1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Column(children: [
+                                        Icon(Icons.nights_stay_outlined, size: 18, color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey),
+                                        Text('Shift B', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey.shade700)),
+                                        Text('Evening', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                                      ]),
+                                    ),
+                                  ),
+                                ),
+                              ]),
+                              const SizedBox(height: 12),
+                              // Cook autocomplete
+                              Autocomplete<Map<String, dynamic>>(
+                                optionsBuilder: (tv) {
+                                  if (_staffList.isEmpty) return const [];
+                                  if (tv.text.isEmpty) return _staffList;
+                                  final q = tv.text.toLowerCase();
+                                  return _staffList.where((s) => '${s['full_name'] ?? ''}'.toLowerCase().contains(q));
+                                },
+                                displayStringForOption: (s) => '${s['full_name'] ?? ''}',
+                                onSelected: (s) => setState(() { _staffName = '${s['full_name'] ?? ''}'; _staffId = '${s['id']}'; }),
+                                fieldViewBuilder: (_, ctrl, fn, __) => TextField(
+                                  controller: ctrl, focusNode: fn,
+                                  decoration: InputDecoration(
+                                    labelText: _staffLoading ? 'Loading staff…' : 'Primary Cook *',
+                                    prefixIcon: const Icon(Icons.person_outline, size: 18),
+                                    border: const OutlineInputBorder(),
+                                    isDense: true,
+                                    suffixIcon: _staffLoading ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))) : null,
+                                  ),
+                                  textCapitalization: TextCapitalization.words,
+                                  onChanged: (v) => setState(() { _staffName = v; if (_staffId != null && _staffList.every((s) => '${s['full_name']}' != v)) _staffId = null; }),
+                                ),
+                                optionsViewBuilder: (_, onSel, options) => Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(elevation: 4, borderRadius: BorderRadius.circular(8),
+                                    child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: 180),
+                                      child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: options.length,
+                                        itemBuilder: (_, i) {
+                                          final s = options.elementAt(i);
+                                          return ListTile(dense: true,
+                                            leading: CircleAvatar(radius: 13, backgroundColor: AppColors.kPrimary.withValues(alpha: 0.12),
+                                                child: Text('${s['first_name'] ?? '?'}'.substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kPrimary))),
+                                            title: Text('${s['full_name'] ?? ''}', style: const TextStyle(fontSize: 12)),
+                                            subtitle: Text('${s['role'] ?? ''}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                            onTap: () => onSel(s));
+                                        }),
+                                    )),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: _notesCtrl,
+                                decoration: const InputDecoration(labelText: 'Notes (optional)', prefixIcon: Icon(Icons.notes_outlined, size: 18), border: OutlineInputBorder(), isDense: true),
+                                maxLines: 1,
+                              ),
+                              const SizedBox(height: 10),
+                              // Extra staff
+                              Row(children: [
+                                Text('Shift Staff', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey.shade700)),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: _addExtraStaff,
+                                  child: Text('+ Add', style: TextStyle(fontSize: 12, color: AppColors.kPrimary, fontWeight: FontWeight.w600)),
+                                ),
+                              ]),
+                              if (_extraStaff.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                ..._extraStaff.asMap().entries.map((entry) {
+                                  final i = entry.key; final s = entry.value;
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.shade200)),
+                                    child: Row(children: [
+                                      Expanded(child: Text('${s['staff_name']}', style: const TextStyle(fontSize: 12))),
+                                      DropdownButton<String>(value: s['role'] as String? ?? 'cook', isDense: true, underline: const SizedBox(),
+                                        items: const [
+                                          DropdownMenuItem(value: 'cook', child: Text('Cook', style: TextStyle(fontSize: 11))),
+                                          DropdownMenuItem(value: 'helper', child: Text('Helper', style: TextStyle(fontSize: 11))),
+                                          DropdownMenuItem(value: 'supervisor', child: Text('Supervisor', style: TextStyle(fontSize: 11))),
+                                        ],
+                                        onChanged: (v) => setState(() => s['role'] = v)),
+                                      Checkbox(value: s['is_accountable'] as bool? ?? true, onChanged: (v) => setState(() => s['is_accountable'] = v), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact),
+                                      GestureDetector(onTap: () => setState(() => _extraStaff.removeAt(i)), child: const Icon(Icons.close, size: 14, color: Colors.red)),
+                                    ]),
+                                  );
+                                }),
+                                Text('✓ = accountable for variance', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                              ],
+                              const SizedBox(height: 14),
+                              const Divider(),
+                              const SizedBox(height: 10),
+                              // Stock issuance list
+                              Text('Quantities to Issue', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey.shade700)),
+                              const SizedBox(height: 2),
+                              Text('Auto-filled from recipes or enter manually. Items with 0 are skipped.',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                              const SizedBox(height: 8),
+                              ..._allIngredients.map((ing) {
+                                final ctrl = _issuanceCtrl[ing.sku]!;
+                                final qty = double.tryParse(ctrl.text.trim()) ?? 0;
+                                final isIssued = qty > 0;
+                                final stockItem = widget.stock.firstWhere(
+                                  (s) => '${s['item_sku']}' == ing.sku || '${s['sku']}' == ing.sku,
+                                  orElse: () => <String, dynamic>{},
+                                );
+                                final available = double.tryParse('${stockItem['quantity'] ?? stockItem['current_stock'] ?? 0}') ?? 0;
+                                final overIssue = isIssued && qty > available && available > 0;
+
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 100),
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: isIssued ? (overIssue ? Colors.red.shade50 : Colors.teal.shade50) : Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: isIssued ? (overIssue ? Colors.red.shade300 : Colors.teal.shade300) : Colors.grey.shade200, width: isIssued ? 1.5 : 1),
+                                  ),
+                                  child: Row(children: [
+                                    Expanded(
+                                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                        Text(ing.name, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isIssued ? (overIssue ? Colors.red.shade700 : Colors.teal.shade800) : Colors.black87)),
+                                        Row(children: [
+                                          Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                                              child: Text(ing.sku, style: const TextStyle(fontSize: 9, color: Colors.grey))),
+                                          const SizedBox(width: 6),
+                                          Text(available > 0 ? '${available.toStringAsFixed(1)} ${ing.unit} avail' : 'not in stock',
+                                              style: TextStyle(fontSize: 10, color: overIssue ? Colors.red : Colors.grey.shade500)),
+                                        ]),
+                                      ]),
+                                    ),
+                                    SizedBox(
+                                      width: 80,
+                                      child: TextField(
+                                        controller: ctrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                                        decoration: InputDecoration(
+                                          hintText: '0',
+                                          suffixText: ing.unit,
+                                          suffixStyle: const TextStyle(fontSize: 9),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6),
+                                              borderSide: BorderSide(color: overIssue ? Colors.red.shade400 : (isIssued ? Colors.teal : Colors.grey.shade300))),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                          isDense: true,
+                                        ),
+                                        onChanged: (_) => setState(() {}),
+                                      ),
+                                    ),
+                                  ]),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Divider ─────────────────────────────────────────────
+                const VerticalDivider(width: 1),
+                // ── RIGHT PANEL: Recipes / Menu Items ──────────────────
+                Expanded(
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        color: Colors.grey.shade50,
+                        child: Row(children: [
+                          const Icon(Icons.menu_book_outlined, size: 15, color: Colors.deepPurple),
+                          const SizedBox(width: 6),
+                          const Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text('Menu Items & Recipes', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                              Text('Enter portions → stock auto-computes. Variance tracked at shift close.',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            ]),
+                          ),
+                          if (recipesWithPortions > 0) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.deepPurple.shade50, borderRadius: BorderRadius.circular(10)),
+                              child: Text('$recipesWithPortions planned', style: const TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w700)),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          FilledButton.icon(
+                            onPressed: _syncFromRecipes,
+                            style: FilledButton.styleFrom(backgroundColor: Colors.teal, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                            icon: const Icon(Icons.sync, size: 14),
+                            label: const Text('Sync Stock', style: TextStyle(fontSize: 12)),
+                          ),
+                        ]),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: widget.recipes.length,
+                          itemBuilder: (_, idx) {
+                            final recipe = widget.recipes[idx];
+                            final recipeId = '${recipe['id']}';
+                            final portCtrl = _portionCtrl[recipeId]!;
+                            final portions = double.tryParse(portCtrl.text.trim()) ?? 0;
+                            final isPlanned = portions > 0;
+                            final ingredients = ((recipe['ingredients'] as List?) ?? []).cast<Map<String, dynamic>>();
+
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 120),
+                              margin: const EdgeInsets.only(bottom: 10),
+                              decoration: BoxDecoration(
+                                color: isPlanned ? Colors.deepPurple.shade50 : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isPlanned ? Colors.deepPurple.shade300 : Colors.grey.shade200,
+                                  width: isPlanned ? 1.5 : 1,
+                                ),
+                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))],
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Expanded(
+                                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                          Text('${recipe['menu_item_name'] ?? recipe['recipe_name']}',
+                                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13,
+                                                  color: isPlanned ? Colors.deepPurple.shade800 : Colors.black87)),
+                                          Text('${recipe['recipe_name']}',
+                                              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                        ]),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                        Text('Portions to cook', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                                        const SizedBox(height: 3),
+                                        SizedBox(
+                                          width: 90,
+                                          child: TextField(
+                                            controller: portCtrl,
+                                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: isPlanned ? Colors.deepPurple : Colors.black87),
+                                            decoration: InputDecoration(
+                                              hintText: '0',
+                                              suffixText: recipe['output_unit'] ?? 'ptn',
+                                              suffixStyle: const TextStyle(fontSize: 9),
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6),
+                                                  borderSide: BorderSide(color: isPlanned ? Colors.deepPurple.shade300 : Colors.grey.shade300)),
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                              isDense: true,
+                                            ),
+                                            onChanged: (_) => setState(() {}),
+                                          ),
+                                        ),
+                                      ]),
+                                    ]),
+                                    if (ingredients.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 8),
+                                      // Show ingredients with computed quantities if portions set
+                                      ...ingredients.map((ing) {
+                                        final qpp = double.tryParse('${ing['quantity_required']}') ?? 0;
+                                        final total = portions > 0 ? qpp * portions : qpp;
+                                        final unit = '${ing['unit'] ?? 'kg'}';
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 4),
+                                          child: Row(children: [
+                                            Container(
+                                              width: 6, height: 6,
+                                              decoration: BoxDecoration(color: isPlanned ? Colors.deepPurple : Colors.grey.shade400, shape: BoxShape.circle),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(child: Text('${ing['item_name']}', style: const TextStyle(fontSize: 11))),
+                                            Text(
+                                              portions > 0
+                                                  ? '${total.toStringAsFixed(3)} $unit'
+                                                  : '${qpp.toStringAsFixed(3)} $unit / ptn',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: portions > 0 ? FontWeight.w700 : FontWeight.normal,
+                                                color: portions > 0 ? Colors.deepPurple.shade700 : Colors.grey,
+                                              ),
+                                            ),
+                                          ]),
+                                        );
+                                      }),
+                                      if (isPlanned) ...[
+                                        const SizedBox(height: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(color: Colors.deepPurple.shade100, borderRadius: BorderRadius.circular(6)),
+                                          child: Row(children: [
+                                            const Icon(Icons.info_outline, size: 12, color: Colors.deepPurple),
+                                            const SizedBox(width: 4),
+                                            Expanded(child: Text(
+                                              'System will track: if ${portions.toStringAsFixed(0)} portions produced, '
+                                              'these exact quantities should be used. Variance = issued − used − physical closing.',
+                                              style: const TextStyle(fontSize: 10, color: Colors.deepPurple),
+                                            )),
+                                          ]),
+                                        ),
+                                      ],
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          const Divider(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.of(context).viewInsets.bottom + 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Shift selector ──────────────────────────────────────
-                  const Text('Select Shift', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _shiftType = 'shift_a'),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: _shiftType == 'shift_a' ? AppColors.kPrimary.withValues(alpha: 0.10) : Colors.grey.shade50,
-                            border: Border.all(
-                              color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey.shade300,
-                              width: _shiftType == 'shift_a' ? 2 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(children: [
-                            Icon(Icons.wb_sunny_outlined, color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey),
-                            const SizedBox(height: 4),
-                            Text('Shift A', style: TextStyle(fontWeight: FontWeight.w700, color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey.shade700)),
-                            Text('Morning', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                          ]),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _shiftType = 'shift_b'),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: _shiftType == 'shift_b' ? Colors.indigo.withValues(alpha: 0.10) : Colors.grey.shade50,
-                            border: Border.all(
-                              color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey.shade300,
-                              width: _shiftType == 'shift_b' ? 2 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(children: [
-                            Icon(Icons.nights_stay_outlined, color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey),
-                            const SizedBox(height: 4),
-                            Text('Shift B', style: TextStyle(fontWeight: FontWeight.w700, color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey.shade700)),
-                            Text('Evening', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                          ]),
-                        ),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 20),
-                  // ── Primary cook ────────────────────────────────────────
-                  const Text('Primary Cook *', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  Autocomplete<Map<String, dynamic>>(
-                    optionsBuilder: (tv) {
-                      if (_staffList.isEmpty) return const [];
-                      if (tv.text.isEmpty) return _staffList;
-                      final q = tv.text.toLowerCase();
-                      return _staffList.where((s) => '${s['full_name'] ?? ''}'.toLowerCase().contains(q));
-                    },
-                    displayStringForOption: (s) => '${s['full_name'] ?? ''}',
-                    onSelected: (s) => setState(() {
-                      _staffName = '${s['full_name'] ?? ''}';
-                      _staffId = '${s['id']}';
-                    }),
-                    fieldViewBuilder: (_, ctrl, fn, __) => TextField(
-                      controller: ctrl,
-                      focusNode: fn,
-                      decoration: InputDecoration(
-                        labelText: _staffLoading ? 'Loading staff…' : 'Cook / Staff Name *',
-                        prefixIcon: const Icon(Icons.person_outline),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: _staffLoading
-                            ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                            : null,
-                      ),
-                      textCapitalization: TextCapitalization.words,
-                      onChanged: (v) => setState(() {
-                        _staffName = v;
-                        if (_staffId != null && _staffList.every((s) => '${s['full_name']}' != v)) _staffId = null;
-                      }),
-                    ),
-                    optionsViewBuilder: (_, onSel, options) => Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4,
-                        borderRadius: BorderRadius.circular(8),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 200),
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            itemCount: options.length,
-                            itemBuilder: (_, i) {
-                              final s = options.elementAt(i);
-                              return ListTile(
-                                dense: true,
-                                leading: CircleAvatar(radius: 14, backgroundColor: AppColors.kPrimary.withValues(alpha: 0.12),
-                                    child: Text('${s['first_name'] ?? '?'}'.substring(0, 1).toUpperCase(),
-                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.kPrimary))),
-                                title: Text('${s['full_name'] ?? ''}', style: const TextStyle(fontSize: 13)),
-                                subtitle: Text('${s['role'] ?? ''}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                onTap: () => onSel(s),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _notesCtrl,
-                    decoration: const InputDecoration(labelText: 'Notes (optional)', prefixIcon: Icon(Icons.notes_outlined), border: OutlineInputBorder()),
-                    maxLines: 1,
-                  ),
-                  const SizedBox(height: 20),
-                  // ── Additional shift staff ──────────────────────────────
-                  Row(children: [
-                    const Text('Additional Shift Staff', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                    const Spacer(),
-                    TextButton.icon(
-                      icon: const Icon(Icons.person_add_outlined, size: 16),
-                      label: const Text('Add Staff'),
-                      onPressed: _addExtraStaff,
-                    ),
-                  ]),
-                  if (_extraStaff.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    ..._extraStaff.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final s = entry.value;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          child: Row(children: [
-                            const Icon(Icons.person_outline, size: 18, color: Colors.grey),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text('${s['staff_name']}', style: const TextStyle(fontSize: 13))),
-                            DropdownButton<String>(
-                              value: s['role'] as String? ?? 'cook',
-                              isDense: true,
-                              underline: const SizedBox(),
-                              items: const [
-                                DropdownMenuItem(value: 'cook', child: Text('Cook', style: TextStyle(fontSize: 12))),
-                                DropdownMenuItem(value: 'helper', child: Text('Helper', style: TextStyle(fontSize: 12))),
-                                DropdownMenuItem(value: 'supervisor', child: Text('Supervisor', style: TextStyle(fontSize: 12))),
-                              ],
-                              onChanged: (v) => setState(() => s['role'] = v),
-                            ),
-                            Tooltip(
-                              message: 'Accountable for variance',
-                              child: Checkbox(
-                                value: s['is_accountable'] as bool? ?? true,
-                                onChanged: (v) => setState(() => s['is_accountable'] = v),
-                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 16, color: Colors.red),
-                              onPressed: () => setState(() => _extraStaff.removeAt(i)),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ]),
-                        ),
-                      );
-                    }),
-                    Text('✓ checkbox = accountable for variance penalty',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                  ],
-                  const SizedBox(height: 24),
-                  // ── Issue Stock to Kitchen ──────────────────────────────
-                  Row(children: [
-                    const Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.kPrimary),
-                    const SizedBox(width: 8),
-                    const Text('Issue Stock to Kitchen', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: AppColors.kPrimary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                      child: Text('${_allIngredients.length} items', style: const TextStyle(fontSize: 11, color: AppColors.kPrimary, fontWeight: FontWeight.w600)),
-                    ),
-                  ]),
-                  const SizedBox(height: 4),
-                  Text('Enter quantities to issue. Items with 0 will not be issued.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                  const SizedBox(height: 10),
-                  if (_allIngredients.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Center(child: Text('No ingredients found in recipes.', style: TextStyle(color: Colors.grey.shade500))),
-                    )
-                  else
-                    ..._allIngredients.map((ing) {
-                      final ctrl = _issuanceCtrl[ing.sku]!;
-                      final qtyStr = ctrl.text.trim();
-                      final qty = double.tryParse(qtyStr) ?? 0;
-                      final isIssued = qty > 0;
-
-                      // Check available stock
-                      final stockItem = widget.stock.firstWhere(
-                        (s) => '${s['item_sku']}' == ing.sku || '${s['sku']}' == ing.sku,
-                        orElse: () => <String, dynamic>{},
-                      );
-                      final available = double.tryParse('${stockItem['quantity'] ?? stockItem['current_stock'] ?? 0}') ?? 0;
-                      final overIssue = isIssued && qty > available;
-
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 120),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: isIssued
-                              ? (overIssue ? Colors.red.shade50 : Colors.teal.shade50)
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isIssued
-                                ? (overIssue ? Colors.red.shade300 : Colors.teal.shade300)
-                                : Colors.grey.shade200,
-                            width: isIssued ? 1.5 : 1,
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          child: Row(children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(ing.name,
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 13,
-                                          color: isIssued ? (overIssue ? Colors.red.shade700 : Colors.teal.shade800) : Colors.black87)),
-                                  const SizedBox(height: 2),
-                                  Row(children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(6)),
-                                      child: Text(ing.sku, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      available > 0 ? 'In stock: ${available.toStringAsFixed(2)} ${ing.unit}' : 'Not in stock',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: overIssue ? Colors.red : Colors.grey.shade600),
-                                    ),
-                                  ]),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            SizedBox(
-                              width: 90,
-                              child: TextField(
-                                controller: ctrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                textAlign: TextAlign.center,
-                                decoration: InputDecoration(
-                                  hintText: '0',
-                                  suffixText: ing.unit,
-                                  suffixStyle: const TextStyle(fontSize: 11),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: overIssue ? Colors.red : Colors.grey.shade300),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: overIssue ? Colors.red.shade400 : (isIssued ? Colors.teal : Colors.grey.shade300)),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                  isDense: true,
-                                ),
-                                onChanged: (_) => setState(() {}),
-                              ),
-                            ),
-                          ]),
-                        ),
-                      );
-                    }),
-                  if (issuedCount > 0) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.teal.shade200),
-                      ),
-                      child: Row(children: [
-                        const Icon(Icons.check_circle_outline, color: Colors.teal, size: 18),
-                        const SizedBox(width: 8),
-                        Text('$issuedCount item${issuedCount == 1 ? '' : 's'} will be issued to the kitchen',
-                            style: const TextStyle(fontSize: 13, color: Colors.teal, fontWeight: FontWeight.w600)),
-                      ]),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          // Bottom sticky bar
+          // ── Bottom bar ────────────────────────────────────────────────
           Container(
-            padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).padding.bottom + 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               border: Border(top: BorderSide(color: Colors.grey.shade200)),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, -2))],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, -2))],
             ),
-            child: SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: _posting ? null : _submit,
-                icon: _posting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.send_outlined),
-                label: Text(_posting ? 'Issuing Stock...' : 'Create Session & Issue Stock'),
+            child: Row(children: [
+              if (issuedCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.teal.shade200)),
+                  child: Row(children: [
+                    const Icon(Icons.check_circle_outline, color: Colors.teal, size: 16),
+                    const SizedBox(width: 6),
+                    Text('$issuedCount stock items · ${recipesWithPortions > 0 ? '$recipesWithPortions recipes linked' : 'no recipes linked'}',
+                        style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              const Spacer(),
+              SizedBox(
+                height: 44,
+                child: FilledButton.icon(
+                  onPressed: _posting ? null : _submit,
+                  icon: _posting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.send_outlined, size: 18),
+                  label: Text(_posting ? 'Issuing Stock...' : 'Create Session & Issue Stock'),
+                ),
               ),
-            ),
+            ]),
           ),
         ],
       ),
