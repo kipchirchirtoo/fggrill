@@ -1093,6 +1093,8 @@ class BranchStorekeeperRepository {
     required String staffName,
     String? staffId,
     String? notes,
+    String shiftType = 'shift_a',
+    List<Map<String, dynamic>> sessionStaff = const [],
     required List<Map<String, dynamic>> issues,
     required List<Map<String, dynamic>> plannedItems,
   }) async {
@@ -1102,8 +1104,10 @@ class BranchStorekeeperRepository {
       data: {
         'branch_id': branchId,
         'staff_name': staffName,
+        'shift_type': shiftType,
         if (staffId != null) 'staff_id': staffId,
         if (notes != null) 'notes': notes,
+        if (sessionStaff.isNotEmpty) 'session_staff': sessionStaff,
         'issues': issues,
         'planned_items': plannedItems,
       },
@@ -1115,10 +1119,14 @@ class BranchStorekeeperRepository {
   Future<Map<String, dynamic>> completeProductionSession({
     required String sessionId,
     required List<Map<String, dynamic>> entries,
+    List<Map<String, dynamic>> closingStock = const [],
   }) async {
     final response = await _dio.put(
       '/kitchen/production-sessions/$sessionId/complete',
-      data: {'entries': entries},
+      data: {
+        'entries': entries,
+        if (closingStock.isNotEmpty) 'closing_stock': closingStock,
+      },
       options: await _authOptions,
     );
     return _unwrapMap(response.data);

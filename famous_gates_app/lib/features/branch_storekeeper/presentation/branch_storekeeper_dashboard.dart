@@ -12566,6 +12566,7 @@ class _KitchenProductionSectionState
   List<Map<String, dynamic>> _recipes = [];
   bool _loading = true;
   Map<String, dynamic>? _selected; // open session for detail view
+  String _shiftFilter = 'ALL'; // ALL | shift_a | shift_b
 
   @override
   void initState() {
@@ -12680,6 +12681,11 @@ class _KitchenProductionSectionState
       (sum, s) => sum + (double.tryParse('${s['total_penalty'] ?? 0}') ?? 0),
     );
 
+    // Apply shift filter
+    final filtered = _shiftFilter == 'ALL'
+        ? _sessions
+        : _sessions.where((s) => s['shift_type'] == _shiftFilter).toList();
+
     return _Page(
       title: 'Kitchen Sessions',
       subtitle: 'Issue stock to kitchen, log actual production, track variance.',
@@ -12698,7 +12704,36 @@ class _KitchenProductionSectionState
           _StatCardData('Recipes Loaded', '${_recipes.length}', Icons.menu_book_outlined, AppColors.kPrimary),
           _StatCardData('Total Penalties', 'KES ${totalPenalty.toStringAsFixed(0)}', Icons.money_off_outlined, AppColors.kError),
         ]),
-        if (_sessions.isEmpty)
+        // Shift filter tabs
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              for (final entry in const {
+                'ALL': 'All Shifts',
+                'shift_a': 'Shift A',
+                'shift_b': 'Shift B',
+              }.entries)
+                ChoiceChip(
+                  label: Text(entry.value),
+                  selected: _shiftFilter == entry.key,
+                  onSelected: (_) => setState(() => _shiftFilter = entry.key),
+                  selectedColor: entry.key == 'shift_b'
+                      ? Colors.indigo.shade100
+                      : AppColors.kPrimary.withOpacity(0.15),
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: _shiftFilter == entry.key
+                        ? (entry.key == 'shift_b' ? Colors.indigo : AppColors.kPrimary)
+                        : Colors.grey.shade700,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (filtered.isEmpty)
           _SectionCard(
             title: 'No Sessions Yet',
             child: Padding(
@@ -12708,9 +12743,13 @@ class _KitchenProductionSectionState
                   children: [
                     Icon(Icons.soup_kitchen_outlined, size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 12),
-                    const Text('Tap "New Session" when a cook comes to collect ingredients.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey)),
+                    Text(
+                      _shiftFilter == 'ALL'
+                          ? 'Tap "New Session" when a cook comes to collect ingredients.'
+                          : 'No ${_shiftFilter == 'shift_a' ? 'Shift A' : 'Shift B'} sessions found.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -12718,9 +12757,9 @@ class _KitchenProductionSectionState
           )
         else
           _SectionCard(
-            title: 'Sessions',
+            title: 'Sessions (${filtered.length})',
             child: Column(
-              children: _sessions.map((s) => _sessionTile(s)).toList(),
+              children: filtered.map((s) => _sessionTile(s)).toList(),
             ),
           ),
       ],
@@ -12752,8 +12791,12 @@ class _KitchenProductionSectionState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${s['session_number'] ?? 'Session'}',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                  Row(children: [
+                    Text('${s['session_number'] ?? 'Session'}',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    const SizedBox(width: 6),
+                    _ShiftBadge(s['shift_type']),
+                  ]),
                   const SizedBox(height: 2),
                   Text('Cook: ${s['staff_name'] ?? '—'}  •  ${s['session_date'] ?? ''}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -12988,11 +13031,18 @@ class _NewSessionSheet extends ConsumerStatefulWidget {
 class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
   final _notesCtrl = TextEditingController();
 
-  // Staff search
+  // Shift
+  String _shiftType = 'shift_a';
+
+  // Primary cook (autocomplete)
   List<Map<String, dynamic>> _staffList = [];
   bool _staffLoading = false;
   String _staffName = '';
   String? _staffId;
+
+  // Additional staff on this shift
+  // Each entry: { staff_profile_id, staff_name, role, is_accountable }
+  final List<Map<String, dynamic>> _extraStaff = [];
 
   // Selected recipes: recipeId → {recipe, qty to produce (text ctrl)}
   final Map<String, _RecipePlan> _plans = {};
@@ -13030,6 +13080,74 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
         _plans[id] = _RecipePlan(recipe: recipe, ctrl: TextEditingController(text: '${recipe['output_quantity'] ?? 1}'));
       }
     });
+  }
+
+  Future<void> _addExtraStaff() async {
+    Map<String, dynamic>? selected;
+    String role = 'cook';
+    bool accountable = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Add Staff to Shift'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<Map<String, dynamic>>(
+                  decoration: const InputDecoration(labelText: 'Staff member', border: OutlineInputBorder()),
+                  items: _staffList.map((s) => DropdownMenuItem(
+                    value: s,
+                    child: Text('${s['full_name'] ?? ''}', style: const TextStyle(fontSize: 13)),
+                  )).toList(),
+                  onChanged: (v) => setS(() => selected = v),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: role,
+                  decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'cook', child: Text('Cook')),
+                    DropdownMenuItem(value: 'helper', child: Text('Helper')),
+                    DropdownMenuItem(value: 'supervisor', child: Text('Supervisor')),
+                  ],
+                  onChanged: (v) => setS(() => role = v ?? role),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  dense: true,
+                  value: accountable,
+                  title: const Text('Accountable for variance', style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('Will share credit bill if variance occurs', style: TextStyle(fontSize: 11)),
+                  onChanged: (v) => setS(() => accountable = v ?? true),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: selected == null ? null : () => Navigator.pop(ctx, true),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true && selected != null) {
+      setState(() {
+        _extraStaff.add({
+          'staff_profile_id': selected!['id'],
+          'staff_name': selected!['full_name'] ?? '',
+          'role': role,
+          'is_accountable': accountable,
+        });
+      });
+    }
   }
 
   // Compute total ingredient needs from all plans
@@ -13079,9 +13197,22 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
     setState(() => _posting = true);
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
+      // Build session_staff list — primary cook + any extra staff
+      final allStaff = <Map<String, dynamic>>[
+        {
+          'staff_profile_id': _staffId,
+          'staff_name': _staffName.trim(),
+          'role': 'cook',
+          'is_accountable': true,
+        },
+        ..._extraStaff,
+      ];
+
       await repo.createProductionSession(
         staffName: _staffName.trim(),
         staffId: _staffId,
+        shiftType: _shiftType,
+        sessionStaff: allStaff,
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         issues: needs.values.map((n) => {
           'item_sku': n.sku,
@@ -13141,6 +13272,86 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── Shift selector ─────────────────────────────────────
+                  const Text('Select Shift', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _shiftType = 'shift_a'),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: _shiftType == 'shift_a'
+                                ? AppColors.kPrimary.withOpacity(0.1)
+                                : Colors.grey.shade50,
+                            border: Border.all(
+                              color: _shiftType == 'shift_a'
+                                  ? AppColors.kPrimary
+                                  : Colors.grey.shade300,
+                              width: _shiftType == 'shift_a' ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(children: [
+                            Icon(Icons.wb_sunny_outlined,
+                                color: _shiftType == 'shift_a'
+                                    ? AppColors.kPrimary
+                                    : Colors.grey),
+                            const SizedBox(height: 4),
+                            Text('Shift A',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: _shiftType == 'shift_a'
+                                        ? AppColors.kPrimary
+                                        : Colors.grey.shade700)),
+                            Text('Morning', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                          ]),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _shiftType = 'shift_b'),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: _shiftType == 'shift_b'
+                                ? Colors.indigo.withOpacity(0.1)
+                                : Colors.grey.shade50,
+                            border: Border.all(
+                              color: _shiftType == 'shift_b'
+                                  ? Colors.indigo
+                                  : Colors.grey.shade300,
+                              width: _shiftType == 'shift_b' ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(children: [
+                            Icon(Icons.nights_stay_outlined,
+                                color: _shiftType == 'shift_b'
+                                    ? Colors.indigo
+                                    : Colors.grey),
+                            const SizedBox(height: 4),
+                            Text('Shift B',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: _shiftType == 'shift_b'
+                                        ? Colors.indigo
+                                        : Colors.grey.shade700)),
+                            Text('Evening', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 20),
+                  // ── Primary cook ────────────────────────────────────────
+                  const Text('Primary Cook *', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(height: 8),
                   // Cook / Staff — searchable autocomplete from branch staff list
                   Autocomplete<Map<String, dynamic>>(
                     optionsBuilder: (TextEditingValue tv) {
@@ -13243,6 +13454,71 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
                     ),
                     maxLines: 1,
                   ),
+                  const SizedBox(height: 20),
+                  // ── Additional shift staff ──────────────────────────────
+                  Row(
+                    children: [
+                      const Text('Additional Shift Staff', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      const Spacer(),
+                      TextButton.icon(
+                        icon: const Icon(Icons.person_add_outlined, size: 16),
+                        label: const Text('Add Staff'),
+                        onPressed: () => _addExtraStaff(),
+                      ),
+                    ],
+                  ),
+                  if (_extraStaff.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    ..._extraStaff.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final s = entry.value;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(children: [
+                            const Icon(Icons.person_outline, size: 18, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('${s['staff_name']}', style: const TextStyle(fontSize: 13))),
+                            DropdownButton<String>(
+                              value: s['role'] as String? ?? 'cook',
+                              isDense: true,
+                              underline: const SizedBox(),
+                              items: const [
+                                DropdownMenuItem(value: 'cook', child: Text('Cook', style: TextStyle(fontSize: 12))),
+                                DropdownMenuItem(value: 'helper', child: Text('Helper', style: TextStyle(fontSize: 12))),
+                                DropdownMenuItem(value: 'supervisor', child: Text('Supervisor', style: TextStyle(fontSize: 12))),
+                              ],
+                              onChanged: (v) => setState(() => s['role'] = v),
+                            ),
+                            const SizedBox(width: 4),
+                            Tooltip(
+                              message: 'Accountable for variance',
+                              child: Checkbox(
+                                value: s['is_accountable'] as bool? ?? true,
+                                onChanged: (v) => setState(() => s['is_accountable'] = v),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 16, color: Colors.red),
+                              onPressed: () => setState(() => _extraStaff.removeAt(i)),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ]),
+                        ),
+                      );
+                    }),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '✓ checkbox = accountable for variance penalty',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   // Recipe selection
                   Row(
@@ -13447,25 +13723,32 @@ class _RecordProductionSheet extends ConsumerStatefulWidget {
 
 class _RecordProductionSheetState extends ConsumerState<_RecordProductionSheet> {
   final Map<String, TextEditingController> _ctrlMap = {};
+  // closing stock: issue item_sku → TextEditingController for closing qty
+  final Map<String, TextEditingController> _closingCtrl = {};
   bool _posting = false;
 
   List<Map<String, dynamic>> get _entries =>
       ((widget.session['entries'] as List?) ?? []).cast<Map<String, dynamic>>();
+  List<Map<String, dynamic>> get _issues =>
+      ((widget.session['issues'] as List?) ?? []).cast<Map<String, dynamic>>();
 
   @override
   void initState() {
     super.initState();
     for (final e in _entries) {
       final id = '${e['id']}';
-      _ctrlMap[id] = TextEditingController(
-        text: '${e['expected_quantity'] ?? 0}',
-      );
+      _ctrlMap[id] = TextEditingController(text: '${e['expected_quantity'] ?? 0}');
+    }
+    for (final i in _issues) {
+      final sku = '${i['item_sku']}';
+      _closingCtrl[sku] = TextEditingController(text: '0');
     }
   }
 
   @override
   void dispose() {
     for (final c in _ctrlMap.values) c.dispose();
+    for (final c in _closingCtrl.values) c.dispose();
     super.dispose();
   }
 
@@ -13481,9 +13764,21 @@ class _RecordProductionSheetState extends ConsumerState<_RecordProductionSheet> 
         };
       }).toList();
 
+      final closingStock = _issues.map((i) {
+        final sku = '${i['item_sku']}';
+        return {
+          'item_sku': sku,
+          'item_name': i['item_name'] ?? sku,
+          'issued_quantity': i['quantity_issued'] ?? 0,
+          'unit': i['unit'] ?? 'kg',
+          'closing_quantity': double.tryParse(_closingCtrl[sku]?.text.trim() ?? '0') ?? 0,
+        };
+      }).toList();
+
       final result = await repo.completeProductionSession(
         sessionId: '${widget.session['id']}',
         entries: entries,
+        closingStock: closingStock,
       );
       if (mounted) {
         Navigator.of(context).pop({
@@ -13639,6 +13934,65 @@ class _RecordProductionSheetState extends ConsumerState<_RecordProductionSheet> 
               },
             ),
           ),
+          // ── Closing stock section ───────────────────────────────────
+          if (_issues.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.teal.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.teal.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(children: [
+                    Icon(Icons.inventory_outlined, color: Colors.teal, size: 16),
+                    SizedBox(width: 6),
+                    Text('Closing Stock (items returned to store)',
+                        style: TextStyle(fontWeight: FontWeight.w700, color: Colors.teal, fontSize: 13)),
+                  ]),
+                  const SizedBox(height: 2),
+                  const Text('Enter how much of each ingredient was NOT used and returned.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  const SizedBox(height: 10),
+                  ..._issues.map((i) {
+                    final sku = '${i['item_sku']}';
+                    final issued = double.tryParse('${i['quantity_issued'] ?? 0}') ?? 0;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(children: [
+                        Expanded(
+                          flex: 3,
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('${i['item_name'] ?? sku}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text('Issued: ${issued.toStringAsFixed(3)} ${i['unit'] ?? 'kg'}',
+                                style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          ]),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 100,
+                          child: TextField(
+                            controller: _closingCtrl[sku],
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Returned',
+                              suffixText: i['unit'] ?? 'kg',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ]),
+                    );
+                  }),
+                ],
+              ),
+            ),
           // Total penalty preview
           if (_entries.isNotEmpty) Builder(builder: (ctx) {
             double totalPenalty = 0;
@@ -13686,6 +14040,28 @@ class _RecordProductionSheetState extends ConsumerState<_RecordProductionSheet> 
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ShiftBadge extends StatelessWidget {
+  const _ShiftBadge(this.shiftType);
+  final dynamic shiftType;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = shiftType == 'shift_b' ? 'Shift B' : 'Shift A';
+    final color = shiftType == 'shift_b' ? Colors.indigo : Colors.teal;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }
