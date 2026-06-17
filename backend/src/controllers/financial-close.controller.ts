@@ -82,38 +82,53 @@ export const submitWorkspaceClose = asyncWrap(async (req, res) => {
     submittedBanked: banked,
   });
 
+  // banking_variance column added in migration 20260613_financial_governance.sql
+  const hasBankingVariance = variance.bankingVariance !== undefined;
+
+  const submissionPayload: Record<string, any> = {
+    branch_id: branch,
+    record_date,
+    submitted_revenue: revenue,
+    submitted_cogs: cogs,
+    submitted_expenses: expenses,
+    submitted_net_profit: netProfit,
+    submitted_cash: cash,
+    submitted_banked: banked,
+    submitted_unbanked: unbanked,
+    revenue_variance: variance.revenueVariance,
+    cash_variance: variance.cashVariance,
+    pos_variance: variance.posVariance,
+    payroll_variance: variance.payrollVariance,
+    supplier_variance: variance.supplierVariance,
+    overall_variance: variance.overallVariance,
+    variance_pct: variance.variancePct,
+    variance_analysis: variance.smartAnalysis,
+    requires_explanation: variance.requiresExplanation,
+    status: 'submitted',
+    submitted_by: actor,
+    submitted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (hasBankingVariance) {
+    submissionPayload.banking_variance = variance.bankingVariance;
+  }
+
   // Upsert the workspace submission record
   const { data: submission, error: upsertErr } = await supabase
     .from('financial_workspace_submissions')
-    .upsert({
-      branch_id: branch,
-      record_date,
-      submitted_revenue: revenue,
-      submitted_cogs: cogs,
-      submitted_expenses: expenses,
-      submitted_net_profit: netProfit,
-      submitted_cash: cash,
-      submitted_banked: banked,
-      submitted_unbanked: unbanked,
-      revenue_variance: variance.revenueVariance,
-      cash_variance: variance.cashVariance,
-      banking_variance: variance.bankingVariance,
-      pos_variance: variance.posVariance,
-      payroll_variance: variance.payrollVariance,
-      supplier_variance: variance.supplierVariance,
-      overall_variance: variance.overallVariance,
-      variance_pct: variance.variancePct,
-      variance_analysis: variance.smartAnalysis,
-      requires_explanation: variance.requiresExplanation,
-      status: variance.requiresExplanation ? 'submitted' : 'submitted',
-      submitted_by: actor,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'branch_id,record_date' })
+    .upsert(submissionPayload, { onConflict: 'branch_id,record_date' })
     .select()
     .single();
 
-  if (upsertErr) throw upsertErr;
+  if (upsertErr) {
+    const errCode = (upsertErr as any).code;
+    if (errCode === 'PGRST204') {
+      logger.warn('[FinancialClose] Submission upsert failed: schema cache missing columns. Run migration 20260613_financial_governance.sql.');
+      throw new AppError('Financial governance schema not yet deployed. Please run migration 20260613_financial_governance.sql.', 503);
+    }
+    throw upsertErr;
+  }
 
   // Also update the daily_financial_records status to SUBMITTED
   await supabase

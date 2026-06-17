@@ -239,9 +239,14 @@ class SchedulerService {
             .from('conference_halls')
             .update({ status: newStatus })
             .eq('id', hall.id);
-          
+
           if (updateError) {
-            logger.error(`Error updating hall ${hall.id} status:`, updateError);
+            // 23514 = check constraint violation; status enum on this table may not match scheduler assumptions
+            if ((updateError as any).code === '23514') {
+              logger.warn(`Hall "${hall.name}" status update skipped: '${newStatus}' violates check constraint conference_halls_status_check`);
+            } else {
+              logger.error(`Error updating hall ${hall.id} status:`, updateError);
+            }
           } else {
             logger.info(`Hall "${hall.name}" status updated: ${hall.status} → ${newStatus}`);
             updatedCount++;

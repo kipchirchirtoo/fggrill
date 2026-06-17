@@ -396,7 +396,10 @@ export default function DispatchPage() {
 
                                     <div className="p-6 lg:w-64 bg-stone-50/20 flex flex-col justify-center gap-2 border-t lg:border-t-0 lg:border-l border-stone-100">
                                         {statusTab === 'READY' ? (
-                                            <button onClick={() => handleOpenDispatch(dispatch)} className="w-full h-11 bg-stone-900 text-white text-[13px] font-bold rounded-lg hover:bg-stone-800 transition-colors flex items-center justify-center gap-2">
+                                            <button
+                                                onClick={() => handleOpenDispatch(dispatch)}
+                                                className="w-full h-11 bg-gradient-to-r from-blue-700 to-blue-600 text-white text-[13px] font-bold rounded-lg hover:from-blue-800 hover:to-blue-700 active:from-blue-900 active:to-blue-800 shadow-sm hover:shadow-md active:shadow-sm active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
+                                            >
                                                 <span>Proceed to Transit</span>
                                                 <ArrowRight className="h-4 w-4" />
                                             </button>

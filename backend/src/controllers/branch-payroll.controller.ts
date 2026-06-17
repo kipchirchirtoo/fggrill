@@ -42,6 +42,7 @@ function calculateLine(input: {
   workingDays?: number;
   loanDeduction?: number;
   advanceDeduction?: number;
+  creditBillDeduction?: number;
   uniformDeduction?: number;
   otherDeductions?: number;
   nssfEnabled?: boolean;
@@ -63,7 +64,7 @@ function calculateLine(input: {
   const dailyRate = basic / workDays;
   const absentDeduction = round2(dailyRate * absent);
 
-  // Statutory deductions (Kenya 2026 rates) - respect per-employee flags and custom amounts
+  // Statutory deductions (Kenya 2026 rates)
   const paye = round2(calculatePAYE(gross - absentDeduction));
   const sha = input.shifEnabled !== false
     ? (input.shifAmount != null ? round2(n(input.shifAmount)) : round2(gross * 0.0275))
@@ -73,17 +74,18 @@ function calculateLine(input: {
     : 0;
   const housingFund = input.housingFundEnabled !== false
     ? (input.housingFundAmount != null ? round2(n(input.housingFundAmount)) : round2(Math.min(gross * 0.015, 2500)))
-    : 0; // 1.5% capped at 2500
+    : 0;
 
   const loan = n(input.loanDeduction);
   const advance = n(input.advanceDeduction);
+  const creditBill = n(input.creditBillDeduction);
   const uniform = n(input.uniformDeduction);
   const other = n(input.otherDeductions);
 
-  const totalDeductions = round2(paye + sha + nssf + housingFund + absentDeduction + loan + advance + uniform + other);
+  const totalDeductions = round2(paye + sha + nssf + housingFund + absentDeduction + loan + advance + creditBill + uniform + other);
   const netPay = round2(gross - totalDeductions);
 
-  return { gross, paye, sha, nssf, housingFund, absentDeduction, loan, advance, uniform, other, totalDeductions, netPay };
+  return { gross, paye, sha, nssf, housingFund, absentDeduction, loan, advance, creditBill, uniform, other, totalDeductions, netPay };
 }
 
 function calculatePAYE(gross: number): number {
@@ -202,17 +204,27 @@ export const generatePayrollBatch = asyncWrap(async (req, res) => {
   if (staffErr) throw staffErr;
   if (!staff?.length) throw new AppError('No active staff found for this branch', 404);
 
-  // Fetch advances to deduct this period (table: staff_advances, cols: amount, month_to_deduct, year_to_deduct)
   const staffIds = staff.map((s) => s.id);
-  const { data: loans } = await supabase
-    .from('staff_advances')
-    .select('staff_id, amount')
-    .in('staff_id', staffIds)
-    .eq('status', 'approved');
 
+  // Fetch all 3 deduction sources in parallel
+  const [advancesRes, loansRes, creditBillsRes] = await Promise.allSettled([
+    supabase.from('staff_advances').select('staff_id, amount').in('staff_id', staffIds).eq('status', 'approved'),
+    supabase.from('staff_loans').select('staff_id, monthly_deduction').in('staff_id', staffIds).eq('status', 'active'),
+    supabase.from('staff_credit_bills').select('staff_id, balance').in('staff_id', staffIds).in('status', ['open', 'partial']),
+  ]);
+
+  const advanceByStaff = new Map<string, number>();
   const loanByStaff = new Map<string, number>();
-  for (const loan of loans || []) {
-    loanByStaff.set(String(loan.staff_id), (loanByStaff.get(String(loan.staff_id)) || 0) + n(loan.amount));
+  const creditBillByStaff = new Map<string, number>();
+
+  for (const adv of (advancesRes.status === 'fulfilled' ? advancesRes.value.data || [] : [])) {
+    advanceByStaff.set(String(adv.staff_id), (advanceByStaff.get(String(adv.staff_id)) || 0) + n(adv.amount));
+  }
+  for (const loan of (loansRes.status === 'fulfilled' ? loansRes.value.data || [] : [])) {
+    loanByStaff.set(String(loan.staff_id), (loanByStaff.get(String(loan.staff_id)) || 0) + n(loan.monthly_deduction));
+  }
+  for (const bill of (creditBillsRes.status === 'fulfilled' ? creditBillsRes.value.data || [] : [])) {
+    creditBillByStaff.set(String(bill.staff_id), (creditBillByStaff.get(String(bill.staff_id)) || 0) + n(bill.balance));
   }
 
   // Previous period lines for variance
@@ -241,6 +253,8 @@ export const generatePayrollBatch = asyncWrap(async (req, res) => {
       daysAbsent: 0,
       workingDays: 26,
       loanDeduction: loanByStaff.get(String(s.id)) || 0,
+      advanceDeduction: advanceByStaff.get(String(s.id)) || 0,
+      creditBillDeduction: creditBillByStaff.get(String(s.id)) || 0,
       nssfEnabled: (s as any).nssf_enabled,
       shifEnabled: (s as any).shif_enabled,
       housingFundEnabled: (s as any).housing_fund_enabled,
@@ -280,7 +294,10 @@ export const generatePayrollBatch = asyncWrap(async (req, res) => {
   const totalPaye = round2(lines.reduce((s, l) => s + l.paye, 0));
   const totalSha = round2(lines.reduce((s, l) => s + l.sha, 0));
   const totalNssf = round2(lines.reduce((s, l) => s + l.nssf, 0));
+  const totalHousingFund = round2(lines.reduce((s, l) => s + l.housingFund, 0));
   const totalLoans = round2(lines.reduce((s, l) => s + l.loan, 0));
+  const totalAdvances = round2(lines.reduce((s, l) => s + l.advance, 0));
+  const totalCreditBills = round2(lines.reduce((s, l) => s + l.creditBill, 0));
   const totalNet = round2(lines.reduce((s, l) => s + l.netPay, 0));
   const prevTotalNet = prevLines.length ? round2(prevLines.reduce((s: number, l: any) => s + n(l.net_pay), 0)) : null;
 
@@ -297,7 +314,10 @@ export const generatePayrollBatch = asyncWrap(async (req, res) => {
     total_paye: totalPaye,
     total_sha: totalSha,
     total_nssf: totalNssf,
+    total_housing_fund: totalHousingFund,
     total_loans: totalLoans,
+    total_advances: totalAdvances,
+    total_credit_bills: totalCreditBills,
     total_net: totalNet,
     headcount: lines.length,
     prev_period_net: prevTotalNet,
@@ -344,6 +364,8 @@ export const generatePayrollBatch = asyncWrap(async (req, res) => {
     nssf: l.nssf,
     loan_deduction: l.loan,
     advance_deduction: l.advance,
+    credit_bill_deduction: l.creditBill,
+    housing_fund_deduction: l.housingFund,
     absent_deduction: l.absentDeduction,
     uniform_deduction: l.uniform,
     other_deductions: l.other,

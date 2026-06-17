@@ -2204,11 +2204,18 @@ class _FinancialWorkspaceSectionState
   Future<void> _dailyEntry(Map<String, dynamic> record) async {
     final status = _text(record, ['status']).toUpperCase();
     final isReadOnly = status == 'SUBMITTED' || status == 'REVIEWED';
+    // Auto-trigger LINA fill when the record has no revenue data yet
+    final hasData = _num(record['total_revenue']) > 0 ||
+        (record['revenue_data'] as Map?)?.isNotEmpty == true;
+    final autoFill = !isReadOnly && !hasData;
     final saved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          _DailyEntryDialog(existing: record, isReadOnly: isReadOnly),
+      builder: (_) => _DailyEntryDialog(
+        existing: record,
+        isReadOnly: isReadOnly,
+        autoFill: autoFill,
+      ),
     );
     if (saved == true) _refresh();
   }
@@ -13788,9 +13795,14 @@ class _BudgetsSectionState extends ConsumerState<_BudgetsSection> {
 }
 
 class _DailyEntryDialog extends ConsumerStatefulWidget {
-  const _DailyEntryDialog({required this.existing, this.isReadOnly = false});
+  const _DailyEntryDialog({
+    required this.existing,
+    this.isReadOnly = false,
+    this.autoFill = false,
+  });
   final Map<String, dynamic> existing;
   final bool isReadOnly;
+  final bool autoFill;
 
   @override
   ConsumerState<_DailyEntryDialog> createState() => _DailyEntryDialogState();
@@ -13877,6 +13889,16 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
   };
 
   String _fieldLabel(String field) => _fieldLabels[field] ?? _title(field);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoFill) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _autofillWithLina();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -13973,29 +13995,43 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
                   onPressed: () => Navigator.pop(context, false),
                   child: const Text('Close')),
             ]
-          : [
-              OutlinedButton.icon(
-                onPressed: _autofilling ? null : _autofillWithLina,
-                icon: _autofilling
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.auto_awesome, size: 16),
-                label: Text(_autofilling
-                    ? 'Lina is collecting…'
-                    : 'Autofill with Lina AI'),
-              ),
-              TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel')),
-              FilledButton.tonal(
-                  onPressed: () => _save('DRAFT'),
-                  child: const Text('Save Draft')),
-              FilledButton(
-                  onPressed: () => _save('SUBMITTED'),
-                  child: const Text('Submit')),
-            ],
+          : _linaLocked
+              ? [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel')),
+                  FilledButton.tonal(
+                      onPressed: () => _save('DRAFT'),
+                      child: const Text('Save Draft')),
+                  FilledButton.icon(
+                    onPressed: () => _save('SUBMITTED'),
+                    icon: const Icon(Icons.send, size: 16),
+                    label: const Text('Send to Auditor'),
+                  ),
+                ]
+              : [
+                  OutlinedButton.icon(
+                    onPressed: _autofilling ? null : _autofillWithLina,
+                    icon: _autofilling
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.auto_awesome, size: 16),
+                    label: Text(_autofilling
+                        ? 'Lina is collecting…'
+                        : 'Autofill with Lina AI'),
+                  ),
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel')),
+                  FilledButton.tonal(
+                      onPressed: () => _save('DRAFT'),
+                      child: const Text('Save Draft')),
+                  FilledButton(
+                      onPressed: () => _save('SUBMITTED'),
+                      child: const Text('Submit')),
+                ],
     );
   }
 
@@ -14232,11 +14268,15 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
       final cogs = _map(data['cogs_data']);
       final expense = _map(data['expense_data']);
 
+      int filledCount = 0;
       void set(String field, dynamic value) {
         final c = _controllers[field];
         if (c == null) return;
         final num v = _num(value);
-        if (v != 0) c.text = v.toStringAsFixed(0);
+        if (v != 0) {
+          c.text = v.toStringAsFixed(0);
+          filledCount++;
+        }
       }
 
       for (final f in _revenueFields) {
@@ -14271,20 +14311,38 @@ class _DailyEntryDialogState extends ConsumerState<_DailyEntryDialog> {
       final anomalies = _list(data['anomalies'])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
-      if (mounted) {
-        setState(() {
-          _linaLocked = true;
-          _linaAnomalies = anomalies;
-        });
+
+      if (!mounted) return;
+
+      // No data found for this date — don't lock the form so the user can
+      // still enter figures manually.
+      if (filledCount == 0) {
         AppNotifier.show(
           context,
-          anomalies.isEmpty
-              ? 'Lina filled & locked this entry. Review and Submit to the Director.'
-              : 'Lina filled & locked this entry and flagged ${anomalies.length} anomaly(ies). Review and Submit to the Director.',
+          'Lina found no recorded transactions for $_recordDate. Enter figures manually.',
+          isError: false,
+        );
+        return;
+      }
+
+      setState(() {
+        _linaLocked = true;
+        _linaAnomalies = anomalies;
+      });
+      AppNotifier.show(
+        context,
+        anomalies.isEmpty
+            ? 'Lina filled & locked this entry. Review and Submit to the Director.'
+            : 'Lina filled & locked this entry and flagged ${anomalies.length} anomaly(ies). Review and Submit to the Director.',
+      );
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.show(
+          context,
+          'Lina autofill failed: $e',
+          isError: true,
         );
       }
-    } catch (e) {
-      if (mounted) _toast('Lina autofill failed: $e');
     } finally {
       if (mounted) setState(() => _autofilling = false);
     }

@@ -476,7 +476,7 @@ export const getSupplierLedger = async (
             .from('store_supplier_ledger')
             .select('*')
             .eq('supplier_id', supplierId)
-            .order('transaction_date', { ascending: false })
+            .order('entry_date', { ascending: false })
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -507,8 +507,8 @@ export const getSupplierLedger = async (
         }));
 
         const combined = [...(ledger || []), ...grnHistory].sort((a: any, b: any) => {
-            const dateA = Date.parse(a.transaction_date || a.created_at || '') || 0;
-            const dateB = Date.parse(b.transaction_date || b.created_at || '') || 0;
+            const dateA = Date.parse(a.entry_date || a.transaction_date || a.created_at || '') || 0;
+            const dateB = Date.parse(b.entry_date || b.transaction_date || b.created_at || '') || 0;
             if (dateA !== dateB) return dateB - dateA;
             return String(b.created_at || '').localeCompare(String(a.created_at || ''));
         });

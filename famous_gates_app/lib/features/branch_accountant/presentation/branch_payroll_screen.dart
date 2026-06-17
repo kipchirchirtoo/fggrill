@@ -501,6 +501,10 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
     final totalPaye = _d(batch['total_paye']);
     final totalSha = _d(batch['total_sha']);
     final totalNssf = _d(batch['total_nssf']);
+    final totalHousingFund = _d(batch['total_housing_fund']);
+    final totalLoans = _d(batch['total_loans']);
+    final totalAdvances = _d(batch['total_advances']);
+    final totalCreditBills = _d(batch['total_credit_bills']);
     final headcount = batch['headcount'] as int? ?? 0;
 
     return SingleChildScrollView(
@@ -546,7 +550,8 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
               ]),
               const SizedBox(height: 16),
               LayoutBuilder(builder: (context, constraints) {
-                final cols = constraints.maxWidth < 600 ? 2 : 5;
+                const minCols = 2;
+                final cols = constraints.maxWidth < 600 ? minCols : (constraints.maxWidth < 900 ? 3 : 5);
                 final cardW = (constraints.maxWidth - ((cols - 1) * 12)) / cols;
                 final cards = [
                   _summaryCard('Gross Pay', _money(totalGross), Icons.payments, AppColors.kPrimary),
@@ -561,6 +566,17 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
                   children: cards.map((c) => SizedBox(width: cardW, height: 96, child: c)).toList(),
                 );
               }),
+              const SizedBox(height: 12),
+              // Deductions summary strip
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  if (totalHousingFund > 0) _dedChip('Housing Levy', _money(totalHousingFund), const Color(0xFF8B5CF6)),
+                  if (totalAdvances > 0) _dedChip('Advances', _money(totalAdvances), AppColors.kError),
+                  if (totalLoans > 0) _dedChip('Loan Repayments', _money(totalLoans), const Color(0xFFDC2626)),
+                  if (totalCreditBills > 0) _dedChip('Credit Bills', _money(totalCreditBills), AppColors.kWarning),
+                ]),
+              ),
             ]),
           ),
         ),
@@ -660,16 +676,27 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
+                  columnSpacing: 18,
                   headingRowColor: WidgetStateProperty.all(AppColors.kSurface),
                   columns: [
                     const DataColumn(label: Text('Staff')),
+                    const DataColumn(label: Text('Emp #')),
                     const DataColumn(label: Text('Dept')),
                     const DataColumn(label: Text('Days')),
+                    const DataColumn(label: Text('Basic')),
                     const DataColumn(label: Text('Gross')),
+                    // Statutory deductions
                     const DataColumn(label: Text('PAYE')),
                     const DataColumn(label: Text('SHA')),
                     const DataColumn(label: Text('NSSF')),
-                    const DataColumn(label: Text('Other Ded')),
+                    const DataColumn(label: Text('Hsg Levy')),
+                    // Voluntary / other deductions
+                    const DataColumn(label: Text('Advance')),
+                    const DataColumn(label: Text('Loan')),
+                    const DataColumn(label: Text('Credit Bill')),
+                    const DataColumn(label: Text('Absent')),
+                    const DataColumn(label: Text('Uniform/Other')),
+                    // Totals
                     const DataColumn(label: Text('Total Ded')),
                     const DataColumn(label: Text('Net Pay')),
                     const DataColumn(label: Text('vs Prev')),
@@ -680,21 +707,33 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
                   rows: _lines.map((line) {
                     final isFlagged = line['is_flagged'] == true;
                     final netVariance = line['net_variance'] != null ? _d(line['net_variance']) : null;
-                    final otherDed = _d(line['absent_deduction']) + _d(line['uniform_deduction']) + _d(line['other_deductions']);
+                    final advance = _d(line['advance_deduction']);
+                    final loan = _d(line['loan_deduction']);
+                    final creditBill = _d(line['credit_bill_deduction']);
+                    final housingFund = _d(line['housing_fund_deduction']);
+                    final absent = _d(line['absent_deduction']);
+                    final uniformOther = _d(line['uniform_deduction']) + _d(line['other_deductions']);
+
+                    Widget _dedCell(double val, {String? tooltip}) {
+                      if (val == 0) return const Text('—', style: TextStyle(color: AppColors.kTextSecondary, fontSize: 12));
+                      final w = Text(_money(val), style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626)));
+                      return tooltip != null ? Tooltip(message: tooltip, child: w) : w;
+                    }
+
                     return DataRow(
                       color: isFlagged
                           ? WidgetStateProperty.all(AppColors.kError.withValues(alpha: 0.04))
                           : null,
                       cells: [
-                        // Staff
+                        // Staff name + designation
                         DataCell(SizedBox(
-                          width: 160,
+                          width: 150,
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(line['staff_name'] as String? ?? '',
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis),
                               if ((line['designation'] as String? ?? '').isNotEmpty)
@@ -705,30 +744,54 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
                             ],
                           ),
                         )),
+                        // Employee number
+                        DataCell(Text(line['staff_number'] as String? ?? '—',
+                            style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary))),
+                        // Department
                         DataCell(Text(line['department'] as String? ?? '—',
                             style: const TextStyle(fontSize: 12))),
+                        // Days
                         DataCell(Text(
                             '${line['days_present']}/${line['working_days']}',
                             style: const TextStyle(fontSize: 12))),
-                        DataCell(Text(_money(line['gross_salary']))),
-                        // PAYE with band indicator
+                        // Basic salary
+                        DataCell(Text(_money(line['basic_salary']),
+                            style: const TextStyle(fontSize: 12))),
+                        // Gross pay
+                        DataCell(Text(_money(line['gross_salary']),
+                            style: const TextStyle(fontWeight: FontWeight.w600))),
+                        // PAYE with band tooltip
                         DataCell(Tooltip(
                           message: _payeBandLabel(_d(line['gross_salary'])),
                           child: Text(_money(line['paye']),
-                              style: const TextStyle(fontSize: 12)),
+                              style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626))),
                         )),
-                        DataCell(Text(_money(line['sha']))),
-                        DataCell(Text(_money(line['nssf']))),
-                        // Other deductions (absent + uniform + other)
-                        DataCell(otherDed > 0
+                        // SHA
+                        DataCell(_dedCell(_d(line['sha']))),
+                        // NSSF
+                        DataCell(_dedCell(_d(line['nssf']))),
+                        // Housing Fund / Levy
+                        DataCell(_dedCell(housingFund, tooltip: 'Housing Fund: 1.5% of gross, capped KES 2,500')),
+                        // Advance deduction
+                        DataCell(_dedCell(advance, tooltip: 'Approved advance recovery')),
+                        // Loan installment
+                        DataCell(_dedCell(loan, tooltip: 'Monthly loan installment')),
+                        // Credit bills
+                        DataCell(_dedCell(creditBill, tooltip: 'Outstanding credit bills')),
+                        // Absent day deduction
+                        DataCell(_dedCell(absent, tooltip: 'Absent day deduction')),
+                        // Uniform + other
+                        DataCell(uniformOther > 0
                             ? Tooltip(
-                                message: 'Absent: ${_money(line['absent_deduction'])}\nUniform: ${_money(line['uniform_deduction'])}\nOther: ${_money(line['other_deductions'])}',
-                                child: Text(_money(otherDed),
-                                    style: const TextStyle(fontSize: 12)),
+                                message: 'Uniform: ${_money(line['uniform_deduction'])}\nOther: ${_money(line['other_deductions'])}',
+                                child: Text(_money(uniformOther),
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626))),
                               )
                             : const Text('—', style: TextStyle(color: AppColors.kTextSecondary))),
+                        // Total deductions
                         DataCell(Text(_money(line['total_deductions']),
-                            style: const TextStyle(fontWeight: FontWeight.w600))),
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFDC2626)))),
+                        // Net pay
                         DataCell(Text(
                           _money(line['net_pay']),
                           style: TextStyle(
@@ -736,6 +799,7 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
                             color: isFlagged ? AppColors.kError : AppColors.kSuccess,
                           ),
                         )),
+                        // vs Previous
                         DataCell(netVariance == null
                             ? const Text('—', style: TextStyle(color: AppColors.kTextSecondary))
                             : Text(
@@ -756,7 +820,7 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
                                   const SizedBox(width: 4),
                                   Text(
                                     (line['flag_type'] as String? ?? '').toUpperCase(),
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                         fontSize: 10,
                                         color: AppColors.kError,
                                         fontWeight: FontWeight.w700),
@@ -764,9 +828,9 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
                                 ]),
                               )
                             : const Text('—', style: TextStyle(color: AppColors.kTextSecondary))),
-                        // Deduction breakdown
+                        // Breakdown detail button
                         DataCell(IconButton(
-                          tooltip: 'Deduction breakdown',
+                          tooltip: 'Full payslip breakdown',
                           icon: Icon(PhosphorIcons.magnifyingGlass(),
                               size: 18, color: AppColors.kPrimary),
                           onPressed: () => _showBreakdownDialog(line),
@@ -808,6 +872,23 @@ class _BranchPayrollScreenState extends ConsumerState<BranchPayrollScreen> {
   }
 
   // ── Shared widgets ──────────────────────────────────────────────────────────
+
+  Widget _dedChip(String label, String value, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 6),
+        Text(value, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w800)),
+      ]),
+    );
+  }
 
   Widget _errorBanner() {
     return Padding(
@@ -1024,12 +1105,19 @@ class _DeductionBreakdownDialog extends StatelessWidget {
     final fmt = NumberFormat('#,##0.00', 'en_KE');
     String m(dynamic v) => 'KES ${fmt.format(double.tryParse(v?.toString() ?? '0') ?? 0)}';
 
+    final basic = _d(line['basic_salary']);
+    final houseAllow = _d(line['house_allowance']);
+    final transportAllow = _d(line['transport_allowance']);
+    final otherAllow = _d(line['other_allowances']);
+    final overtimePay = _d(line['overtime_pay']);
     final gross = _d(line['gross_salary']);
     final paye = _d(line['paye']);
     final sha = _d(line['sha']);
     final nssf = _d(line['nssf']);
+    final housingFund = _d(line['housing_fund_deduction']);
     final loan = _d(line['loan_deduction']);
     final advance = _d(line['advance_deduction']);
+    final creditBill = _d(line['credit_bill_deduction']);
     final absent = _d(line['absent_deduction']);
     final uniform = _d(line['uniform_deduction']);
     final other = _d(line['other_deductions']);
@@ -1037,13 +1125,21 @@ class _DeductionBreakdownDialog extends StatelessWidget {
     final net = _d(line['net_pay']);
 
     final rows = <_BreakdownItem>[
-      _BreakdownItem('Basic Salary (Gross)', m(gross), isHeader: true, color: AppColors.kPrimary),
+      _BreakdownItem('Basic Salary', m(basic), isHeader: true, color: AppColors.kPrimary),
+      if (houseAllow > 0) _BreakdownItem('+ House Allowance', m(houseAllow), color: AppColors.kSuccess),
+      if (transportAllow > 0) _BreakdownItem('+ Transport Allowance', m(transportAllow), color: AppColors.kSuccess),
+      if (otherAllow > 0) _BreakdownItem('+ Other Allowances', m(otherAllow), color: AppColors.kSuccess),
+      if (overtimePay > 0) _BreakdownItem('+ Overtime Pay', m(overtimePay), color: AppColors.kSuccess),
+      _BreakdownItem('Gross Pay', m(gross), isHeader: true, color: AppColors.kPrimary),
       _BreakdownItem('', '', isDivider: true),
       _BreakdownItem('PAYE Tax', '− ${m(paye)}', note: _payeBand(gross), color: AppColors.kError),
       _BreakdownItem('SHA (2.75%)', '− ${m(sha)}', color: AppColors.kError),
       _BreakdownItem('NSSF (6% capped KES 1,080)', '− ${m(nssf)}', color: AppColors.kError),
-      if (loan > 0) _BreakdownItem('Loan Deduction', '− ${m(loan)}', color: AppColors.kError),
-      if (advance > 0) _BreakdownItem('Advance Deduction', '− ${m(advance)}', color: AppColors.kError),
+      if (housingFund > 0) _BreakdownItem('Housing Levy (1.5% capped KES 2,500)', '− ${m(housingFund)}', color: AppColors.kError),
+      _BreakdownItem('', '', isDivider: true),
+      if (advance > 0) _BreakdownItem('Advance Recovery', '− ${m(advance)}', note: 'Approved salary advance', color: AppColors.kError),
+      if (loan > 0) _BreakdownItem('Loan Installment', '− ${m(loan)}', note: 'Monthly loan repayment', color: AppColors.kError),
+      if (creditBill > 0) _BreakdownItem('Credit Bills', '− ${m(creditBill)}', note: 'Outstanding credit bills', color: AppColors.kError),
       if (absent > 0) _BreakdownItem('Absent Day Deduction', '− ${m(absent)}', color: AppColors.kError),
       if (uniform > 0) _BreakdownItem('Uniform Deduction', '− ${m(uniform)}', color: AppColors.kError),
       if (other > 0) _BreakdownItem('Other Deductions', '− ${m(other)}', color: AppColors.kError),

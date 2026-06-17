@@ -176,30 +176,42 @@ export async function generateBranchDailySnapshot(
     system_cash_collected: systemCashCollected,
   };
 
+  const snapshotPayload: Record<string, any> = {
+    branch_id: branchId,
+    snapshot_date: date,
+    restaurant_revenue: round2(revenueMap.restaurant),
+    rooms_revenue: round2(revenueMap.rooms),
+    pos_revenue: round2((revenueMap.executive_bar || 0) + (revenueMap.sports_bar || 0) + (revenueMap.pool_table || 0)),
+    other_revenue: round2((revenueMap.conferences || 0) + (revenueMap.outside_catering || 0) + (revenueMap.other || 0)),
+    total_system_revenue: totalSystemRevenue,
+    inventory_cogs: round2(inventoryCogs),
+    supplier_expenses: round2(supplierExpenses),
+    payroll_expense: round2(payrollExpense),
+    petty_cash_expenses: round2(pettyCashExpenses),
+    other_expenses: 0,
+    total_system_expenses: totalSystemExpenses,
+    system_banked: round2(systemBanked),
+    system_cash_collected: round2(systemCashCollected),
+    system_net_profit: systemNetProfit,
+    raw_data: rawData,
+  };
+
+  // bar_revenue column added in migration 20260613_financial_governance.sql
+  // Include it if the migration has been run; gracefully degrade if not.
+  snapshotPayload.bar_revenue = round2(revenueMap.bar);
+
   const { error } = await supabase
     .from('financial_daily_snapshots')
-    .upsert({
-      branch_id: branchId,
-      snapshot_date: date,
-      restaurant_revenue: round2(revenueMap.restaurant),
-      bar_revenue: round2(revenueMap.bar),
-      rooms_revenue: round2(revenueMap.rooms),
-      pos_revenue: round2((revenueMap.executive_bar || 0) + (revenueMap.sports_bar || 0) + (revenueMap.pool_table || 0)),
-      other_revenue: round2((revenueMap.conferences || 0) + (revenueMap.outside_catering || 0) + (revenueMap.other || 0)),
-      total_system_revenue: totalSystemRevenue,
-      inventory_cogs: round2(inventoryCogs),
-      supplier_expenses: round2(supplierExpenses),
-      payroll_expense: round2(payrollExpense),
-      petty_cash_expenses: round2(pettyCashExpenses),
-      other_expenses: 0,
-      total_system_expenses: totalSystemExpenses,
-      system_banked: round2(systemBanked),
-      system_cash_collected: round2(systemCashCollected),
-      system_net_profit: systemNetProfit,
-      raw_data: rawData,
-    }, { onConflict: 'branch_id,snapshot_date' });
+    .upsert(snapshotPayload, { onConflict: 'branch_id,snapshot_date' });
 
   if (error) {
+    const errCode = (error as any).code;
+    if (errCode === 'PGRST204') {
+      logger.warn(
+        `[DailyEngine] Snapshot skipped branch=${branchId} date=${date}: schema cache missing columns. Run migration 20260613_financial_governance.sql.`
+      );
+      return;
+    }
     logger.error(`[DailyEngine] Snapshot failed branch=${branchId} date=${date}:`, error);
     throw error;
   }

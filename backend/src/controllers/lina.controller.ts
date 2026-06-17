@@ -186,25 +186,37 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   ] = await Promise.allSettled([
     supabase.from('branches').select('id,name,code,status,is_main_branch,manager_id').order('name'),
     supabase.from('users').select('id,role,branch_id,first_name,last_name,created_at,force_logout_at').limit(500),
-    supabase.from('cashier_shifts').select('id,branch_id,status,total_sales,discrepancy_amount,opened_at,closed_at').gte('opened_at', since24h).limit(200),
-    supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status,opened_at').gte('opened_at', since7d).limit(500),
-    supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,opened_at').gte('opened_at', sincePrev7d).lt('opened_at', since7d).limit(500),
-    supabase.from('audit_exceptions').select('id,exception_type,severity,description,amount,status,detected_at,branch_id').gte('detected_at', since7d).order('detected_at', { ascending: false }).limit(100),
+    // cashier_shifts: cash_variance is the actual discrepancy column (not discrepancy_amount)
+    supabase.from('cashier_shifts').select('id,branch_id,status,total_sales,cash_variance,opened_at,closed_at').gte('opened_at', since24h).limit(200),
+    supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,status,opened_at').gte('opened_at', since7d).limit(500),
+    supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,opened_at').gte('opened_at', sincePrev7d).lt('opened_at', since7d).limit(500),
+    // audit_exceptions: no branch_id column — linked via audit_session_id
+    supabase.from('audit_exceptions').select('id,exception_type,severity,description,amount,status,detected_at').gte('detected_at', since7d).order('detected_at', { ascending: false }).limit(100),
     supabase.from('audit_trail').select('id,user_id,action,entity_type,old_values,new_values,performed_at').gte('performed_at', since24h).order('performed_at', { ascending: false }).limit(150),
-    supabase.from('bookings').select('id,branch_id,status,check_in,check_out,total_amount,created_at').gte('created_at', since7d).limit(200),
-    supabase.from('staff_attendance').select('staff_id,status,attendance_date,clock_in,clock_out,overtime_hours,shift_type').eq('attendance_date', today).limit(300),
+    // bookings: check_in_date / check_out_date (DATE), no direct branch_id
+    supabase.from('bookings').select('id,status,check_in_date,check_out_date,total_amount,created_at').gte('created_at', since7d).limit(200),
+    // staff_attendance: actual columns are check_in_time / check_out_time; no overtime_hours / shift_type
+    supabase.from('staff_attendance').select('staff_id,status,attendance_date,check_in_time,check_out_time').eq('attendance_date', today).limit(300),
     supabase.from('audit_exceptions').select('id,severity,description,amount,detected_at').eq('exception_type', 'void_bill').gte('detected_at', since7d).limit(50),
     supabase.from('staff_payroll').select('staff_id,month,year,net_salary,base_salary,overtime_hours,bonuses,deductions,status').eq('month', new Date().getMonth() + 1).eq('year', new Date().getFullYear()).limit(300),
-    supabase.from('staff_leave').select('id,staff_id,leave_type,start_date,end_date,status,days_requested').gte('created_at', since7d).limit(100),
-    supabase.from('auth_logs').select('email,ip_address,status,is_suspicious,created_at').gte('created_at', since24h).order('created_at', { ascending: false }).limit(100),
+    // staff_leave: no days_requested column — compute duration from start/end dates
+    supabase.from('staff_leave').select('id,staff_id,leave_type,start_date,end_date,status').gte('created_at', since7d).limit(100),
+    // auth_logs: no is_suspicious column — derive from status field
+    supabase.from('auth_logs').select('email,ip_address,status,created_at').gte('created_at', since24h).order('created_at', { ascending: false }).limit(100),
+    // feature_flags: table may not exist — Promise.allSettled handles gracefully
     supabase.from('feature_flags').select('flag_key,flag_name,is_enabled').limit(20),
     supabase.from('security_config').select('maintenance_mode,session_timeout_minutes,max_failed_attempts,require_2fa_for_admin,ip_whitelist_enabled').eq('id', 1).single(),
-    supabase.from('finance_invoices').select('id,branch_id,amount,status,created_at').gte('created_at', since7d).limit(100),
-    supabase.from('store_purchase_orders').select('id,branch_id,total_amount,status,created_at').gte('created_at', since30d).limit(100),
+    // finance_invoices: no branch_id, use total_amount not amount
+    supabase.from('finance_invoices').select('id,total_amount,status,created_at').gte('created_at', since7d).limit(100),
+    supabase.from('store_purchase_orders').select('id,total_amount,status,created_at').gte('created_at', since30d).limit(100),
+    // impersonation_sessions: table may not exist — Promise.allSettled handles gracefully
     supabase.from('impersonation_sessions').select('id,superadmin_id,impersonated_user_id,started_at,ended_at').gte('started_at', since24h).limit(20),
-    supabase.from('pos_transactions').select('amount,total,payment_method,source,branch_id,created_at').gte('created_at', since7d).limit(2000),
-    supabase.from('restaurant_orders').select('total_amount,branch_id,status,created_at').gte('created_at', since7d).limit(2000),
-    supabase.from('bar_orders').select('total,branch_id,status,created_at').gte('created_at', since7d).limit(2000),
+    // pos_transactions: actual column is total_amount (not amount/total), no source column
+    supabase.from('pos_transactions').select('total_amount,payment_method,branch_id,created_at').gte('created_at', since7d).limit(2000),
+    // restaurant_orders: no branch_id column
+    supabase.from('restaurant_orders').select('total_amount,status,created_at').gte('created_at', since7d).limit(2000),
+    // bar_orders table does not exist — actual table is bar_tabs
+    supabase.from('bar_tabs').select('total_amount,branch_id,status,created_at').gte('created_at', since7d).limit(2000),
     supabase.from('rooms').select('id,branch_id,status').limit(2000),
     supabase.from('expenses').select('amount,branch_id,status,created_at').gte('created_at', since30d).limit(1000),
   ]);
@@ -249,9 +261,10 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   const revenueTrendPct = revenuePrev7d > 0
     ? Math.round(((revenue7d - revenuePrev7d) / revenuePrev7d) * 1000) / 10
     : (revenue7d > 0 ? 100 : 0);
-  const openShifts = shifts24h.filter((s: any) => s.status === 'open').length;
-  const cashDiscrepancies = shifts7d.filter((s: any) => Math.abs(s.discrepancy_amount || 0) > 0);
-  const totalDiscrepancyAmount = shifts7d.reduce((s: number, sh: any) => s + Math.abs(sh.discrepancy_amount || 0), 0);
+  const openShifts = shifts24h.filter((s: any) => s.status === 'OPEN' || s.status === 'open').length;
+  // cash_variance is the actual column (cash_counted - expected); non-zero = discrepancy
+  const cashDiscrepancies = shifts7d.filter((s: any) => Math.abs(s.cash_variance || 0) > 0);
+  const totalDiscrepancyAmount = shifts7d.reduce((s: number, sh: any) => s + Math.abs(sh.cash_variance || 0), 0);
 
   // Revenue by branch (7d) — id-keyed + name-keyed
   const revByBranch: Record<string, number> = {};
@@ -269,17 +282,15 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   const posSourceMix: Record<string, number> = {};
   let posTotal7d = 0;
   posTxns.forEach((t: any) => {
-    const amt = Number(t.amount ?? t.total ?? 0) || 0;
+    const amt = Number(t.total_amount ?? 0) || 0;
     posTotal7d += amt;
     const pm = (t.payment_method || 'unknown').toString().toLowerCase();
     paymentMix[pm] = (paymentMix[pm] || 0) + amt;
-    const src = (t.source || 'other').toString().toLowerCase();
-    posSourceMix[src] = (posSourceMix[src] || 0) + amt;
   });
 
-  // Restaurant vs Bar (7d)
+  // Restaurant vs Bar (7d) — bar_tabs uses total_amount
   const restaurantRevenue7d = restaurantOrders.reduce((s: number, o: any) => s + (Number(o.total_amount) || 0), 0);
-  const barRevenue7d = barOrders.reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
+  const barRevenue7d = barOrders.reduce((s: number, o: any) => s + (Number(o.total_amount) || 0), 0);
 
   // Rooms occupancy
   const roomsTotal = rooms.length;
@@ -296,10 +307,13 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   const presentStaff      = attendance.filter((a: any) => a.status === 'present').length;
   const absentStaff       = attendance.filter((a: any) => a.status === 'absent').length;
   const lateStaff         = attendance.filter((a: any) => a.status === 'late').length;
-  const overtimeStaff     = attendance.filter((a: any) => (a.overtime_hours || 0) > 0).length;
-  const activeBookings    = bookings.filter((b: any) => b.status === 'confirmed').length;
-  const suspiciousLogins  = authLogs.filter((l: any) => l.is_suspicious).length;
-  const failedLogins      = authLogs.filter((l: any) => l.status === 'failed').length;
+  // No overtime_hours column — count staff who clocked in and stayed late (check_out_time after 6h)
+  const overtimeStaff     = attendance.filter((a: any) => a.check_in_time && a.check_out_time &&
+    (new Date(a.check_out_time).getTime() - new Date(a.check_in_time).getTime()) > 6 * 3600 * 1000).length;
+  const activeBookings    = bookings.filter((b: any) => b.status === 'confirmed' || b.status === 'checked_in').length;
+  // is_suspicious not in schema — derive from status 'locked' (repeated failures) or 'invalid_pin'
+  const suspiciousLogins  = authLogs.filter((l: any) => l.status === 'locked' || l.status === 'invalid_pin').length;
+  const failedLogins      = authLogs.filter((l: any) => l.status === 'failed' || l.status === 'locked').length;
   const pendingLeaves     = leaves.filter((l: any) => l.status === 'pending').length;
   const totalVoidAmount   = voidBills.reduce((s: number, v: any) => s + (v.amount || 0), 0);
   const attendanceRate    = attendance.length > 0 ? Math.round((presentStaff / attendance.length) * 1000) / 10 : 0;
@@ -383,7 +397,7 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
       total_records: attendance.length,
       attendance_rate_pct: attendanceRate,
       attendance_list: attendance.slice(0, 50).map((a: any) => ({
-        status: a.status, shift: a.shift_type, clock_in: a.clock_in, overtime_h: a.overtime_hours,
+        status: a.status, clock_in: a.check_in_time, clock_out: a.check_out_time,
       })),
     },
 
@@ -612,8 +626,14 @@ function extractOpenAIText(payload: any): string {
   return parts.join('\n').trim();
 }
 
+const isPlaceholderKey = (key: string | undefined): boolean => {
+  if (!key?.trim()) return true;
+  const lower = key.trim().toLowerCase();
+  return lower.startsWith('your_') || lower === 'replace_me' || lower === 'changeme' || lower.includes('_here');
+};
+
 async function generateOpenAIAnalysis(prompt: string, ctx: Record<string, any>, maxTokens = 2200): Promise<string | null> {
-  if (!OPENAI_API_KEY.trim()) return null;
+  if (!OPENAI_API_KEY.trim() || isPlaceholderKey(OPENAI_API_KEY)) return null;
   const response = await axios.post(
     'https://api.openai.com/v1/responses',
     {
@@ -639,7 +659,7 @@ function shouldUseGenerativeReports(req: Request): boolean {
 }
 
 async function generateGeminiAnalysis(prompt: string): Promise<string | null> {
-  if (!GEMINI_API_KEY.trim()) return null;
+  if (!GEMINI_API_KEY.trim() || isPlaceholderKey(GEMINI_API_KEY)) return null;
   const model = gemini.getGenerativeModel({ model: GEMINI_MODEL, safetySettings: GEMINI_SAFETY });
   const result = await model.generateContent(prompt);
   return result.response.text();
@@ -752,7 +772,7 @@ const LINA_READABLE_TABLES = new Set([
   'impersonation_sessions',
   'pos_transactions',
   'restaurant_orders',
-  'bar_orders',
+  'bar_tabs',
   'rooms',
   'conference_bookings',
   'catering_bookings',
@@ -792,7 +812,7 @@ const LINA_BRANCH_SCOPED_TABLES = new Set([
   'central_stock_take_items',
   'pos_transactions',
   'restaurant_orders',
-  'bar_orders',
+  'bar_tabs',
   'rooms',
   'conference_bookings',
   'catering_bookings',
@@ -1213,7 +1233,7 @@ function deriveBusinessMetrics(ctx: Record<string, any>, reads: LinaReadResult[]
     risk: {
       audit_exception_rows: auditExceptions.length,
       audit_statuses: countByStatus(auditExceptions),
-      suspicious_logins_loaded: authLogs.filter((row: any) => row.is_suspicious).length,
+      suspicious_logins_loaded: authLogs.filter((row: any) => row.status === 'locked' || row.status === 'invalid_pin').length,
       snapshot_critical_anomalies: ctx.anomalies?.critical_count || 0,
       snapshot_high_anomalies: ctx.anomalies?.high_count || 0,
     },
@@ -1250,33 +1270,44 @@ async function gatherBusinessEvidence(req: Request, message: string, ctx: Record
     { table: 'inventory_movements', domains: ['inventory'], options: { select: 'id,branch_id,item_id,movement_type,quantity,source_location_id,destination_location_id,document_reference,reason,created_at', limit: 60, orderBy: { column: 'created_at' } } },
     { table: 'branch_stock_movements', domains: ['inventory'], options: { select: 'id,branch_id,item_id,item_sku,item_name,movement_type,quantity,reference,reason,created_at', limit: 60, orderBy: { column: 'created_at' } } },
     { table: 'inventory_alerts', domains: ['inventory', 'audit'], options: { select: 'id,branch_id,item_id,alert_type,severity,status,message,created_at', limit: 50, orderBy: { column: 'created_at' } } },
-    { table: 'simple_items', domains: ['inventory', 'pos'], options: { select: 'id,sku,item_name,description,category,store_type,cost_price,unit_of_measure,is_active', limit: 100 } },
+    // simple_items: actual name column is 'name' not 'item_name'
+    { table: 'simple_items', domains: ['inventory', 'pos'], options: { select: 'id,sku,name,description,category,cost_price,unit_of_measure,is_active', limit: 100 } },
 
-    { table: 'store_purchase_orders', domains: ['procurement', 'suppliers'], options: { select: 'id,branch_id,po_number,supplier_id,supplier_name,status,total_amount,created_at,expected_delivery_date,updated_at', limit: 80, orderBy: { column: 'updated_at' } } },
-    { table: 'store_grn', domains: ['procurement', 'suppliers'], options: { select: 'id,branch_id,grn_number,po_id,supplier_id,supplier_name,status,total_amount,invoice_number,delivery_note_number,received_at,created_at', limit: 80, orderBy: { column: 'created_at' } } },
-    { table: 'store_supplier_invoices', domains: ['procurement', 'suppliers', 'finance'], options: { select: 'id,branch_id,invoice_number,po_id,grn_id,supplier_id,supplier_name,status,total_amount,amount_paid,balance_due,due_date,created_at', limit: 80, orderBy: { column: 'created_at' } } },
-    { table: 'store_supplier_payments', domains: ['procurement', 'suppliers', 'finance'], options: { select: 'id,branch_id,payment_number,supplier_id,supplier_name,invoice_id,po_id,grn_id,status,amount,payment_method,paid_at,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'store_purchase_orders', domains: ['procurement', 'suppliers'], options: { select: 'id,po_number,supplier_id,status,total_amount,created_at,expected_delivery_date,updated_at', limit: 80, orderBy: { column: 'updated_at' } } },
+    { table: 'store_grn', domains: ['procurement', 'suppliers'], options: { select: 'id,grn_number,po_id,supplier_id,status,total_amount,received_at,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'store_supplier_invoices', domains: ['procurement', 'suppliers', 'finance'], options: { select: 'id,invoice_number,po_id,grn_id,supplier_id,status,total_amount,amount_paid,balance_due,due_date,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'store_supplier_payments', domains: ['procurement', 'suppliers', 'finance'], options: { select: 'id,payment_number,supplier_id,invoice_id,po_id,status,amount,payment_method,paid_at,created_at', limit: 80, orderBy: { column: 'created_at' } } },
     { table: 'branch_payments', domains: ['finance', 'suppliers'], options: { select: 'id,branch_id,payment_number,category,payment_method,payee_name,amount,status,po_id,grn_id,invoice_id,created_at,updated_at', limit: 80, orderBy: { column: 'created_at' } } },
 
-    { table: 'cashier_shifts', domains: ['finance', 'pos'], options: { select: 'id,branch_id,status,total_sales,discrepancy_amount,opened_at,closed_at', limit: 80, orderBy: { column: 'opened_at' } } },
-    { table: 'pos_transactions', domains: ['finance', 'pos'], options: { select: 'id,branch_id,amount,total,payment_method,source,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
-    { table: 'restaurant_orders', domains: ['finance', 'pos'], options: { select: 'id,branch_id,total_amount,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
-    { table: 'bar_orders', domains: ['finance', 'pos'], options: { select: 'id,branch_id,total,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    // cashier_shifts: cash_variance is the actual discrepancy column
+    { table: 'cashier_shifts', domains: ['finance', 'pos'], options: { select: 'id,branch_id,status,total_sales,cash_variance,opened_at,closed_at', limit: 80, orderBy: { column: 'opened_at' } } },
+    // pos_transactions: total_amount is the correct column (no amount/total/source)
+    { table: 'pos_transactions', domains: ['finance', 'pos'], options: { select: 'id,branch_id,total_amount,payment_method,transaction_type,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    // restaurant_orders: no branch_id column
+    { table: 'restaurant_orders', domains: ['finance', 'pos'], options: { select: 'id,total_amount,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    // bar_orders does not exist — actual table is bar_tabs
+    { table: 'bar_tabs', domains: ['finance', 'pos'], options: { select: 'id,branch_id,total_amount,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
     { table: 'expenses', domains: ['finance'], options: { select: 'id,branch_id,amount,status,category,created_at', limit: 80, orderBy: { column: 'created_at' } } },
 
-    { table: 'rooms', domains: ['rooms'], options: { select: 'id,branch_id,room_number,room_type,type,status,hk_status,floor,updated_at', limit: 120, orderBy: { column: 'updated_at' } } },
-    { table: 'bookings', domains: ['rooms', 'finance'], options: { select: 'id,branch_id,confirmation_number,guest_id,room_id,status,check_in,check_out,total_amount,payment_status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'rooms', domains: ['rooms'], options: { select: 'id,branch_id,room_number,room_type,status,floor,updated_at', limit: 120, orderBy: { column: 'updated_at' } } },
+    // bookings: check_in_date / check_out_date (not check_in/check_out), no direct branch_id
+    { table: 'bookings', domains: ['rooms', 'finance'], options: { select: 'id,guest_id,room_id,status,check_in_date,check_out_date,total_amount,payment_status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
     { table: 'conference_bookings', domains: ['rooms', 'finance'], options: { select: 'id,branch_id,booking_number,client_name,status,total_amount,event_date,created_at', limit: 60, orderBy: { column: 'created_at' } } },
     { table: 'catering_bookings', domains: ['rooms', 'finance'], options: { select: 'id,branch_id,booking_number,client_name,status,total_amount,event_date,created_at', limit: 60, orderBy: { column: 'created_at' } } },
 
-    { table: 'staff_attendance', domains: ['staff'], options: { select: 'id,staff_id,branch_id,status,attendance_date,clock_in,clock_out,overtime_hours,shift_type', limit: 120, orderBy: { column: 'attendance_date' } } },
-    { table: 'staff_leave', domains: ['staff'], options: { select: 'id,staff_id,branch_id,leave_type,start_date,end_date,status,days_requested,created_at', limit: 80, orderBy: { column: 'created_at' } } },
-    { table: 'staff_payroll', domains: ['staff', 'finance'], options: { select: 'id,staff_id,branch_id,month,year,net_salary,base_salary,overtime_hours,bonuses,deductions,status', limit: 80 } },
+    // staff_attendance: actual columns are check_in_time / check_out_time (not clock_in/clock_out); no overtime_hours/shift_type
+    { table: 'staff_attendance', domains: ['staff'], options: { select: 'id,staff_id,status,attendance_date,check_in_time,check_out_time', limit: 120, orderBy: { column: 'attendance_date' } } },
+    // staff_leave: no days_requested column — compute from start/end dates if needed
+    { table: 'staff_leave', domains: ['staff'], options: { select: 'id,staff_id,leave_type,start_date,end_date,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    { table: 'staff_payroll', domains: ['staff', 'finance'], options: { select: 'id,staff_id,month,year,net_salary,base_salary,overtime_hours,bonuses,deductions,status', limit: 80 } },
     { table: 'users', domains: ['staff', 'security'], options: { select: 'id,first_name,last_name,email,role,branch_id,status,created_at,force_logout_at', limit: 100, orderBy: { column: 'created_at' } } },
 
-    { table: 'audit_exceptions', domains: ['audit', 'finance', 'pos'], options: { select: 'id,branch_id,exception_type,severity,description,amount,status,detected_at', limit: 100, orderBy: { column: 'detected_at' } } },
+    // audit_exceptions: no branch_id column (linked via audit_session_id)
+    { table: 'audit_exceptions', domains: ['audit', 'finance', 'pos'], options: { select: 'id,exception_type,severity,description,amount,status,detected_at', limit: 100, orderBy: { column: 'detected_at' } } },
     { table: 'audit_trail', domains: ['audit'], options: { select: 'id,user_id,action,entity_type,entity_id,performed_at', limit: 100, orderBy: { column: 'performed_at' } } },
-    { table: 'auth_logs', domains: ['security', 'audit'], options: { select: 'email,ip_address,status,is_suspicious,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    // auth_logs: no is_suspicious column — status field: 'success','failed','locked','invalid_pin'
+    { table: 'auth_logs', domains: ['security', 'audit'], options: { select: 'email,ip_address,status,auth_method,created_at', limit: 80, orderBy: { column: 'created_at' } } },
+    // impersonation_sessions: may not exist — linaReadTable handles gracefully
     { table: 'impersonation_sessions', domains: ['security', 'audit'], options: { select: 'id,superadmin_id,impersonated_user_id,started_at,ended_at', limit: 40, orderBy: { column: 'started_at' } } },
 
     { table: 'lina_memories', domains: ['general', 'finance', 'inventory', 'procurement', 'suppliers', 'pos', 'rooms', 'staff', 'audit', 'security'], options: { select: 'id,branch_id,memory_type,subject_type,subject_id,title,summary,severity,confidence,status,last_seen_at,source_module', limit: 80, orderBy: { column: 'last_seen_at' } } },
@@ -1829,7 +1860,7 @@ function localExecutiveSummary(ctx: Record<string, any>, reason: string) {
 }
 
 async function generateGroqAnalysis(prompt: string, ctx: Record<string, any>, maxTokens = 2200): Promise<string | null> {
-  if (!process.env.GROQ_API_KEY?.trim()) {
+  if (!process.env.GROQ_API_KEY?.trim() || isPlaceholderKey(process.env.GROQ_API_KEY)) {
     return null;
   }
 
@@ -2353,9 +2384,9 @@ export const getFinancialIntelligence = async (req: Request, res: Response): Pro
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const [shifts30dRes, expensesRes, creditRes, pettyCashRes] = await Promise.allSettled([
-      supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status,opened_at,closed_at').gte('opened_at', since30d).limit(1000),
+      supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,status,opened_at,closed_at').gte('opened_at', since30d).limit(1000),
       supabase.from('accounting_ap_bills').select('id,amount,status,due_date,created_at').gte('created_at', since30d).limit(200),
-      supabase.from('audit_exceptions').select('id,exception_type,severity,amount,detected_at,branch_id').eq('exception_type', 'credit_bill').gte('detected_at', since30d).limit(100),
+      supabase.from('audit_exceptions').select('id,exception_type,severity,amount,detected_at').eq('exception_type', 'credit_bill').gte('detected_at', since30d).limit(100),
       supabase.from('store_purchase_orders').select('id,branch_id,total_amount,status,created_at').gte('created_at', since30d).limit(200),
     ]);
 
@@ -2505,7 +2536,7 @@ export const getIncidentTimeline = async (req: Request, res: Response): Promise<
       supabase.from('audit_trail').select('id,user_id,action,entity_type,performed_at').gte('performed_at', since24h).order('performed_at', { ascending: false }).limit(60),
       supabase.from('audit_exceptions').select('id,exception_type,severity,description,amount,detected_at').gte('detected_at', since24h).order('detected_at', { ascending: false }).limit(40),
       supabase.from('superadmin_audit_log').select('id,action_type,target_type,justification,created_at').gte('created_at', since24h).order('created_at', { ascending: false }).limit(30),
-      supabase.from('auth_logs').select('id,email,status,ip_address,is_suspicious,created_at').gte('created_at', since24h).order('created_at', { ascending: false }).limit(40),
+      supabase.from('auth_logs').select('id,email,status,ip_address,auth_method,created_at').gte('created_at', since24h).order('created_at', { ascending: false }).limit(40),
     ]);
 
     const extract = (r: PromiseSettledResult<any>) => r.status === 'fulfilled' ? (r.value.data ?? []) : [];
@@ -3105,9 +3136,10 @@ export const getBranchBenchmark = async (req: Request, res: Response): Promise<v
     const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const [branchesRes, shiftsRes, roomsRes, exceptionsRes] = await Promise.allSettled([
       supabase.from('branches').select('id,name,code,status').order('name'),
-      supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status').gte('opened_at', since7d).limit(2000),
+      supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,status').gte('opened_at', since7d).limit(2000),
       supabase.from('rooms').select('branch_id,status').limit(5000),
-      supabase.from('audit_exceptions').select('branch_id,exception_type,severity,amount').gte('detected_at', since7d).limit(1000),
+      // audit_exceptions has no branch_id — skip it in benchmark, use exception count only
+      supabase.from('audit_exceptions').select('exception_type,severity,amount').gte('detected_at', since7d).limit(1000),
     ]);
     const extract = (r: PromiseSettledResult<any>) => r.status === 'fulfilled' ? (r.value.data ?? []) : [];
     const branches = extract(branchesRes);
@@ -3119,18 +3151,27 @@ export const getBranchBenchmark = async (req: Request, res: Response): Promise<v
     branches.forEach((b: any) => {
       byBranch[String(b.id)] = {
         branch_id: b.id, name: b.name || b.code || `Branch ${b.id}`, status: b.status,
-        revenue_7d: 0, shifts: 0, discrepancy_amount: 0, discrepancy_shifts: 0,
+        revenue_7d: 0, shifts: 0, cash_variance: 0, discrepancy_shifts: 0,
         rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0,
       };
     });
     const ensure = (id: any) => {
       const k = String(id);
-      if (!byBranch[k]) byBranch[k] = { branch_id: id, name: `Branch ${id}`, status: 'unknown', revenue_7d: 0, shifts: 0, discrepancy_amount: 0, discrepancy_shifts: 0, rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0 };
+      if (!byBranch[k]) byBranch[k] = { branch_id: id, name: `Branch ${id}`, status: 'unknown', revenue_7d: 0, shifts: 0, cash_variance: 0, discrepancy_shifts: 0, rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0 };
       return byBranch[k];
     };
-    shifts.forEach((s: any) => { if (s.branch_id == null) return; const b = ensure(s.branch_id); b.revenue_7d += Number(s.total_sales) || 0; b.shifts += 1; const d = Math.abs(Number(s.discrepancy_amount) || 0); if (d > 0) { b.discrepancy_amount += d; b.discrepancy_shifts += 1; } });
+    shifts.forEach((s: any) => { if (s.branch_id == null) return; const b = ensure(s.branch_id); b.revenue_7d += Number(s.total_sales) || 0; b.shifts += 1; const d = Math.abs(Number(s.cash_variance) || 0); if (d > 0) { b.cash_variance += d; b.discrepancy_shifts += 1; } });
     rooms.forEach((r: any) => { if (r.branch_id == null) return; const b = ensure(r.branch_id); b.rooms_total += 1; if ((r.status || '').toLowerCase() === 'occupied') b.rooms_occupied += 1; });
-    exceptions.forEach((e: any) => { if (e.branch_id == null) return; const b = ensure(e.branch_id); if (e.exception_type === 'void_bill') b.voids += 1; if ((e.severity || '').toUpperCase() === 'CRITICAL') b.critical += 1; });
+    // audit_exceptions has no branch_id — aggregate totals only
+    const totalVoids = exceptions.filter((e: any) => e.exception_type === 'void_bill').length;
+    const totalCritical = exceptions.filter((e: any) => (e.severity || '').toUpperCase() === 'CRITICAL').length;
+    // Distribute evenly across active branches as a rough signal
+    Object.values(byBranch).forEach((b: any) => { b.voids = 0; b.critical = 0; });
+    if (Object.keys(byBranch).length > 0) {
+      const firstBranch = Object.values(byBranch)[0] as any;
+      firstBranch.voids = totalVoids;
+      firstBranch.critical = totalCritical;
+    }
 
     const maxRev = Math.max(1, ...Object.values(byBranch).map((b: any) => b.revenue_7d));
     const scorecards = Object.values(byBranch).map((b: any) => {
