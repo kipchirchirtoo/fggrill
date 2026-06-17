@@ -309,7 +309,6 @@ class TemplatePrintRenderer {
 
       case 'kv':
         if (data.kvRows.isEmpty) return null;
-        final kvValueWidth = _priceColumnMm * PdfPageFormat.mm;
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: data.kvRows
@@ -322,8 +321,7 @@ class TemplatePrintRenderer {
                             child: pw.Text(e.key,
                                 style: const pw.TextStyle(fontSize: 8))),
                         pw.SizedBox(width: 4),
-                        pw.SizedBox(
-                          width: kvValueWidth,
+                        pw.Flexible(
                           child: pw.Text(e.value,
                               textAlign: pw.TextAlign.right,
                               maxLines: 2,
@@ -337,7 +335,6 @@ class TemplatePrintRenderer {
 
       case 'items':
         if (data.items.isEmpty) return null;
-        final priceWidth = _priceColumnMm * PdfPageFormat.mm;
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
@@ -350,8 +347,7 @@ class TemplatePrintRenderer {
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 8))),
                 pw.SizedBox(width: 4),
-                pw.SizedBox(
-                  width: priceWidth,
+                pw.Flexible(
                   child: pw.Text('Price',
                       textAlign: pw.TextAlign.right,
                       style: pw.TextStyle(
@@ -360,8 +356,6 @@ class TemplatePrintRenderer {
               ],
             ),
             pw.Divider(height: 4, thickness: 0.4),
-            // Item rows — crossAxisAlignment.center keeps price vertically
-            // centred with the description even when names wrap
             ...data.items.map((it) => pw.Padding(
                   padding: const pw.EdgeInsets.only(bottom: 3),
                   child: pw.Row(
@@ -372,8 +366,7 @@ class TemplatePrintRenderer {
                               maxLines: 3,
                               style: const pw.TextStyle(fontSize: 8))),
                       pw.SizedBox(width: 4),
-                      pw.SizedBox(
-                        width: priceWidth,
+                      pw.Flexible(
                         child: pw.Text(
                           'KES ${_money.format(it.lineTotal)}',
                           textAlign: pw.TextAlign.right,
@@ -387,12 +380,11 @@ class TemplatePrintRenderer {
         ));
 
       case 'totals':
-        final totalsWidth = _priceColumnMm * PdfPageFormat.mm;
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            _totalRow('SUBTOTAL', 'KES ${_money.format(data.subtotal)}', 9, totalsWidth),
-            _totalRow('TAX (16% incl.)', 'KES ${_money.format(data.tax)}', 9, totalsWidth),
+            _totalRow('SUBTOTAL', 'KES ${_money.format(data.subtotal)}', 9),
+            _totalRow('TAX (16% incl.)', 'KES ${_money.format(data.tax)}', 9),
             pw.SizedBox(height: 2),
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.center,
@@ -402,8 +394,7 @@ class TemplatePrintRenderer {
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 11))),
                 pw.SizedBox(width: 4),
-                pw.SizedBox(
-                  width: totalsWidth,
+                pw.Flexible(
                   child: pw.Text('KES ${_money.format(data.total)}',
                       textAlign: pw.TextAlign.right,
                       style: pw.TextStyle(
@@ -468,7 +459,7 @@ class TemplatePrintRenderer {
     }
   }
 
-  pw.Widget _totalRow(String label, String value, double fontSize, double valueWidth) {
+  pw.Widget _totalRow(String label, String value, double fontSize) {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 2),
       child: pw.Row(
@@ -477,8 +468,7 @@ class TemplatePrintRenderer {
           pw.Expanded(
               child: pw.Text(label, style: pw.TextStyle(fontSize: fontSize))),
           pw.SizedBox(width: 4),
-          pw.SizedBox(
-            width: valueWidth,
+          pw.Flexible(
             child: pw.Text(value,
                 textAlign: pw.TextAlign.right,
                 style: pw.TextStyle(fontSize: fontSize)),

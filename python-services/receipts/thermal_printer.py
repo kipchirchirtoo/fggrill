@@ -106,11 +106,155 @@ class ThermalPrinter:
                 pass
             self.printer = None
     
+    def print_captain_order(self, receipt_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Print captain order for kitchen display (restaurant orders only)
+        Simplified format focused on order fulfillment, not payment
+        """
+        try:
+            if not self.printer:
+                self.connect()
+            
+            p = self.printer
+            
+            # === HEADER ===
+            p.set(align='center', font='a', bold=True, double_height=True)
+            p.text("CAPTAIN ORDER\n")
+            p.text("KITCHEN COPY\n")
+            
+            p.set(align='center', font='a', bold=False, double_height=False)
+            p.text(f"{self.company_name}\n")
+            p.text("\n")
+            
+            # === ORDER INFO ===
+            order_no = receipt_data.get('order_number', f"ORD-{datetime.now().strftime('%H%M%S')}")
+            lookup_code = (
+                receipt_data.get('short_code')
+                or receipt_data.get('shortCode')
+                or receipt_data.get('lookup_code')
+                or receipt_data.get('lookupCode')
+                or ''
+            )
+            lookup_code = str(lookup_code).strip().upper()
+            
+            if lookup_code:
+                p.set(align='center', font='a', bold=True, double_height=True)
+                p.text(f"{lookup_code}\n")
+                p.set(align='center', font='a', bold=False, double_height=False)
+                p.text("ORDER CODE\n\n")
+            
+            p.set(align='left', font='a', bold=True)
+            p.text(f"ORDER: {order_no}\n")
+            p.set(align='left', font='a', bold=False)
+            
+            # Location info (Table/Room)
+            table_no = receipt_data.get('table_number', '')
+            room_no = receipt_data.get('room_number', '')
+            if table_no:
+                p.set(align='left', font='a', bold=True)
+                p.text(f"TABLE: {table_no}\n")
+            if room_no:
+                p.set(align='left', font='a', bold=True)
+                p.text(f"ROOM: {room_no}\n")
+            
+            # Order type
+            order_type = receipt_data.get('order_type', 'dine_in').replace('_', ' ').upper()
+            p.set(align='left', font='a', bold=False)
+            p.text(f"TYPE: {order_type}\n")
+            
+            # Customer name
+            customer = receipt_data.get('customer_name', 'Walk-in')
+            p.text(f"GUEST: {customer}\n")
+            
+            # Waiter name
+            waiter = receipt_data.get('waiter_name', 'Staff')
+            p.text(f"WAITER: {waiter}\n")
+            
+            # Time
+            time_str = datetime.now().strftime('%I:%M %p')
+            date_str = datetime.now().strftime('%m/%d/%Y')
+            p.text(f"TIME: {time_str} - {date_str}\n")
+            
+            p.text("\n")
+            p.text("=" * 32 + "\n")
+            p.text("\n")
+            
+            # === ITEMS (LARGE AND CLEAR FOR KITCHEN) ===
+            p.set(align='left', font='a', bold=True)
+            p.text("ITEMS TO PREPARE:\n")
+            p.text("-" * 32 + "\n")
+            
+            items = receipt_data.get('items', [])
+            
+            for item in items:
+                qty = item.get('quantity', 1)
+                name = item.get('name', item.get('item_name', 'Item'))
+                notes = item.get('notes', item.get('special_instructions', ''))
+                
+                # Quantity and item name (BOLD)
+                p.set(align='left', font='a', bold=True, double_width=True)
+                p.text(f"{qty}x {name.upper()}\n")
+                
+                # Special instructions (if any)
+                if notes:
+                    p.set(align='left', font='a', bold=False, double_width=False)
+                    p.text(f"   NOTE: {notes}\n")
+                
+                p.set(align='left', font='a', bold=False, double_width=False)
+                p.text("\n")
+            
+            p.text("=" * 32 + "\n")
+            p.text("\n")
+            
+            # === SUMMARY ===
+            p.set(align='left', font='a', bold=True)
+            p.text(f"TOTAL ITEMS: {len(items)}\n")
+            total_qty = sum(item.get('quantity', 1) for item in items)
+            p.text(f"TOTAL QUANTITY: {total_qty}\n")
+            
+            p.text("\n")
+            
+            # === FOOTER ===
+            p.set(align='center', font='a', bold=False)
+            p.text("-" * 32 + "\n")
+            p.text("KITCHEN PREPARATION ORDER\n")
+            p.text("DO NOT GIVE TO CUSTOMER\n")
+            p.text("\n")
+            
+            # Cut paper
+            p.cut()
+            
+            # Get raw output if using Dummy printer
+            output = None
+            if isinstance(self.printer, Dummy):
+                output = self.printer.output
+            
+            return {
+                'success': True,
+                'message': 'Captain order printed to kitchen',
+                'receipt_number': order_no,
+                'raw_output': output.decode('utf-8', errors='ignore') if output else None
+            }
+            
+        except Exception as e:
+            logger.error(f"Error printing captain order: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
     def print_receipt(self, receipt_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Print a receipt matching the Fish & Chips style from the images
         VAT is already included in prices - just show breakdown
         """
+        # Check if this is a captain order
+        is_captain_order = receipt_data.get('is_captain_order', False)
+        receipt_type = receipt_data.get('receipt_type', '').upper()
+        
+        if is_captain_order or 'CAPTAIN' in receipt_type:
+            return self.print_captain_order(receipt_data)
+        
         try:
             if not self.printer:
                 self.connect()

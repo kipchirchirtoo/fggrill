@@ -947,22 +947,48 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       builder: (context) => const _ReasonDialog(title: 'Request void approval'),
     );
     if (reason == null || reason.trim().isEmpty) return;
-    await _run(() async {
+    
+    setState(() => _busy = true);
+    try {
       final repo = ref.read(outletPosRepositoryProvider);
+      
+      // Request void with explicit error handling
       await repo.requestVoidOrder(
         shiftId: _shift!.id,
         orderId: order.id,
         reason: reason.trim(),
       );
-      _orders = await repo.getOrders(_shift!.id);
+      
+      // Refresh orders list to show updated status
+      final updatedOrders = await repo.getOrders(_shift!.id);
+      setState(() {
+        _orders = updatedOrders;
+        _busy = false;
+      });
+      
       if (mounted) {
         AppNotifier.showSnackBar(
           context,
           const SnackBar(
-              content: Text('Void request sent to branch accountant')),
+            content: Text('Void request sent to branch accountant'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
         );
       }
-    });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _busy = false);
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+            content: Text('Failed to request void: $error'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _run(Future<void> Function() action) async {
