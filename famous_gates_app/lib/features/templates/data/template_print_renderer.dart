@@ -309,23 +309,28 @@ class TemplatePrintRenderer {
 
       case 'kv':
         if (data.kvRows.isEmpty) return null;
+        final kvValueWidth = _priceColumnMm * PdfPageFormat.mm;
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: data.kvRows
               .map((e) => pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 1),
-                    child: pw.Row(children: [
-                      pw.Expanded(
-                          child: pw.Text(e.key,
-                              style: const pw.TextStyle(fontSize: 8))),
-                      pw.SizedBox(width: 6),
-                      pw.Flexible(
-                        child: pw.Text(e.value,
-                            textAlign: pw.TextAlign.right,
-                            maxLines: 2,
-                            style: const pw.TextStyle(fontSize: 8)),
-                      ),
-                    ]),
+                    padding: const pw.EdgeInsets.only(bottom: 2),
+                    child: pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Expanded(
+                            child: pw.Text(e.key,
+                                style: const pw.TextStyle(fontSize: 8))),
+                        pw.SizedBox(width: 4),
+                        pw.SizedBox(
+                          width: kvValueWidth,
+                          child: pw.Text(e.value,
+                              textAlign: pw.TextAlign.right,
+                              maxLines: 2,
+                              style: const pw.TextStyle(fontSize: 8)),
+                        ),
+                      ],
+                    ),
                   ))
               .toList(),
         ));
@@ -336,64 +341,76 @@ class TemplatePrintRenderer {
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            pw.Row(children: [
-              pw.Expanded(
-                  child: pw.Text('Description',
+            // Header row
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Expanded(
+                    child: pw.Text('Description',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 8))),
+                pw.SizedBox(width: 4),
+                pw.SizedBox(
+                  width: priceWidth,
+                  child: pw.Text('Price',
+                      textAlign: pw.TextAlign.right,
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 8))),
-              pw.SizedBox(width: 4),
-              pw.SizedBox(
-                width: priceWidth,
-                child: pw.Text('Price',
-                    textAlign: pw.TextAlign.right,
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 8)),
-              ),
-            ]),
-            pw.SizedBox(height: 2),
+                          fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                ),
+              ],
+            ),
+            pw.Divider(height: 4, thickness: 0.4),
+            // Item rows — crossAxisAlignment.center keeps price vertically
+            // centred with the description even when names wrap
             ...data.items.map((it) => pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 1),
+                  padding: const pw.EdgeInsets.only(bottom: 3),
                   child: pw.Row(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Expanded(
-                            child: pw.Text('${it.qty}x ${it.name}',
-                                maxLines: 2,
-                                style: const pw.TextStyle(fontSize: 8))),
-                        pw.SizedBox(width: 4),
-                        pw.SizedBox(
-                          width: priceWidth,
-                          child: pw.Text(
-                            'KES ${_money.format(it.lineTotal)}',
-                            textAlign: pw.TextAlign.right,
-                            style: const pw.TextStyle(fontSize: 8),
-                          ),
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.Expanded(
+                          child: pw.Text('${it.qty}x ${it.name}',
+                              maxLines: 3,
+                              style: const pw.TextStyle(fontSize: 8))),
+                      pw.SizedBox(width: 4),
+                      pw.SizedBox(
+                        width: priceWidth,
+                        child: pw.Text(
+                          'KES ${_money.format(it.lineTotal)}',
+                          textAlign: pw.TextAlign.right,
+                          style: const pw.TextStyle(fontSize: 8),
                         ),
-                      ]),
+                      ),
+                    ],
+                  ),
                 )),
           ],
         ));
 
       case 'totals':
+        final totalsWidth = _priceColumnMm * PdfPageFormat.mm;
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            _totalRow('SUBTOTAL', 'KES ${_money.format(data.subtotal)}', 9),
-            _totalRow('TAX (16% incl.)', 'KES ${_money.format(data.tax)}', 9),
+            _totalRow('SUBTOTAL', 'KES ${_money.format(data.subtotal)}', 9, totalsWidth),
+            _totalRow('TAX (16% incl.)', 'KES ${_money.format(data.tax)}', 9, totalsWidth),
             pw.SizedBox(height: 2),
-            pw.Row(children: [
-              pw.Expanded(
-                  child: pw.Text('TOTAL:',
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Expanded(
+                    child: pw.Text('TOTAL:',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                pw.SizedBox(width: 4),
+                pw.SizedBox(
+                  width: totalsWidth,
+                  child: pw.Text('KES ${_money.format(data.total)}',
+                      textAlign: pw.TextAlign.right,
                       style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 11))),
-              pw.SizedBox(width: 6),
-              pw.Flexible(
-                child: pw.Text('KES ${_money.format(data.total)}',
-                    textAlign: pw.TextAlign.right,
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 11)),
-              ),
-            ]),
+                          fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                ),
+              ],
+            ),
           ],
         ));
 
@@ -451,19 +468,23 @@ class TemplatePrintRenderer {
     }
   }
 
-  pw.Widget _totalRow(String label, String value, double fontSize) {
+  pw.Widget _totalRow(String label, String value, double fontSize, double valueWidth) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 1),
-      child: pw.Row(children: [
-        pw.Expanded(
-            child: pw.Text(label, style: pw.TextStyle(fontSize: fontSize))),
-        pw.SizedBox(width: 6),
-        pw.Flexible(
-          child: pw.Text(value,
-              textAlign: pw.TextAlign.right,
-              style: pw.TextStyle(fontSize: fontSize)),
-        ),
-      ]),
+      padding: const pw.EdgeInsets.only(bottom: 2),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.Expanded(
+              child: pw.Text(label, style: pw.TextStyle(fontSize: fontSize))),
+          pw.SizedBox(width: 4),
+          pw.SizedBox(
+            width: valueWidth,
+            child: pw.Text(value,
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(fontSize: fontSize)),
+          ),
+        ],
+      ),
     );
   }
 
