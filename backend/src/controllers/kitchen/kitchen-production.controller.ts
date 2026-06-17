@@ -29,10 +29,25 @@ async function generateCreditBillNumber(branchId: number): Promise<string> {
   return `KV-${branchId}-${today}-${seq}`;
 }
 
-// Resolve staff_profiles.id from users.id (sessions store users.id, credit bills need staff_profiles.id)
+// Resolve staff_profiles.id from users.id
 async function resolveStaffProfileId(userId: string | null): Promise<string | null> {
   if (!userId) return null;
-  const { data } = await supabase.from('staff_profiles').select('id').eq('user_id', userId).maybeSingle();
+  const { data } = await supabase
+    .from('staff_profiles')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+// Resolve staff_profiles.id from staff_profiles.id directly (already the right ID)
+async function resolveStaffProfileIdDirect(profileId: string | null): Promise<string | null> {
+  if (!profileId) return null;
+  const { data } = await supabase
+    .from('staff_profiles')
+    .select('id')
+    .eq('id', profileId)
+    .maybeSingle();
   return data?.id ?? null;
 }
 
@@ -54,14 +69,11 @@ async function calcExpectedYield(
   );
   if (!recipeRows.length) return 0;
 
-  // For each ingredient in the recipe, find how many output portions the issued qty yields
-  // possible = issued_qty / qty_required_per_portion
-  // Take minimum across all ingredients (limiting factor)
   let minPossible: number | null = null;
   for (const row of recipeRows) {
     const issued = issues.find((i) => i.item_sku === row.item_sku);
     if (!issued || Number(row.quantity_required) <= 0) continue;
-    const possible = issued.quantity_issued / Number(row.quantity_required);
+    const possible = (issued.quantity_issued / Number(row.quantity_required)) * Number(row.output_quantity);
     if (minPossible === null || possible < minPossible) minPossible = possible;
   }
   return minPossible ?? 0;
@@ -71,17 +83,24 @@ async function calcExpectedYield(
 
 export const listProductionSessions = async (req: Request, res: Response) => {
   try {
-    const { branch_id, status, date_from, date_to, limit = '50' } = req.query;
+    const { branch_id, status, shift_type, date_from, date_to, limit = '50' } = req.query;
     if (!branch_id) return res.status(400).json({ success: false, message: 'branch_id required' });
 
     let q = supabase
       .from('kitchen_production_sessions')
-      .select(`*, entries:kitchen_production_entries(*), issues:kitchen_session_issues(*)`)
+      .select(`
+        *,
+        entries:kitchen_production_entries(*),
+        issues:kitchen_session_issues(*),
+        session_staff:kitchen_session_staff(*),
+        closing_stock:kitchen_session_closing_stock(*)
+      `)
       .eq('branch_id', Number(branch_id))
       .order('created_at', { ascending: false })
       .limit(Number(limit));
 
-    if (status) q = q.eq('status', status);
+    if (status) q = q.eq('status', status as string);
+    if (shift_type) q = q.eq('shift_type', shift_type as string);
     if (date_from) q = q.gte('session_date', date_from as string);
     if (date_to) q = q.lte('session_date', date_to as string);
 
@@ -93,22 +112,69 @@ export const listProductionSessions = async (req: Request, res: Response) => {
   }
 };
 
+// ── GET /api/kitchen/production-sessions/handover ────────────────────────
+// Returns the last completed session for the opposite shift (for handover display)
+
+export const getShiftHandover = async (req: Request, res: Response) => {
+  try {
+    const { branch_id, shift_type } = req.query;
+    if (!branch_id || !shift_type) {
+      return res.status(400).json({ success: false, message: 'branch_id and shift_type required' });
+    }
+
+    // Opposite shift
+    const oppositeShift = shift_type === 'shift_a' ? 'shift_b' : 'shift_a';
+
+    const { data, error } = await supabase
+      .from('kitchen_production_sessions')
+      .select(`
+        id, session_number, shift_type, session_date, status, completed_at,
+        staff_name, total_penalty,
+        closing_stock:kitchen_session_closing_stock(*),
+        session_staff:kitchen_session_staff(*)
+      `)
+      .eq('branch_id', Number(branch_id))
+      .eq('shift_type', oppositeShift)
+      .in('status', ['completed', 'closed'])
+      .order('completed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // ── POST /api/kitchen/production-sessions ──────────────────────────────────
-// Storekeeper creates session + issues stock to cook
+// Storekeeper creates session + issues stock to kitchen shift
 
 export const createProductionSession = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
-    const { branch_id, staff_id, staff_name, notes, issues, planned_items } = req.body;
-    // issues: [{ item_sku, item_name, quantity_issued, unit, unit_cost }]
-    // planned_items: [{ menu_item_id, menu_item_name }]
+    const {
+      branch_id,
+      shift_type = 'shift_a',
+      staff_id,
+      staff_name,
+      session_staff,   // [{ staff_profile_id, staff_name, role, is_accountable }]
+      notes,
+      issues,          // [{ item_sku, item_name, quantity_issued, unit, unit_cost }]
+      planned_items,   // [{ menu_item_id, menu_item_name, expected_quantity }]
+    } = req.body;
 
-    if (!branch_id || !staff_name) {
-      return res.status(400).json({ success: false, message: 'branch_id and staff_name required' });
+    if (!branch_id) {
+      return res.status(400).json({ success: false, message: 'branch_id required' });
     }
     if (!issues?.length) {
       return res.status(400).json({ success: false, message: 'At least one stock issue required' });
     }
+
+    // Derive primary staff name from session_staff list if not explicitly provided
+    const primaryStaff = (session_staff as any[])?.[0];
+    const resolvedStaffName = staff_name || primaryStaff?.staff_name || 'Kitchen Staff';
+    const resolvedStaffId = staff_id || primaryStaff?.staff_profile_id || null;
 
     const sessionNumber = await generateSessionNumber(Number(branch_id));
 
@@ -118,8 +184,9 @@ export const createProductionSession = async (req: Request, res: Response) => {
       .insert({
         branch_id: Number(branch_id),
         session_number: sessionNumber,
-        staff_id: staff_id || null,
-        staff_name,
+        shift_type,
+        staff_id: resolvedStaffId,
+        staff_name: resolvedStaffName,
         notes,
         status: 'in_production',
         created_by: userId,
@@ -127,6 +194,21 @@ export const createProductionSession = async (req: Request, res: Response) => {
       .select()
       .single();
     if (sErr) throw sErr;
+
+    // Insert all session staff members
+    if (session_staff?.length) {
+      const staffRows = (session_staff as any[]).map((s) => ({
+        session_id: session.id,
+        staff_profile_id: s.staff_profile_id || null,
+        staff_name: s.staff_name,
+        role: s.role || 'cook',
+        is_accountable: s.is_accountable !== false,
+      }));
+      const { error: ssErr } = await supabase
+        .from('kitchen_session_staff')
+        .insert(staffRows);
+      if (ssErr) console.warn('[KitchenSession] session_staff insert warning:', ssErr.message);
+    }
 
     // Insert issued items
     const issueRows = (issues as any[]).map((i) => ({
@@ -137,7 +219,9 @@ export const createProductionSession = async (req: Request, res: Response) => {
       unit: i.unit || 'kg',
       unit_cost: Number(i.unit_cost || 0),
     }));
-    const { error: iErr } = await supabase.from('kitchen_session_issues').insert(issueRows);
+    const { error: iErr } = await supabase
+      .from('kitchen_session_issues')
+      .insert(issueRows);
     if (iErr) throw iErr;
 
     // Deduct stock from branch_stock
@@ -150,15 +234,18 @@ export const createProductionSession = async (req: Request, res: Response) => {
       );
     }
 
-    // Create planned production entries with expected yield (calculated from recipe)
+    // Create planned production entries
     if (planned_items?.length) {
       const entryRows: any[] = [];
       for (const pi of planned_items as any[]) {
-        const expected = await calcExpectedYield(
-          Number(branch_id),
-          pi.menu_item_id,
-          issueRows
-        );
+        // Use pre-calculated expected_quantity from client (yield preview) if provided,
+        // otherwise recalculate from recipe on server
+        let expectedQty = Number(pi.expected_quantity || 0);
+        if (!expectedQty && pi.menu_item_id) {
+          expectedQty = Math.round(
+            await calcExpectedYield(Number(branch_id), pi.menu_item_id, issueRows)
+          );
+        }
         const { rows: priceRows } = await db.query(
           `SELECT selling_price FROM public.restaurant_menu_items WHERE id=$1::uuid LIMIT 1`,
           [pi.menu_item_id]
@@ -167,7 +254,7 @@ export const createProductionSession = async (req: Request, res: Response) => {
           session_id: session.id,
           menu_item_id: pi.menu_item_id,
           menu_item_name: pi.menu_item_name,
-          expected_quantity: Math.round(expected),
+          expected_quantity: expectedQty,
           actual_quantity: 0,
           variance: 0,
           menu_selling_price: Number(priceRows[0]?.selling_price || 0),
@@ -181,7 +268,20 @@ export const createProductionSession = async (req: Request, res: Response) => {
       }
     }
 
-    res.json({ success: true, data: session });
+    // Return full session with related data
+    const { data: full } = await supabase
+      .from('kitchen_production_sessions')
+      .select(`
+        *,
+        entries:kitchen_production_entries(*),
+        issues:kitchen_session_issues(*),
+        session_staff:kitchen_session_staff(*),
+        closing_stock:kitchen_session_closing_stock(*)
+      `)
+      .eq('id', session.id)
+      .single();
+
+    res.json({ success: true, data: full });
   } catch (err: any) {
     console.error('createProductionSession error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -195,7 +295,13 @@ export const getProductionSession = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { data, error } = await supabase
       .from('kitchen_production_sessions')
-      .select(`*, entries:kitchen_production_entries(*), issues:kitchen_session_issues(*)`)
+      .select(`
+        *,
+        entries:kitchen_production_entries(*),
+        issues:kitchen_session_issues(*),
+        session_staff:kitchen_session_staff(*),
+        closing_stock:kitchen_session_closing_stock(*)
+      `)
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -206,28 +312,53 @@ export const getProductionSession = async (req: Request, res: Response) => {
 };
 
 // ── PUT /api/kitchen/production-sessions/:id/complete ─────────────────────
-// Kitchen logs actual production → system calculates variance → credit bills
+// Records actual production + closing stock → calculates variance → credit bills
+// for ALL accountable staff on the shift
 
 export const completeProductionSession = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userId = (req as any).user?.id;
-    const { entries } = req.body;
-    // entries: [{ entry_id, actual_quantity }]
+    const { entries, closing_stock } = req.body;
+    // entries:       [{ entry_id, actual_quantity }]
+    // closing_stock: [{ item_sku, item_name, issued_quantity, closing_quantity, unit }]
 
     if (!entries?.length) {
       return res.status(400).json({ success: false, message: 'entries required' });
     }
 
-    // Fetch session
+    // Fetch session + all related data
     const { data: session, error: sErr } = await supabase
       .from('kitchen_production_sessions')
-      .select('*, entries:kitchen_production_entries(*)')
+      .select(`
+        *,
+        entries:kitchen_production_entries(*),
+        session_staff:kitchen_session_staff(*)
+      `)
       .eq('id', id)
       .single();
     if (sErr || !session) throw sErr ?? new Error('Session not found');
-    if (session.status === 'closed') {
-      return res.status(400).json({ success: false, message: 'Session already closed' });
+    if (session.status === 'completed' || session.status === 'closed') {
+      return res.status(400).json({ success: false, message: 'Session already completed' });
+    }
+
+    // Save closing stock ledger
+    if (closing_stock?.length) {
+      const stockRows = (closing_stock as any[]).map((cs) => ({
+        session_id: id,
+        item_sku: cs.item_sku,
+        item_name: cs.item_name || null,
+        issued_quantity: Number(cs.issued_quantity || 0),
+        closing_quantity: Number(cs.closing_quantity || 0),
+        unit: cs.unit || 'kg',
+        recorded_by: userId,
+      }));
+      // Delete any previous closing stock records then re-insert
+      await supabase.from('kitchen_session_closing_stock').delete().eq('session_id', id);
+      const { error: csErr } = await supabase
+        .from('kitchen_session_closing_stock')
+        .insert(stockRows);
+      if (csErr) console.warn('[KitchenSession] closing_stock insert warning:', csErr.message);
     }
 
     let totalExpected = 0;
@@ -251,38 +382,74 @@ export const completeProductionSession = async (req: Request, res: Response) => 
         .update({ actual_quantity: actual, variance, variance_penalty: penalty })
         .eq('id', entry.entry_id);
 
-      // Create credit bill for negative variance → staff_credit_bills (visible to branch accountant)
-      let creditBillId: string | null = null;
+      // Create credit bills for EACH accountable staff member
       if (penalty > 0) {
-        // session.staff_id is users.id; staff_credit_bills needs staff_profiles.id
-        const staffProfileId = await resolveStaffProfileId(session.staff_id);
-        if (!staffProfileId) {
-          // Cook has no staff_profiles record — skip credit bill, log warning
-          console.warn(`[KitchenVariance] No staff_profiles found for user ${session.staff_id} (${session.staff_name}). Credit bill not created.`);
-        } else {
+        const accountableStaff = (session.session_staff as any[]).filter(
+          (s: any) => s.is_accountable
+        );
+
+        // If no session_staff records, fall back to session.staff_id
+        if (!accountableStaff.length) {
+          const staffProfileId = await resolveStaffProfileId(session.staff_id);
+          if (staffProfileId) {
+            accountableStaff.push({
+              staff_profile_id: staffProfileId,
+              staff_name: session.staff_name,
+            });
+          }
+        }
+
+        const perStaffPenalty =
+          accountableStaff.length > 0
+            ? Math.round((penalty / accountableStaff.length) * 100) / 100
+            : penalty;
+
+        let firstBillId: string | null = null;
+        for (const staffMember of accountableStaff) {
+          // session_staff.staff_profile_id is already staff_profiles.id
+          const profileId =
+            (await resolveStaffProfileIdDirect(staffMember.staff_profile_id)) ??
+            (await resolveStaffProfileId(staffMember.staff_profile_id));
+
+          if (!profileId) {
+            console.warn(
+              `[KitchenVariance] No staff_profiles found for ${staffMember.staff_name}. Skipping.`
+            );
+            continue;
+          }
+
           const billNumber = await generateCreditBillNumber(session.branch_id);
           const { data: bill, error: bErr } = await supabase
             .from('staff_credit_bills')
             .insert({
-              staff_id: staffProfileId,
+              staff_id: profileId,
               branch_id: session.branch_id,
               bill_number: billNumber,
-              description: `Kitchen Variance Penalty | Session: ${session.session_number} | Item: ${existing.menu_item_name} | Expected: ${expected}, Actual: ${actual}, Variance: ${variance} | ${VARIANCE_REASON_CONSTANT}`,
-              amount: penalty,
-              balance: penalty,
+              description:
+                `Kitchen Variance Penalty | Session: ${session.session_number} | ` +
+                `Shift: ${session.shift_type === 'shift_a' ? 'Shift A' : 'Shift B'} | ` +
+                `Item: ${existing.menu_item_name} | ` +
+                `Expected: ${expected}, Actual: ${actual}, Variance: ${variance} | ` +
+                `Staff share: ${accountableStaff.length > 1 ? `1/${accountableStaff.length}` : 'full'} | ` +
+                VARIANCE_REASON_CONSTANT,
+              amount: perStaffPenalty,
+              balance: perStaffPenalty,
               paid_amount: 0,
               status: 'pending',
               bill_date: new Date().toISOString().split('T')[0],
             })
             .select()
             .single();
-          if (bErr) throw bErr;
-          creditBillId = bill.id;
+          if (bErr) {
+            console.error('[KitchenVariance] Credit bill error:', bErr.message);
+          } else {
+            if (!firstBillId) firstBillId = bill.id;
+          }
         }
 
         await supabase
           .from('kitchen_production_entries')
-          .update({ penalty_credit_bill_id: creditBillId })
+          .update({ penalty_credit_bill_id: firstBillId })
           .eq('id', entry.entry_id);
       }
 
@@ -292,7 +459,7 @@ export const completeProductionSession = async (req: Request, res: Response) => 
       totalPenalty += penalty;
     }
 
-    // Update session totals + mark completed
+    // Mark session completed
     await supabase
       .from('kitchen_production_sessions')
       .update({
@@ -308,11 +475,22 @@ export const completeProductionSession = async (req: Request, res: Response) => 
 
     const { data: updated } = await supabase
       .from('kitchen_production_sessions')
-      .select('*, entries:kitchen_production_entries(*), issues:kitchen_session_issues(*)')
+      .select(`
+        *,
+        entries:kitchen_production_entries(*),
+        issues:kitchen_session_issues(*),
+        session_staff:kitchen_session_staff(*),
+        closing_stock:kitchen_session_closing_stock(*)
+      `)
       .eq('id', id)
       .single();
 
-    res.json({ success: true, data: updated, total_penalty: totalPenalty, credit_bill_raised: totalPenalty > 0 });
+    res.json({
+      success: true,
+      data: updated,
+      total_penalty: totalPenalty,
+      credit_bill_raised: totalPenalty > 0,
+    });
   } catch (err: any) {
     console.error('completeProductionSession error:', err);
     res.status(500).json({ success: false, message: err.message });

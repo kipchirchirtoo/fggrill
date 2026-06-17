@@ -111,13 +111,19 @@ export const getUsageEntries = async (req: Request, res: Response) => {
  */
 export const recordWastage = async (req: Request, res: Response) => {
     try {
-        const { item_sku, item_name, quantity, unit_of_measure, reason, estimated_value, photo_url, shift } = req.body;
+        const {
+            item_sku, item_name, quantity, unit_of_measure, reason,
+            estimated_value, photo_url, shift, session_id, unit_cost,
+        } = req.body;
         const userId = (req as any).user?.id;
         const branchId = (req as any).user?.branch_id;
 
         if (!item_sku || !quantity || !reason) {
             return res.status(400).json({ success: false, message: 'Item SKU, quantity, and reason are required' });
         }
+
+        const resolvedUnitCost = Number(unit_cost || 0);
+        const resolvedTotalCost = Math.round(Number(quantity) * resolvedUnitCost * 100) / 100;
 
         // Create wastage entry
         const { data: wastage, error: wastageError } = await supabase
@@ -130,11 +136,14 @@ export const recordWastage = async (req: Request, res: Response) => {
                 quantity,
                 unit_of_measure,
                 reason,
-                estimated_value,
+                estimated_value: estimated_value ?? resolvedTotalCost,
                 photo_url,
                 shift,
+                session_id: session_id || null,
+                unit_cost: resolvedUnitCost,
+                total_cost: resolvedTotalCost,
                 reported_by: userId,
-                status: 'pending_review'
+                status: 'pending',
             })
             .select()
             .single();
@@ -169,7 +178,7 @@ export const recordWastage = async (req: Request, res: Response) => {
  */
 export const getWastageRecords = async (req: Request, res: Response) => {
     try {
-        const { branch_id, start_date, end_date, reason } = req.query;
+        const { branch_id, start_date, end_date, reason, session_id, status } = req.query;
 
         let query = supabase
             .from('kitchen_wastage')
@@ -187,6 +196,14 @@ export const getWastageRecords = async (req: Request, res: Response) => {
 
         if (reason) {
             query = query.eq('reason', reason);
+        }
+
+        if (session_id) {
+            query = query.eq('session_id', session_id);
+        }
+
+        if (status) {
+            query = query.eq('status', status);
         }
 
         if (start_date) {

@@ -16,6 +16,8 @@ enum KitchenOperationsSection {
   usage,
   wastage,
   foodControls,
+  sessions,
+  spoilage,
 }
 
 enum KitchenFoodTab { rules, portions, expected, variance, reports }
@@ -53,6 +55,7 @@ class _KitchenOperationsDashboardState
   String _recipeSearch = '';
   String _selectedStockTab = 'levels';
   String? _detailSku;
+  String _sessionShiftFilter = 'ALL';
 
   KitchenOpsRepository get _repo => ref.read(kitchenOpsRepositoryProvider);
 
@@ -113,6 +116,15 @@ class _KitchenOperationsDashboardState
           <Map<String, dynamic>>[]),
       _safe(_repo.getLossReport(startDate: startDate, endDate: endDate),
           <Map<String, dynamic>>[]),
+      _safe(
+          _repo.getProductionSessions(
+              shiftType: _sessionShiftFilter == 'ALL'
+                  ? null
+                  : _sessionShiftFilter),
+          <Map<String, dynamic>>[]),
+      _safe(_repo.getRecipesWithIngredients(), <Map<String, dynamic>>[]),
+      _safe(_repo.getKitchenStaff(), <Map<String, dynamic>>[]),
+      _safe(_repo.getSpoilage(), <Map<String, dynamic>>[]),
     ]);
     return _KitchenSnapshot(
       stats: Map<String, dynamic>.from(results[0] as Map),
@@ -133,6 +145,10 @@ class _KitchenOperationsDashboardState
       variance: _rows(results[15]),
       yieldReport: _rows(results[16]),
       lossReport: _rows(results[17]),
+      sessions: _rows(results[18]),
+      recipesWithIngredients: _rows(results[19]),
+      staffProfiles: _rows(results[20]),
+      spoilage: _rows(results[21]),
     );
   }
 
@@ -181,6 +197,10 @@ class _KitchenOperationsDashboardState
         return '/kitchen-operations/wastage';
       case KitchenOperationsSection.foodControls:
         return '/kitchen-operations/food-controls';
+      case KitchenOperationsSection.sessions:
+        return '/kitchen-operations/sessions';
+      case KitchenOperationsSection.spoilage:
+        return '/kitchen-operations/spoilage';
     }
   }
 
@@ -250,6 +270,18 @@ class _KitchenOperationsDashboardState
           group: 'Production',
         ),
         MasterNavItem(
+          section: KitchenOperationsSection.sessions,
+          label: 'Kitchen Sessions',
+          icon: Icons.soup_kitchen_outlined,
+          group: 'Shifts',
+        ),
+        MasterNavItem(
+          section: KitchenOperationsSection.spoilage,
+          label: 'Spoilage',
+          icon: Icons.warning_amber_outlined,
+          group: 'Shifts',
+        ),
+        MasterNavItem(
           section: KitchenOperationsSection.wastage,
           label: 'Record Wastage',
           icon: Icons.delete_outline,
@@ -283,6 +315,10 @@ class _KitchenOperationsDashboardState
         return _wastage(data);
       case KitchenOperationsSection.foodControls:
         return _foodControls(data);
+      case KitchenOperationsSection.sessions:
+        return _sessions(data);
+      case KitchenOperationsSection.spoilage:
+        return _spoilage(data);
     }
   }
 
@@ -840,6 +876,330 @@ class _KitchenOperationsDashboardState
         ],
       ),
     );
+  }
+
+  // ── Kitchen Sessions ──────────────────────────────────────────────────────
+
+  Widget _sessions(_KitchenSnapshot data) {
+    final sessions = data.sessions;
+    return _Page(
+      title: 'Kitchen Sessions',
+      subtitle: 'Shift-based production sessions with stock issue, yield tracking and staff accountability.',
+      actions: [
+        _ActionButton(
+          label: 'Open New Session',
+          icon: Icons.add,
+          onPressed: () => _showNewSessionSheet(data),
+          filled: true,
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Toolbar(
+            filters: [
+              _ChipSelect(
+                value: _sessionShiftFilter,
+                values: const {
+                  'ALL': 'All Shifts',
+                  'shift_a': 'Shift A',
+                  'shift_b': 'Shift B',
+                },
+                onChanged: (value) {
+                  setState(() => _sessionShiftFilter = value);
+                  _refresh();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _SimpleRows(
+            rows: sessions,
+            empty: 'No sessions found. Open a new session to begin.',
+            title: (row) {
+              final shift = '${row['shift_type'] ?? ''}' == 'shift_b'
+                  ? 'Shift B'
+                  : 'Shift A';
+              return '${_value(row, ['session_number'])} · $shift';
+            },
+            subtitle: (row) {
+              final status = _value(row, ['status']);
+              final staff = _value(row, ['staff_name']);
+              final date = _value(row, ['session_date', 'created_at']);
+              final penalty = row['total_penalty'] != null &&
+                      double.tryParse('${row['total_penalty']}') != null &&
+                      double.parse('${row['total_penalty']}') > 0
+                  ? ' · Penalty ${_money(row['total_penalty'])}'
+                  : '';
+              return '$status · $staff · $date$penalty';
+            },
+            trailing: (row) {
+              final status = _value(row, ['status']);
+              return _RowActions(actions: [
+                if (status == 'in_production')
+                  _RowAction('Close Session', Icons.check_circle_outline,
+                      () => _showCloseSessionSheet(row, data)),
+                _RowAction('View Detail', Icons.info_outline,
+                    () => _viewSessionDetail(row)),
+              ]);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Spoilage ──────────────────────────────────────────────────────────────
+
+  Widget _spoilage(_KitchenSnapshot data) {
+    return _Page(
+      title: 'Spoilage',
+      subtitle: 'Record kitchen spoilage events linked to shift sessions.',
+      actions: [
+        _ActionButton(
+          label: 'Record Spoilage',
+          icon: Icons.add,
+          onPressed: () => _showSpoilageDialog(data),
+          filled: true,
+        ),
+      ],
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          _SimpleRows(
+            rows: data.spoilage,
+            empty: 'No spoilage records found.',
+            title: (row) =>
+                '${_value(row, ['item_name', 'item_sku'])} · ${_value(row, ['quantity'])} ${_value(row, ['unit_of_measure'])}',
+            subtitle: (row) {
+              final cost = row['total_cost'] != null
+                  ? ' · ${_money(row['total_cost'])}'
+                  : '';
+              return '${_value(row, ['wastage_date', 'created_at'])} · Shift ${_value(row, ['shift'])} · ${_value(row, ['status'])}$cost';
+            },
+            trailing: (row) => _RowActions(actions: [
+              _RowAction('Approve', Icons.verified_outlined,
+                  () => _auditWastage(row, 'approved')),
+              _RowAction(
+                  'Delete',
+                  Icons.delete_outline,
+                  () => _confirm('Delete spoilage record?', () {
+                        return _repo.deleteWastage('${row['id']}');
+                      })),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Session dialogs ───────────────────────────────────────────────────────
+
+  Future<void> _showNewSessionSheet(_KitchenSnapshot data) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _NewSessionDialog(
+        stock: data.stock,
+        recipesWithIngredients: data.recipesWithIngredients,
+        staffProfiles: data.staffProfiles,
+      ),
+    );
+    if (result == null) return;
+    await _run(() async {
+      await _repo.createProductionSession(result);
+    }, successMessage: 'Session opened');
+  }
+
+  Future<void> _showCloseSessionSheet(
+      Map<String, dynamic> session, _KitchenSnapshot data) async {
+    final entries =
+        List<Map<String, dynamic>>.from(session['entries'] as List? ?? []);
+    final issues =
+        List<Map<String, dynamic>>.from(session['issues'] as List? ?? []);
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CloseSessionDialog(
+        session: session,
+        entries: entries,
+        issues: issues,
+      ),
+    );
+    if (result == null) return;
+    await _run(() async {
+      await _repo.completeProductionSession('${session['id']}', result);
+    }, successMessage: 'Session closed');
+  }
+
+  void _viewSessionDetail(Map<String, dynamic> session) {
+    final entries =
+        List<Map<String, dynamic>>.from(session['entries'] as List? ?? []);
+    final issues =
+        List<Map<String, dynamic>>.from(session['issues'] as List? ?? []);
+    final staff =
+        List<Map<String, dynamic>>.from(session['session_staff'] as List? ?? []);
+    final closing =
+        List<Map<String, dynamic>>.from(session['closing_stock'] as List? ?? []);
+    final shift = '${session['shift_type'] ?? ''}' == 'shift_b' ? 'B' : 'A';
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Session ${_value(session, ['session_number'])} · Shift $shift'),
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DetailRow('Status', _value(session, ['status'])),
+                _DetailRow('Staff', _value(session, ['staff_name'])),
+                _DetailRow('Date', _value(session, ['session_date', 'created_at'])),
+                if (session['total_penalty'] != null &&
+                    double.tryParse('${session['total_penalty']}') != null &&
+                    double.parse('${session['total_penalty']}') > 0)
+                  _DetailRow(
+                      'Variance Penalty', _money(session['total_penalty'])),
+                if (staff.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Shift Staff',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...staff.map((s) => _DetailRow(
+                      _value(s, ['staff_name']),
+                      '${_value(s, ['role'])} · ${(s['is_accountable'] == true) ? 'Accountable' : 'Not accountable'}')),
+                ],
+                if (issues.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Issued to Kitchen',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...issues.map((i) => _DetailRow(
+                      _value(i, ['item_name', 'item_sku']),
+                      '${_value(i, ['quantity_issued'])} ${_value(i, ['unit'])}')),
+                ],
+                if (entries.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Production Entries',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...entries.map((e) => _DetailRow(
+                      _value(e, ['menu_item_name']),
+                      'Expected: ${_value(e, ['expected_quantity'])} · Actual: ${_value(e, ['actual_quantity'])} · Variance: ${_value(e, ['variance'])}')),
+                ],
+                if (closing.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Closing Stock',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...closing.map((c) => _DetailRow(
+                      _value(c, ['item_name', 'item_sku']),
+                      'Issued: ${_value(c, ['issued_quantity'])} ${_value(c, ['unit'])} · Closing: ${_value(c, ['closing_quantity'])} ${_value(c, ['unit'])}')),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSpoilageDialog(_KitchenSnapshot data) async {
+    final itemController = TextEditingController();
+    final qtyController = TextEditingController();
+    final unitController = TextEditingController(text: 'kg');
+    final unitCostController = TextEditingController();
+    final notesController = TextEditingController();
+    String shift = 'A';
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Record Spoilage'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: itemController,
+                    decoration: const InputDecoration(labelText: 'Item name / SKU'),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: qtyController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Quantity'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: unitController,
+                        decoration: const InputDecoration(labelText: 'Unit'),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: unitCostController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Unit cost (Ksh)'),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: shift,
+                    decoration: const InputDecoration(labelText: 'Shift'),
+                    items: const [
+                      DropdownMenuItem(value: 'A', child: Text('Shift A')),
+                      DropdownMenuItem(value: 'B', child: Text('Shift B')),
+                    ],
+                    onChanged: (v) => setS(() => shift = v ?? 'A'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) return;
+
+    final qty = double.tryParse(qtyController.text) ?? 0;
+    final cost = double.tryParse(unitCostController.text) ?? 0;
+
+    await _run(() => _repo.recordSpoilage({
+          'item_sku': itemController.text.trim(),
+          'item_name': itemController.text.trim(),
+          'quantity': qty,
+          'unit_of_measure': unitController.text.trim().ifEmpty('kg'),
+          'shift': shift,
+          'unit_cost': cost,
+          'notes': notesController.text.trim(),
+        }));
   }
 
   Widget _foodControls(_KitchenSnapshot data) {
@@ -1716,6 +2076,685 @@ class _KitchenOperationsDashboardState
   }
 }
 
+// ── _DetailRow ────────────────────────────────────────────────────────────
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow(this.label, this.value);
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 160,
+              child: Text(label,
+                  style: const TextStyle(
+                      color: AppColors.kTextSecondary, fontSize: 13)),
+            ),
+            Expanded(
+                child: Text(value, style: const TextStyle(fontSize: 13))),
+          ],
+        ),
+      );
+}
+
+// ── _NewSessionDialog (multi-step) ────────────────────────────────────────
+
+class _NewSessionDialog extends StatefulWidget {
+  const _NewSessionDialog({
+    required this.stock,
+    required this.recipesWithIngredients,
+    required this.staffProfiles,
+  });
+  final List<Map<String, dynamic>> stock;
+  final List<Map<String, dynamic>> recipesWithIngredients;
+  final List<Map<String, dynamic>> staffProfiles;
+
+  @override
+  State<_NewSessionDialog> createState() => _NewSessionDialogState();
+}
+
+class _NewSessionDialogState extends State<_NewSessionDialog> {
+  int _step = 0;
+
+  // Step 0: Shift
+  String _shiftType = 'shift_a';
+
+  // Step 1: Staff
+  final List<Map<String, dynamic>> _selectedStaff = [];
+
+  // Step 2: Stock issues + yield
+  final List<Map<String, dynamic>> _issues = [];
+  final List<Map<String, dynamic>> _plannedItems = [];
+
+  String _text(Map<String, dynamic> row, List<String> keys) {
+    for (final k in keys) {
+      final v = row[k];
+      if (v != null && '$v'.trim().isNotEmpty) return '$v';
+    }
+    return '';
+  }
+
+  void _next() => setState(() => _step++);
+  void _back() => setState(() => _step--);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text([
+        'Step 1 of 3: Select Shift',
+        'Step 2 of 3: Assign Staff',
+        'Step 3 of 3: Issue Stock',
+      ][_step]),
+      content: SizedBox(
+        width: 600,
+        child: SingleChildScrollView(
+          child: [
+            _buildShiftStep(),
+            _buildStaffStep(),
+            _buildStockStep(),
+          ][_step],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => _step == 0
+              ? Navigator.pop(context)
+              : _back(),
+          child: Text(_step == 0 ? 'Cancel' : 'Back'),
+        ),
+        FilledButton(
+          onPressed: _canProceed() ? _handleNext : null,
+          child: Text(_step < 2 ? 'Next' : 'Open Session'),
+        ),
+      ],
+    );
+  }
+
+  bool _canProceed() {
+    if (_step == 0) return true;
+    if (_step == 1) return _selectedStaff.isNotEmpty;
+    if (_step == 2) return _issues.isNotEmpty;
+    return false;
+  }
+
+  void _handleNext() {
+    if (_step < 2) {
+      _next();
+    } else {
+      // Compute planned items from yield preview
+      Navigator.pop(context, {
+        'shift_type': _shiftType,
+        'session_staff': _selectedStaff,
+        'issues': _issues,
+        'planned_items': _plannedItems,
+      });
+    }
+  }
+
+  Widget _buildShiftStep() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Select which kitchen shift this session is for:'),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: _ShiftCard(
+                label: 'Shift A',
+                subtitle: 'Morning / First shift',
+                icon: Icons.wb_sunny_outlined,
+                selected: _shiftType == 'shift_a',
+                onTap: () => setState(() => _shiftType = 'shift_a'),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _ShiftCard(
+                label: 'Shift B',
+                subtitle: 'Evening / Second shift',
+                icon: Icons.nights_stay_outlined,
+                selected: _shiftType == 'shift_b',
+                onTap: () => setState(() => _shiftType = 'shift_b'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStaffStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Select staff on duty for this shift. Accountable staff will share variance penalty bills.'),
+        const SizedBox(height: 12),
+        if (widget.staffProfiles.isEmpty)
+          const Text('No staff profiles found. Add staff in HR module.'),
+        ...widget.staffProfiles.map((profile) {
+          final profileId = _text(profile, ['id']);
+          final name =
+              '${_text(profile, ['first_name'])} ${_text(profile, ['last_name'])}'.trim();
+          final existing = _selectedStaff.firstWhere(
+            (s) => s['staff_profile_id'] == profileId,
+            orElse: () => {},
+          );
+          final isSelected = existing.isNotEmpty;
+          return StatefulBuilder(
+            builder: (ctx, setS) => CheckboxListTile(
+              dense: true,
+              value: isSelected,
+              title: Text(name.isNotEmpty ? name : profileId),
+              subtitle: isSelected
+                  ? DropdownButtonFormField<String>(
+                      value: existing['role'] as String? ?? 'cook',
+                      isDense: true,
+                      decoration: const InputDecoration(
+                          contentPadding: EdgeInsets.symmetric(vertical: 4)),
+                      items: const [
+                        DropdownMenuItem(value: 'cook', child: Text('Cook')),
+                        DropdownMenuItem(
+                            value: 'helper', child: Text('Helper')),
+                        DropdownMenuItem(
+                            value: 'supervisor', child: Text('Supervisor')),
+                      ],
+                      onChanged: (v) => setState(() {
+                        existing['role'] = v;
+                      }),
+                    )
+                  : null,
+              secondary: isSelected
+                  ? Checkbox(
+                      value: existing['is_accountable'] as bool? ?? true,
+                      onChanged: (v) => setState(() {
+                        existing['is_accountable'] = v;
+                      }),
+                    )
+                  : null,
+              onChanged: (checked) => setState(() {
+                if (checked == true) {
+                  _selectedStaff.add({
+                    'staff_profile_id': profileId,
+                    'staff_name': name.isNotEmpty ? name : profileId,
+                    'role': 'cook',
+                    'is_accountable': true,
+                  });
+                } else {
+                  _selectedStaff.removeWhere(
+                      (s) => s['staff_profile_id'] == profileId);
+                }
+              }),
+            ),
+          );
+        }),
+        if (_selectedStaff.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Select at least one staff member.',
+                style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildStockStep() {
+    // Compute yield preview per recipe based on current issues
+    final yieldLines = <Map<String, dynamic>>[];
+    for (final recipe in widget.recipesWithIngredients) {
+      final ingredients =
+          (recipe['ingredients'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final outputQty = double.tryParse('${recipe['output_quantity']}') ?? 0;
+      final outputUnit = _text(recipe, ['output_unit']);
+      final menuItemName = _text(recipe, ['menu_item_name', 'recipe_name']);
+
+      double minPossible = double.infinity;
+      bool hasAnyIssue = false;
+      for (final ing in ingredients) {
+        final sku = _text(ing, ['item_sku']);
+        final reqQty =
+            double.tryParse('${ing['quantity_required']}') ?? 0;
+        if (reqQty <= 0) continue;
+        final issue = _issues.firstWhere((i) => i['item_sku'] == sku,
+            orElse: () => {});
+        if (issue.isEmpty) continue;
+        hasAnyIssue = true;
+        final issued =
+            double.tryParse('${issue['quantity_issued']}') ?? 0;
+        final possible = (issued / reqQty) * outputQty;
+        if (possible < minPossible) minPossible = possible;
+      }
+      if (hasAnyIssue && minPossible != double.infinity) {
+        yieldLines.add({
+          'menu_item_id': _text(recipe, ['menu_item_id']),
+          'menu_item_name': menuItemName,
+          'expected_quantity': minPossible.round(),
+          'output_unit': outputUnit,
+        });
+      }
+    }
+
+    // Update planned_items whenever stock step is shown
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _plannedItems
+          ..clear()
+          ..addAll(yieldLines);
+      }
+    });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Record stock items issued to kitchen for this session:'),
+        const SizedBox(height: 12),
+        _IssueEditor(
+          stock: widget.stock,
+          issues: _issues,
+          onChanged: () => setState(() {}),
+        ),
+        if (yieldLines.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Divider(),
+          const Text('Expected Yield (auto-calculated from recipes)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
+          ...yieldLines.map((y) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    const Icon(Icons.restaurant_outlined,
+                        size: 16, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: Text(_text(y, ['menu_item_name']),
+                            style: const TextStyle(fontSize: 13))),
+                    Text(
+                        '${y['expected_quantity']} ${_text(y, ['output_unit'])}',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green)),
+                  ],
+                ),
+              )),
+        ],
+      ],
+    );
+  }
+}
+
+// ── _ShiftCard ────────────────────────────────────────────────────────────
+
+class _ShiftCard extends StatelessWidget {
+  const _ShiftCard({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primary.withOpacity(0.1)
+              : theme.colorScheme.surface,
+          border: Border.all(
+            color: selected
+                ? theme.colorScheme.primary
+                : theme.dividerColor,
+            width: selected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(icon,
+                size: 32,
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface),
+            const SizedBox(height: 8),
+            Text(label,
+                style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: selected
+                        ? theme.colorScheme.primary
+                        : null)),
+            const SizedBox(height: 4),
+            Text(subtitle,
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.kTextSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── _IssueEditor ──────────────────────────────────────────────────────────
+
+class _IssueEditor extends StatefulWidget {
+  const _IssueEditor({
+    required this.stock,
+    required this.issues,
+    required this.onChanged,
+  });
+  final List<Map<String, dynamic>> stock;
+  final List<Map<String, dynamic>> issues;
+  final VoidCallback onChanged;
+
+  @override
+  State<_IssueEditor> createState() => _IssueEditorState();
+}
+
+class _IssueEditorState extends State<_IssueEditor> {
+  String _text(Map<String, dynamic> row, List<String> keys) {
+    for (final k in keys) {
+      final v = row[k];
+      if (v != null && '$v'.trim().isNotEmpty) return '$v';
+    }
+    return '';
+  }
+
+  void _addIssue() {
+    setState(() {
+      widget.issues.add({
+        'item_sku': '',
+        'item_name': '',
+        'quantity_issued': '0',
+        'unit': 'kg',
+        'unit_cost': '0',
+      });
+    });
+    widget.onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ...List.generate(widget.issues.length, (i) {
+          final issue = widget.issues[i];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: _StockDropdown(
+                          stock: widget.stock,
+                          value: issue['item_sku'] as String? ?? '',
+                          onChanged: (sku) => setState(() {
+                            issue['item_sku'] = sku ?? '';
+                            // Look up item name from stock list
+                            final match = widget.stock.firstWhere(
+                              (s) => s['item_sku'] == sku || s['sku'] == sku,
+                              orElse: () => {},
+                            );
+                            issue['item_name'] = match.isEmpty
+                                ? sku ?? ''
+                                : (match['item_name'] ??
+                                    match['name'] ??
+                                    sku ??
+                                    '');
+                            widget.onChanged();
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: '${issue['quantity_issued']}',
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Qty',
+                            isDense: true,
+                          ),
+                          onChanged: (v) {
+                            issue['quantity_issued'] = v;
+                            widget.onChanged();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: issue['unit'] as String? ?? 'kg',
+                          decoration: const InputDecoration(
+                            labelText: 'Unit',
+                            isDense: true,
+                          ),
+                          onChanged: (v) {
+                            issue['unit'] = v;
+                            widget.onChanged();
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline,
+                            color: Colors.red),
+                        onPressed: () => setState(() {
+                          widget.issues.removeAt(i);
+                          widget.onChanged();
+                        }),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        TextButton.icon(
+          icon: const Icon(Icons.add),
+          label: const Text('Add Stock Item'),
+          onPressed: _addIssue,
+        ),
+      ],
+    );
+  }
+}
+
+// ── _CloseSessionDialog ───────────────────────────────────────────────────
+
+class _CloseSessionDialog extends StatefulWidget {
+  const _CloseSessionDialog({
+    required this.session,
+    required this.entries,
+    required this.issues,
+  });
+  final Map<String, dynamic> session;
+  final List<Map<String, dynamic>> entries;
+  final List<Map<String, dynamic>> issues;
+
+  @override
+  State<_CloseSessionDialog> createState() => _CloseSessionDialogState();
+}
+
+class _CloseSessionDialogState extends State<_CloseSessionDialog> {
+  late final List<Map<String, dynamic>> _entryActuals;
+  late final List<Map<String, dynamic>> _closingStock;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryActuals = widget.entries
+        .map((e) => {
+              'entry_id': e['id'],
+              'menu_item_name': e['menu_item_name'] ?? '',
+              'expected_quantity': e['expected_quantity'] ?? 0,
+              'actual_controller':
+                  TextEditingController(text: '${e['actual_quantity'] ?? 0}'),
+            })
+        .toList();
+    _closingStock = widget.issues
+        .map((i) => {
+              'item_sku': i['item_sku'] ?? '',
+              'item_name': i['item_name'] ?? '',
+              'issued_quantity': i['quantity_issued'] ?? 0,
+              'unit': i['unit'] ?? 'kg',
+              'closing_controller': TextEditingController(text: '0'),
+            })
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    for (final e in _entryActuals) {
+      (e['actual_controller'] as TextEditingController).dispose();
+    }
+    for (final s in _closingStock) {
+      (s['closing_controller'] as TextEditingController).dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Close Kitchen Session'),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_entryActuals.isNotEmpty) ...[
+                const Text('Actual production (how many portions were made):',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                ..._entryActuals.map((e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text('${e['menu_item_name']}',
+                                style: const TextStyle(fontSize: 13)),
+                          ),
+                          Text(
+                              'Expected: ${e['expected_quantity']}  ',
+                              style: const TextStyle(
+                                  color: AppColors.kTextSecondary,
+                                  fontSize: 12)),
+                          Expanded(
+                            child: TextFormField(
+                              controller: e['actual_controller']
+                                  as TextEditingController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: 'Actual', isDense: true),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
+              if (_closingStock.isNotEmpty) ...[
+                const Divider(height: 24),
+                const Text('Closing stock (stock returned to store):',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                ..._closingStock.map((s) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                                '${s['item_name']} (${s['item_sku']})',
+                                style: const TextStyle(fontSize: 13)),
+                          ),
+                          Text(
+                              'Issued: ${s['issued_quantity']} ${s['unit']}  ',
+                              style: const TextStyle(
+                                  color: AppColors.kTextSecondary,
+                                  fontSize: 12)),
+                          Expanded(
+                            child: TextFormField(
+                              controller: s['closing_controller']
+                                  as TextEditingController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: 'Closing qty', isDense: true),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final entries = _entryActuals
+                .map((e) => {
+                      'entry_id': e['entry_id'],
+                      'actual_quantity': double.tryParse(
+                              (e['actual_controller']
+                                      as TextEditingController)
+                                  .text) ??
+                          0,
+                    })
+                .toList();
+            final closingStock = _closingStock
+                .map((s) => {
+                      'item_sku': s['item_sku'],
+                      'item_name': s['item_name'],
+                      'issued_quantity': s['issued_quantity'],
+                      'unit': s['unit'],
+                      'closing_quantity': double.tryParse(
+                              (s['closing_controller']
+                                      as TextEditingController)
+                                  .text) ??
+                          0,
+                    })
+                .toList();
+            Navigator.pop(context, {
+              'entries': entries,
+              'closing_stock': closingStock,
+            });
+          },
+          child: const Text('Close Session'),
+        ),
+      ],
+    );
+  }
+}
+
 class _KitchenSnapshot {
   const _KitchenSnapshot({
     required this.stats,
@@ -1736,6 +2775,10 @@ class _KitchenSnapshot {
     required this.variance,
     required this.yieldReport,
     required this.lossReport,
+    required this.sessions,
+    required this.recipesWithIngredients,
+    required this.staffProfiles,
+    required this.spoilage,
   });
 
   factory _KitchenSnapshot.empty() => const _KitchenSnapshot(
@@ -1757,6 +2800,10 @@ class _KitchenSnapshot {
         variance: [],
         yieldReport: [],
         lossReport: [],
+        sessions: [],
+        recipesWithIngredients: [],
+        staffProfiles: [],
+        spoilage: [],
       );
 
   final Map<String, dynamic> stats;
@@ -1777,6 +2824,10 @@ class _KitchenSnapshot {
   final List<Map<String, dynamic>> variance;
   final List<Map<String, dynamic>> yieldReport;
   final List<Map<String, dynamic>> lossReport;
+  final List<Map<String, dynamic>> sessions;
+  final List<Map<String, dynamic>> recipesWithIngredients;
+  final List<Map<String, dynamic>> staffProfiles;
+  final List<Map<String, dynamic>> spoilage;
 }
 
 class _Page extends StatelessWidget {

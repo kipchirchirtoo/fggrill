@@ -82,6 +82,7 @@ import {
     getProductionSession,
     completeProductionSession,
     getRecipesWithIngredients,
+    getShiftHandover,
 } from '../controllers/kitchen/kitchen-production.controller';
 
 const router = express.Router();
@@ -218,6 +219,7 @@ router.put('/expected-portions/:id/verify', authorize(kitchenStaff), verifyActua
 // KITCHEN PRODUCTION SESSIONS (STOREKEEPER FLOW)
 // =====================================================
 router.get('/production-sessions/recipes', authorize(storekeepers), getRecipesWithIngredients);
+router.get('/production-sessions/handover', authorize([...storekeepers, ...kitchenStaff]), getShiftHandover);
 router.get('/production-sessions', authorize([...storekeepers, ...kitchenStaff]), listProductionSessions);
 router.post('/production-sessions', authorize(storekeepers), createProductionSession);
 router.get('/production-sessions/:id', authorize([...storekeepers, ...kitchenStaff]), getProductionSession);

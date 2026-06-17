@@ -520,6 +520,90 @@ class KitchenOpsRepository {
     return _unwrapList(response.data);
   }
 
+  // ── Kitchen Production Sessions ──────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getProductionSessions({
+    String? shiftType,
+    String? status,
+  }) async {
+    final response = await _dio.get(
+      '/kitchen/production-sessions',
+      queryParameters: await _branchQuery({
+        if (shiftType != null && shiftType != 'ALL') 'shift_type': shiftType,
+        if (status != null && status != 'ALL') 'status': status,
+        'limit': 100,
+      }),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createProductionSession(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post(
+      '/kitchen/production-sessions',
+      data: {...await _branchQuery(), ...data},
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> completeProductionSession(
+      String id, Map<String, dynamic> data) async {
+    final response = await _dio.put(
+      '/kitchen/production-sessions/$id/complete',
+      data: data,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> getShiftHandover(String shiftType) async {
+    final response = await _dio.get(
+      '/kitchen/production-sessions/handover',
+      queryParameters: await _branchQuery({'shift_type': shiftType}),
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getRecipesWithIngredients() async {
+    final response = await _dio.get(
+      '/kitchen/production-sessions/recipes',
+      queryParameters: await _branchQuery(),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getKitchenStaff() async {
+    final response = await _dio.get(
+      '/staff',
+      queryParameters: await _branchQuery({'department': 'kitchen', 'limit': 200}),
+    );
+    return _unwrapList(response.data);
+  }
+
+  // ── Spoilage (wastage linked to session) ─────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getSpoilage({
+    String? sessionId,
+    String? status,
+  }) async {
+    final response = await _dio.get(
+      '/kitchen/wastage',
+      queryParameters: await _branchQuery({
+        'reason': 'SPOILAGE',
+        if (sessionId != null && sessionId.isNotEmpty) 'session_id': sessionId,
+        if (status != null && status != 'ALL') 'status': status,
+      }),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> recordSpoilage(Map<String, dynamic> data) async {
+    await _dio.post('/kitchen/wastage', data: {
+      ...await _branchQuery(),
+      'reason': 'SPOILAGE',
+      ...data,
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getAccountabilityReport({
     required String startDate,
     required String endDate,

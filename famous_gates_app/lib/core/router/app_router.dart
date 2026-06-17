@@ -832,6 +832,18 @@ List<GoRoute> get _kitchenOperationsSectionRoutes => [
           initialFoodTab: KitchenFoodTab.reports,
         ),
       ),
+      GoRoute(
+        path: '/kitchen-operations/sessions',
+        builder: (context, state) => const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.sessions,
+        ),
+      ),
+      GoRoute(
+        path: '/kitchen-operations/spoilage',
+        builder: (context, state) => const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.spoilage,
+        ),
+      ),
     ];
 
 KitchenFoodTab _foodTabFromQuery(String? value) {
