@@ -832,35 +832,168 @@ export const getProfitLossStatement = async (
 ): Promise<void> => {
   try {
     const { startDate, endDate, branch_id } = req.query;
-    const start = startDate as string || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString();
-    const end = endDate as string || new Date().toISOString();
-
-    const dateRange = { startDate: start, endDate: end };
+    const start = startDate as string || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0];
+    const end = endDate as string || new Date().toISOString().split('T')[0];
+    const startTs = `${start}T00:00:00`;
+    const endTs = `${end}T23:59:59`;
     const branchId = branch_id ? Number(branch_id) : undefined;
+    const n = (v: any) => Number.isFinite(Number(v)) ? Number(v) : 0;
 
-    // Get aggregated data from all sources
-    const aggregatedData = await aggregationService.getAggregatedData(dateRange, branchId);
+    // ============================================================
+    // 1. REVENUE — primary source: cashier_transactions (posted sales)
+    // ============================================================
+    const { data: cashierTxns, error: cashierErr } = await supabase
+      .from('cashier_transactions')
+      .select('amount, revenue_type, transaction_type, status')
+      .eq('branch_id', branchId)
+      .gte('transaction_date', startTs)
+      .lte('transaction_date', endTs)
+      .eq('status', 'posted')
+      .neq('transaction_type', 'refund');
 
-    const totalRevenue = aggregatedData.revenue;
-    const expensesByCategory = aggregatedData.expensesByCategory;
+    if (cashierErr) logger.error('Error fetching cashier transactions for P&L:', cashierErr);
 
-    // Calculate COGS (Food & Beverage, Supplies, Inventory)
-    const cogsCategories = ['Food & Beverage', 'Supplies', 'Inventory', 'FOOD_BEVERAGE', 'SUPPLIES'];
-    const costOfGoods = Object.entries(expensesByCategory)
+    let roomRevenue = 0;
+    let restaurantRevenue = 0;
+    let barRevenue = 0;
+    let posRevenue = 0;
+    let otherRevenue = 0;
+
+    (cashierTxns || []).forEach((t: any) => {
+      const amount = n(t.amount);
+      const type = String(t.revenue_type || '').toLowerCase();
+      if (type.includes('hotel') || type.includes('room') || type.includes('accommodation')) {
+        roomRevenue += amount;
+      } else if (type.includes('restaurant') || type.includes('food') || type.includes('dining') || type.includes('kitchen')) {
+        restaurantRevenue += amount;
+      } else if (type.includes('bar') || type.includes('beverage') || type.includes('drink') || type.includes('club')) {
+        barRevenue += amount;
+      } else if (type.includes('pos') || type.includes('outlet') || type.includes('sale')) {
+        posRevenue += amount;
+      } else {
+        otherRevenue += amount;
+      }
+    });
+
+    // ============================================================
+    // 2. REVENUE — fallback to order tables (ensures completeness)
+    // ============================================================
+    const [{ data: restOrders }, { data: barOrders }, { data: bookingsData }, { data: posOrders }] = await Promise.all([
+      supabase.from('restaurant_orders').select('id, total_amount, grand_total, status').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
+      supabase.from('bar_orders').select('id, total, subtotal, status').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
+      supabase.from('bookings').select('total_amount, status').eq('branch_id', branchId).gte('check_in_date', start).lte('check_in_date', end).in('status', ['confirmed', 'checked_in', 'checked_out']),
+      supabase.from('pos_shift_orders').select('id, total_amount, status, outlet_id').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
+    ]);
+
+    const orderRoomRevenue = (bookingsData || []).reduce((s: number, b: any) => s + n(b.total_amount), 0);
+    const orderRestaurantRevenue = (restOrders || []).reduce((s: number, o: any) => s + (n(o.grand_total) || n(o.total_amount)), 0);
+    const orderBarRevenue = (barOrders || []).reduce((s: number, o: any) => s + (n(o.total) || n(o.subtotal)), 0);
+    const orderPosRevenue = (posOrders || []).reduce((s: number, o: any) => s + n(o.total_amount), 0);
+
+    // Use order totals when they exceed cashier totals (indicates missing cashier records)
+    if (orderRoomRevenue > roomRevenue) roomRevenue = orderRoomRevenue;
+    if (orderRestaurantRevenue > restaurantRevenue) restaurantRevenue = orderRestaurantRevenue;
+    if (orderBarRevenue > barRevenue) barRevenue = orderBarRevenue;
+    if (orderPosRevenue > posRevenue) posRevenue = orderPosRevenue;
+
+    const totalRevenue = roomRevenue + restaurantRevenue + barRevenue + posRevenue + otherRevenue;
+
+    // ============================================================
+    // 3. COGS — sold items × cost prices + purchases
+    // ============================================================
+    let cogs = 0;
+
+    // POS stock counts (direct cost tracking)
+    const { data: stockCounts } = await supabase
+      .from('pos_shift_stock_counts')
+      .select('sold_quantity, cost_price')
+      .eq('branch_id', branchId)
+      .gte('created_at', startTs)
+      .lte('created_at', endTs);
+    (stockCounts || []).forEach((c: any) => { cogs += n(c.sold_quantity) * n(c.cost_price); });
+
+    // Restaurant items COGS
+    if ((restOrders || []).length) {
+      const [{ data: menuItems }, { data: restItems }] = await Promise.all([
+        supabase.from('restaurant_menu_items').select('id, cost_price').or(`branch_id.is.null,branch_id.eq.${branchId}`),
+        supabase.from('restaurant_order_items').select('order_id, menu_item_id, quantity').in('order_id', restOrders!.map((o: any) => o.id)),
+      ]);
+      const costMap = new Map<string, number>();
+      (menuItems || []).forEach((m: any) => costMap.set(String(m.id), n(m.cost_price)));
+      (restItems || []).forEach((it: any) => { cogs += n(it.quantity) * (costMap.get(String(it.menu_item_id)) || 0); });
+    }
+
+    // Bar items COGS
+    if ((barOrders || []).length) {
+      const [{ data: barDrinks }, { data: barItems }] = await Promise.all([
+        supabase.from('bar_drinks').select('id, cost_price').or(`branch_id.is.null,branch_id.eq.${branchId}`),
+        supabase.from('bar_order_items').select('order_id, drink_id, quantity').in('order_id', barOrders!.map((o: any) => o.id)),
+      ]);
+      const costMap = new Map<string, number>();
+      (barDrinks || []).forEach((d: any) => costMap.set(String(d.id), n(d.cost_price)));
+      (barItems || []).forEach((it: any) => { cogs += n(it.quantity) * (costMap.get(String(it.drink_id)) || 0); });
+    }
+
+    // Purchases as COGS fallback
+    const { data: purchases } = await supabase
+      .from('purchases')
+      .select('total_amount')
+      .eq('branch_id', branchId)
+      .gte('purchase_date', start)
+      .lte('purchase_date', end)
+      .in('status', ['approved', 'completed']);
+    const purchaseCogs = (purchases || []).reduce((s: number, p: any) => s + n(p.total_amount), 0);
+    cogs += purchaseCogs;
+
+    // ============================================================
+    // 4. EXPENSES — all branch expense sources
+    // ============================================================
+    const [{ data: expenses }, { data: financeExpenses }, { data: pettyCash }] = await Promise.all([
+      supabase.from('expenses').select('amount, category, status, approval_status').eq('branch_id', branchId).gte('expense_date', start).lte('expense_date', end),
+      supabase.from('finance_transactions').select('amount, category, transaction_type').eq('branch_id', branchId).eq('transaction_type', 'expense').gte('created_at', startTs).lte('created_at', endTs),
+      supabase.from('petty_cash_transactions').select('amount, status').eq('branch_id', branchId).gte('date', start).lte('date', end),
+    ]);
+
+    const expensesByCategory: Record<string, number> = {};
+    let totalExpenses = 0;
+
+    (expenses || []).forEach((e: any) => {
+      const ok = String(e.status || e.approval_status || '').toLowerCase();
+      if (ok && !['approved', 'completed', 'paid'].includes(ok)) return;
+      const cat = e.category || 'Other';
+      expensesByCategory[cat] = (expensesByCategory[cat] || 0) + n(e.amount);
+      totalExpenses += n(e.amount);
+    });
+
+    (financeExpenses || []).forEach((e: any) => {
+      const cat = e.category || 'Finance';
+      expensesByCategory[cat] = (expensesByCategory[cat] || 0) + n(e.amount);
+      totalExpenses += n(e.amount);
+    });
+
+    (pettyCash || []).forEach((p: any) => {
+      const cat = 'Petty Cash';
+      expensesByCategory[cat] = (expensesByCategory[cat] || 0) + n(p.amount);
+      totalExpenses += n(p.amount);
+    });
+
+    // ============================================================
+    // 5. PROFIT CALCULATION
+    // ============================================================
+    const cogsCategories = ['Food & Beverage', 'Supplies', 'Inventory', 'FOOD_BEVERAGE', 'SUPPLIES', 'Purchases'];
+    const costOfGoodsFromExpenses = Object.entries(expensesByCategory)
       .filter(([cat]) => cogsCategories.some(c => cat.toLowerCase().includes(c.toLowerCase())))
       .reduce((sum, [, amount]) => sum + amount, 0);
 
-    // Calculate Operating Expenses (Salaries, Utilities, Maintenance, Marketing, etc.)
-    const opexCategories = ['Salaries', 'Utilities', 'Maintenance', 'Marketing', 'Transport', 'Rent', 'SALARIES', 'UTILITIES', 'MAINTENANCE', 'MARKETING'];
+    const opexCategories = ['Salaries', 'Utilities', 'Maintenance', 'Marketing', 'Transport', 'Rent', 'SALARIES', 'UTILITIES', 'MAINTENANCE', 'MARKETING', 'Payroll', 'Petty Cash', 'Finance'];
     const operatingExpenses = Object.entries(expensesByCategory)
       .filter(([cat]) => opexCategories.some(c => cat.toLowerCase().includes(c.toLowerCase())))
       .reduce((sum, [, amount]) => sum + amount, 0);
 
-    // Other expenses
-    const otherExpenses = aggregatedData.expenses - costOfGoods - operatingExpenses;
+    const otherExpenses = totalExpenses - costOfGoodsFromExpenses - operatingExpenses;
 
-    // Calculate P&L components
-    const grossProfit = totalRevenue - costOfGoods;
+    const finalCogs = Math.max(cogs, costOfGoodsFromExpenses);
+    const grossProfit = totalRevenue - finalCogs;
     const operatingIncome = grossProfit - operatingExpenses;
     const netProfit = operatingIncome - otherExpenses;
     const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
@@ -869,15 +1002,21 @@ export const getProfitLossStatement = async (
       success: true,
       data: {
         revenue: Math.round(totalRevenue * 100) / 100,
-        costOfGoods: Math.round(costOfGoods * 100) / 100,
+        costOfGoods: Math.round(finalCogs * 100) / 100,
         grossProfit: Math.round(grossProfit * 100) / 100,
         operatingExpenses: Math.round(operatingExpenses * 100) / 100,
         operatingIncome: Math.round(operatingIncome * 100) / 100,
-        otherIncome: 0, // Can be enhanced later
+        otherIncome: 0,
         otherExpenses: Math.round(otherExpenses * 100) / 100,
         netProfit: Math.round(netProfit * 100) / 100,
         margin: Math.round(margin * 10) / 10,
-        revenueBySource: aggregatedData.revenueBySource,
+        revenueBySource: {
+          rooms: Math.round(roomRevenue * 100) / 100,
+          restaurant: Math.round(restaurantRevenue * 100) / 100,
+          bar: Math.round(barRevenue * 100) / 100,
+          pos: Math.round(posRevenue * 100) / 100,
+          other: Math.round(otherRevenue * 100) / 100,
+        },
         expensesByCategory,
         period: { start, end }
       }

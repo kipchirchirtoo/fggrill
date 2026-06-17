@@ -500,31 +500,37 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
             });
         }
 
-        // ── 5. Cashier-recorded revenue cross-check (cashier_shifts) ─────────────
-        // Primary: cashier_shifts.actual_cash (what cashiers physically handed over)
-        // Fallback: shift_transactions if cashier_shifts has no data for this branch
-        const [{ data: cashierShiftsData }, { data: shiftTxns }] = await Promise.all([
-            supabase.from('cashier_shifts')
-                .select('actual_cash, expected_cash')
+        // ── 5. Cashier-recorded revenue cross-check ─────────────────────────────
+        // Primary: cashier_transactions (canonical posted payments)
+        // Fallback: cashier_shift_logs (legacy shift data)
+        const [{ data: cashierTxns }, { data: cashierShiftLogs }] = await Promise.all([
+            supabase.from('cashier_transactions')
+                .select('amount, transaction_type, status')
                 .eq('branch_id', branchId)
-                .gte('start_time', startTs)
-                .lte('start_time', endTs),
-            supabase.from('shift_transactions')
-                .select('total_amount, is_voided')
+                .gte('transaction_date', startTs)
+                .lte('transaction_date', endTs)
+                .eq('status', 'posted')
+                .neq('transaction_type', 'refund'),
+            supabase.from('cashier_shift_logs')
+                .select('cash_at_hand, total_sales')
                 .eq('branch_id', branchId)
-                .gte('created_at', startTs)
-                .lte('created_at', endTs),
+                .gte('shift_start', startTs)
+                .lte('shift_start', endTs)
+                .not('status', 'eq', 'cancelled'),
         ]);
-        const cashierShiftTotal = (cashierShiftsData || []).reduce((s: number, t: any) => s + n(t.actual_cash || t.expected_cash), 0);
-        const shiftTxnTotal = (shiftTxns || []).filter((t: any) => t.is_voided !== true).reduce((s: number, t: any) => s + n(t.total_amount), 0);
-        const cashierRevenue = cashierShiftTotal > 0 ? cashierShiftTotal : shiftTxnTotal;
+        const cashierTxnTotal = (cashierTxns || []).reduce((s: number, t: any) => s + n(t.amount), 0);
+        const cashierLogTotal = (cashierShiftLogs || []).reduce((s: number, t: any) => s + n(t.cash_at_hand || t.total_sales), 0);
+        const cashierRevenue = cashierTxnTotal > 0 ? cashierTxnTotal : cashierLogTotal;
 
         // ── 6. Branch operating expenses ────────────────────────────────────────
-        const [{ data: expenses }, { data: pettyCash }] = await Promise.all([
+        const [{ data: expenses }, { data: pettyCash }, { data: financeExpenses }] = await Promise.all([
             supabase.from('expenses').select('amount, category, status, approval_status')
                 .eq('branch_id', branchId).gte('expense_date', startDate).lte('expense_date', endDate),
             supabase.from('petty_cash_transactions').select('amount, status')
                 .eq('branch_id', branchId).gte('date', startDate).lte('date', endDate),
+            supabase.from('finance_transactions').select('amount, category, transaction_type')
+                .eq('branch_id', branchId).eq('transaction_type', 'expense')
+                .gte('created_at', startTs).lte('created_at', endTs),
         ]);
         const expensesByCategory: Record<string, number> = {};
         let operatingExpenses = 0;
@@ -540,6 +546,11 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
             expensesByCategory['Petty Cash'] = (expensesByCategory['Petty Cash'] || 0) + pettyCashTotal;
             operatingExpenses += pettyCashTotal;
         }
+        (financeExpenses || []).forEach((e: any) => {
+            const cat = e.category || 'Finance';
+            expensesByCategory[cat] = (expensesByCategory[cat] || 0) + n(e.amount);
+            operatingExpenses += n(e.amount);
+        });
 
         // ── 7. Roll up ──────────────────────────────────────────────────────────
         const outletList = Array.from(outlets.values())
