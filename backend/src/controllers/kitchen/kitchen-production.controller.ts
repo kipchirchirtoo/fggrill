@@ -79,6 +79,26 @@ async function calcExpectedYield(
   return minPossible ?? 0;
 }
 
+// Select strings — FULL includes tables added by migration 91; BASE works
+// even before the migration has been applied.
+const SESSION_SELECT_FULL = `
+  *,
+  entries:kitchen_production_entries(*),
+  issues:kitchen_session_issues(*),
+  session_staff:kitchen_session_staff(*),
+  closing_stock:kitchen_session_closing_stock(*)
+`;
+const SESSION_SELECT_BASE = `
+  *,
+  entries:kitchen_production_entries(*),
+  issues:kitchen_session_issues(*)
+`;
+
+function isSchemaError(err: any): boolean {
+  const msg: string = err?.message ?? '';
+  return msg.includes('relationship') || msg.includes('schema cache');
+}
+
 // ── GET /api/kitchen/production-sessions ───────────────────────────────────
 
 export const listProductionSessions = async (req: Request, res: Response) => {
@@ -86,25 +106,27 @@ export const listProductionSessions = async (req: Request, res: Response) => {
     const { branch_id, status, shift_type, date_from, date_to, limit = '50' } = req.query;
     if (!branch_id) return res.status(400).json({ success: false, message: 'branch_id required' });
 
-    let q = supabase
+    // Try full select with new relation tables; fall back to base select if
+    // migration 91 hasn't run yet (tables won't exist → PostgREST 500).
+    const applyFilters = (q: any) => {
+      if (status) q = q.eq('status', status as string);
+      if (shift_type) q = q.eq('shift_type', shift_type as string);
+      if (date_from) q = q.gte('session_date', date_from as string);
+      if (date_to) q = q.lte('session_date', date_to as string);
+      return q;
+    };
+
+    const base = supabase
       .from('kitchen_production_sessions')
-      .select(`
-        *,
-        entries:kitchen_production_entries(*),
-        issues:kitchen_session_issues(*),
-        session_staff:kitchen_session_staff(*),
-        closing_stock:kitchen_session_closing_stock(*)
-      `)
       .eq('branch_id', Number(branch_id))
       .order('created_at', { ascending: false })
       .limit(Number(limit));
 
-    if (status) q = q.eq('status', status as string);
-    if (shift_type) q = q.eq('shift_type', shift_type as string);
-    if (date_from) q = q.gte('session_date', date_from as string);
-    if (date_to) q = q.lte('session_date', date_to as string);
+    let { data, error } = await applyFilters(base.select(SESSION_SELECT_FULL));
+    if (isSchemaError(error)) {
+      ({ data, error } = await applyFilters(base.select(SESSION_SELECT_BASE)));
+    }
 
-    const { data, error } = await q;
     if (error) throw error;
     res.json({ success: true, data });
   } catch (err: any) {
@@ -125,7 +147,7 @@ export const getShiftHandover = async (req: Request, res: Response) => {
     // Opposite shift
     const oppositeShift = shift_type === 'shift_a' ? 'shift_b' : 'shift_a';
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('kitchen_production_sessions')
       .select(`
         id, session_number, shift_type, session_date, status, completed_at,
@@ -139,6 +161,20 @@ export const getShiftHandover = async (req: Request, res: Response) => {
       .order('completed_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    if (error?.message?.includes('relationship') || error?.message?.includes('schema cache')) {
+      const fallback = await supabase
+        .from('kitchen_production_sessions')
+        .select('id, session_number, shift_type, session_date, status, completed_at, staff_name, total_penalty')
+        .eq('branch_id', Number(branch_id))
+        .eq('shift_type', oppositeShift)
+        .in('status', ['completed', 'closed'])
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) throw error;
     res.json({ success: true, data });
@@ -269,17 +305,18 @@ export const createProductionSession = async (req: Request, res: Response) => {
     }
 
     // Return full session with related data
-    const { data: full } = await supabase
+    let { data: full } = await supabase
       .from('kitchen_production_sessions')
-      .select(`
-        *,
-        entries:kitchen_production_entries(*),
-        issues:kitchen_session_issues(*),
-        session_staff:kitchen_session_staff(*),
-        closing_stock:kitchen_session_closing_stock(*)
-      `)
+      .select(SESSION_SELECT_FULL)
       .eq('id', session.id)
       .single();
+    if (!full) {
+      ({ data: full } = await supabase
+        .from('kitchen_production_sessions')
+        .select(SESSION_SELECT_BASE)
+        .eq('id', session.id)
+        .single());
+    }
 
     res.json({ success: true, data: full });
   } catch (err: any) {
@@ -293,17 +330,18 @@ export const createProductionSession = async (req: Request, res: Response) => {
 export const getProductionSession = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('kitchen_production_sessions')
-      .select(`
-        *,
-        entries:kitchen_production_entries(*),
-        issues:kitchen_session_issues(*),
-        session_staff:kitchen_session_staff(*),
-        closing_stock:kitchen_session_closing_stock(*)
-      `)
+      .select(SESSION_SELECT_FULL)
       .eq('id', id)
       .single();
+    if (isSchemaError(error)) {
+      ({ data, error } = await supabase
+        .from('kitchen_production_sessions')
+        .select(SESSION_SELECT_BASE)
+        .eq('id', id)
+        .single());
+    }
     if (error) throw error;
     res.json({ success: true, data });
   } catch (err: any) {
@@ -328,15 +366,18 @@ export const completeProductionSession = async (req: Request, res: Response) => 
     }
 
     // Fetch session + all related data
-    const { data: session, error: sErr } = await supabase
+    let { data: session, error: sErr } = await supabase
       .from('kitchen_production_sessions')
-      .select(`
-        *,
-        entries:kitchen_production_entries(*),
-        session_staff:kitchen_session_staff(*)
-      `)
+      .select(`*, entries:kitchen_production_entries(*), session_staff:kitchen_session_staff(*)`)
       .eq('id', id)
       .single();
+    if (isSchemaError(sErr)) {
+      ({ data: session, error: sErr } = await supabase
+        .from('kitchen_production_sessions')
+        .select(`*, entries:kitchen_production_entries(*)`)
+        .eq('id', id)
+        .single());
+    }
     if (sErr || !session) throw sErr ?? new Error('Session not found');
     if (session.status === 'completed' || session.status === 'closed') {
       return res.status(400).json({ success: false, message: 'Session already completed' });
@@ -473,17 +514,18 @@ export const completeProductionSession = async (req: Request, res: Response) => 
       })
       .eq('id', id);
 
-    const { data: updated } = await supabase
+    let { data: updated } = await supabase
       .from('kitchen_production_sessions')
-      .select(`
-        *,
-        entries:kitchen_production_entries(*),
-        issues:kitchen_session_issues(*),
-        session_staff:kitchen_session_staff(*),
-        closing_stock:kitchen_session_closing_stock(*)
-      `)
+      .select(SESSION_SELECT_FULL)
       .eq('id', id)
       .single();
+    if (!updated) {
+      ({ data: updated } = await supabase
+        .from('kitchen_production_sessions')
+        .select(SESSION_SELECT_BASE)
+        .eq('id', id)
+        .single());
+    }
 
     res.json({
       success: true,
