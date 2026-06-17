@@ -108,7 +108,14 @@ export const listProductionSessions = async (req: Request, res: Response) => {
 
     // Try full select with new relation tables; fall back to base select if
     // migration 91 hasn't run yet (tables won't exist → PostgREST 500).
-    const applyFilters = (q: any) => {
+    // .select() must come before .eq()/.order() in the Supabase chain
+    const applyFilters = (selectStr: string) => {
+      let q: any = supabase
+        .from('kitchen_production_sessions')
+        .select(selectStr)
+        .eq('branch_id', Number(branch_id))
+        .order('created_at', { ascending: false })
+        .limit(Number(limit));
       if (status) q = q.eq('status', status as string);
       if (shift_type) q = q.eq('shift_type', shift_type as string);
       if (date_from) q = q.gte('session_date', date_from as string);
@@ -116,15 +123,9 @@ export const listProductionSessions = async (req: Request, res: Response) => {
       return q;
     };
 
-    const base = supabase
-      .from('kitchen_production_sessions')
-      .eq('branch_id', Number(branch_id))
-      .order('created_at', { ascending: false })
-      .limit(Number(limit));
-
-    let { data, error } = await applyFilters(base.select(SESSION_SELECT_FULL));
+    let { data, error } = await applyFilters(SESSION_SELECT_FULL);
     if (isSchemaError(error)) {
-      ({ data, error } = await applyFilters(base.select(SESSION_SELECT_BASE)));
+      ({ data, error } = await applyFilters(SESSION_SELECT_BASE));
     }
 
     if (error) throw error;
@@ -147,34 +148,26 @@ export const getShiftHandover = async (req: Request, res: Response) => {
     // Opposite shift
     const oppositeShift = shift_type === 'shift_a' ? 'shift_b' : 'shift_a';
 
-    let { data, error } = await supabase
-      .from('kitchen_production_sessions')
-      .select(`
-        id, session_number, shift_type, session_date, status, completed_at,
-        staff_name, total_penalty,
-        closing_stock:kitchen_session_closing_stock(*),
-        session_staff:kitchen_session_staff(*)
-      `)
-      .eq('branch_id', Number(branch_id))
-      .eq('shift_type', oppositeShift)
-      .in('status', ['completed', 'closed'])
-      .order('completed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error?.message?.includes('relationship') || error?.message?.includes('schema cache')) {
-      const fallback = await supabase
+    const handoverBase = (selectStr: string) =>
+      supabase
         .from('kitchen_production_sessions')
-        .select('id, session_number, shift_type, session_date, status, completed_at, staff_name, total_penalty')
+        .select(selectStr)
         .eq('branch_id', Number(branch_id))
         .eq('shift_type', oppositeShift)
         .in('status', ['completed', 'closed'])
         .order('completed_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      data = fallback.data;
-      error = fallback.error;
+
+    let handoverResult = await handoverBase(
+      'id, session_number, shift_type, session_date, status, completed_at, staff_name, total_penalty, closing_stock:kitchen_session_closing_stock(*), session_staff:kitchen_session_staff(*)'
+    );
+    if (isSchemaError(handoverResult.error)) {
+      handoverResult = await handoverBase(
+        'id, session_number, shift_type, session_date, status, completed_at, staff_name, total_penalty'
+      );
     }
+    const { data, error } = handoverResult as { data: any; error: any };
 
     if (error) throw error;
     res.json({ success: true, data });
