@@ -208,7 +208,7 @@ export const getStaff = async (
         created_at,
         updated_at,
         national_id,
-        employee_number,
+        id_number,
         basic_salary,
         shift,
         employment_type,
@@ -257,7 +257,7 @@ export const getStaff = async (
         `role.ilike.%${search}%`,
         `position.ilike.%${search}%`,
         `department.ilike.%${search}%`,
-        `employee_number.ilike.%${search}%`
+        `id_number.ilike.%${search}%`
       ].join(','));
     }
 
@@ -283,9 +283,9 @@ export const getStaff = async (
         branch_name: branch?.name || s.branch_name || '',
         branch,
         role: s.role || s.position || '',
-        employee_id: s.employee_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
-        employee_number: s.employee_number || s.employee_id || '',
-        id_number: s.national_id || '',
+        employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
+        employee_number: s.id_number || s.employee_id || '',
+        id_number: s.national_id || s.id_number || '',
       };
     });
 
@@ -328,8 +328,7 @@ export const getStaffMember = async (
           avatar,
           pos_pin
         ),
-        branch:branches(id, name, code),
-        schedules:staff_schedules(*)
+        branch:branches(id, name, code)
       `);
 
     if (isUUID) {
@@ -337,7 +336,7 @@ export const getStaffMember = async (
     } else {
       // Use double quotes for values in .or() to handle special characters (e.g. spaces, dots)
       // This matches PostgREST syntax requirements for strings with special characters
-      query = query.or(`employee_number.eq."${id}", rfid_tag.eq."${id}", national_id.eq."${id}"`);
+      query = query.or(`id_number.eq."${id}", rfid_tag.eq."${id}", national_id.eq."${id}"`);
     }
 
     logger.debug?.('Executing getStaffMember query', { id, isUUID });
@@ -395,9 +394,9 @@ export const getStaffMember = async (
         profile_photo_url: profilePhotoUrl,
         branch_name: branch?.name || '',
         branch,
-        employee_id: staff.employee_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase(),
-        employee_number: staff.employee_number || staff.employee_id || '',
-        id_number: staff.national_id || '',
+        employee_id: staff.id_number || staff.employee_id || staff.id.substring(0, 8).toUpperCase(),
+        employee_number: staff.id_number || staff.employee_id || '',
+        id_number: staff.national_id || staff.id_number || '',
       }
     });
   } catch (error: any) {
@@ -525,7 +524,7 @@ export const createStaffMember = async (
       shift: shift || 'morning',
       basic_salary: basic_salary ? parseFloat(basic_salary) : 0,
       start_date: start_date || new Date().toISOString().split('T')[0],
-      employee_number: idNumber,
+      id_number: idNumber,
       status: 'active',
       employment_type: employment_type || 'permanent',
       contract_expiry: contract_expiry || null,
@@ -813,7 +812,7 @@ export const updateStaffMember = async (
     if (effectiveRole !== undefined) staffUpdateData.role = effectiveRole;
     if (branch_id !== undefined) staffUpdateData.branch_id = parseInt(branch_id);
     // Note: email and phone_number are in users table, not staff_profiles
-    if (employee_id !== undefined) staffUpdateData.employee_number = employee_id;
+    if (employee_id !== undefined) staffUpdateData.id_number = employee_id;
     if (kra_pin !== undefined) staffUpdateData.kra_pin = kra_pin;
     if (nssf_number !== undefined) staffUpdateData.nssf_number = nssf_number;
     if (nhif_number !== undefined) staffUpdateData.nhif_number = nhif_number;
@@ -1309,7 +1308,7 @@ export const getAttendance = async (
     // Join staff_profiles for names and staff ID
     const ids = [...new Set(records.map((r: any) => r.staff_id).filter(Boolean))];
     const { data: profiles } = ids.length
-      ? await supabase.from('staff_profiles').select('id, first_name, last_name, employee_number, department, user_id').in('id', ids as string[])
+      ? await supabase.from('staff_profiles').select('id, first_name, last_name, id_number, department, user_id').in('id', ids as string[])
       : { data: [] };
 
     // Build map by profile id AND by user_id as fallback
@@ -1753,7 +1752,7 @@ export const getLeaveRequests = async (
 
     const [profilesRes, approversRes] = await Promise.all([
       staffIds.length
-        ? supabase.from('staff_profiles').select('id, first_name, last_name, employee_number, department, status, user_id, branch_id').in('id', staffIds as string[])
+        ? supabase.from('staff_profiles').select('id, first_name, last_name, id_number, department, status, user_id, branch_id').in('id', staffIds as string[])
         : { data: [] },
       approverIds.length
         ? supabase.from('users').select('id, first_name, last_name').in('id', approverIds as string[])
@@ -1789,7 +1788,7 @@ export const getLeaveRequests = async (
       return {
         ...leave,
         staff_name: staffName || null,
-        employee_id: staffData?.employee_number || null,
+        employee_id: staffData?.id_number || null,
         staff: staffData,
         approver,
       };
@@ -2353,14 +2352,15 @@ export const getStaffByIdentifier = async (
     const numericPart = normalizedId.replace(/[A-Z]/g, '');
     
     // Try exact match first (fast path)
+    // Note: Using id_number and national_id columns (not employee_number)
     let { data: staff, error } = await supabase
       .from('staff_profiles')
       .select(`
         *,
         user: users!user_id(id, first_name, last_name, email, phone_number, role, department)
       `)
-      .or(`employee_number.eq.${identifier},national_id.eq.${identifier}`)
-      .eq('employment_status', 'active')
+      .or(`id_number.eq.${identifier},national_id.eq.${identifier}`)
+      .eq('status', 'active')
       .maybeSingle();
 
     // If not found, try normalized matching
@@ -2371,12 +2371,12 @@ export const getStaffByIdentifier = async (
           *,
           user: users!user_id(id, first_name, last_name, email, phone_number, role, department)
         `)
-        .eq('employment_status', 'active');
+        .eq('status', 'active');
 
       if (!errorList && staffList && staffList.length > 0) {
         // Priority 1: Exact normalized match (FG-005 matches FG005)
         staff = staffList.find((s: any) => {
-          const staffIdNorm = (s.employee_number || '').replace(/[-\s]/g, '').toUpperCase();
+          const staffIdNorm = (s.id_number || '').replace(/[-\s]/g, '').toUpperCase();
           const nationalIdNorm = (s.national_id || '').replace(/[-\s]/g, '').toUpperCase();
           return staffIdNorm === normalizedId || nationalIdNorm === normalizedId;
         });
@@ -2384,7 +2384,7 @@ export const getStaffByIdentifier = async (
         // Priority 2: If numeric part exists, match by numeric suffix (FG-005 matches FGH005)
         if (!staff && numericPart && numericPart.length >= 2) {
           staff = staffList.find((s: any) => {
-            const staffIdNorm = (s.employee_number || '').replace(/[-\s]/g, '').toUpperCase();
+            const staffIdNorm = (s.id_number || '').replace(/[-\s]/g, '').toUpperCase();
             const staffNumeric = staffIdNorm.replace(/[A-Z]/g, '');
             // Match if numeric parts are equal and staff ID starts with FG
             return staffNumeric === numericPart && staffIdNorm.startsWith('FG');
@@ -2399,7 +2399,7 @@ export const getStaffByIdentifier = async (
       return;
     }
 
-    logger.info(`Staff found: ${staff.first_name} ${staff.last_name} (${staff.employee_number}) for identifier: ${identifier}`);
+    logger.info(`Staff found: ${staff.first_name} ${staff.last_name} (${staff.id_number || staff.national_id}) for identifier: ${identifier}`);
     res.status(200).json({
       success: true,
       data: staff

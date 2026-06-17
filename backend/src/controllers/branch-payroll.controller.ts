@@ -146,7 +146,7 @@ export const listPayrollBatches = asyncWrap(async (req, res) => {
 
   let query = supabase
     .from('payroll_batches')
-    .select('id, batch_number, branch_id, period_label, period_month, period_year, total_gross, total_net, headcount, has_ghost_flag, has_spike_flag, status, submitted_at, auditor_reviewed_at, director_approved_at')
+    .select('id, batch_number, branch_id, period_label, period_month, period_year, total_gross, total_paye, total_net, headcount, has_ghost_flag, has_spike_flag, status, submitted_at, auditor_reviewed_at, director_approved_at')
     .order('period_year', { ascending: false })
     .order('period_month', { ascending: false });
 
@@ -164,7 +164,7 @@ export const listPayrollBatches = asyncWrap(async (req, res) => {
 export const getPayrollBatch = asyncWrap(async (req, res) => {
   const [batchRes, linesRes] = await Promise.all([
     supabase.from('payroll_batches').select('*').eq('id', req.params.id).single(),
-    supabase.from('payroll_batch_lines').select('*').eq('batch_id', req.params.id).order('staff_name'),
+    supabase.from('payroll_batch_lines').select('*').eq('batch_id', req.params.id).order('created_at'),
   ]);
   if (batchRes.error) throw batchRes.error;
   res.json({ success: true, data: { ...batchRes.data, lines: linesRes.data || [] } });

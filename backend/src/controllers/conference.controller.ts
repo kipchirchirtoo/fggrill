@@ -259,11 +259,7 @@ export const createConferenceBooking = async (
 ): Promise<void> => {
     try {
         const {
-            conference_hall_id,
             company_name,
-            contact_person,
-            customer_name,
-            customer_phone,
             customer_email,
             start_date,
             end_date,
@@ -275,6 +271,13 @@ export const createConferenceBooking = async (
             payment_mode,
             notes
         } = req.body;
+
+        // Flutter sends 'hall_id'; web client may send 'conference_hall_id' — accept both
+        const conference_hall_id: string = req.body.conference_hall_id || req.body.hall_id;
+        // Flutter sends 'contact_person'; web client may send 'customer_name' — accept both
+        const customer_name: string = req.body.customer_name || req.body.contact_person || company_name;
+        const contact_person: string = req.body.contact_person || req.body.customer_name || '';
+        const customer_phone: string = req.body.customer_phone || '';
 
         const branch_id = req.body.branch_id || req.user?.branch_id;
         const created_by = req.user?.id;

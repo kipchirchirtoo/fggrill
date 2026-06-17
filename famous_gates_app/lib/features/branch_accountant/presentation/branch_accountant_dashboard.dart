@@ -7793,13 +7793,7 @@ class _PaymentsInvoicesSectionState
                             _paymentSourceLabel(payment),
                             _paymentDescription(payment),
                             _title(_text(payment, ['payment_method'])),
-                            _text(payment, ['reference_number', 'reference'])
-                                    .isEmpty
-                                ? '-'
-                                : _text(payment, [
-                                    'reference_number',
-                                    'reference',
-                                  ]),
+                            _paymentReference(payment),
                             _money(_num(payment['amount'])),
                             _paymentRecordedBy(payment),
                             _StatusPill(_paymentStatusLabel(
@@ -17203,6 +17197,37 @@ String _paymentRecordedBy(Map<String, dynamic> payment) {
   return _text(payment, ['recorded_by']).isEmpty
       ? '-'
       : _text(payment, ['recorded_by']);
+}
+
+String _paymentReference(Map<String, dynamic> payment) {
+  // Prefer structured order/bill reference over raw IDs
+  final billRef = _text(payment, ['bill_reference']);
+  if (billRef.isNotEmpty) return billRef;
+
+  final ref = _text(payment, ['reference_number', 'reference']);
+  if (ref.isEmpty) return '-';
+
+  // UUID → show first 8 hex chars uppercase (e.g. "C09D5CF7")
+  final uuidRe = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+      caseSensitive: false);
+  if (uuidRe.hasMatch(ref)) return ref.substring(0, 8).toUpperCase();
+
+  // cash-<epoch ms> → "CASH-<date>" e.g. "CASH-20260615"
+  final cashRe = RegExp(r'^cash-(\d{10,13})$', caseSensitive: false);
+  final cashMatch = cashRe.firstMatch(ref);
+  if (cashMatch != null) {
+    final ms = int.tryParse(cashMatch.group(1)!);
+    if (ms != null) {
+      final epoch = ms > 9999999999 ? ms : ms * 1000;
+      final dt = DateTime.fromMillisecondsSinceEpoch(epoch);
+      final dateStr =
+          '${dt.year}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}';
+      return 'CASH-$dateStr';
+    }
+  }
+
+  return ref;
 }
 
 IconData _icon(BranchAccountantSection section) =>

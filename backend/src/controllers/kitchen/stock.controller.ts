@@ -308,11 +308,14 @@ export const getKitchenDashboardStats = async (req: Request, res: Response) => {
 
 /**
  * Create portion ledger entry (internal helper)
+ * Schema: kitchen_portion_ledger(id, branch_id, ledger_number, item_sku,
+ *   opening_portions, added_portions, sold_portions, closing_portions, period_date, created_at)
+ * Schema: kitchen_portion_stock(id, branch_id, item_sku, portions, updated_at)
  */
 export async function createPortionLedgerEntry(params: {
     branch_id: number;
     item_sku: string;
-    portion_name: string;
+    portion_name: string;  // kept for caller compatibility; not stored (no such column)
     transaction_type: string;
     reference_type?: string;
     reference_id?: string;
@@ -324,48 +327,49 @@ export async function createPortionLedgerEntry(params: {
     const {
         branch_id,
         item_sku,
-        portion_name,
-        transaction_type,
-        reference_type,
-        reference_id,
         quantity_in = 0,
         quantity_out = 0,
-        user_id,
-        notes
     } = params;
 
-    // Get current portion balance
+    // Fetch current running portions balance (column is 'portions', not 'expected_balance')
     const { data: currentPortion } = await supabase
         .from('kitchen_portion_stock')
-        .select('expected_balance')
+        .select('portions')
         .eq('branch_id', branch_id)
         .eq('item_sku', item_sku)
-        .single();
+        .maybeSingle();
 
-    const opening_balance = currentPortion?.expected_balance || 0;
-    const closing_balance = Number(opening_balance) + Number(quantity_in) - Number(quantity_out);
+    const opening_portions = Number(currentPortion?.portions ?? 0);
+    const closing_portions = opening_portions + Number(quantity_in) - Number(quantity_out);
 
-    // Insert portion ledger entry
+    // Generate unique ledger number: PLG-<branchId>-<yyyymmdd>-<ms>
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const ledger_number = `PLG-${branch_id}-${today}-${Date.now()}`;
+
     const { data, error } = await supabase
         .from('kitchen_portion_ledger')
         .insert({
             branch_id,
+            ledger_number,
             item_sku,
-            portion_name,
-            transaction_type,
-            reference_type,
-            reference_id,
-            opening_balance,
-            quantity_in,
-            quantity_out,
-            closing_balance,
-            user_id,
-            notes
+            opening_portions,
+            added_portions: Number(quantity_in),
+            sold_portions: Number(quantity_out),
+            closing_portions,
+            period_date: new Date().toISOString().split('T')[0],
         })
         .select()
         .single();
 
     if (error) throw error;
+
+    // Keep portion_stock balance in sync
+    await supabase
+        .from('kitchen_portion_stock')
+        .upsert(
+            { branch_id, item_sku, portions: closing_portions, updated_at: new Date().toISOString() },
+            { onConflict: 'branch_id,item_sku' }
+        );
 
     return data;
 }

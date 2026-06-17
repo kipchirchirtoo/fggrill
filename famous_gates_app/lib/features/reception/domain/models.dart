@@ -55,7 +55,7 @@ class Booking {
           json['roomNumber'] ??
           room?['room_number'] ??
           room?['number']),
-      roomType: _string(json['room_type'] ??
+      roomType: _extractTypeName(json['room_type'] ??
           json['roomType'] ??
           room?['room_type'] ??
           room?['type']),
@@ -145,8 +145,6 @@ class Room {
   final Map<String, dynamic> raw;
 
   factory Room.fromJson(Map<String, dynamic> json) {
-    final type =
-        json['type'] is Map ? Map<String, dynamic>.from(json['type']) : null;
     final room =
         json['room'] is Map ? Map<String, dynamic>.from(json['room']) : null;
     final rawRoomNumber = json['room_number'] ??
@@ -161,7 +159,7 @@ class Room {
       id: '${json['id']}',
       number: _int(rawRoomNumber) ?? 0,
       roomNumber: _string(rawRoomNumber),
-      type: _string(json['room_type'] ?? json['type'] ?? type?['name']),
+      type: _extractTypeName(json['room_type'] ?? json['type']),
       floor: _int(json['floor'] ?? json['floor_number']),
       status: '${json['status'] ?? 'available'}',
       guestName: _string(json['guest_name'] ?? json['current_guest']),
@@ -255,6 +253,14 @@ String? _string(dynamic value) {
   if (value == null) return null;
   final text = '$value';
   return text == 'null' ? null : text;
+}
+
+// Safely extract a type name — handles both plain strings and nested
+// {id, name, ...} objects returned by joined Supabase queries.
+String? _extractTypeName(dynamic value) {
+  if (value == null) return null;
+  if (value is Map) return _string(value['name'] ?? value['type_name'] ?? value['label']);
+  return _string(value);
 }
 
 String? _name(Map<String, dynamic>? json) {

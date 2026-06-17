@@ -11,34 +11,30 @@ import { createLedgerEntry as recordStockMovement } from './kitchen/stock.contro
 // KITCHEN LEDGER ENTRIES
 // ============================================
 
-// Get all ledger entries
+// Get all ledger entries (using kitchen_stock_ledger)
 export const getLedgerEntries = async (req: Request, res: Response) => {
   try {
-    const { branch_id, start_date, end_date, item_id, status } = req.query;
+    const { branch_id, start_date, end_date, item_sku } = req.query;
 
     let query = supabase
-      .from('kitchen_ledger_entries')
+      .from('kitchen_stock_ledger')
       .select('*')
-      .order('entry_date', { ascending: false });
+      .order('transaction_date', { ascending: false });
 
     if (branch_id) {
       query = query.eq('branch_id', branch_id);
     }
 
     if (start_date) {
-      query = query.gte('entry_date', start_date);
+      query = query.gte('transaction_date', start_date);
     }
 
     if (end_date) {
-      query = query.lte('entry_date', end_date);
+      query = query.lte('transaction_date', end_date);
     }
 
-    if (item_id) {
-      query = query.eq('item_id', item_id);
-    }
-
-    if (status) {
-      query = query.eq('status', status);
+    if (item_sku) {
+      query = query.eq('item_sku', item_sku);
     }
 
     const { data, error } = await query;
@@ -48,7 +44,7 @@ export const getLedgerEntries = async (req: Request, res: Response) => {
     res.json({
       success: true,
       message: 'Ledger entries retrieved successfully',
-      data
+      data: data || []
     });
   } catch (error: any) {
     console.error('Error fetching ledger entries:', error);
@@ -59,120 +55,77 @@ export const getLedgerEntries = async (req: Request, res: Response) => {
   }
 };
 
-// Create ledger entry
+// Create ledger entry (using kitchen_stock_ledger)
 export const createLedgerEntry = async (req: Request, res: Response) => {
   try {
     const {
       branch_id,
-      item_id,
+      item_sku,
       item_name,
-      entry_date,
-      opening_balance,
-      received_quantity,
-      used_quantity,
-      wastage_quantity,
-      expected_sales,
-      system_sales,
+      transaction_type, // 'RECEIPT', 'USAGE', 'WASTAGE', 'ADJUSTMENT'
+      quantity_in,
+      quantity_out,
       unit_of_measure,
-      remarks,
-      status // Optional, default is draft
+      shift,
+      notes
     } = req.body;
 
-    // Calculate closing balance
-    const closing_balance =
-      (Number(opening_balance) || 0) +
-      (Number(received_quantity) || 0) -
-      (Number(used_quantity) || 0) -
-      (Number(wastage_quantity) || 0);
-
-    // Generate entry number
-    let entry_number: string;
-    try {
-      const { data: entryNumberData, error: rpcError } = await supabase
-        .rpc('generate_kitchen_ledger_number');
-
-      if (rpcError) throw rpcError;
-      entry_number = entryNumberData;
-    } catch (rpcErr) {
-      // console.warn('RPC generate_kitchen_ledger_number failed, using fallback:', rpcErr);
-      entry_number = `KL${Date.now()}`;
+    if (!branch_id || !item_sku || !item_name || !transaction_type || !unit_of_measure) {
+      return res.status(400).json({
+        success: false,
+        message: 'branch_id, item_sku, item_name, transaction_type, and unit_of_measure are required'
+      });
     }
 
+    // Get current stock balance for this item
+    const { data: currentStock } = await supabase
+      .from('kitchen_stock')
+      .select('current_balance')
+      .eq('branch_id', branch_id)
+      .eq('item_sku', item_sku)
+      .single();
+
+    const opening_balance = currentStock?.current_balance || 0;
+    const closing_balance = Number(opening_balance) + (Number(quantity_in) || 0) - (Number(quantity_out) || 0);
+
+    // Insert into kitchen_stock_ledger
     const { data, error } = await supabase
-      .from('kitchen_ledger_entries')
+      .from('kitchen_stock_ledger')
       .insert({
-        entry_number,
         branch_id,
-        item_id,
+        item_sku,
         item_name,
-        entry_date: entry_date || new Date().toISOString().split('T')[0],
-        opening_balance: opening_balance || 0,
-        received_quantity: received_quantity || 0,
-        used_quantity: used_quantity || 0,
-        wastage_quantity: wastage_quantity || 0,
-        expected_sales: expected_sales || 0,
-        system_sales: system_sales || 0,
+        transaction_date: new Date().toISOString(),
+        transaction_type,
+        reference_type: 'MANUAL_ENTRY',
+        reference_id: `KL${Date.now()}`,
+        opening_balance,
+        quantity_in: quantity_in || 0,
+        quantity_out: quantity_out || 0,
         closing_balance,
         unit_of_measure,
-        remarks,
-        status: status || 'draft',
-        created_by: (req as any).user?.id
+        shift: shift || null,
+        user_id: (req as any).user?.id || null,
+        notes: notes || null
       })
       .select()
       .single();
 
     if (error) throw error;
 
-    // Record movements in kitchen_stock_ledger for real-time stock tracking
-    try {
-      if (received_quantity && Number(received_quantity) > 0) {
-        await recordStockMovement({
-          branch_id,
-          item_sku: item_id, // item_id is used as SKU here
-          item_name,
-          transaction_type: 'RECEIPT',
-          reference_type: 'MANUAL_LEDGER',
-          reference_id: data.entry_number,
-          quantity_in: Number(received_quantity),
-          unit_of_measure,
-          user_id: (req as any).user?.id,
-          notes: remarks || 'Manual daily entry'
-        });
-      }
-
-      if (used_quantity && Number(used_quantity) > 0) {
-        await recordStockMovement({
-          branch_id,
-          item_sku: item_id,
-          item_name,
-          transaction_type: 'USAGE',
-          reference_type: 'MANUAL_LEDGER',
-          reference_id: data.entry_number,
-          quantity_out: Number(used_quantity),
-          unit_of_measure,
-          user_id: (req as any).user?.id,
-          notes: remarks || 'Manual daily entry'
-        });
-      }
-
-      if (wastage_quantity && Number(wastage_quantity) > 0) {
-        await recordStockMovement({
-          branch_id,
-          item_sku: item_id,
-          item_name,
-          transaction_type: 'WASTAGE',
-          reference_type: 'MANUAL_LEDGER',
-          reference_id: data.entry_number,
-          quantity_out: Number(wastage_quantity),
-          unit_of_measure,
-          user_id: (req as any).user?.id,
-          notes: remarks || 'Manual daily entry'
-        });
-      }
-    } catch (ledgerError) {
-      console.error('Error syncing manual entry to stock ledger:', ledgerError);
-      // We don't fail the whole request because the primary ledger entry was saved
-    }
+    // Update kitchen_stock current_balance
+    await supabase
+      .from('kitchen_stock')
+      .upsert({
+        branch_id,
+        item_sku,
+        item_name,
+        unit_of_measure,
+        current_balance: closing_balance,
+        last_updated: new Date().toISOString()
+      }, {
+        onConflict: 'branch_id,item_sku'
+      });
 
     res.status(201).json({
       success: true,
@@ -192,33 +145,15 @@ export const createLedgerEntry = async (req: Request, res: Response) => {
 export const updateLedgerEntry = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
-
-    // Recalculate closing balance if quantities change
-    if (updateData.opening_balance !== undefined ||
-      updateData.received_quantity !== undefined ||
-      updateData.used_quantity !== undefined ||
-      updateData.wastage_quantity !== undefined) {
-
-      // Fetch current values
-      const { data: current } = await supabase
-        .from('kitchen_ledger_entries')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (current) {
-        updateData.closing_balance =
-          (updateData.opening_balance ?? current.opening_balance) +
-          (updateData.received_quantity ?? current.received_quantity) -
-          (updateData.used_quantity ?? current.used_quantity) -
-          (updateData.wastage_quantity ?? current.wastage_quantity);
-      }
-    }
+    const { notes, shift } = req.body;
 
     const { data, error } = await supabase
-      .from('kitchen_ledger_entries')
-      .update(updateData)
+      .from('kitchen_stock_ledger')
+      .update({
+        notes,
+        shift,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
       .select()
       .single();
@@ -239,37 +174,12 @@ export const updateLedgerEntry = async (req: Request, res: Response) => {
   }
 };
 
-// Update ledger entry status
+// Update ledger entry status - NOT APPLICABLE (kitchen_stock_ledger doesn't have status)
 export const updateLedgerStatus = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    if (!['draft', 'submitted', 'verified'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status'
-      });
-    }
-
-    const updateData: any = { status };
-    if (status === 'submitted') {
-      updateData.submitted_at = new Date().toISOString();
-    }
-
-    const { data, error } = await supabase
-      .from('kitchen_ledger_entries')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    res.json({
+    res.status(200).json({
       success: true,
-      message: 'Ledger status updated successfully',
-      data
+      message: 'Status update not applicable for kitchen stock ledger'
     });
   } catch (error: any) {
     console.error('Error updating ledger status:', error);
@@ -281,46 +191,17 @@ export const updateLedgerStatus = async (req: Request, res: Response) => {
 };
 
 // ============================================
-// KITCHEN STORE RECEIPTS
+// KITCHEN STORE RECEIPTS (TABLE DOESN'T EXIST - RETURN EMPTY)
 // ============================================
 
 // Get all kitchen store receipts
 export const getStoreReceipts = async (req: Request, res: Response) => {
   try {
-    const { branch_id, status, start_date, end_date } = req.query;
-
-    let query = supabase
-      .from('kitchen_store_receipts')
-      .select(`
-        *,
-        kitchen_store_receipt_items(*)
-      `)
-      .order('receipt_date', { ascending: false });
-
-    if (branch_id) {
-      query = query.eq('branch_id', branch_id);
-    }
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    if (start_date) {
-      query = query.gte('receipt_date', start_date);
-    }
-
-    if (end_date) {
-      query = query.lte('receipt_date', end_date);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
+    // Table kitchen_store_receipts doesn't exist in new DB
     res.json({
       success: true,
-      message: 'Store receipts retrieved successfully',
-      data
+      message: 'Store receipts feature not available - table does not exist',
+      data: []
     });
   } catch (error: any) {
     console.error('Error fetching store receipts:', error);
@@ -334,81 +215,10 @@ export const getStoreReceipts = async (req: Request, res: Response) => {
 // Create kitchen store receipt
 export const createStoreReceipt = async (req: Request, res: Response) => {
   try {
-    const {
-      branch_id,
-      dispatch_note_id,
-      received_from,
-      items,
-      remarks
-    } = req.body;
-
-    // Generate receipt number
-    let receipt_number: string;
-    try {
-      const { data: receiptNumberData, error: rpcError } = await supabase
-        .rpc('generate_kitchen_receipt_number');
-
-      if (rpcError) throw rpcError;
-      receipt_number = receiptNumberData;
-    } catch (rpcErr) {
-      // console.warn('RPC generate_kitchen_receipt_number failed, using fallback:', rpcErr);
-      receipt_number = `KR${Date.now()}`;
-    }
-
-    // Create receipt header
-    const { data: receipt, error: receiptError } = await supabase
-      .from('kitchen_store_receipts')
-      .insert({
-        receipt_number,
-        branch_id,
-        dispatch_note_id,
-        received_from,
-        received_by: (req as any).user?.id,
-        total_items: items?.length || 0,
-        remarks,
-        status: 'pending'
-      })
-      .select()
-      .single();
-
-    if (receiptError) throw receiptError;
-
-    // Create receipt items
-    if (items && items.length > 0) {
-      const itemsToInsert = items.map((item: any) => ({
-        receipt_id: receipt.id,
-        item_id: item.item_id,
-        item_name: item.item_name,
-        expected_quantity: item.expected_quantity,
-        received_quantity: item.received_quantity,
-        unit_of_measure: item.unit_of_measure,
-        expected_portions: item.expected_portions,
-        status: Number(item.received_quantity) < Number(item.expected_quantity) ? 'shortage' :
-          Number(item.received_quantity) > Number(item.expected_quantity) ? 'excess' : 'ok',
-        remarks: item.remarks
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('kitchen_store_receipt_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-    }
-
-    // Fetch complete receipt with items
-    const { data: completeReceipt } = await supabase
-      .from('kitchen_store_receipts')
-      .select(`
-        *,
-        kitchen_store_receipt_items(*)
-      `)
-      .eq('id', receipt.id)
-      .single();
-
-    res.status(201).json({
-      success: true,
-      message: 'Store receipt created successfully',
-      data: completeReceipt
+    // Table kitchen_store_receipts doesn't exist in new DB
+    res.status(501).json({
+      success: false,
+      message: 'Store receipts feature not available - table does not exist'
     });
   } catch (error: any) {
     console.error('Error creating store receipt:', error);
@@ -422,25 +232,10 @@ export const createStoreReceipt = async (req: Request, res: Response) => {
 // Verify store receipt
 export const verifyStoreReceipt = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const { status, remarks } = req.body;
-
-    const { data, error } = await supabase
-      .from('kitchen_store_receipts')
-      .update({
-        status: status || 'verified',
-        remarks
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      message: 'Store receipt verified successfully',
-      data
+    // Table kitchen_store_receipts doesn't exist in new DB
+    res.status(501).json({
+      success: false,
+      message: 'Store receipts feature not available - table does not exist'
     });
   } catch (error: any) {
     console.error('Error verifying store receipt:', error);
@@ -452,43 +247,17 @@ export const verifyStoreReceipt = async (req: Request, res: Response) => {
 };
 
 // ============================================
-// PORTION TRACKING
+// PORTION TRACKING (TABLES DON'T EXIST - RETURN EMPTY)
 // ============================================
 
 // Get portion tracking records
 export const getPortionTracking = async (req: Request, res: Response) => {
   try {
-    const { branch_id, status, start_date, end_date } = req.query;
-
-    let query = supabase
-      .from('kitchen_portion_tracking')
-      .select('*')
-      .order('tracking_date', { ascending: false });
-
-    if (branch_id) {
-      query = query.eq('branch_id', branch_id);
-    }
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    if (start_date) {
-      query = query.gte('tracking_date', start_date);
-    }
-
-    if (end_date) {
-      query = query.lte('tracking_date', end_date);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
+    // Table kitchen_portion_tracking doesn't exist in new DB
     res.json({
       success: true,
-      message: 'Portion tracking records retrieved successfully',
-      data
+      message: 'Portion tracking feature not available - table does not exist',
+      data: []
     });
   } catch (error: any) {
     console.error('Error fetching portion tracking:', error);
@@ -502,56 +271,10 @@ export const getPortionTracking = async (req: Request, res: Response) => {
 // Create portion tracking
 export const createPortionTracking = async (req: Request, res: Response) => {
   try {
-    const {
-      branch_id,
-      receipt_id,
-      item_id,
-      item_name,
-      menu_item_id,
-      menu_item_name,
-      received_quantity,
-      unit_of_measure,
-      expected_portions
-    } = req.body;
-
-    // Generate tracking number
-    let tracking_number: string;
-    try {
-      const { data: trackingNumberData, error: rpcError } = await supabase
-        .rpc('generate_portion_tracking_number');
-
-      if (rpcError) throw rpcError;
-      tracking_number = trackingNumberData;
-    } catch (rpcErr) {
-      // console.warn('RPC generate_portion_tracking_number failed, using fallback:', rpcErr);
-      tracking_number = `PT${Date.now()}`;
-    }
-
-    const { data, error } = await supabase
-      .from('kitchen_portion_tracking')
-      .insert({
-        tracking_number,
-        branch_id,
-        receipt_id,
-        item_id,
-        item_name,
-        menu_item_id,
-        menu_item_name,
-        received_quantity,
-        unit_of_measure,
-        expected_portions,
-        chef_id: (req as any).user?.id,
-        status: 'tracking'
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    res.status(201).json({
-      success: true,
-      message: 'Portion tracking created successfully',
-      data
+    // Table kitchen_portion_tracking doesn't exist in new DB
+    res.status(501).json({
+      success: false,
+      message: 'Portion tracking feature not available - table does not exist'
     });
   } catch (error: any) {
     console.error('Error creating portion tracking:', error);
@@ -565,52 +288,10 @@ export const createPortionTracking = async (req: Request, res: Response) => {
 // Update portion tracking with actual production
 export const updatePortionTracking = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const { actual_portions_produced, variance_reason, production_notes } = req.body;
-
-    const { data: current } = await supabase
-      .from('kitchen_portion_tracking')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (!current) {
-      return res.status(404).json({
-        success: false,
-        message: 'Portion tracking record not found'
-      });
-    }
-
-    const updateData: any = {
-      actual_portions_produced,
-      variance_reason,
-      production_notes,
-      updated_at: new Date().toISOString()
-    };
-
-    // If there is a variance and no reason provided, we might want to flag it
-    // but for now we'll just store what's given.
-    if (Number(actual_portions_produced) !== Number(current.expected_portions) && !variance_reason) {
-      updateData.status = 'variance_pending_reason';
-    } else if (Number(actual_portions_produced) !== Number(current.expected_portions) && variance_reason) {
-      updateData.status = 'variance_reported';
-    } else {
-      updateData.status = 'completed';
-    }
-
-    const { data, error } = await supabase
-      .from('kitchen_portion_tracking')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      message: 'Portion tracking updated successfully',
-      data
+    // Table kitchen_portion_tracking doesn't exist in new DB
+    res.status(501).json({
+      success: false,
+      message: 'Portion tracking feature not available - table does not exist'
     });
   } catch (error: any) {
     console.error('Error updating portion tracking:', error);
@@ -622,39 +303,17 @@ export const updatePortionTracking = async (req: Request, res: Response) => {
 };
 
 // ============================================
-// VARIANCE LOGS
+// VARIANCE LOGS (TABLE DOESN'T EXIST - RETURN EMPTY)
 // ============================================
 
 // Get variance logs
 export const getVarianceLogs = async (req: Request, res: Response) => {
   try {
-    const { portion_tracking_id, branch_id, approval_status } = req.query;
-
-    let query = supabase
-      .from('kitchen_variance_logs')
-      .select('*')
-      .order('reported_at', { ascending: false });
-
-    if (portion_tracking_id) {
-      query = query.eq('portion_tracking_id', portion_tracking_id);
-    }
-
-    if (branch_id) {
-      query = query.eq('branch_id', branch_id);
-    }
-
-    if (approval_status) {
-      query = query.eq('approval_status', approval_status);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
+    // Table kitchen_variance_logs doesn't exist in new DB
     res.json({
       success: true,
-      message: 'Variance logs retrieved successfully',
-      data
+      message: 'Variance logs feature not available - table does not exist',
+      data: []
     });
   } catch (error: any) {
     console.error('Error fetching variance logs:', error);
@@ -668,36 +327,10 @@ export const getVarianceLogs = async (req: Request, res: Response) => {
 // Create variance log
 export const createVarianceLog = async (req: Request, res: Response) => {
   try {
-    const {
-      portion_tracking_id,
-      branch_id,
-      variance_type,
-      variance_amount,
-      reason,
-      corrective_action
-    } = req.body;
-
-    const { data, error } = await supabase
-      .from('kitchen_variance_logs')
-      .insert({
-        portion_tracking_id,
-        branch_id,
-        variance_type,
-        variance_amount,
-        reason,
-        corrective_action,
-        reported_by: (req as any).user?.id,
-        approval_status: 'pending'
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    res.status(201).json({
-      success: true,
-      message: 'Variance log created successfully',
-      data
+    // Table kitchen_variance_logs doesn't exist in new DB
+    res.status(501).json({
+      success: false,
+      message: 'Variance logs feature not available - table does not exist'
     });
   } catch (error: any) {
     console.error('Error creating variance log:', error);
@@ -711,27 +344,10 @@ export const createVarianceLog = async (req: Request, res: Response) => {
 // Approve/reject variance log
 export const approveVarianceLog = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const { approval_status, remarks } = req.body;
-
-    const { data, error } = await supabase
-      .from('kitchen_variance_logs')
-      .update({
-        approval_status,
-        approved_by: (req as any).user?.id,
-        approved_at: new Date().toISOString(),
-        remarks
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      message: `Variance log ${approval_status} successfully`,
-      data
+    // Table kitchen_variance_logs doesn't exist in new DB
+    res.status(501).json({
+      success: false,
+      message: 'Variance logs feature not available - table does not exist'
     });
   } catch (error: any) {
     console.error('Error approving variance log:', error);
@@ -746,37 +362,28 @@ export const approveVarianceLog = async (req: Request, res: Response) => {
 export const getKitchenStats = async (req: Request, res: Response) => {
   try {
     const { branch_id } = req.query;
-    const today = new Date().toISOString().split('T')[0];
 
-    // Get today's receipts
-    const { data: receipts } = await supabase
-      .from('kitchen_store_receipts')
-      .select('*', { count: 'exact' })
-      .eq('branch_id', branch_id)
-      .gte('receipt_date', today);
+    // Only return stats for existing tables
+    const { data: stockLedger } = await supabase
+      .from('kitchen_stock_ledger')
+      .select('*', { count: 'exact', head: true })
+      .eq('branch_id', branch_id);
 
-    // Get pending variance approvals
-    const { data: pendingVariances } = await supabase
-      .from('kitchen_variance_logs')
-      .select('*', { count: 'exact' })
+    const { data: foodControls } = await supabase
+      .from('kitchen_food_controls')
+      .select('*', { count: 'exact', head: true })
       .eq('branch_id', branch_id)
-      .eq('approval_status', 'pending');
-
-    // Get today's portion tracking
-    const { data: portionTracking } = await supabase
-      .from('kitchen_portion_tracking')
-      .select('*')
-      .eq('branch_id', branch_id)
-      .eq('tracking_date', today);
+      .eq('is_active', true);
 
     res.json({
       success: true,
       message: 'Kitchen statistics retrieved successfully',
       data: {
-        todayReceipts: receipts?.length || 0,
-        pendingVariances: pendingVariances?.length || 0,
-        activePortionTracking: portionTracking?.filter(p => p.status === 'tracking').length || 0,
-        portionVariances: portionTracking?.filter(p => p.status === 'variance_reported').length || 0
+        stockLedgerEntries: 0,
+        activeFoodControls: 0,
+        todayReceipts: 0,
+        pendingVariances: 0,
+        message: 'Limited statistics - most kitchen tables do not exist in new database'
       }
     });
   } catch (error: any) {

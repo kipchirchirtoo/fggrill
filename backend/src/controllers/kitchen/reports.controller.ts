@@ -1,49 +1,20 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
 
+// NOTE: Tables kitchen_portion_ledger and kitchen_daily_variance don't exist in new DB
+
 /**
  * Get Kitchen Yield Report
  * raw -> expected -> sold -> variance
  */
 export const getYieldReport = async (req: Request, res: Response) => {
     try {
-        const { branch_id, start_date, end_date } = req.query;
-
-        // This report joins portion stock, ledger and sales
-        const { data, error } = await supabase
-            .from('kitchen_portion_ledger')
-            .select(`
-                item_sku,
-                portion_name,
-                transaction_type,
-                quantity_in,
-                quantity_out,
-                transaction_date
-            `)
-            .eq('branch_id', branch_id)
-            .gte('transaction_date', start_date)
-            .lte('transaction_date', end_date);
-
-        if (error) throw error;
-
-        // Process data into summary
-        const summary: any = {};
-        data?.forEach(entry => {
-            const key = `${entry.item_sku}-${entry.portion_name}`;
-            if (!summary[key]) {
-                summary[key] = {
-                    sku: entry.item_sku,
-                    name: entry.portion_name,
-                    expected: 0,
-                    sold: 0,
-                    variance: 0
-                };
-            }
-            if (entry.transaction_type === 'ISSUE') summary[key].expected += Number(entry.quantity_in);
-            if (entry.transaction_type === 'POS_SALE') summary[key].sold += Number(entry.quantity_out);
+        // Table kitchen_portion_ledger doesn't exist in new DB
+        res.json({ 
+            success: true, 
+            data: [],
+            message: 'Yield report feature not available - table does not exist in new database'
         });
-
-        res.json({ success: true, data: Object.values(summary) });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -54,20 +25,13 @@ export const getYieldReport = async (req: Request, res: Response) => {
  */
 export const getLossReport = async (req: Request, res: Response) => {
     try {
-        const { branch_id, start_date, end_date } = req.query;
-        const { data, error } = await supabase
-            .from('kitchen_daily_variance')
-            .select('*, reason:kitchen_variance_reasons(reason)')
-            .eq('branch_id', branch_id)
-            .gte('variance_date', start_date)
-            .lte('variance_date', end_date)
-            .neq('variance', 0);
-
-        if (error) throw error;
-
-        const totalLoss = data?.reduce((sum, v) => sum + Math.abs(Number(v.cost_value || 0)), 0);
-
-        res.json({ success: true, data, totalLoss });
+        // Table kitchen_daily_variance doesn't exist in new DB
+        res.json({ 
+            success: true, 
+            data: [], 
+            totalLoss: 0,
+            message: 'Loss report feature not available - table does not exist in new database'
+        });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -78,17 +42,12 @@ export const getLossReport = async (req: Request, res: Response) => {
  */
 export const getAccountabilityReport = async (req: Request, res: Response) => {
     try {
-        const { branch_id, start_date, end_date } = req.query;
-        const { data, error } = await supabase
-            .from('kitchen_daily_variance')
-            .select('*, reason:kitchen_variance_reasons(reason), approved_by_user:users!approved_by(full_name)')
-            .eq('branch_id', branch_id)
-            .gte('variance_date', start_date)
-            .lte('variance_date', end_date);
-
-        if (error) throw error;
-
-        res.json({ success: true, data });
+        // Table kitchen_daily_variance doesn't exist in new DB
+        res.json({ 
+            success: true, 
+            data: [],
+            message: 'Accountability report feature not available - table does not exist in new database'
+        });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
