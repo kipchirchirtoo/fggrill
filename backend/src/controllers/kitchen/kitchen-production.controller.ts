@@ -21,12 +21,19 @@ async function generateSessionNumber(branchId: number): Promise<string> {
 async function generateCreditBillNumber(branchId: number): Promise<string> {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const { rows } = await db.query(
-    `SELECT COUNT(*) AS cnt FROM public.credit_bills
-     WHERE branch_id=$1 AND created_at::date=CURRENT_DATE AND source_module='KITCHEN_VARIANCE'`,
+    `SELECT COUNT(*) AS cnt FROM public.staff_credit_bills
+     WHERE branch_id=$1 AND created_at::date=CURRENT_DATE`,
     [branchId]
   );
   const seq = String(Number(rows[0].cnt) + 1).padStart(3, '0');
   return `KV-${branchId}-${today}-${seq}`;
+}
+
+// Resolve staff_profiles.id from users.id (sessions store users.id, credit bills need staff_profiles.id)
+async function resolveStaffProfileId(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const { data } = await supabase.from('staff_profiles').select('id').eq('user_id', userId).maybeSingle();
+  return data?.id ?? null;
 }
 
 // Expected yield from issued ingredients using recipe ratios
@@ -244,38 +251,34 @@ export const completeProductionSession = async (req: Request, res: Response) => 
         .update({ actual_quantity: actual, variance, variance_penalty: penalty })
         .eq('id', entry.entry_id);
 
-      // Create credit bill for negative variance
+      // Create credit bill for negative variance → staff_credit_bills (visible to branch accountant)
       let creditBillId: string | null = null;
       if (penalty > 0) {
-        const billNumber = await generateCreditBillNumber(session.branch_id);
-        const { data: bill, error: bErr } = await supabase
-          .from('credit_bills')
-          .insert({
-            branch_id: session.branch_id,
-            bill_number: billNumber,
-            customer_name: session.staff_name,
-            staff_id: session.staff_id || null,
-            staff_name: session.staff_name,
-            source_module: 'KITCHEN_VARIANCE',
-            source_document_id: session.id,
-            source_document_number: session.session_number,
-            total_amount: penalty,
-            amount_paid: 0,
-            balance_due: penalty,
-            amount: penalty,
-            balance: penalty,
-            status: 'open',
-            approval_status: 'pending',
-            description: `${VARIANCE_REASON_CONSTANT} | Item: ${existing.menu_item_name} | Expected: ${expected}, Actual: ${actual}, Variance: ${variance} | Penalty: KES ${penalty.toFixed(2)}`,
-            notes: VARIANCE_REASON_CONSTANT,
-            bill_date: new Date().toISOString().split('T')[0],
-            credit_date: new Date().toISOString().split('T')[0],
-            created_by: userId,
-          })
-          .select()
-          .single();
-        if (bErr) throw bErr;
-        creditBillId = bill.id;
+        // session.staff_id is users.id; staff_credit_bills needs staff_profiles.id
+        const staffProfileId = await resolveStaffProfileId(session.staff_id);
+        if (!staffProfileId) {
+          // Cook has no staff_profiles record — skip credit bill, log warning
+          console.warn(`[KitchenVariance] No staff_profiles found for user ${session.staff_id} (${session.staff_name}). Credit bill not created.`);
+        } else {
+          const billNumber = await generateCreditBillNumber(session.branch_id);
+          const { data: bill, error: bErr } = await supabase
+            .from('staff_credit_bills')
+            .insert({
+              staff_id: staffProfileId,
+              branch_id: session.branch_id,
+              bill_number: billNumber,
+              description: `Kitchen Variance Penalty | Session: ${session.session_number} | Item: ${existing.menu_item_name} | Expected: ${expected}, Actual: ${actual}, Variance: ${variance} | ${VARIANCE_REASON_CONSTANT}`,
+              amount: penalty,
+              balance: penalty,
+              paid_amount: 0,
+              status: 'pending',
+              bill_date: new Date().toISOString().split('T')[0],
+            })
+            .select()
+            .single();
+          if (bErr) throw bErr;
+          creditBillId = bill.id;
+        }
 
         await supabase
           .from('kitchen_production_entries')
@@ -309,7 +312,7 @@ export const completeProductionSession = async (req: Request, res: Response) => 
       .eq('id', id)
       .single();
 
-    res.json({ success: true, data: updated, total_penalty: totalPenalty });
+    res.json({ success: true, data: updated, total_penalty: totalPenalty, credit_bill_raised: totalPenalty > 0 });
   } catch (err: any) {
     console.error('completeProductionSession error:', err);
     res.status(500).json({ success: false, message: err.message });

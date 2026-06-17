@@ -472,18 +472,13 @@ export const getSupplierLedger = async (
     try {
         const { supplierId } = req.params;
 
-        const { data: ledger, error } = await supabase
-            .from('store_supplier_ledger')
-            .select('*')
-            .eq('supplier_id', supplierId)
-            .order('entry_date', { ascending: false })
-            .order('created_at', { ascending: false });
+        // Build ledger from actual transaction tables since store_supplier_ledger doesn't exist
+        const ledgerEntries: any[] = [];
 
-        if (error) throw error;
-
+        // 1. Get GRNs (Goods Received Notes)
         const { data: grns, error: grnError } = await supabase
             .from('store_grn')
-            .select('id, grn_number, grn_date, created_at, total_value, total_quantity, status, invoice_number, po_id, purchase_order:store_purchase_orders(po_number)')
+            .select('id, grn_number, grn_date, created_at, total_value, total_quantity, status, invoice_number, po_id')
             .eq('supplier_id', supplierId)
             .order('grn_date', { ascending: false })
             .order('created_at', { ascending: false })
@@ -491,31 +486,98 @@ export const getSupplierLedger = async (
 
         if (grnError) throw grnError;
 
-        const grnHistory = (grns || []).map((grn: any) => ({
-            id: `grn:${grn.id}`,
-            source_type: 'grn',
-            grn_id: grn.id,
-            transaction_date: grn.grn_date || grn.created_at,
-            transaction_type: 'goods_received',
-            reference_number: grn.grn_number,
-            description: `GRN received${grn.purchase_order?.po_number ? ` for PO ${grn.purchase_order.po_number}` : ''}${grn.invoice_number ? ` / Invoice ${grn.invoice_number}` : ''}`,
-            debit_amount: 0,
-            credit_amount: Number(grn.total_value || 0),
-            running_balance: null,
-            status: grn.status,
-            quantity: grn.total_quantity
-        }));
+        // Get PO numbers for GRNs
+        const poIds = (grns || []).map(g => g.po_id).filter(Boolean);
+        const { data: pos } = poIds.length > 0 ? await supabase
+            .from('store_purchase_orders')
+            .select('id, po_number')
+            .in('id', poIds) : { data: [] };
+        
+        const poMap = new Map((pos || []).map(po => [po.id, po]));
 
-        const combined = [...(ledger || []), ...grnHistory].sort((a: any, b: any) => {
-            const dateA = Date.parse(a.entry_date || a.transaction_date || a.created_at || '') || 0;
-            const dateB = Date.parse(b.entry_date || b.transaction_date || b.created_at || '') || 0;
+        (grns || []).forEach((grn: any) => {
+            const po = poMap.get(grn.po_id);
+            ledgerEntries.push({
+                id: `grn:${grn.id}`,
+                source_type: 'grn',
+                grn_id: grn.id,
+                transaction_date: grn.grn_date || grn.created_at,
+                transaction_type: 'goods_received',
+                reference_number: grn.grn_number,
+                description: `GRN received${po?.po_number ? ` for PO ${po.po_number}` : ''}${grn.invoice_number ? ` / Invoice ${grn.invoice_number}` : ''}`,
+                debit_amount: Number(grn.total_value || 0),
+                credit_amount: 0,
+                running_balance: null,
+                status: grn.status,
+                quantity: grn.total_quantity
+            });
+        });
+
+        // 2. Get Supplier Invoices
+        const { data: invoices, error: invoiceError } = await supabase
+            .from('store_supplier_invoices')
+            .select('id, invoice_number, invoice_date, total_amount, amount_paid, status, created_at')
+            .eq('supplier_id', supplierId)
+            .order('invoice_date', { ascending: false })
+            .limit(100);
+
+        if (invoiceError) throw invoiceError;
+
+        (invoices || []).forEach((invoice: any) => {
+            ledgerEntries.push({
+                id: `invoice:${invoice.id}`,
+                source_type: 'invoice',
+                invoice_id: invoice.id,
+                transaction_date: invoice.invoice_date || invoice.created_at,
+                transaction_type: 'invoice',
+                reference_number: invoice.invoice_number,
+                description: `Supplier Invoice ${invoice.invoice_number}`,
+                debit_amount: Number(invoice.total_amount || 0),
+                credit_amount: 0,
+                running_balance: null,
+                status: invoice.status,
+                amount_paid: Number(invoice.amount_paid || 0)
+            });
+        });
+
+        // 3. Get Purchase Orders (for context)
+        const { data: purchaseOrders, error: poError } = await supabase
+            .from('store_purchase_orders')
+            .select('id, po_number, po_date, total_amount, status, created_at')
+            .eq('supplier_id', supplierId)
+            .order('po_date', { ascending: false })
+            .limit(50);
+
+        if (poError) throw poError;
+
+        (purchaseOrders || []).forEach((po: any) => {
+            ledgerEntries.push({
+                id: `po:${po.id}`,
+                source_type: 'purchase_order',
+                po_id: po.id,
+                transaction_date: po.po_date || po.created_at,
+                transaction_type: 'purchase_order',
+                reference_number: po.po_number,
+                description: `Purchase Order ${po.po_number}`,
+                debit_amount: 0,
+                credit_amount: 0,
+                running_balance: null,
+                status: po.status,
+                po_amount: Number(po.total_amount || 0)
+            });
+        });
+
+        // Sort all entries by date descending
+        const sortedLedger = ledgerEntries.sort((a: any, b: any) => {
+            const dateA = Date.parse(a.transaction_date || a.created_at || '') || 0;
+            const dateB = Date.parse(b.transaction_date || b.created_at || '') || 0;
             if (dateA !== dateB) return dateB - dateA;
-            return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+            return String(b.id || '').localeCompare(String(a.id || ''));
         });
 
         res.status(200).json({
             success: true,
-            data: combined
+            data: sortedLedger
         });
     } catch (error) {
         logger.error('Error fetching supplier ledger:', error);

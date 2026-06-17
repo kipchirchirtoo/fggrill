@@ -2065,10 +2065,30 @@ class _BranchStorekeeperDashboardState
     ]);
   }
 
-  num _stockTakeAdded(Map<String, dynamic> item) =>
-      _stockTakeFirstNum(item, ['adds', 'added_quantity', 'additions']) +
-      _stockTakeFirstNum(item, ['transfers_in', 'received_quantity']) +
-      _stockTakeFirstNum(item, ['production_quantity', 'produced_quantity']);
+  num _stockTakeAdded(Map<String, dynamic> item) {
+    final stored = _stockTakeFirstNum(item, ['adds', 'added_quantity', 'additions']) +
+        _stockTakeFirstNum(item, ['transfers_in', 'received_quantity']) +
+        _stockTakeFirstNum(item, ['production_quantity', 'produced_quantity']);
+    if (stored != 0) return stored;
+
+    // Fallback: infer additions from system_closing - opening + issued
+    // when the stored additions field is 0 (e.g. column missing or
+    // branch_stock_movements empty).
+    final opening = _stockTakeOpening(item);
+    final systemClosing = _stockTakeFirstNum(item, ['system_closing_stock', 'system_quantity']);
+    final issued = _stockTakeFirstNum(item, [
+      'issued_quantity',
+      'sales_quantity',
+      'quantity_issued',
+      'stock_out_quantity',
+      'spoilage_quantity'
+    ]);
+    if (systemClosing > opening || issued > 0) {
+      final inferred = systemClosing - opening + issued;
+      return inferred > 0 ? inferred : 0;
+    }
+    return 0;
+  }
 
   num _stockTakeTotal(Map<String, dynamic> item) =>
       _stockTakeOpening(item) + _stockTakeAdded(item);
@@ -12937,7 +12957,7 @@ class _KitchenProductionSectionState
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'Credit bill raised against ${s['staff_name']} — sent to accountant for review.',
+                                    'Credit bill of KES ${(double.tryParse('${s['total_penalty'] ?? 0}') ?? 0).toStringAsFixed(2)} raised against ${s['staff_name']} and sent to Branch Accountant for review.',
                                     style: const TextStyle(fontSize: 12, color: Colors.red),
                                   ),
                                 ),

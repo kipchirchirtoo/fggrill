@@ -240,8 +240,7 @@ export const getDispatchNote = async (
         picker:users!picker_id(id, first_name, last_name),
         packer:users!packer_id(id, first_name, last_name),
         dispatcher:users!dispatcher_id(id, first_name, last_name),
-        receiver:users!receiver_id(id, first_name, last_name),
-        stock_request:stock_requests(id, request_number, priority)
+        receiver:users!receiver_id(id, first_name, last_name)
       `)
             .eq('id', id)
             .maybeSingle();
@@ -253,6 +252,19 @@ export const getDispatchNote = async (
 
         if (!dispatch) {
             throw new AppError('Dispatch note not found', 404);
+        }
+
+        // Fetch stock request separately if it exists
+        if (dispatch.stock_request_id) {
+            const { data: stockRequest, error: requestError } = await supabase
+                .from('stock_requests')
+                .select('id, request_number, priority')
+                .eq('id', dispatch.stock_request_id)
+                .maybeSingle();
+
+            if (!requestError && stockRequest) {
+                dispatch.stock_request = stockRequest;
+            }
         }
 
         // Fetch dispatch items separately with item details
