@@ -1108,98 +1108,182 @@ class _KitchenOperationsDashboardState
   }
 
   Future<void> _showSpoilageDialog(_KitchenSnapshot data) async {
-    final itemController = TextEditingController();
-    final qtyController = TextEditingController();
-    final unitController = TextEditingController(text: 'kg');
-    final unitCostController = TextEditingController();
-    final notesController = TextEditingController();
+    String? selectedSku;
+    final itemNameCtrl = TextEditingController();
+    final qtyCtrl = TextEditingController();
+    final unitCtrl = TextEditingController(text: 'kg');
+    final unitCostCtrl = TextEditingController(text: '0');
+    final notesCtrl = TextEditingController();
     String shift = 'A';
+    String? sessionId;
+
+    // Build a session picker list for in-progress / recent sessions
+    final activeSessions = data.sessions
+        .where((s) =>
+            s['status'] == 'in_production' || s['status'] == 'completed')
+        .toList();
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('Record Spoilage'),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: itemController,
-                    decoration: const InputDecoration(labelText: 'Item name / SKU'),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    Expanded(
-                      child: TextField(
-                        controller: qtyController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Quantity'),
-                      ),
+        builder: (ctx, setS) {
+          final qty = double.tryParse(qtyCtrl.text) ?? 0;
+          final cost = double.tryParse(unitCostCtrl.text) ?? 0;
+          final total = (qty * cost * 100).round() / 100;
+
+          return AlertDialog(
+            title: const Text('Record Spoilage'),
+            content: SizedBox(
+              width: 540,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _StockDropdown(
+                      stock: data.stock,
+                      value: selectedSku,
+                      onChanged: (sku) {
+                        setS(() => selectedSku = sku);
+                        if (sku != null) {
+                          final match = data.stock.firstWhere(
+                            (s) =>
+                                s['item_sku'] == sku || s['sku'] == sku,
+                            orElse: () => {},
+                          );
+                          if (match.isNotEmpty) {
+                            itemNameCtrl.text =
+                                _value(match, ['item_name', 'name']);
+                          }
+                        }
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: unitController,
-                        decoration: const InputDecoration(labelText: 'Unit'),
-                      ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: itemNameCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Item name', isDense: true),
                     ),
-                  ]),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: unitCostController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Unit cost (Ksh)'),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: shift,
-                    decoration: const InputDecoration(labelText: 'Shift'),
-                    items: const [
-                      DropdownMenuItem(value: 'A', child: Text('Shift A')),
-                      DropdownMenuItem(value: 'B', child: Text('Shift B')),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: qtyCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Quantity', isDense: true),
+                          onChanged: (_) => setS(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: unitCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Unit', isDense: true),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: unitCostCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Unit cost (Ksh)', isDense: true),
+                          onChanged: (_) => setS(() {}),
+                        ),
+                      ),
+                    ]),
+                    if (total > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Total cost: Ksh ${total.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: shift,
+                      decoration: const InputDecoration(
+                          labelText: 'Shift', isDense: true),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'A',
+                            child: Text('Shift A (Morning)')),
+                        DropdownMenuItem(
+                            value: 'B',
+                            child: Text('Shift B (Evening)')),
+                      ],
+                      onChanged: (v) => setS(() => shift = v ?? shift),
+                    ),
+                    if (activeSessions.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: sessionId,
+                        decoration: const InputDecoration(
+                          labelText: 'Link to session (optional)',
+                          isDense: true,
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                              value: null,
+                              child: Text('— No session —')),
+                          ...activeSessions.map((s) => DropdownMenuItem(
+                                value: '${s['id']}',
+                                child: Text(
+                                    '${s['session_number']} · ${s['shift_type'] == 'shift_b' ? 'Shift B' : 'Shift A'}'),
+                              )),
+                        ],
+                        onChanged: (v) => setS(() => sessionId = v),
+                      ),
                     ],
-                    onChanged: (v) => setS(() => shift = v ?? 'A'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: notesController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(labelText: 'Notes (optional)'),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: notesCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                          labelText: 'Notes', isDense: true),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save Spoilage'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (saved != true) return;
 
-    final qty = double.tryParse(qtyController.text) ?? 0;
-    final cost = double.tryParse(unitCostController.text) ?? 0;
-
+    final qty = double.tryParse(qtyCtrl.text) ?? 0;
+    final cost = double.tryParse(unitCostCtrl.text) ?? 0;
     await _run(() => _repo.recordSpoilage({
-          'item_sku': itemController.text.trim(),
-          'item_name': itemController.text.trim(),
+          'item_sku': selectedSku ?? itemNameCtrl.text.trim(),
+          'item_name': itemNameCtrl.text.trim(),
           'quantity': qty,
-          'unit_of_measure': unitController.text.trim().ifEmpty('kg'),
-          'shift': shift,
+          'unit_of_measure': unitCtrl.text.trim().ifEmpty('kg'),
           'unit_cost': cost,
-          'notes': notesController.text.trim(),
-        }));
+          'total_cost': (qty * cost * 100).round() / 100,
+          'shift': shift,
+          if (sessionId != null) 'session_id': sessionId,
+          'notes': notesCtrl.text.trim(),
+        }),
+        successMessage: 'Spoilage recorded');
   }
 
   Widget _foodControls(_KitchenSnapshot data) {
@@ -1810,39 +1894,167 @@ class _KitchenOperationsDashboardState
     List<Map<String, dynamic>> stock, {
     Map<String, dynamic>? existing,
   }) async {
-    final form = _FormBag({
-      'item_sku': _value(existing ?? {}, ['item_sku']),
-      'item_name': _value(existing ?? {}, ['item_name']),
-      'quantity': _value(existing ?? {}, ['quantity']),
-      'unit_of_measure':
-          _value(existing ?? {}, ['unit_of_measure']).ifEmpty('kg'),
-      'reason': _value(existing ?? {}, ['reason']).ifEmpty('SPOILAGE'),
-      'estimated_value': _value(existing ?? {}, ['estimated_value']),
-      'shift': _value(existing ?? {}, ['shift']).ifEmpty('DAY'),
-      'photo_url': _value(existing ?? {}, ['photo_url']),
-    });
-    final saved = await _showFormDialog(
-      title: existing == null ? 'Record Wastage' : 'Edit Wastage',
-      form: form,
-      stock: stock,
-      stockField: 'item_sku',
-      fields: const [
-        _FieldSpec('item_name', 'Item name'),
-        _FieldSpec('quantity', 'Quantity', number: true),
-        _FieldSpec('unit_of_measure', 'Unit'),
-        _FieldSpec('reason', 'Reason'),
-        _FieldSpec('estimated_value', 'Estimated value', number: true),
-        _FieldSpec('shift', 'Shift'),
-        _FieldSpec('photo_url', 'Photo URL'),
-      ],
+    final _existingSku = _value(existing ?? {}, ['item_sku']);
+    String? selectedSku = _existingSku.trim().isEmpty ? null : _existingSku;
+    final itemNameCtrl = TextEditingController(
+        text: _value(existing ?? {}, ['item_name']));
+    final quantityCtrl = TextEditingController(
+        text: _value(existing ?? {}, ['quantity']));
+    final unitCtrl = TextEditingController(
+        text: _value(existing ?? {}, ['unit_of_measure']).ifEmpty('kg'));
+    final unitCostCtrl = TextEditingController(
+        text: _value(existing ?? {}, ['unit_cost']).ifEmpty('0'));
+    final notesCtrl = TextEditingController(
+        text: _value(existing ?? {}, ['notes']));
+    String reason =
+        _value(existing ?? {}, ['reason']).ifEmpty('SPOILAGE');
+    String shift = _value(existing ?? {}, ['shift']).ifEmpty('A');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: Text(existing == null ? 'Record Wastage' : 'Edit Wastage'),
+          content: SizedBox(
+            width: 540,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StockDropdown(
+                    stock: stock,
+                    value: selectedSku,
+                    onChanged: (sku) {
+                      selectedSku = sku;
+                      if (sku != null) {
+                        final match = stock.firstWhere(
+                          (s) =>
+                              s['item_sku'] == sku || s['sku'] == sku,
+                          orElse: () => {},
+                        );
+                        if (match.isNotEmpty) {
+                          itemNameCtrl.text = _value(
+                              match, ['item_name', 'name']);
+                        }
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: itemNameCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Item name', isDense: true),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: quantityCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Quantity', isDense: true),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: unitCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Unit', isDense: true),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: unitCostCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Unit cost (Ksh)', isDense: true),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: reason,
+                    decoration: const InputDecoration(
+                        labelText: 'Reason', isDense: true),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'SPOILAGE', child: Text('Spoilage')),
+                      DropdownMenuItem(
+                          value: 'OVERCOOKING',
+                          child: Text('Overcooking')),
+                      DropdownMenuItem(
+                          value: 'CONTAMINATION',
+                          child: Text('Contamination')),
+                      DropdownMenuItem(
+                          value: 'EXPIRED', child: Text('Expired')),
+                      DropdownMenuItem(
+                          value: 'DROPPED', child: Text('Dropped')),
+                      DropdownMenuItem(
+                          value: 'OTHER', child: Text('Other')),
+                    ],
+                    onChanged: (v) => setS(() => reason = v ?? reason),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: shift,
+                    decoration: const InputDecoration(
+                        labelText: 'Shift', isDense: true),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'A', child: Text('Shift A (Morning)')),
+                      DropdownMenuItem(
+                          value: 'B', child: Text('Shift B (Evening)')),
+                    ],
+                    onChanged: (v) => setS(() => shift = v ?? shift),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                        labelText: 'Notes', isDense: true),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
     );
-    if (saved == null) return;
-    await _run(() {
-      final payload = form.numeric(['quantity', 'estimated_value']);
-      return existing == null
-          ? _repo.recordWastage(payload)
-          : _repo.updateWastage('${existing['id']}', payload);
-    });
+    if (saved != true) return;
+
+    final qty = double.tryParse(quantityCtrl.text) ?? 0;
+    final unitCost = double.tryParse(unitCostCtrl.text) ?? 0;
+    final payload = {
+      'item_sku': selectedSku ?? itemNameCtrl.text.trim(),
+      'item_name': itemNameCtrl.text.trim(),
+      'quantity': qty,
+      'unit_of_measure': unitCtrl.text.trim().ifEmpty('kg'),
+      'reason': reason,
+      'unit_cost': unitCost,
+      'total_cost': (qty * unitCost * 100).round() / 100,
+      'estimated_value': (qty * unitCost * 100).round() / 100,
+      'shift': shift,
+      'notes': notesCtrl.text.trim(),
+    };
+    await _run(() => existing == null
+        ? _repo.recordWastage(payload)
+        : _repo.updateWastage('${existing['id']}', payload));
   }
 
   Future<void> _showFoodControlDialog({Map<String, dynamic>? existing}) async {
