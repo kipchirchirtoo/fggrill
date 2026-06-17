@@ -196,7 +196,7 @@ export const generatePayrollBatch = asyncWrap(async (req, res) => {
   // Fetch branch staff (using actual column names from staff_profiles)
   const { data: staff, error: staffErr } = await supabase
     .from('staff_profiles')
-    .select('id, first_name, last_name, employee_number, department, position, basic_salary, nssf_enabled, shif_enabled, housing_fund_enabled')
+    .select('id, first_name, last_name, employee_number, department, role, position, basic_salary, nssf_enabled, shif_enabled, housing_fund_enabled')
     .eq('branch_id', branch)
     .eq('employment_status', 'active');
 
@@ -269,7 +269,7 @@ export const generatePayrollBatch = asyncWrap(async (req, res) => {
       staffName: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
       staffNumber: (s as any).employee_number || '',
       department: s.department || '',
-      designation: (s as any).position || '',
+      designation: (s as any).role || (s as any).position || s.department || '',
       workingDays: 26,
       daysPresent: 26,
       daysAbsent: 0,
@@ -549,6 +549,18 @@ export const downloadPayrollBatchPdf = asyncWrap(async (req, res) => {
 
   const rows: any[] = lines || [];
 
+  // Fetch current staff profile roles so the PDF shows correct roles even if
+  // the batch line designation is stale or was populated from the wrong field.
+  const staffIds = [...new Set(rows.map((r: any) => r.staff_id).filter(Boolean))];
+  const { data: staffProfiles } = staffIds.length > 0
+    ? await supabase.from('staff_profiles').select('id, role, position, department').in('id', staffIds)
+    : { data: [] };
+  const staffRoleMap = new Map<string, string>();
+  (staffProfiles || []).forEach((sp: any) => {
+    const role = [sp.role, sp.position, sp.department].find((v) => v && String(v).trim() && String(v).toLowerCase() !== 'null');
+    if (role) staffRoleMap.set(String(sp.id), String(role).trim());
+  });
+
   // Fetch branch name
   let branchName = 'All Branches';
   if (batch.branch_id) {
@@ -556,5 +568,5 @@ export const downloadPayrollBatchPdf = asyncWrap(async (req, res) => {
     if (branchData?.name) branchName = branchData.name;
   }
 
-  await generatePayrollBatchPDF(res, batch, rows, branchName);
+  await generatePayrollBatchPDF(res, batch, rows, branchName, staffRoleMap);
 });

@@ -2284,7 +2284,8 @@ export async function generatePayrollBatchPDF(
   res: Response,
   batch: any,
   lines: any[],
-  branchName: string
+  branchName: string,
+  staffRoleMap?: Map<string, string>
 ) {
   const MARGIN = 34;
   const doc = new PDFDocument({ margin: MARGIN, size: 'A3', layout: 'landscape', autoFirstPage: true, bufferPages: true });
@@ -2406,7 +2407,7 @@ export async function generatePayrollBatchPDF(
       { v: String(i + 1), x: C[0].x, w: C[0].width },
       { v: oneLine(r.staff_number), x: C[1].x, w: C[1].width },
       { v: oneLine(r.staff_name), x: C[2].x, w: C[2].width },
-      { v: oneLine(r.designation, 'Staff'), x: C[3].x, w: C[3].width },
+      { v: oneLine(staffRoleMap?.get(String(r.staff_id)) || r.designation || r.department, 'Staff'), x: C[3].x, w: C[3].width },
       { v: money(basic), x: C[4].x, w: C[4].width, a: 'right' },
       { v: money(gross), x: C[5].x, w: C[5].width, a: 'right' },
       { v: moneyOrDash(nssf), x: C[6].x, w: C[6].width, a: 'right' },
