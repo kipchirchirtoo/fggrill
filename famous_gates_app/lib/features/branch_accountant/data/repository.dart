@@ -1056,6 +1056,38 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getPendingKitchenShiftReviews() async {
+    final branchId = await getBranchId();
+    return _getList('/kitchen/shifts', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      'status': 'pending_accountant_review',
+    });
+  }
+
+  Future<Map<String, dynamic>> getKitchenShiftReviewDetail(String id) async {
+    return _getMap('/kitchen/shifts/$id');
+  }
+
+  Future<Map<String, dynamic>> reviewKitchenShiftVariance({
+    required String shiftId,
+    required bool approved,
+    required String liabilityAction,
+    List<Map<String, dynamic>> allocations = const [],
+    String? notes,
+    String? writeOffReason,
+  }) async {
+    final res = await _dio.post('/kitchen/shifts/$shiftId/accountant-review',
+        data: {
+          'approved': approved,
+          'liability_action': liabilityAction,
+          if (allocations.isNotEmpty) 'allocations': allocations,
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+          if (writeOffReason != null && writeOffReason.trim().isNotEmpty)
+            'write_off_reason': writeOffReason.trim(),
+        });
+    return _asMap(res.data);
+  }
+
   Future<List<Map<String, dynamic>>> getShiftPnLs({
     String status = 'all',
   }) async {

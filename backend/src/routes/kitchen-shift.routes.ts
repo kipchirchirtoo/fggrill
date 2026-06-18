@@ -10,9 +10,12 @@ import {
     submitForApproval,
     chefConfirmShift,
     accountantReviewShift,
+    confirmProductionActual,
     getKitchenShift,
     listKitchenShifts,
     createProductionRecipe,
+    updateProductionRecipe,
+    deactivateProductionRecipe,
     listProductionRecipes,
     getKitchenShiftStats
 } from '../controllers/kitchen-shift.controller';
@@ -39,11 +42,16 @@ const KITCHEN_ROLES = [
 router.post('/', authorize(KITCHEN_ROLES), openKitchenShift);
 router.get('/', authorize(KITCHEN_ROLES), listKitchenShifts);
 router.get('/stats', authorize(KITCHEN_ROLES), getKitchenShiftStats);
+router.post('/recipes', authorize(KITCHEN_ROLES), createProductionRecipe);
+router.get('/recipes/list', authorize(KITCHEN_ROLES), listProductionRecipes);
+router.put('/recipes/:recipe_id', authorize(KITCHEN_ROLES), updateProductionRecipe);
+router.delete('/recipes/:recipe_id', authorize(KITCHEN_ROLES), deactivateProductionRecipe);
 router.get('/:shift_id', authorize(KITCHEN_ROLES), getKitchenShift);
 
 // Stock operations
 router.post('/:shift_id/stock', authorize(KITCHEN_ROLES), addShiftStock);
 router.post('/:shift_id/production', authorize(KITCHEN_ROLES), recordProduction);
+router.post('/:shift_id/production/:production_id/confirm-actual', authorize(KITCHEN_ROLES), confirmProductionActual);
 router.post('/:shift_id/spoilage', authorize(KITCHEN_ROLES), recordSpoilage);
 
 // Shift lifecycle
@@ -53,7 +61,4 @@ router.post('/:shift_id/chef-confirm', authorize([...KITCHEN_ROLES, UserRole.HEA
 router.post('/:shift_id/accountant-review', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER]), accountantReviewShift);
 
 // Recipes
-router.post('/recipes', authorize(KITCHEN_ROLES), createProductionRecipe);
-router.get('/recipes/list', authorize(KITCHEN_ROLES), listProductionRecipes);
-
 export default router;

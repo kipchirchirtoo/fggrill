@@ -45,6 +45,15 @@ class AuthNotifier extends AsyncNotifier<User?> {
     state = const AsyncValue.data(null);
   }
 
+  /// Called when the network layer discovers the stored token was rejected
+  /// (expired/invalid/force-logout) by the backend. The token itself is
+  /// already cleared by the caller — this just syncs auth state so the
+  /// router redirects to /login instead of leaving the user stranded on a
+  /// dashboard that silently 401s on every request.
+  void forceSessionExpired() {
+    state = const AsyncValue.data(null);
+  }
+
   Future<LicenseInfo> validateLicense(String licenseKey, String branchCode) {
     return ref
         .read(authRepositoryProvider)

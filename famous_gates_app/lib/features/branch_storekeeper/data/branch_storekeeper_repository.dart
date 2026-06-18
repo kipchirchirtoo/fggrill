@@ -1082,11 +1082,107 @@ class BranchStorekeeperRepository {
   Future<List<Map<String, dynamic>>> getProductionRecipes() async {
     final branchId = await _branchId;
     final response = await _dio.get(
-      '/kitchen/production-sessions/recipes',
+      '/kitchen/shifts/recipes/list',
       queryParameters: {'branch_id': branchId},
       options: await _authOptions,
     );
     return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createProductionRecipe({
+    required String rawItemSku,
+    required String rawItemName,
+    required double rawQuantity,
+    required String rawUnit,
+    required String producedItemName,
+    String? producedItemSku,
+    required double producedQuantity,
+    required String producedUnit,
+    String? posOutletItemId,
+    double allowedVariancePercent = 2,
+    double spoilageThresholdPercent = 1,
+    double costPerOutput = 0,
+    bool requiresYieldConfirmation = true,
+    String? poolItemId,
+    double? poolFraction,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/kitchen/shifts/recipes',
+      data: {
+        'branch_id': branchId,
+        'recipe_name': '$rawItemName to $producedItemName',
+        'raw_item_sku': rawItemSku,
+        'raw_item_name': rawItemName,
+        'raw_quantity': rawQuantity,
+        'raw_unit': rawUnit,
+        'produced_item_name': producedItemName,
+        if (producedItemSku != null && producedItemSku.isNotEmpty)
+          'produced_item_sku': producedItemSku,
+        'produced_quantity': producedQuantity,
+        'produced_unit': producedUnit,
+        if (posOutletItemId != null && posOutletItemId.isNotEmpty)
+          'pos_outlet_item_id': posOutletItemId,
+        'allowed_variance_percent': allowedVariancePercent,
+        'spoilage_threshold_percent': spoilageThresholdPercent,
+        'cost_per_output': costPerOutput,
+        'requires_yield_confirmation': requiresYieldConfirmation,
+        if (poolItemId != null && poolItemId.isNotEmpty) 'pool_item_id': poolItemId,
+        if (poolFraction != null) 'pool_fraction': poolFraction,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> updateProductionRecipe({
+    required String id,
+    required String rawItemSku,
+    required String rawItemName,
+    required double rawQuantity,
+    required String rawUnit,
+    required String producedItemName,
+    String? producedItemSku,
+    required double producedQuantity,
+    required String producedUnit,
+    String? posOutletItemId,
+    double allowedVariancePercent = 2,
+    double spoilageThresholdPercent = 1,
+    double costPerOutput = 0,
+    bool requiresYieldConfirmation = true,
+    String? poolItemId,
+    double? poolFraction,
+  }) async {
+    final response = await _dio.put(
+      '/kitchen/shifts/recipes/$id',
+      data: {
+        'recipe_name': '$rawItemName to $producedItemName',
+        'raw_item_sku': rawItemSku,
+        'raw_item_name': rawItemName,
+        'raw_quantity': rawQuantity,
+        'raw_unit': rawUnit,
+        'produced_item_name': producedItemName,
+        'produced_item_sku': producedItemSku,
+        'produced_quantity': producedQuantity,
+        'produced_unit': producedUnit,
+        'pos_outlet_item_id': posOutletItemId,
+        'allowed_variance_percent': allowedVariancePercent,
+        'spoilage_threshold_percent': spoilageThresholdPercent,
+        'cost_per_output': costPerOutput,
+        'requires_yield_confirmation': requiresYieldConfirmation,
+        if (poolItemId != null && poolItemId.isNotEmpty) 'pool_item_id': poolItemId,
+        if (poolFraction != null) 'pool_fraction': poolFraction,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<void> deactivateProductionRecipe(String id) async {
+    await _dio.delete(
+      '/kitchen/shifts/recipes/$id',
+      options: await _authOptions,
+    );
   }
 
   Future<Map<String, dynamic>> createProductionSession({
@@ -1148,5 +1244,172 @@ class BranchStorekeeperRepository {
       options: await _authOptions,
     );
     return _unwrapList(response.data);
+  }
+
+  // ── Kitchen Shift Management ────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getKitchenShifts({
+    String? status,
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts',
+      queryParameters: {
+        'branch_id': branchId,
+        if (status != null) 'status': status,
+        if (dateFrom != null) 'from_date': dateFrom,
+        if (dateTo != null) 'to_date': dateTo,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> getKitchenShiftDetail(String id) async {
+    final response = await _dio.get(
+      '/kitchen/shifts/$id',
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> openKitchenShift({
+    required String shiftType,
+    required String shiftDate,
+    required List<Map<String, dynamic>> openingItems,
+    List<String> assignedChefIds = const [],
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/kitchen/shifts',
+      data: {
+        'branch_id': branchId,
+        'shift_type': shiftType,
+        'shift_date': shiftDate,
+        'opening_items': openingItems,
+        'assigned_chef_ids': assignedChefIds,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> addShiftStock(
+    String shiftId,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/stock',
+      data: {'items': items},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> recordProduction(
+    String shiftId,
+    List<Map<String, dynamic>> productions,
+  ) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/production',
+      data: {'productions': productions},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> confirmProductionActual(
+    String shiftId,
+    String productionId,
+    double actualQuantity,
+  ) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/production/$productionId/confirm-actual',
+      data: {'actual_quantity': actualQuantity},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> recordSpoilage(
+    String shiftId,
+    List<Map<String, dynamic>> items, {
+    String? notes,
+  }) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/spoilage',
+      data: {'items': items, if (notes != null && notes.isNotEmpty) 'notes': notes},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> closeKitchenShift(
+    String shiftId,
+    List<Map<String, dynamic>> physicalCounts, {
+    String? closingNotes,
+  }) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/close',
+      data: {
+        'physical_counts': physicalCounts,
+        if (closingNotes != null) 'closing_notes': closingNotes,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> submitShiftForApproval(String shiftId) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/submit',
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> chefConfirmShift(
+    String shiftId, {
+    required bool confirmed,
+    String? notes,
+  }) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/chef-confirm',
+      data: {'confirmed': confirmed, if (notes != null) 'notes': notes},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> accountantReviewShift(
+    String shiftId, {
+    required bool approved,
+    String? notes,
+  }) async {
+    final response = await _dio.post(
+      '/kitchen/shifts/$shiftId/accountant-review',
+      data: {'approved': approved, if (notes != null) 'notes': notes},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> getKitchenShiftStats({
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/stats',
+      queryParameters: {
+        'branch_id': branchId,
+        if (dateFrom != null) 'from_date': dateFrom,
+        if (dateTo != null) 'to_date': dateTo,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
   }
 }

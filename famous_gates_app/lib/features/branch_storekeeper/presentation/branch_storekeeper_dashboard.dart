@@ -1379,8 +1379,8 @@ class _BranchStorekeeperDashboardState
       ],
       children: [
         _StatGrid(cards: [
-          _StatCardData('Incoming', '$pendingDispatches',
-              PhosphorIcons.truck(), AppColors.kPrimary),
+          _StatCardData('Incoming', '$pendingDispatches', PhosphorIcons.truck(),
+              AppColors.kPrimary),
           _StatCardData('In Transit', '$incoming', PhosphorIcons.clock(),
               AppColors.kWarning),
           _StatCardData('Local Vendors', '${_suppliers.length}',
@@ -2066,7 +2066,8 @@ class _BranchStorekeeperDashboardState
   }
 
   num _stockTakeAdded(Map<String, dynamic> item) {
-    final stored = _stockTakeFirstNum(item, ['adds', 'added_quantity', 'additions']) +
+    final stored = _stockTakeFirstNum(
+            item, ['adds', 'added_quantity', 'additions']) +
         _stockTakeFirstNum(item, ['transfers_in', 'received_quantity']) +
         _stockTakeFirstNum(item, ['production_quantity', 'produced_quantity']);
     if (stored != 0) return stored;
@@ -2075,7 +2076,8 @@ class _BranchStorekeeperDashboardState
     // when the stored additions field is 0 (e.g. column missing or
     // branch_stock_movements empty).
     final opening = _stockTakeOpening(item);
-    final systemClosing = _stockTakeFirstNum(item, ['system_closing_stock', 'system_quantity']);
+    final systemClosing =
+        _stockTakeFirstNum(item, ['system_closing_stock', 'system_quantity']);
     final issued = _stockTakeFirstNum(item, [
       'issued_quantity',
       'sales_quantity',
@@ -2218,7 +2220,8 @@ class _BranchStorekeeperDashboardState
         SizedBox(width: 16),
         SizedBox(
             width: 90,
-            child: Text('SYS CLOSING', textAlign: TextAlign.right, style: style)),
+            child:
+                Text('SYS CLOSING', textAlign: TextAlign.right, style: style)),
         SizedBox(width: 16),
         SizedBox(width: 130, child: Text('PHYS COUNT', style: style)),
         SizedBox(width: 16),
@@ -2295,8 +2298,7 @@ class _BranchStorekeeperDashboardState
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
-            Text(
-                '${itemMap?['unit'] ?? item['unit'] ?? ''}'.trim(),
+            Text('${itemMap?['unit'] ?? item['unit'] ?? ''}'.trim(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -2316,7 +2318,8 @@ class _BranchStorekeeperDashboardState
         ),
         const SizedBox(width: 16),
         // Reorder Level
-        _worksheetNumberCell(_stockTakeFirstNum(item, ['reorder_level']), width: 80),
+        _worksheetNumberCell(_stockTakeFirstNum(item, ['reorder_level']),
+            width: 80),
         const SizedBox(width: 16),
         // Cost Price
         SizedBox(
@@ -2743,8 +2746,8 @@ class _BranchStorekeeperDashboardState
       ],
       children: [
         _StatGrid(cards: [
-          _StatCardData('Pending', '${pending.length}',
-              PhosphorIcons.clock(), AppColors.kWarning),
+          _StatCardData('Pending', '${pending.length}', PhosphorIcons.clock(),
+              AppColors.kWarning),
           _StatCardData('History', '${history.length}',
               PhosphorIcons.checkCircle(), AppColors.kSuccess),
         ]),
@@ -3591,10 +3594,19 @@ class _BranchStorekeeperDashboardState
         .where((d) => ['CONFIRMED', 'RECEIVED', 'VERIFIED']
             .contains('${d['status']}'.toUpperCase()))
         .fold<num>(0, (s, d) {
-          final items = _listFrom(d['items']);
-          return s + items.fold<num>(0, (ss, i) => ss + _num(i['received_quantity'] ?? i['dispatched_quantity'] ?? i['quantity'] ?? 0));
-        });
-    final totalIn = stockIn.fold<num>(0, (s, r) => s + _num(r['quantity'])) + dispatchStockIn;
+      final items = _listFrom(d['items']);
+      return s +
+          items.fold<num>(
+              0,
+              (ss, i) =>
+                  ss +
+                  _num(i['received_quantity'] ??
+                      i['dispatched_quantity'] ??
+                      i['quantity'] ??
+                      0));
+    });
+    final totalIn = stockIn.fold<num>(0, (s, r) => s + _num(r['quantity'])) +
+        dispatchStockIn;
     final totalOut =
         stockOut.fold<num>(0, (s, r) => s + _num(r['quantity']).abs());
     final pendingRequests = _stockRequests
@@ -3666,8 +3678,13 @@ class _BranchStorekeeperDashboardState
         }(),
         '_qty': () {
           final dispItems = _listFrom(dispatch['items']);
-          if (dispItems.isEmpty) return _num(dispatch['total_quantity'] ?? dispatch['quantity'] ?? 0);
-          return dispItems.fold<num>(0, (s, i) => s + _num(i['dispatched_quantity'] ?? i['quantity'] ?? 0));
+          if (dispItems.isEmpty)
+            return _num(
+                dispatch['total_quantity'] ?? dispatch['quantity'] ?? 0);
+          return dispItems.fold<num>(
+              0,
+              (s, i) =>
+                  s + _num(i['dispatched_quantity'] ?? i['quantity'] ?? 0));
         }(),
         '_sign': '+',
         '_status': status,
@@ -4026,7 +4043,8 @@ class _BranchStorekeeperDashboardState
           icon: Icon(isBarSelected
               ? Icons.local_bar_outlined
               : PhosphorIcons.package()),
-          label: Text(isBarSelected ? 'Transfer to Bar' : 'Issue to POS Outlet'),
+          label:
+              Text(isBarSelected ? 'Transfer to Bar' : 'Issue to POS Outlet'),
           style: isBarSelected
               ? FilledButton.styleFrom(backgroundColor: Colors.amber.shade700)
               : null,
@@ -4401,53 +4419,53 @@ class _BranchStorekeeperDashboardState
                   ),
                 ),
               ] else ...[
-              TextField(
-                onChanged: (value) => setState(() => _search = value),
-                decoration: InputDecoration(
-                  hintText: selectedOutlet == null
-                      ? 'Search menu item'
-                      : 'Search ${_outletDisplayName(selectedOutlet)} menu item',
-                  prefixIcon: const Icon(Icons.search),
+                TextField(
+                  onChanged: (value) => setState(() => _search = value),
+                  decoration: InputDecoration(
+                    hintText: selectedOutlet == null
+                        ? 'Search menu item'
+                        : 'Search ${_outletDisplayName(selectedOutlet)} menu item',
+                    prefixIcon: const Icon(Icons.search),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _OutletProductionSheet(
-                items: filteredItems,
-                emptyText: selectedOutlet == null
-                    ? 'Select POS outlet first'
-                    : 'No menu items found for ${_outletDisplayName(selectedOutlet)}',
-                itemName: _outletItemName,
-                itemSku: _outletItemSku,
-                currentStock: producedTodayFor,
-                maxProduce: (item) => item['max_producible_quantity'] == null
-                    ? null
-                    : _num(item['max_producible_quantity']),
-                qtyText: _qtyText,
-                onCommit: selectedOutlet == null
-                    ? null
-                    : (item, quantity) => _commitOutletProductionItem(
-                          selectedOutlet,
-                          item,
-                          quantity,
-                        ),
-                onToggleTrackStock: selectedOutlet == null
-                    ? null
-                    : (item, trackStock) => _toggleOutletItemTrackStock(
-                          selectedOutlet,
-                          item,
-                          trackStock,
-                        ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '(Double click item line to view production turns)',
-                style: TextStyle(
-                  color: AppColors.kError,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
+                const SizedBox(height: 12),
+                _OutletProductionSheet(
+                  items: filteredItems,
+                  emptyText: selectedOutlet == null
+                      ? 'Select POS outlet first'
+                      : 'No menu items found for ${_outletDisplayName(selectedOutlet)}',
+                  itemName: _outletItemName,
+                  itemSku: _outletItemSku,
+                  currentStock: producedTodayFor,
+                  maxProduce: (item) => item['max_producible_quantity'] == null
+                      ? null
+                      : _num(item['max_producible_quantity']),
+                  qtyText: _qtyText,
+                  onCommit: selectedOutlet == null
+                      ? null
+                      : (item, quantity) => _commitOutletProductionItem(
+                            selectedOutlet,
+                            item,
+                            quantity,
+                          ),
+                  onToggleTrackStock: selectedOutlet == null
+                      ? null
+                      : (item, trackStock) => _toggleOutletItemTrackStock(
+                            selectedOutlet,
+                            item,
+                            trackStock,
+                          ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                const Text(
+                  '(Double click item line to view production turns)',
+                  style: TextStyle(
+                    color: AppColors.kError,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
               ], // end else (non-bar outlets)
             ],
           ),
@@ -6358,7 +6376,8 @@ class _BranchStorekeeperDashboardState
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Related Activity — ${req['requisition_number'] ?? req['id']}'),
+          title: Text(
+              'Related Activity — ${req['requisition_number'] ?? req['id']}'),
           content: SizedBox(
             width: 720,
             height: 520,
@@ -6371,12 +6390,17 @@ class _BranchStorekeeperDashboardState
                     _RelatedSection(
                       title: 'GRN Receipts',
                       count: grns.length,
-                      children: grns.map((g) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.receipt_long_outlined),
-                        title: Text('GRN #${g['grn_number'] ?? g['id']}'),
-                        subtitle: Text('${_date(g['created_at'] ?? g['received_at'])} | ${_listFrom(g['items']).length} items'),
-                      )).toList(),
+                      children: grns
+                          .map((g) => ListTile(
+                                dense: true,
+                                leading:
+                                    const Icon(Icons.receipt_long_outlined),
+                                title:
+                                    Text('GRN #${g['grn_number'] ?? g['id']}'),
+                                subtitle: Text(
+                                    '${_date(g['created_at'] ?? g['received_at'])} | ${_listFrom(g['items']).length} items'),
+                              ))
+                          .toList(),
                     ),
                     const Divider(),
                   ],
@@ -6384,12 +6408,17 @@ class _BranchStorekeeperDashboardState
                     _RelatedSection(
                       title: 'Stock Ledger',
                       count: ledgerEntries.length,
-                      children: ledgerEntries.map((l) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.account_balance_outlined),
-                        title: Text('${l['item_name'] ?? l['item_sku']}'),
-                        subtitle: Text('${l['transaction_type']} | Qty ${_num(l['quantity_in']) > 0 ? '+${_num(l['quantity_in'])}' : '-${_num(l['quantity_out'])}'} | Balance ${_num(l['closing_balance'])}'),
-                      )).toList(),
+                      children: ledgerEntries
+                          .map((l) => ListTile(
+                                dense: true,
+                                leading:
+                                    const Icon(Icons.account_balance_outlined),
+                                title:
+                                    Text('${l['item_name'] ?? l['item_sku']}'),
+                                subtitle: Text(
+                                    '${l['transaction_type']} | Qty ${_num(l['quantity_in']) > 0 ? '+${_num(l['quantity_in'])}' : '-${_num(l['quantity_out'])}'} | Balance ${_num(l['closing_balance'])}'),
+                              ))
+                          .toList(),
                     ),
                     const Divider(),
                   ],
@@ -6397,12 +6426,16 @@ class _BranchStorekeeperDashboardState
                     _RelatedSection(
                       title: 'Kitchen Usage',
                       count: usageEntries.length,
-                      children: usageEntries.map((u) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.restaurant_outlined),
-                        title: Text('${u['item_name'] ?? u['item_sku']}'),
-                        subtitle: Text('${_date(u['usage_date'])} | ${_num(u['quantity'])} ${u['unit_of_measure'] ?? ''} | ${u['usage_type'] ?? 'CONSUMPTION'}'),
-                      )).toList(),
+                      children: usageEntries
+                          .map((u) => ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.restaurant_outlined),
+                                title:
+                                    Text('${u['item_name'] ?? u['item_sku']}'),
+                                subtitle: Text(
+                                    '${_date(u['usage_date'])} | ${_num(u['quantity'])} ${u['unit_of_measure'] ?? ''} | ${u['usage_type'] ?? 'CONSUMPTION'}'),
+                              ))
+                          .toList(),
                     ),
                     const Divider(),
                   ],
@@ -6410,12 +6443,16 @@ class _BranchStorekeeperDashboardState
                     _RelatedSection(
                       title: 'Wastage',
                       count: wastageEntries.length,
-                      children: wastageEntries.map((w) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.delete_outline),
-                        title: Text('${w['item_name'] ?? w['item_sku']}'),
-                        subtitle: Text('${_date(w['wastage_date'])} | ${_num(w['quantity'])} ${w['unit_of_measure'] ?? ''} | ${w['reason'] ?? ''}'),
-                      )).toList(),
+                      children: wastageEntries
+                          .map((w) => ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.delete_outline),
+                                title:
+                                    Text('${w['item_name'] ?? w['item_sku']}'),
+                                subtitle: Text(
+                                    '${_date(w['wastage_date'])} | ${_num(w['quantity'])} ${w['unit_of_measure'] ?? ''} | ${w['reason'] ?? ''}'),
+                              ))
+                          .toList(),
                     ),
                     const Divider(),
                   ],
@@ -6423,18 +6460,28 @@ class _BranchStorekeeperDashboardState
                     _RelatedSection(
                       title: 'Department Issues',
                       count: issueEntries.length,
-                      children: issueEntries.map((i) => ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.assignment_return_outlined),
-                        title: Text('${i['item_name'] ?? i['item_sku']}'),
-                        subtitle: Text('${_date(i['issued_at'])} | Dept: ${i['department_code'] ?? i['department_name'] ?? ''} | ${_num(i['quantity'])}'),
-                      )).toList(),
+                      children: issueEntries
+                          .map((i) => ListTile(
+                                dense: true,
+                                leading: const Icon(
+                                    Icons.assignment_return_outlined),
+                                title:
+                                    Text('${i['item_name'] ?? i['item_sku']}'),
+                                subtitle: Text(
+                                    '${_date(i['issued_at'])} | Dept: ${i['department_code'] ?? i['department_name'] ?? ''} | ${_num(i['quantity'])}'),
+                              ))
+                          .toList(),
                     ),
                   ],
-                  if (grns.isEmpty && usageEntries.isEmpty && wastageEntries.isEmpty && issueEntries.isEmpty && ledgerEntries.isEmpty)
+                  if (grns.isEmpty &&
+                      usageEntries.isEmpty &&
+                      wastageEntries.isEmpty &&
+                      issueEntries.isEmpty &&
+                      ledgerEntries.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(24),
-                      child: Center(child: Text('No related activity found yet.')),
+                      child:
+                          Center(child: Text('No related activity found yet.')),
                     ),
                 ],
               ),
@@ -7990,10 +8037,11 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
 
   Future<void> _turnOnAll(BuildContext ctx) async {
     if (widget.onToggleTrackStock == null || widget.items.isEmpty) return;
-    
+
     // Count how many items are currently tracked
-    final trackedCount = widget.items.where((item) => item['track_stock'] != false).length;
-    
+    final trackedCount =
+        widget.items.where((item) => item['track_stock'] != false).length;
+
     if (trackedCount == 0) {
       ScaffoldMessenger.of(ctx).showSnackBar(
         const SnackBar(
@@ -8009,10 +8057,9 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
       builder: (_) => AlertDialog(
         title: const Text('Turn On All Items'),
         content: Text(
-          'This will set ALL $trackedCount tracked items to "Always On" mode.\n\n'
-          'Items will be permanently available in POS without requiring production commits or stock tracking.\n\n'
-          'Are you sure you want to continue?'
-        ),
+            'This will set ALL $trackedCount tracked items to "Always On" mode.\n\n'
+            'Items will be permanently available in POS without requiring production commits or stock tracking.\n\n'
+            'Are you sure you want to continue?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -8033,12 +8080,13 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
         // Update all tracked items to Always On
         int successCount = 0;
         int failCount = 0;
-        
+
         for (final item in widget.items) {
           final isTracked = item['track_stock'] != false;
           if (isTracked) {
             try {
-              await widget.onToggleTrackStock!(item, false); // false = Always On
+              await widget.onToggleTrackStock!(
+                  item, false); // false = Always On
               successCount++;
             } catch (e) {
               failCount++;
@@ -8070,7 +8118,8 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
     if (widget.items.isEmpty) return _EmptyState(widget.emptyText);
 
     // Count tracked items for the button
-    final trackedCount = widget.items.where((item) => item['track_stock'] != false).length;
+    final trackedCount =
+        widget.items.where((item) => item['track_stock'] != false).length;
 
     return Container(
       decoration: BoxDecoration(
@@ -8084,7 +8133,8 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
             color: AppColors.kPrimary,
             child: Row(
               children: [
-                const SizedBox(width: 48, child: Text('#', style: _headerStyle)),
+                const SizedBox(
+                    width: 48, child: Text('#', style: _headerStyle)),
                 const Expanded(
                     flex: 3, child: Text('Item Name', style: _headerStyle)),
                 const Expanded(
@@ -8140,7 +8190,8 @@ class _OutletProductionSheetState extends State<_OutletProductionSheet> {
                 const SizedBox(
                     width: 170,
                     child: Text('Add Qty Produced', style: _headerStyle)),
-                const SizedBox(width: 96, child: Text('Action', style: _headerStyle)),
+                const SizedBox(
+                    width: 96, child: Text('Action', style: _headerStyle)),
               ],
             ),
           ),
@@ -8428,9 +8479,11 @@ class _LineEditorState extends State<_LineEditor> {
           Column(
             children: widget.lines.map((line) {
               final index = widget.lines.indexOf(line);
-              final centralQty = _num(line['quantity'] ?? line['available_quantity']);
+              final centralQty =
+                  _num(line['quantity'] ?? line['available_quantity']);
               final requestedQty = _num(line[widget.quantityKey] ?? 1);
-              final overRequest = widget.showCentralAvailable && requestedQty > centralQty;
+              final overRequest =
+                  widget.showCentralAvailable && requestedQty > centralQty;
               final unit = line['unit_of_measure'] ?? line['unit'] ?? 'units';
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -8450,12 +8503,14 @@ class _LineEditorState extends State<_LineEditor> {
                           Expanded(
                             child: Text(
                               '${line['item_name'] ?? line['item_sku']}',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ),
                           if (widget.showCentralAvailable) ...[
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
                               margin: const EdgeInsets.only(right: 8),
                               decoration: BoxDecoration(
                                 color: centralQty <= 0
@@ -8491,9 +8546,11 @@ class _LineEditorState extends State<_LineEditor> {
                             child: TextFormField(
                               initialValue: '${line[widget.quantityKey] ?? 1}',
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(labelText: 'Qty'),
+                              decoration:
+                                  const InputDecoration(labelText: 'Qty'),
                               onChanged: (value) {
-                                line[widget.quantityKey] = num.tryParse(value) ?? 0;
+                                line[widget.quantityKey] =
+                                    num.tryParse(value) ?? 0;
                                 widget.onChanged();
                               },
                             ),
@@ -8505,8 +8562,8 @@ class _LineEditorState extends State<_LineEditor> {
                               child: TextFormField(
                                 initialValue: '${line['unit_price'] ?? 0}',
                                 keyboardType: TextInputType.number,
-                                decoration:
-                                    const InputDecoration(labelText: 'Unit Price'),
+                                decoration: const InputDecoration(
+                                    labelText: 'Unit Price'),
                                 onChanged: (value) {
                                   line['unit_price'] = num.tryParse(value) ?? 0;
                                   widget.onChanged();
@@ -9361,12 +9418,14 @@ class _PurchaseOrderDetailScreen extends StatelessWidget {
                         children: [
                           Text(
                             _poSupplierName(purchaseOrder),
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 16),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Expected: ${_poDate(purchaseOrder['expected_delivery'] ?? purchaseOrder['expected_delivery_date'])}',
-                            style: const TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+                            style: const TextStyle(
+                                color: AppColors.kTextSecondary, fontSize: 13),
                           ),
                         ],
                       ),
@@ -9376,12 +9435,19 @@ class _PurchaseOrderDetailScreen extends StatelessWidget {
                       children: [
                         Text(
                           _poMoney(total),
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: Color(0xFF007AFF)),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              color: Color(0xFF007AFF)),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Created by: ${_poText(purchaseOrder, const ['created_by_name', 'created_by'], fallback: 'System')}',
-                          style: const TextStyle(color: AppColors.kTextSecondary, fontSize: 12),
+                          'Created by: ${_poText(purchaseOrder, const [
+                                'created_by_name',
+                                'created_by'
+                              ], fallback: 'System')}',
+                          style: const TextStyle(
+                              color: AppColors.kTextSecondary, fontSize: 12),
                         ),
                       ],
                     ),
@@ -10125,7 +10191,8 @@ class _FoodControlSection extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> stock;
 
   @override
-  ConsumerState<_FoodControlSection> createState() => _FoodControlSectionState();
+  ConsumerState<_FoodControlSection> createState() =>
+      _FoodControlSectionState();
 }
 
 class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
@@ -10145,7 +10212,7 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
     setState(() => _loading = true);
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final data = await repo.getRecipes();
+      final data = await repo.getProductionRecipes();
       if (mounted) setState(() => _recipes = data);
     } catch (_) {
     } finally {
@@ -10194,14 +10261,14 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
     if (_selectedStock != null) {
       final sku = '${_selectedStock!['item_sku']}';
       list = list.where((r) {
-        final ings = r['ingredients'];
-        if (ings is! List) return false;
-        return ings.any((i) => '${i['item_sku']}' == sku);
+        return '${r['raw_item_sku']}' == sku;
       }).toList();
     }
     if (q.isNotEmpty) {
       list = list
-          .where((r) => '${r['menu_item_name']}'.toLowerCase().contains(q))
+          .where((r) =>
+              '${r['produced_item_name']}'.toLowerCase().contains(q) ||
+              '${r['raw_item_name']}'.toLowerCase().contains(q))
           .toList();
     }
     return list;
@@ -10211,7 +10278,8 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
   Widget build(BuildContext context) {
     return _Page(
       title: 'Food Control',
-      subtitle: 'Recipe yield ratios — link raw ingredients to menu outputs.',
+      subtitle:
+          'Kitchen production engine — raw stock, POS item yield, variance, spoilage and food cost.',
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
@@ -10221,7 +10289,7 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
         FilledButton.icon(
           onPressed: () => _openRecipeDialog(null),
           icon: const Icon(Icons.add, size: 16),
-          label: const Text('New Recipe'),
+          label: const Text('Add Food Control'),
         ),
       ],
       children: [
@@ -10319,8 +10387,7 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
                             isDense: true,
                             border: OutlineInputBorder(),
                           ),
-                          onChanged: (v) =>
-                              setState(() => _stockSearch = v),
+                          onChanged: (v) => setState(() => _stockSearch = v),
                         ),
                       ),
                       Expanded(
@@ -10336,8 +10403,8 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
                               selected: selected,
                               selectedTileColor:
                                   AppColors.kPrimary.withOpacity(0.08),
-                              onTap: () => setState(() =>
-                                  _selectedStock = selected ? null : s),
+                              onTap: () => setState(
+                                  () => _selectedStock = selected ? null : s),
                               title: Text('${s['item_name']}',
                                   style: const TextStyle(
                                       fontSize: 13,
@@ -10404,19 +10471,17 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
                         padding: const EdgeInsets.all(8),
                         child: TextField(
                           decoration: const InputDecoration(
-                            hintText: 'Search recipes…',
+                            hintText: 'Search food controls…',
                             prefixIcon: Icon(Icons.search, size: 18),
                             isDense: true,
                             border: OutlineInputBorder(),
                           ),
-                          onChanged: (v) =>
-                              setState(() => _recipeSearch = v),
+                          onChanged: (v) => setState(() => _recipeSearch = v),
                         ),
                       ),
                       if (_loading)
                         const Expanded(
-                            child:
-                                Center(child: CircularProgressIndicator()))
+                            child: Center(child: CircularProgressIndicator()))
                       else if (_filteredRecipes.isEmpty)
                         Expanded(
                           child: Center(
@@ -10424,21 +10489,19 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(Icons.restaurant_menu_outlined,
-                                    size: 48,
-                                    color: Colors.grey.shade400),
+                                    size: 48, color: Colors.grey.shade400),
                                 const SizedBox(height: 12),
                                 Text(
                                   _selectedStock != null
-                                      ? 'No recipe uses ${_selectedStock!['item_name']} yet.'
-                                      : 'No recipes configured yet.',
-                                  style: TextStyle(
-                                      color: Colors.grey.shade600),
+                                      ? 'No food control uses ${_selectedStock!['item_name']} yet.'
+                                      : 'No food controls configured yet.',
+                                  style: TextStyle(color: Colors.grey.shade600),
                                 ),
                                 const SizedBox(height: 12),
                                 FilledButton.icon(
                                   onPressed: () => _openRecipeDialog(null),
                                   icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Add Recipe'),
+                                  label: const Text('Add Food Control'),
                                 ),
                               ],
                             ),
@@ -10456,6 +10519,7 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
                               return _RecipeCard(
                                 recipe: r,
                                 onEdit: () => _openRecipeDialog(r),
+                                onDeactivate: () => _deactivateFoodControl(r),
                               );
                             },
                           ),
@@ -10475,29 +10539,65 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
     final saved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _RecipeDialog(
+      builder: (_) => _FoodControlDialog(
         existing: existing,
-        preselectedIngredient: existing == null ? _selectedStock : null,
+        preselectedRawItem: existing == null ? _selectedStock : null,
         stock: widget.stock,
       ),
     );
     if (saved == true) _loadRecipes();
+  }
+
+  Future<void> _deactivateFoodControl(Map<String, dynamic> recipe) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Deactivate Food Control'),
+        content: Text(
+          'Deactivate ${recipe['raw_item_name']} to ${recipe['produced_item_name']}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Deactivate'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref
+        .read(branchStorekeeperRepositoryProvider)
+        .deactivateProductionRecipe('${recipe['id']}');
+    _loadRecipes();
   }
 }
 
 // ─── Recipe Card ────────────────────────────────────────────────────────────
 
 class _RecipeCard extends StatelessWidget {
-  const _RecipeCard({required this.recipe, required this.onEdit});
+  const _RecipeCard({
+    required this.recipe,
+    required this.onEdit,
+    required this.onDeactivate,
+  });
   final Map<String, dynamic> recipe;
   final VoidCallback onEdit;
+  final VoidCallback onDeactivate;
 
   @override
   Widget build(BuildContext context) {
-    final ingredients = recipe['ingredients'];
-    final ings = ingredients is List ? ingredients : <dynamic>[];
-    final portions = _fcNum(recipe['portions_per_recipe']).toInt();
-    final cost = _fcNum(recipe['standard_cost']);
+    final rawQty = _fcNum(recipe['raw_quantity']);
+    final producedQty = _fcNum(recipe['produced_quantity']);
+    final cost = _fcNum(recipe['cost_per_output']);
+    final variance = _fcNum(recipe['allowed_variance_percent']);
+    final spoilage = _fcNum(recipe['spoilage_threshold_percent']);
+    final ratio = rawQty > 0 ? producedQty / rawQty : 0;
+    final requiresConfirmation = recipe['requires_yield_confirmation'] != false;
 
     return Card(
       elevation: 0,
@@ -10520,7 +10620,7 @@ class _RecipeCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '${recipe['menu_item_name'] ?? recipe['recipe_code'] ?? 'Recipe'}',
+                    '${recipe['produced_item_name'] ?? recipe['recipe_code'] ?? 'Food Control'}',
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -10528,61 +10628,80 @@ class _RecipeCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (portions > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text('×$portions portions',
-                        style: TextStyle(
-                            color: Colors.orange.shade800,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11)),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(6),
                   ),
+                  child: Text(
+                    ratio > 0 ? '1 : ${ratio.toStringAsFixed(2)}' : '—',
+                    style: TextStyle(
+                        color: Colors.orange.shade800,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: requiresConfirmation
+                        ? Colors.purple.shade50
+                        : Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    requiresConfirmation ? 'Confirms yield' : 'Auto-finalizes',
+                    style: TextStyle(
+                        color: requiresConfirmation
+                            ? Colors.purple.shade700
+                            : Colors.green.shade700,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10),
+                  ),
+                ),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   onPressed: onEdit,
-                  tooltip: 'Edit recipe',
-                  style: IconButton.styleFrom(
-                      foregroundColor: AppColors.kPrimary),
+                  tooltip: 'Edit food control',
+                  style:
+                      IconButton.styleFrom(foregroundColor: AppColors.kPrimary),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.block, size: 18),
+                  onPressed: onDeactivate,
+                  tooltip: 'Deactivate',
+                  style: IconButton.styleFrom(foregroundColor: Colors.red),
                 ),
               ],
             ),
-            if (ings.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              const Text('Ingredients',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: ings.map<Widget>((ing) {
-                  final qty = _fcNum(ing['quantity_per_portion']);
-                  final unit = '${ing['unit_of_measure'] ?? ''}';
-                  return Chip(
-                    label: Text(
-                        '${qty % 1 == 0 ? qty.toInt() : qty} $unit ${ing['item_name']}',
-                        style: const TextStyle(fontSize: 11)),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    backgroundColor: AppColors.kPrimary.withOpacity(0.07),
-                  );
-                }).toList(),
-              ),
-            ],
-            if (cost > 0) ...[
-              const SizedBox(height: 8),
-              Text('Est. cost: KES ${cost.toStringAsFixed(2)}',
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade600)),
-            ],
+            const SizedBox(height: 10),
+            Text(
+              '${_qtyText(rawQty)} ${recipe['raw_unit'] ?? ''} ${recipe['raw_item_name'] ?? ''}  →  '
+              '${_qtyText(producedQty)} ${recipe['produced_unit'] ?? ''} ${recipe['produced_item_name'] ?? ''}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 14,
+              runSpacing: 4,
+              children: [
+                if (cost > 0)
+                  Text('Cost/output: KES ${cost.toStringAsFixed(2)}',
+                      style:
+                          TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                Text('Variance allowed: ${variance.toStringAsFixed(0)}%',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                Text('Spoilage threshold: ${spoilage.toStringAsFixed(0)}%',
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              ],
+            ),
           ],
         ),
       ),
@@ -10590,174 +10709,215 @@ class _RecipeCard extends StatelessWidget {
   }
 }
 
-// ─── Recipe Create/Edit Dialog ───────────────────────────────────────────────
+String _qtyText(double v) =>
+    v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(2);
 
-class _RecipeDialog extends ConsumerStatefulWidget {
-  const _RecipeDialog({
+// ─── Food Control Create/Edit Dialog ────────────────────────────────────────
+
+class _FoodControlDialog extends ConsumerStatefulWidget {
+  const _FoodControlDialog({
     this.existing,
-    this.preselectedIngredient,
+    this.preselectedRawItem,
     required this.stock,
   });
+
   final Map<String, dynamic>? existing;
-  final Map<String, dynamic>? preselectedIngredient;
+  final Map<String, dynamic>? preselectedRawItem;
   final List<Map<String, dynamic>> stock;
 
   @override
-  ConsumerState<_RecipeDialog> createState() => _RecipeDialogState();
+  ConsumerState<_FoodControlDialog> createState() => _FoodControlDialogState();
 }
 
-class _RecipeDialogState extends ConsumerState<_RecipeDialog> {
-  final _menuItemCtrl = TextEditingController();
-  final _portionsCtrl = TextEditingController(text: '1');
+class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
+  final _rawSearchCtrl = TextEditingController();
+  final _rawQtyCtrl = TextEditingController(text: '1');
+  final _rawUnitCtrl = TextEditingController(text: 'KG');
+  final _menuCtrl = TextEditingController();
+  final _yieldQtyCtrl = TextEditingController(text: '1');
+  final _yieldUnitCtrl = TextEditingController(text: 'Portions');
+  final _varianceCtrl = TextEditingController(text: '2');
+  final _spoilageCtrl = TextEditingController(text: '1');
+  final _rawCostCtrl = TextEditingController(text: '0');
+  final _poolFractionCtrl = TextEditingController(text: '1');
   bool _busy = false;
-  List<Map<String, dynamic>> _menuItems = [];
   bool _menuLoading = true;
-  String? _selectedMenuItemId;
-
-  // ingredient rows: [sku, name, qty, unit, unit_cost]
-  final List<Map<String, TextEditingController>> _rows = [];
+  bool _requiresConfirmation = true;
+  List<Map<String, dynamic>> _menuItems = [];
+  Map<String, dynamic>? _selectedRaw;
+  Map<String, dynamic>? _selectedMenu;
+  Map<String, dynamic>? _poolItem;
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
     if (e != null) {
-      _menuItemCtrl.text = '${e['menu_item_name'] ?? ''}';
-      _selectedMenuItemId = '${e['menu_item_id'] ?? ''}';
-      _portionsCtrl.text = '${e['portions_per_recipe'] ?? 1}';
-      final ings = e['ingredients'];
-      if (ings is List) {
-        for (final ing in ings) {
-          _rows.add(_buildRow(
-            sku: '${ing['item_sku'] ?? ''}',
-            name: '${ing['item_name'] ?? ''}',
-            qty: '${ing['quantity_per_portion'] ?? ''}',
-            unit: '${ing['unit_of_measure'] ?? ''}',
-            cost: '${ing['unit_cost'] ?? ''}',
-          ));
-        }
-      }
-    } else if (widget.preselectedIngredient != null) {
-      final s = widget.preselectedIngredient!;
-      _rows.add(_buildRow(
-        sku: '${s['item_sku'] ?? ''}',
-        name: '${s['item_name'] ?? ''}',
-        qty: '1',
-        unit: '${s['unit_of_measure'] ?? s['unit'] ?? ''}',
-        cost: '0',
-      ));
+      _rawSearchCtrl.text = '${e['raw_item_name'] ?? ''}';
+      _rawQtyCtrl.text = '${e['raw_quantity'] ?? 1}';
+      _rawUnitCtrl.text = '${e['raw_unit'] ?? 'KG'}';
+      _menuCtrl.text = '${e['produced_item_name'] ?? ''}';
+      _yieldQtyCtrl.text = '${e['produced_quantity'] ?? 1}';
+      _yieldUnitCtrl.text = '${e['produced_unit'] ?? 'Portions'}';
+      _varianceCtrl.text = '${e['allowed_variance_percent'] ?? 2}';
+      _spoilageCtrl.text = '${e['spoilage_threshold_percent'] ?? 1}';
+      _rawCostCtrl.text = _inferRawCost(e).toStringAsFixed(2);
+      _requiresConfirmation = e['requires_yield_confirmation'] != false;
+      _selectedRaw = {
+        'item_sku': e['raw_item_sku'],
+        'item_name': e['raw_item_name'],
+        'unit_of_measure': e['raw_unit'],
+      };
+      _selectedMenu = {
+        'id': e['pos_outlet_item_id'] ?? e['produced_item_sku'],
+        'name': e['produced_item_name'],
+      };
+    } else if (widget.preselectedRawItem != null) {
+      _applyRaw(widget.preselectedRawItem!);
     }
-    if (_rows.isEmpty) _addRow();
     _loadMenuItems();
+  }
+
+  double _inferRawCost(Map<String, dynamic> e) {
+    final stored = _fcNum(e['cost_per_output']);
+    final yieldQty = _fcNum(e['produced_quantity']);
+    if (stored > 0 && yieldQty > 0) return stored * yieldQty;
+    return 0;
   }
 
   Future<void> _loadMenuItems() async {
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
       final items = await repo.getMenuItems();
-      if (mounted) setState(() { _menuItems = items; _menuLoading = false; });
+      if (mounted) {
+        setState(() {
+          _menuItems = items;
+          _menuLoading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _menuLoading = false);
     }
   }
 
-  Map<String, TextEditingController> _buildRow({
-    String sku = '',
-    String name = '',
-    String qty = '',
-    String unit = '',
-    String cost = '0',
-  }) =>
-      {
-        'sku': TextEditingController(text: sku),
-        'name': TextEditingController(text: name),
-        'qty': TextEditingController(text: qty),
-        'unit': TextEditingController(text: unit),
-        'cost': TextEditingController(text: cost),
-      };
-
-  void _addRow() {
-    setState(() => _rows.add(_buildRow()));
+  void _applyRaw(Map<String, dynamic> item) {
+    _selectedRaw = item;
+    _rawSearchCtrl.text = '${item['item_name'] ?? item['name'] ?? ''}';
+    _rawUnitCtrl.text = '${item['unit_of_measure'] ?? item['unit'] ?? 'KG'}';
+    final cost = _fcNum(item['cost_price'] ?? item['unit_cost']);
+    if (cost > 0) _rawCostCtrl.text = cost.toStringAsFixed(2);
   }
 
-  void _removeRow(int i) {
-    setState(() {
-      for (final c in _rows[i].values) c.dispose();
-      _rows.removeAt(i);
-    });
+  String? _uuid(dynamic value) {
+    final text = '$value';
+    final uuid = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    );
+    return uuid.hasMatch(text) ? text : null;
   }
 
-  void _fillFromStock(int rowIndex, Map<String, dynamic> s) {
-    final row = _rows[rowIndex];
-    row['sku']!.text = '${s['item_sku'] ?? ''}';
-    row['name']!.text = '${s['item_name'] ?? ''}';
-    row['unit']!.text =
-        '${s['unit_of_measure'] ?? s['unit'] ?? ''}';
-    setState(() {});
+  double get _costPerOutput {
+    final rawCost = _fcNum(_rawCostCtrl.text);
+    final yieldQty = _fcNum(_yieldQtyCtrl.text);
+    return yieldQty <= 0 ? 0 : rawCost / yieldQty;
   }
 
   @override
   void dispose() {
-    _menuItemCtrl.dispose();
-    _portionsCtrl.dispose();
-    for (final row in _rows) {
-      for (final c in row.values) c.dispose();
-    }
+    _rawSearchCtrl.dispose();
+    _rawQtyCtrl.dispose();
+    _rawUnitCtrl.dispose();
+    _menuCtrl.dispose();
+    _yieldQtyCtrl.dispose();
+    _yieldUnitCtrl.dispose();
+    _varianceCtrl.dispose();
+    _spoilageCtrl.dispose();
+    _rawCostCtrl.dispose();
+    _poolFractionCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    final menuName = _menuItemCtrl.text.trim();
-    if (menuName.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Menu item name is required')));
+    if (_selectedRaw == null ||
+        '${_selectedRaw!['item_sku'] ?? _selectedRaw!['sku'] ?? ''}'.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Select a raw material from branch stock')),
+      );
       return;
     }
-    final portions = int.tryParse(_portionsCtrl.text.trim()) ?? 1;
-    final ingredients = _rows
-        .where((r) => r['sku']!.text.trim().isNotEmpty)
-        .map((r) => {
-              'item_sku': r['sku']!.text.trim(),
-              'item_name': r['name']!.text.trim(),
-              'quantity_per_portion':
-                  double.tryParse(r['qty']!.text.trim()) ?? 0,
-              'unit_of_measure': r['unit']!.text.trim(),
-              'unit_cost': double.tryParse(r['cost']!.text.trim()) ?? 0,
-            })
-        .toList();
-
-    if (ingredients.isEmpty) {
+    if (_selectedMenu == null || _menuCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Add at least one ingredient')));
+        const SnackBar(content: Text('Select a POS menu item')),
+      );
+      return;
+    }
+    final rawQty = _fcNum(_rawQtyCtrl.text);
+    final yieldQty = _fcNum(_yieldQtyCtrl.text);
+    if (rawQty <= 0 || yieldQty <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Raw quantity and yield must be greater than zero')),
+      );
       return;
     }
 
     setState(() => _busy = true);
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      if (widget.existing != null) {
-        await repo.updateRecipe(
-          id: '${widget.existing!['id']}',
-          menuItemName: menuName,
-          portionsPerRecipe: portions,
-          ingredients: ingredients,
+      final rawSku = '${_selectedRaw!['item_sku'] ?? _selectedRaw!['sku']}';
+      final rawName =
+          '${_selectedRaw!['item_name'] ?? _selectedRaw!['name'] ?? _rawSearchCtrl.text}';
+      final producedName = _menuCtrl.text.trim();
+      final producedSku =
+          '${_selectedMenu!['sku'] ?? _selectedMenu!['item_sku'] ?? _selectedMenu!['id'] ?? ''}';
+      final posId = _uuid(_selectedMenu!['id']);
+      final poolId = _poolItem == null ? null : _uuid(_poolItem!['id']);
+      final poolFraction =
+          poolId == null ? null : _fcNum(_poolFractionCtrl.text);
+      if (widget.existing == null) {
+        await repo.createProductionRecipe(
+          rawItemSku: rawSku,
+          rawItemName: rawName,
+          rawQuantity: rawQty,
+          rawUnit: _rawUnitCtrl.text.trim(),
+          producedItemName: producedName,
+          producedItemSku: producedSku,
+          producedQuantity: yieldQty,
+          producedUnit: _yieldUnitCtrl.text.trim(),
+          posOutletItemId: posId,
+          allowedVariancePercent: _fcNum(_varianceCtrl.text),
+          spoilageThresholdPercent: _fcNum(_spoilageCtrl.text),
+          costPerOutput: _costPerOutput,
+          requiresYieldConfirmation: _requiresConfirmation,
+          poolItemId: poolId,
+          poolFraction: poolFraction,
         );
       } else {
-        await repo.createRecipe(
-          menuItemName: menuName,
-          menuItemId: (_selectedMenuItemId?.isNotEmpty == true &&
-                  _selectedMenuItemId != 'null')
-              ? _selectedMenuItemId
-              : null,
-          portionsPerRecipe: portions,
-          ingredients: ingredients,
+        await repo.updateProductionRecipe(
+          id: '${widget.existing!['id']}',
+          rawItemSku: rawSku,
+          rawItemName: rawName,
+          rawQuantity: rawQty,
+          rawUnit: _rawUnitCtrl.text.trim(),
+          producedItemName: producedName,
+          producedItemSku: producedSku,
+          producedQuantity: yieldQty,
+          producedUnit: _yieldUnitCtrl.text.trim(),
+          posOutletItemId: posId,
+          allowedVariancePercent: _fcNum(_varianceCtrl.text),
+          spoilageThresholdPercent: _fcNum(_spoilageCtrl.text),
+          costPerOutput: _costPerOutput,
+          requiresYieldConfirmation: _requiresConfirmation,
+          poolItemId: poolId,
+          poolFraction: poolFraction,
         );
       }
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Food control save failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -10768,280 +10928,276 @@ class _RecipeDialogState extends ConsumerState<_RecipeDialog> {
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
     return AlertDialog(
-      title: Text(isEdit ? 'Edit Recipe' : 'New Recipe'),
+      title: Text(isEdit ? 'Edit Food Control' : 'Create Food Control'),
       contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       content: SizedBox(
-        width: 680,
+        width: 720,
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Output (menu item) — searchable autocomplete
-              Row(
-                children: [
-                  const Text('Output (Menu Item)',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13)),
-                  const SizedBox(width: 8),
-                  if (_menuLoading)
-                    const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                  if (!_menuLoading)
-                    Text('${_menuItems.length} items loaded',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade500)),
-                ],
-              ),
+              const Text('Step 1: Select Raw Material',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               Autocomplete<Map<String, dynamic>>(
-                initialValue:
-                    TextEditingValue(text: _menuItemCtrl.text),
+                initialValue: TextEditingValue(text: _rawSearchCtrl.text),
                 optionsBuilder: (tv) {
                   final q = tv.text.toLowerCase().trim();
-                  if (q.isEmpty) return _menuItems.take(20);
-                  return _menuItems.where((m) {
-                    final name = '${m['name'] ?? ''}'.toLowerCase();
-                    final cat = '${m['category_name'] ?? m['category'] ?? ''}'.toLowerCase();
-                    return name.contains(q) || cat.contains(q);
+                  if (q.isEmpty) return widget.stock.take(20);
+                  return widget.stock.where((s) {
+                    final sku =
+                        '${s['item_sku'] ?? s['sku'] ?? ''}'.toLowerCase();
+                    final name =
+                        '${s['item_name'] ?? s['name'] ?? ''}'.toLowerCase();
+                    return sku.contains(q) || name.contains(q);
                   }).take(20);
                 },
-                displayStringForOption: (m) => '${m['name'] ?? ''}',
-                onSelected: (m) {
-                  setState(() {
-                    _menuItemCtrl.text = '${m['name'] ?? ''}';
-                    _selectedMenuItemId = '${m['id'] ?? ''}';
-                  });
-                },
-                fieldViewBuilder: (ctx, ctrl, focusNode, onSubmitted) {
-                  ctrl.text = _menuItemCtrl.text;
-                  ctrl.addListener(() => _menuItemCtrl.text = ctrl.text);
+                displayStringForOption: (s) =>
+                    '${s['item_name'] ?? s['name'] ?? s['item_sku'] ?? ''}',
+                onSelected: (s) => setState(() => _applyRaw(s)),
+                fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
+                  if (ctrl.text != _rawSearchCtrl.text)
+                    ctrl.text = _rawSearchCtrl.text;
                   return TextField(
                     controller: ctrl,
-                    focusNode: focusNode,
-                    decoration: InputDecoration(
-                      hintText: _menuLoading
-                          ? 'Loading menu items…'
-                          : 'Search menu items (e.g. Samosa, Ugali, Beef…)',
-                      border: const OutlineInputBorder(),
+                    focusNode: focus,
+                    decoration: const InputDecoration(
+                      labelText: 'Raw Material',
+                      border: OutlineInputBorder(),
                       isDense: true,
-                      prefixIcon:
-                          const Icon(Icons.restaurant_menu_outlined),
-                      suffixIcon: _selectedMenuItemId != null &&
-                              _selectedMenuItemId!.isNotEmpty &&
-                              _selectedMenuItemId != 'null'
-                          ? const Icon(Icons.check_circle,
-                              color: Colors.green, size: 18)
-                          : null,
                     ),
+                    onChanged: (v) => _rawSearchCtrl.text = v,
                   );
                 },
-                optionsViewBuilder: (ctx, onSel, opts) => Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 640,
-                      child: ListView(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        children: opts.map((m) {
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                    child: TextField(
+                  controller: _rawQtyCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Standard Quantity',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                  onChanged: (_) => setState(() {}),
+                )),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: TextField(
+                  controller: _rawUnitCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Unit',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                )),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: TextField(
+                  controller: _rawCostCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Raw Cost',
+                      prefixText: 'KES ',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                  onChanged: (_) => setState(() {}),
+                )),
+              ]),
+              const SizedBox(height: 16),
+              const Text('Step 2: Link POS Menu Item',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Autocomplete<Map<String, dynamic>>(
+                initialValue: TextEditingValue(text: _menuCtrl.text),
+                optionsBuilder: (tv) {
+                  final q = tv.text.toLowerCase().trim();
+                  final source = q.isEmpty
+                      ? _menuItems.take(20)
+                      : _menuItems.where((m) {
+                          final name = '${m['name'] ?? m['item_name'] ?? ''}'
+                              .toLowerCase();
                           final cat =
-                              '${m['category_name'] ?? m['category'] ?? ''}';
-                          final price =
-                              _fcNum(m['price'] ?? m['selling_price']);
-                          return ListTile(
-                            dense: true,
-                            leading: const Icon(
-                                Icons.restaurant_menu_outlined,
-                                size: 18),
-                            title: Text('${m['name'] ?? ''}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13)),
-                            subtitle: Text(cat,
-                                style:
-                                    const TextStyle(fontSize: 11)),
-                            trailing: price > 0
-                                ? Text(
-                                    'KES ${price.toStringAsFixed(0)}',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.teal.shade700,
-                                        fontWeight: FontWeight.w600))
-                                : null,
-                            onTap: () => onSel(m),
-                          );
-                        }).toList(),
-                      ),
+                              '${m['category_name'] ?? m['category'] ?? ''}'
+                                  .toLowerCase();
+                          return name.contains(q) || cat.contains(q);
+                        }).take(20);
+                  return source;
+                },
+                displayStringForOption: (m) =>
+                    '${m['name'] ?? m['item_name'] ?? ''}',
+                onSelected: (m) {
+                  setState(() {
+                    _selectedMenu = m;
+                    _menuCtrl.text = '${m['name'] ?? m['item_name'] ?? ''}';
+                  });
+                },
+                fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
+                  if (ctrl.text != _menuCtrl.text) ctrl.text = _menuCtrl.text;
+                  return TextField(
+                    controller: ctrl,
+                    focusNode: focus,
+                    decoration: InputDecoration(
+                      labelText: _menuLoading
+                          ? 'Loading POS menu items...'
+                          : 'POS Menu Item',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: _selectedMenu == null
+                          ? null
+                          : const Icon(Icons.check_circle,
+                              color: Colors.green, size: 18),
                     ),
-                  ),
+                    onChanged: (v) {
+                      _menuCtrl.text = v;
+                      _selectedMenu = null;
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text('Step 3: Define Yield',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Row(children: [
+                Expanded(
+                    child: TextField(
+                  controller: _yieldQtyCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Yield Quantity',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                  onChanged: (_) => setState(() {}),
+                )),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: TextField(
+                  controller: _yieldUnitCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Yield Unit',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                )),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: InputDecorator(
+                  decoration: const InputDecoration(
+                      labelText: 'Cost Per Output',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                  child: Text('KES ${_costPerOutput.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                )),
+              ]),
+              const SizedBox(height: 16),
+              const Text('Step 4: Variance & Spoilage',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Row(children: [
+                Expanded(
+                    child: TextField(
+                  controller: _varianceCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Allowed Variance %',
+                      suffixText: '%',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                )),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: TextField(
+                  controller: _spoilageCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Expected Waste %',
+                      suffixText: '%',
+                      border: OutlineInputBorder(),
+                      isDense: true),
+                )),
+              ]),
+              const SizedBox(height: 16),
+              const Text('Step 5: Yield Confirmation & Stock Pool',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: _requiresConfirmation,
+                title: const Text('Requires yield confirmation',
+                    style: TextStyle(fontSize: 13)),
+                subtitle: const Text(
+                  'ON for baking/pastry items (chapati, ndazi...) — expected yield posts to POS immediately, then the storekeeper confirms actual output and any shortfall is billed to the producer. OFF for exact conversions (rice, chicken cuts) which finalize immediately.',
+                  style: TextStyle(fontSize: 11),
                 ),
+                onChanged: (v) => setState(() => _requiresConfirmation = v),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Shares stock pool with (optional) — e.g. Half/Quarter Chicken share the Full Chicken pool. Selling any of them deducts the fraction below from the pool item\'s stock instead of its own.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
               ),
               const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Text('Portions per batch: ',
-                      style: TextStyle(fontSize: 12)),
-                  SizedBox(
-                    width: 70,
-                    child: TextField(
-                      controller: _portionsCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                          border: OutlineInputBorder(), isDense: true),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  flex: 3,
+                  child: Autocomplete<Map<String, dynamic>>(
+                    optionsBuilder: (tv) {
+                      final q = tv.text.toLowerCase().trim();
+                      final source = q.isEmpty
+                          ? _menuItems.take(20)
+                          : _menuItems.where((m) {
+                              final name =
+                                  '${m['name'] ?? m['item_name'] ?? ''}'
+                                      .toLowerCase();
+                              return name.contains(q);
+                            }).take(20);
+                      return source;
+                    },
+                    displayStringForOption: (m) =>
+                        '${m['name'] ?? m['item_name'] ?? ''}',
+                    onSelected: (m) => setState(() => _poolItem = m),
+                    fieldViewBuilder: (ctx, ctrl, focus, onSubmit) => TextField(
+                      controller: ctrl,
+                      focusNode: focus,
+                      decoration: InputDecoration(
+                        labelText: 'Pool base item',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: _poolItem == null
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close, size: 16),
+                                onPressed: () {
+                                  setState(() => _poolItem = null);
+                                  ctrl.clear();
+                                },
+                              ),
+                      ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              const Divider(),
-              const SizedBox(height: 8),
-              // Ingredients
-              Row(
-                children: [
-                  const Text('Ingredients (Inputs)',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13)),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _addRow,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add row'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              // Header row
-              const Row(
-                children: [
-                  SizedBox(
-                      width: 120,
-                      child: Text('SKU',
-                          style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w600))),
-                  SizedBox(width: 4),
-                  Expanded(
-                      child: Text('Ingredient Name',
-                          style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w600))),
-                  SizedBox(width: 4),
-                  SizedBox(
-                      width: 60,
-                      child: Text('Qty/batch',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                  SizedBox(width: 4),
-                  SizedBox(
-                      width: 60,
-                      child: Text('Unit',
-                          style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w600))),
-                  SizedBox(width: 32),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ..._rows.asMap().entries.map((entry) {
-                final i = entry.key;
-                final row = entry.value;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      // SKU with stock picker
-                      SizedBox(
-                        width: 120,
-                        child: _StockAutocomplete(
-                          controller: row['sku']!,
-                          stock: widget.stock,
-                          onSelected: (s) => _fillFromStock(i, s),
-                          hint: 'SKU',
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: TextField(
-                          controller: row['name']!,
-                          decoration: const InputDecoration(
-                              hintText: 'Name',
-                              border: OutlineInputBorder(),
-                              isDense: true),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      SizedBox(
-                        width: 60,
-                        child: TextField(
-                          controller: row['qty']!,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(
-                              hintText: '1',
-                              border: OutlineInputBorder(),
-                              isDense: true),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      SizedBox(
-                        width: 60,
-                        child: TextField(
-                          controller: row['unit']!,
-                          decoration: const InputDecoration(
-                              hintText: 'kg',
-                              border: OutlineInputBorder(),
-                              isDense: true),
-                        ),
-                      ),
-                      IconButton(
-                        icon:
-                            const Icon(Icons.close, size: 16, color: Colors.red),
-                        onPressed: _rows.length > 1 ? () => _removeRow(i) : null,
-                        style: IconButton.styleFrom(padding: EdgeInsets.zero),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-              const SizedBox(height: 8),
-              // Default yield reference
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade200),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Standard Yield Reference',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11,
-                            color: Colors.amber.shade900)),
-                    const SizedBox(height: 6),
-                    const Text(
-                      '1kg Minced Meat → 30 Samosas\n'
-                      '1kg Beef/Mbuzi → 4 Portions\n'
-                      '1kg Beef → 10 Mixes Managu/Sukuma\n'
-                      '1kg Beef → 12 Specials Rice/Pilau\n'
-                      '2kg Chips → 3 Portions Chips\n'
-                      '1kg Chips → 3 Specials Sausage/Samosa\n'
-                      '1kg Chips → 6 Specials Rice/Pilau\n'
-                      '2kg EXE flour → 27 Chapatis\n'
-                      '2kg EXE flour → 70 Kebabs\n'
-                      '2kg Self Raising → 23 Portions Ndazi\n'
-                      '1kg Rice → 7 Plates Rice/Pilau\n'
-                      '2kg Ajab → 8 Ugalis\n'
-                      '1 Litre Milk → 4 Tea Cups\n'
-                      '1kg Managu → 4 Portions Managu',
-                      style: TextStyle(fontSize: 10, height: 1.7),
-                    ),
-                  ],
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 1,
+                  child: TextField(
+                    controller: _poolFractionCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Fraction',
+                        border: OutlineInputBorder(),
+                        isDense: true),
+                  ),
                 ),
-              ),
+              ]),
               const SizedBox(height: 12),
             ],
           ),
@@ -11049,8 +11205,9 @@ class _RecipeDialogState extends ConsumerState<_RecipeDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-            child: const Text('Cancel')),
+          onPressed: _busy ? null : () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: _busy ? null : _submit,
           child: _busy
@@ -11059,7 +11216,7 @@ class _RecipeDialogState extends ConsumerState<_RecipeDialog> {
                   height: 16,
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white))
-              : Text(isEdit ? 'Save Changes' : 'Create Recipe'),
+              : Text(isEdit ? 'Save Food Control' : 'Create Food Control'),
         ),
       ],
     );
@@ -11222,11 +11379,13 @@ class _BranchInventoryTab extends StatelessWidget {
                           fontWeight: FontWeight.w500),
                       children: const [
                         TextSpan(
-                            text: 'Stock quantities are controlled and tamper-proof. '
+                            text:
+                                'Stock quantities are controlled and tamper-proof. '
                                 'Opening stock is entered once via the Central Master Catalog tab. '
                                 'Changes only happen via Receive Goods, Stock Takes, or approved issuances. '),
                         TextSpan(
-                            text: 'Items in this list that do not appear in the Central Catalog are legacy items '
+                            text:
+                                'Items in this list that do not appear in the Central Catalog are legacy items '
                                 'added before the catalog control system was introduced.',
                             style: TextStyle(fontStyle: FontStyle.italic)),
                       ],
@@ -11255,12 +11414,12 @@ class _BranchInventoryTab extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppColors.kPrimary,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(8)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(8)),
                   ),
                   child: const Row(
                     children: [
@@ -11360,14 +11519,21 @@ class _BranchInventoryTab extends StatelessWidget {
                               width: 72,
                               child: Center(
                                 child: Builder(builder: (_) {
-                                  final st = '${item['store_type'] ?? item['item']?['store_type'] ?? 'foodstuffs'}';
+                                  final st =
+                                      '${item['store_type'] ?? item['item']?['store_type'] ?? 'foodstuffs'}';
                                   final isBar = st == 'bar_store';
                                   return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: isBar ? Colors.purple.shade50 : Colors.green.shade50,
+                                      color: isBar
+                                          ? Colors.purple.shade50
+                                          : Colors.green.shade50,
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: isBar ? Colors.purple.shade200 : Colors.green.shade200),
+                                      border: Border.all(
+                                          color: isBar
+                                              ? Colors.purple.shade200
+                                              : Colors.green.shade200),
                                     ),
                                     child: Text(
                                       isBar ? 'Bar' : 'Food',
@@ -11375,7 +11541,9 @@ class _BranchInventoryTab extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
-                                        color: isBar ? Colors.purple.shade700 : Colors.green.shade700,
+                                        color: isBar
+                                            ? Colors.purple.shade700
+                                            : Colors.green.shade700,
                                       ),
                                     ),
                                   );
@@ -11437,7 +11605,8 @@ class _BranchInventoryTab extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   Tooltip(
-                                    message: 'Stock is controlled. Request from Central Store to add more.',
+                                    message:
+                                        'Stock is controlled. Request from Central Store to add more.',
                                     child: Icon(Icons.lock_outline,
                                         size: 14, color: Colors.grey.shade400),
                                   ),
@@ -11501,8 +11670,10 @@ class _CentralCatalogTabState extends State<_CentralCatalogTab> {
       .where((s) => s.isNotEmpty && s != 'NULL')
       .toSet();
 
-  List<Map<String, dynamic>> get _unregisteredFiltered =>
-      _filtered.where((i) => !_registeredSkus.contains('${i['sku']}'.trim().toUpperCase())).toList();
+  List<Map<String, dynamic>> get _unregisteredFiltered => _filtered
+      .where(
+          (i) => !_registeredSkus.contains('${i['sku']}'.trim().toUpperCase()))
+      .toList();
 
   void _toggleItem(String sku) {
     setState(() {
@@ -11526,7 +11697,8 @@ class _CentralCatalogTabState extends State<_CentralCatalogTab> {
 
   Future<void> _openBulkReview() async {
     final items = _unregisteredFiltered
-        .where((i) => _selectedSkus.contains('${i['sku']}'.trim().toUpperCase()))
+        .where(
+            (i) => _selectedSkus.contains('${i['sku']}'.trim().toUpperCase()))
         .toList();
     if (items.isEmpty) return;
     final confirmed = await showModalBottomSheet<bool>(
@@ -11540,7 +11712,8 @@ class _CentralCatalogTabState extends State<_CentralCatalogTab> {
       await widget.onRefresh?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${items.length} item${items.length == 1 ? '' : 's'} registered to branch inventory'),
+          content: Text(
+              '${items.length} item${items.length == 1 ? '' : 's'} registered to branch inventory'),
           backgroundColor: Colors.green.shade700,
         ));
       }
@@ -11571,492 +11744,534 @@ class _CentralCatalogTabState extends State<_CentralCatalogTab> {
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final registered = filtered
-        .where((i) => _registeredSkus
-            .contains('${i['sku']}'.trim().toUpperCase()))
+        .where(
+            (i) => _registeredSkus.contains('${i['sku']}'.trim().toUpperCase()))
         .length;
     final available = filtered.length - registered;
     final selectedCount = _selectedSkus.length;
     final unregisteredCount = _unregisteredFiltered.length;
-    final allSelected = unregisteredCount > 0 && _selectedSkus.length >= unregisteredCount;
+    final allSelected =
+        unregisteredCount > 0 && _selectedSkus.length >= unregisteredCount;
 
     return Stack(
       children: [
-      SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: selectedCount > 0 ? 72 : 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.indigo.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.indigo.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.lock_outline,
-                    color: Colors.indigo.shade700, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Branches adopt items from this central catalog — they cannot create new items. '
-                    'Cost prices, SKUs, and units are centrally controlled and read-only.',
-                    style: TextStyle(
-                        color: Colors.indigo.shade900,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
+        SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: selectedCount > 0 ? 72 : 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _InventoryStat(
-                  label: 'Catalog Items',
-                  value: '${widget.catalog.length}',
-                  icon: Icons.store_outlined,
-                  color: Colors.indigo),
-              const SizedBox(width: 8),
-              _InventoryStat(
-                  label: 'Registered',
-                  value: '$registered',
-                  icon: Icons.check_circle_outline,
-                  color: Colors.green),
-              const SizedBox(width: 8),
-              _InventoryStat(
-                  label: 'Not Yet Registered',
-                  value: '$available',
-                  icon: Icons.add_circle_outline,
-                  color: Colors.orange),
-            ],
-          ),
-          const SizedBox(height: 10),
-          // Store type filter pills
-          Row(
-            children: [
-              const Text('Store:',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.kTextSecondary)),
-              const SizedBox(width: 8),
-              for (final entry in const [
-                ('all', 'All Items', Colors.grey),
-                ('foodstuffs', 'Foodstuffs', Colors.green),
-                ('bar_store', 'Bar Store', Colors.purple),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: FilterChip(
-                    label: Text(entry.$2),
-                    selected: _storeTypeFilter == entry.$1,
-                    onSelected: (_) =>
-                        setState(() => _storeTypeFilter = entry.$1),
-                    selectedColor: (entry.$3 as Color).withValues(alpha: 0.15),
-                    checkmarkColor: entry.$3 as Color,
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: _storeTypeFilter == entry.$1
-                          ? FontWeight.w700
-                          : FontWeight.normal,
-                      color: _storeTypeFilter == entry.$1
-                          ? entry.$3 as Color
-                          : AppColors.kTextSecondary,
-                    ),
-                    side: BorderSide(
-                      color: _storeTypeFilter == entry.$1
-                          ? (entry.$3 as Color).withValues(alpha: 0.5)
-                          : Colors.grey.shade300,
-                    ),
-                  ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.indigo.shade200),
                 ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  onChanged: (v) => setState(() => _search = v),
-                  decoration: const InputDecoration(
-                    hintText:
-                        'Search central catalog (name, SKU, category)…',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: widget.catalogFilter,
-                  decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      labelText: 'Category'),
-                  items: widget.categories
-                      .map((c) =>
-                          DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
-                  onChanged: (v) =>
-                      v != null ? widget.onFilterChanged(v) : null,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          // ── Bulk-select toolbar ──────────────────────────────────────────
-          if (unregisteredCount > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: selectedCount > 0 ? Colors.indigo.shade50 : Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: selectedCount > 0 ? Colors.indigo.shade300 : Colors.grey.shade200,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Checkbox(
-                    value: allSelected ? true : (selectedCount > 0 ? null : false),
-                    tristate: true,
-                    activeColor: Colors.indigo,
-                    onChanged: (_) => allSelected ? _clearSelection() : _selectAll(),
-                  ),
-                  Text(
-                    selectedCount > 0
-                        ? '$selectedCount of $unregisteredCount selected'
-                        : 'Select items to bulk register',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: selectedCount > 0 ? Colors.indigo.shade700 : Colors.grey.shade600,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (selectedCount > 0) ...[
-                    TextButton.icon(
-                      onPressed: _clearSelection,
-                      icon: const Icon(Icons.clear, size: 14),
-                      label: const Text('Clear', style: TextStyle(fontSize: 12)),
-                      style: TextButton.styleFrom(foregroundColor: Colors.grey.shade700),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: _openBulkReview,
-                      icon: const Icon(Icons.checklist_rtl, size: 15),
-                      label: Text('Review & Register ($selectedCount)'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline,
+                        color: Colors.indigo.shade700, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Branches adopt items from this central catalog — they cannot create new items. '
+                        'Cost prices, SKUs, and units are centrally controlled and read-only.',
+                        style: TextStyle(
+                            color: Colors.indigo.shade900,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500),
                       ),
                     ),
-                  ] else
-                    TextButton.icon(
-                      onPressed: _selectAll,
-                      icon: const Icon(Icons.select_all, size: 14),
-                      label: Text('Select All ($unregisteredCount)', style: const TextStyle(fontSize: 12)),
-                      style: TextButton.styleFrom(foregroundColor: Colors.indigo),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _InventoryStat(
+                      label: 'Catalog Items',
+                      value: '${widget.catalog.length}',
+                      icon: Icons.store_outlined,
+                      color: Colors.indigo),
+                  const SizedBox(width: 8),
+                  _InventoryStat(
+                      label: 'Registered',
+                      value: '$registered',
+                      icon: Icons.check_circle_outline,
+                      color: Colors.green),
+                  const SizedBox(width: 8),
+                  _InventoryStat(
+                      label: 'Not Yet Registered',
+                      value: '$available',
+                      icon: Icons.add_circle_outline,
+                      color: Colors.orange),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Store type filter pills
+              Row(
+                children: [
+                  const Text('Store:',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.kTextSecondary)),
+                  const SizedBox(width: 8),
+                  for (final entry in const [
+                    ('all', 'All Items', Colors.grey),
+                    ('foodstuffs', 'Foodstuffs', Colors.green),
+                    ('bar_store', 'Bar Store', Colors.purple),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: FilterChip(
+                        label: Text(entry.$2),
+                        selected: _storeTypeFilter == entry.$1,
+                        onSelected: (_) =>
+                            setState(() => _storeTypeFilter = entry.$1),
+                        selectedColor:
+                            (entry.$3 as Color).withValues(alpha: 0.15),
+                        checkmarkColor: entry.$3 as Color,
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: _storeTypeFilter == entry.$1
+                              ? FontWeight.w700
+                              : FontWeight.normal,
+                          color: _storeTypeFilter == entry.$1
+                              ? entry.$3 as Color
+                              : AppColors.kTextSecondary,
+                        ),
+                        side: BorderSide(
+                          color: _storeTypeFilter == entry.$1
+                              ? (entry.$3 as Color).withValues(alpha: 0.5)
+                              : Colors.grey.shade300,
+                        ),
+                      ),
                     ),
                 ],
               ),
-            ),
-          const SizedBox(height: 10),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.shade800,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(8)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      onChanged: (v) => setState(() => _search = v),
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Search central catalog (name, SKU, category)…',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
                   ),
-                  child: const Row(
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 200,
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: widget.catalogFilter,
+                      decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          labelText: 'Category'),
+                      items: widget.categories
+                          .map(
+                              (c) => DropdownMenuItem(value: c, child: Text(c)))
+                          .toList(),
+                      onChanged: (v) =>
+                          v != null ? widget.onFilterChanged(v) : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // ── Bulk-select toolbar ──────────────────────────────────────────
+              if (unregisteredCount > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selectedCount > 0
+                        ? Colors.indigo.shade50
+                        : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selectedCount > 0
+                          ? Colors.indigo.shade300
+                          : Colors.grey.shade200,
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      SizedBox(width: 40), // checkbox column
-                      Expanded(
-                          flex: 3,
-                          child: Text('Item Name',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12))),
-                      Expanded(
-                          flex: 2,
-                          child: Text('SKU',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12))),
-                      Expanded(
-                          child: Text('Category',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12))),
-                      SizedBox(
-                          width: 80,
-                          child: Text('Store',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12))),
-                      Expanded(
-                          child: Text('Unit',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12))),
-                      SizedBox(
-                          width: 90,
-                          child: Text('Cost Price',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12))),
-                      SizedBox(
-                          width: 110,
-                          child: Text('Status',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12))),
-                      SizedBox(width: 110),
+                      Checkbox(
+                        value: allSelected
+                            ? true
+                            : (selectedCount > 0 ? null : false),
+                        tristate: true,
+                        activeColor: Colors.indigo,
+                        onChanged: (_) =>
+                            allSelected ? _clearSelection() : _selectAll(),
+                      ),
+                      Text(
+                        selectedCount > 0
+                            ? '$selectedCount of $unregisteredCount selected'
+                            : 'Select items to bulk register',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: selectedCount > 0
+                              ? Colors.indigo.shade700
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (selectedCount > 0) ...[
+                        TextButton.icon(
+                          onPressed: _clearSelection,
+                          icon: const Icon(Icons.clear, size: 14),
+                          label: const Text('Clear',
+                              style: TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                              foregroundColor: Colors.grey.shade700),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: _openBulkReview,
+                          icon: const Icon(Icons.checklist_rtl, size: 15),
+                          label: Text('Review & Register ($selectedCount)'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            textStyle: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ] else
+                        TextButton.icon(
+                          onPressed: _selectAll,
+                          icon: const Icon(Icons.select_all, size: 14),
+                          label: Text('Select All ($unregisteredCount)',
+                              style: const TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                              foregroundColor: Colors.indigo),
+                        ),
                     ],
                   ),
                 ),
-                if (filtered.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(
-                        child: Text('No catalog items found',
-                            style: TextStyle(color: Colors.grey))),
-                  )
-                else
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) =>
-                        Divider(height: 1, color: Colors.grey.shade100),
-                    itemBuilder: (ctx, i) {
-                      final item = filtered[i];
-                      final sku = '${item['sku'] ?? ''}';
-                      final skuKey = sku.trim().toUpperCase();
-                      final isRegistered = _registeredSkus.contains(skuKey);
-                      final isSelected = _selectedSkus.contains(skuKey);
-                      final cost =
-                          _fcNum(item['cost_price'] ?? item['unit_cost']);
-                      return InkWell(
-                        onTap: isRegistered ? null : () => _toggleItem(skuKey),
-                        child: Container(
-                        color: isSelected
-                            ? Colors.indigo.shade50
-                            : isRegistered
-                                ? Colors.green.shade50
-                                : (i.isEven
-                                    ? Colors.white
-                                    : Colors.grey.shade50),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 40,
-                              child: isRegistered
-                                  ? const Icon(Icons.check_circle,
-                                      size: 18, color: Colors.green)
-                                  : Checkbox(
-                                      value: isSelected,
-                                      activeColor: Colors.indigo,
-                                      onChanged: (_) => _toggleItem(skuKey),
-                                    ),
-                            ),
-                            Expanded(
+              const SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.shade800,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(8)),
+                      ),
+                      child: const Row(
+                        children: [
+                          SizedBox(width: 40), // checkbox column
+                          Expanded(
                               flex: 3,
-                              child: Text(
-                                '${item['item_name'] ?? item['name'] ?? sku}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(sku,
-                                  style: const TextStyle(
-                                      fontSize: 11, color: Colors.grey)),
-                            ),
-                            Expanded(
-                              child: Text(
-                                  '${item['category'] ?? '—'}',
-                                  style: const TextStyle(fontSize: 12)),
-                            ),
-                            SizedBox(
-                              width: 80,
-                              child: Center(
-                                child: Builder(builder: (_) {
-                                  final st = '${item['store_type'] ?? 'foodstuffs'}';
-                                  final isBar = st == 'bar_store';
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isBar ? Colors.purple.shade50 : Colors.green.shade50,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: isBar ? Colors.purple.shade200 : Colors.green.shade200),
-                                    ),
-                                    child: Text(
-                                      isBar ? 'Bar' : 'Food',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: isBar ? Colors.purple.shade700 : Colors.green.shade700,
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                  '${item['unit'] ?? item['unit_of_measure'] ?? '—'}',
-                                  style: const TextStyle(fontSize: 12)),
-                            ),
-                            SizedBox(
-                              width: 90,
-                              child: Text(
-                                cost > 0
-                                    ? 'KES ${cost.toStringAsFixed(0)}'
-                                    : '—',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.teal.shade700),
-                              ),
-                            ),
-                            SizedBox(
-                              width: 110,
-                              child: Center(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 5, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isRegistered
-                                        ? Colors.green.shade100
-                                        : Colors.blue.shade50,
-                                    borderRadius:
-                                        BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    isRegistered
-                                        ? '✓ REGISTERED'
-                                        : 'NOT REGISTERED',
-                                    style: TextStyle(
-                                      fontSize: 9,
+                              child: Text('Item Name',
+                                  style: TextStyle(
+                                      color: Colors.white,
                                       fontWeight: FontWeight.w700,
-                                      color: isRegistered
-                                          ? Colors.green.shade800
-                                          : Colors.blue.shade800,
+                                      fontSize: 12))),
+                          Expanded(
+                              flex: 2,
+                              child: Text('SKU',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12))),
+                          Expanded(
+                              child: Text('Category',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 80,
+                              child: Text('Store',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12))),
+                          Expanded(
+                              child: Text('Unit',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 90,
+                              child: Text('Cost Price',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 110,
+                              child: Text('Status',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12))),
+                          SizedBox(width: 110),
+                        ],
+                      ),
+                    ),
+                    if (filtered.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(
+                            child: Text('No catalog items found',
+                                style: TextStyle(color: Colors.grey))),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) =>
+                            Divider(height: 1, color: Colors.grey.shade100),
+                        itemBuilder: (ctx, i) {
+                          final item = filtered[i];
+                          final sku = '${item['sku'] ?? ''}';
+                          final skuKey = sku.trim().toUpperCase();
+                          final isRegistered = _registeredSkus.contains(skuKey);
+                          final isSelected = _selectedSkus.contains(skuKey);
+                          final cost =
+                              _fcNum(item['cost_price'] ?? item['unit_cost']);
+                          return InkWell(
+                            onTap:
+                                isRegistered ? null : () => _toggleItem(skuKey),
+                            child: Container(
+                              color: isSelected
+                                  ? Colors.indigo.shade50
+                                  : isRegistered
+                                      ? Colors.green.shade50
+                                      : (i.isEven
+                                          ? Colors.white
+                                          : Colors.grey.shade50),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 40,
+                                    child: isRegistered
+                                        ? const Icon(Icons.check_circle,
+                                            size: 18, color: Colors.green)
+                                        : Checkbox(
+                                            value: isSelected,
+                                            activeColor: Colors.indigo,
+                                            onChanged: (_) =>
+                                                _toggleItem(skuKey),
+                                          ),
+                                  ),
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      '${item['item_name'] ?? item['name'] ?? sku}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: 110,
-                              child: isRegistered
-                                  ? const Center(
-                                      child: Icon(Icons.lock_outline,
-                                          size: 16, color: Colors.green))
-                                  : FilledButton(
-                                      onPressed: () =>
-                                          widget.onRegister(item),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: Colors.indigo,
-                                        padding:
-                                            const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 6),
-                                        textStyle: const TextStyle(
-                                            fontSize: 12),
-                                      ),
-                                      child: const Text('+ Register'),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(sku,
+                                        style: const TextStyle(
+                                            fontSize: 11, color: Colors.grey)),
+                                  ),
+                                  Expanded(
+                                    child: Text('${item['category'] ?? '—'}',
+                                        style: const TextStyle(fontSize: 12)),
+                                  ),
+                                  SizedBox(
+                                    width: 80,
+                                    child: Center(
+                                      child: Builder(builder: (_) {
+                                        final st =
+                                            '${item['store_type'] ?? 'foodstuffs'}';
+                                        final isBar = st == 'bar_store';
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 5, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isBar
+                                                ? Colors.purple.shade50
+                                                : Colors.green.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                                color: isBar
+                                                    ? Colors.purple.shade200
+                                                    : Colors.green.shade200),
+                                          ),
+                                          child: Text(
+                                            isBar ? 'Bar' : 'Food',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: isBar
+                                                  ? Colors.purple.shade700
+                                                  : Colors.green.shade700,
+                                            ),
+                                          ),
+                                        );
+                                      }),
                                     ),
-                            ),
-                          ],
-                        ),
-                        ), // InkWell
-                      );
-                    },
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                        '${item['unit'] ?? item['unit_of_measure'] ?? '—'}',
+                                        style: const TextStyle(fontSize: 12)),
+                                  ),
+                                  SizedBox(
+                                    width: 90,
+                                    child: Text(
+                                      cost > 0
+                                          ? 'KES ${cost.toStringAsFixed(0)}'
+                                          : '—',
+                                      textAlign: TextAlign.right,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.teal.shade700),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 110,
+                                    child: Center(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 5, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isRegistered
+                                              ? Colors.green.shade100
+                                              : Colors.blue.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          isRegistered
+                                              ? '✓ REGISTERED'
+                                              : 'NOT REGISTERED',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: isRegistered
+                                                ? Colors.green.shade800
+                                                : Colors.blue.shade800,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 110,
+                                    child: isRegistered
+                                        ? const Center(
+                                            child: Icon(Icons.lock_outline,
+                                                size: 16, color: Colors.green))
+                                        : FilledButton(
+                                            onPressed: () =>
+                                                widget.onRegister(item),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: Colors.indigo,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6),
+                                              textStyle:
+                                                  const TextStyle(fontSize: 12),
+                                            ),
+                                            child: const Text('+ Register'),
+                                          ),
+                                  ),
+                                ],
+                              ),
+                            ), // InkWell
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ), // SingleChildScrollView
+        // ── Sticky bottom action bar ────────────────────────────────────────────
+        if (selectedCount > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade900,
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 8,
+                      offset: const Offset(0, -2))
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$selectedCount item${selectedCount == 1 ? '' : 's'} selected',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13),
+                    ),
                   ),
-              ],
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _clearSelection,
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: _openBulkReview,
+                    icon: const Icon(Icons.checklist_rtl, size: 16),
+                    label: Text('Review & Register ($selectedCount)',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 13)),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.indigo.shade900,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
-      ), // SingleChildScrollView
-      // ── Sticky bottom action bar ────────────────────────────────────────────
-      if (selectedCount > 0)
-        Positioned(
-          left: 0, right: 0, bottom: 0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.indigo.shade900,
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: const Offset(0, -2))],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '$selectedCount item${selectedCount == 1 ? '' : 's'} selected',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
-                  ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: _clearSelection,
-                  child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: _openBulkReview,
-                  icon: const Icon(Icons.checklist_rtl, size: 16),
-                  label: Text('Review & Register ($selectedCount)',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.indigo.shade900,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ], // Stack children
     );
   }
@@ -12069,10 +12284,12 @@ class _BulkRegistrationSheet extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> items;
 
   @override
-  ConsumerState<_BulkRegistrationSheet> createState() => _BulkRegistrationSheetState();
+  ConsumerState<_BulkRegistrationSheet> createState() =>
+      _BulkRegistrationSheetState();
 }
 
-class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> {
+class _BulkRegistrationSheetState
+    extends ConsumerState<_BulkRegistrationSheet> {
   final _initialQtyCtrl = TextEditingController(text: '0');
   final _reorderCtrl = TextEditingController(text: '0');
   final _maxCtrl = TextEditingController(text: '0');
@@ -12098,7 +12315,11 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
       setState(() => _error = 'Initial quantity cannot be negative');
       return;
     }
-    setState(() { _busy = true; _done = 0; _error = null; });
+    setState(() {
+      _busy = true;
+      _done = 0;
+      _error = null;
+    });
     final repo = ref.read(branchStorekeeperRepositoryProvider);
     final notes = _notesCtrl.text.trim();
     try {
@@ -12119,7 +12340,11 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) setState(() { _busy = false; _error = 'Failed at item ${_done + 1}: $e'; });
+      if (mounted)
+        setState(() {
+          _busy = false;
+          _error = 'Failed at item ${_done + 1}: $e';
+        });
     }
   }
 
@@ -12131,7 +12356,9 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
-        left: 20, right: 20, top: 20,
+        left: 20,
+        right: 20,
+        top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: Column(
@@ -12141,8 +12368,11 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
           // Handle
           Center(
             child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
             ),
           ),
           const SizedBox(height: 16),
@@ -12151,8 +12381,11 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(8)),
-                child: Icon(Icons.checklist_rtl, color: Colors.indigo.shade700, size: 22),
+                decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(8)),
+                child: Icon(Icons.checklist_rtl,
+                    color: Colors.indigo.shade700, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -12160,13 +12393,17 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Bulk Register to Branch',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w800)),
                     Text('${widget.items.length} items selected',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
                   ],
                 ),
               ),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+              IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close)),
             ],
           ),
           const Divider(height: 20),
@@ -12182,21 +12419,29 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
               shrinkWrap: true,
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: widget.items.length,
-              separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: Colors.grey.shade200),
               itemBuilder: (_, i) {
                 final item = widget.items[i];
-                final name = '${item['item_name'] ?? item['name'] ?? item['sku']}';
+                final name =
+                    '${item['item_name'] ?? item['name'] ?? item['sku']}';
                 final sku = '${item['sku'] ?? ''}';
                 final isDone = _busy && i < _done;
                 return ListTile(
                   dense: true,
                   leading: isDone
-                      ? const Icon(Icons.check_circle, color: Colors.green, size: 18)
+                      ? const Icon(Icons.check_circle,
+                          color: Colors.green, size: 18)
                       : (_busy && i == _done
-                          ? const SizedBox(width: 18, height: 18,
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2))
-                          : Icon(Icons.inventory_2_outlined, color: Colors.indigo.shade300, size: 18)),
-                  title: Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          : Icon(Icons.inventory_2_outlined,
+                              color: Colors.indigo.shade300, size: 18)),
+                  title: Text(name,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
                   subtitle: Text('SKU: $sku • ${item['category'] ?? ''}',
                       style: const TextStyle(fontSize: 11)),
                 );
@@ -12206,7 +12451,10 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
           const SizedBox(height: 16),
           // Shared fields
           const Text('Apply to all selected items:',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey)),
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey)),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -12267,7 +12515,8 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
           ),
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            Text(_error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12)),
           ],
           const SizedBox(height: 16),
           if (_busy)
@@ -12298,7 +12547,8 @@ class _BulkRegistrationSheetState extends ConsumerState<_BulkRegistrationSheet> 
                   child: FilledButton.icon(
                     onPressed: _submit,
                     icon: const Icon(Icons.add_business_outlined, size: 18),
-                    label: Text('Confirm & Register All (${widget.items.length})',
+                    label: Text(
+                        'Confirm & Register All (${widget.items.length})',
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.indigo,
@@ -12347,8 +12597,8 @@ class _CatalogRegistrationDialogState
   Future<void> _submit() async {
     final initialQty = double.tryParse(_initialQtyCtrl.text.trim()) ?? 0;
     if (initialQty < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Initial quantity cannot be negative')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Initial quantity cannot be negative')));
       return;
     }
     setState(() => _busy = true);
@@ -12390,16 +12640,15 @@ class _CatalogRegistrationDialogState
                 const Icon(Icons.lock_outline, size: 16, color: Colors.grey),
           ),
           child: Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, fontSize: 13)),
+              style:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         ),
       );
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final name =
-        '${item['item_name'] ?? item['name'] ?? item['sku'] ?? ''}';
+    final name = '${item['item_name'] ?? item['name'] ?? item['sku'] ?? ''}';
     final sku = '${item['sku'] ?? ''}';
     final category = '${item['category'] ?? '—'}';
     final unit = '${item['unit'] ?? item['unit_of_measure'] ?? '—'}';
@@ -12413,8 +12662,7 @@ class _CatalogRegistrationDialogState
           const SizedBox(width: 8),
           const Expanded(
             child: Text('Register to Branch Inventory',
-                style: TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w700)),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -12440,8 +12688,7 @@ class _CatalogRegistrationDialogState
                     Row(
                       children: [
                         Icon(Icons.lock_outline,
-                            size: 14,
-                            color: Colors.indigo.shade700),
+                            size: 14, color: Colors.indigo.shade700),
                         const SizedBox(width: 6),
                         Text(
                           'Central Master Inventory — Read Only',
@@ -12457,8 +12704,7 @@ class _CatalogRegistrationDialogState
                     _roField('SKU', sku),
                     Row(
                       children: [
-                        Expanded(
-                            child: _roField('Category', category)),
+                        Expanded(child: _roField('Category', category)),
                         const SizedBox(width: 10),
                         Expanded(child: _roField('Unit', unit)),
                         const SizedBox(width: 10),
@@ -12523,17 +12769,15 @@ class _CatalogRegistrationDialogState
                     child: TextField(
                       controller: _initialQtyCtrl,
                       keyboardType:
-                          const TextInputType.numberWithOptions(
-                              decimal: true),
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
                         labelText: 'Initial Branch Quantity *',
                         hintText: '0',
                         border: const OutlineInputBorder(),
                         isDense: true,
                         helperText: 'Locked after save',
-                        helperStyle: TextStyle(
-                            color: Colors.red.shade400,
-                            fontSize: 11),
+                        helperStyle:
+                            TextStyle(color: Colors.red.shade400, fontSize: 11),
                       ),
                     ),
                   ),
@@ -12542,8 +12786,7 @@ class _CatalogRegistrationDialogState
                     child: TextField(
                       controller: _reorderCtrl,
                       keyboardType:
-                          const TextInputType.numberWithOptions(
-                              decimal: true),
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'Reorder Level',
                         hintText: '0',
@@ -12557,8 +12800,7 @@ class _CatalogRegistrationDialogState
                     child: TextField(
                       controller: _maxCtrl,
                       keyboardType:
-                          const TextInputType.numberWithOptions(
-                              decimal: true),
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'Maximum Level',
                         hintText: '0',
@@ -12574,8 +12816,7 @@ class _CatalogRegistrationDialogState
                 controller: _locationCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Storage Location',
-                  hintText:
-                      'e.g. Food Store A, Cold Room, Dry Store',
+                  hintText: 'e.g. Food Store A, Cold Room, Dry Store',
                   border: OutlineInputBorder(),
                   isDense: true,
                   prefixIcon: Icon(Icons.location_on_outlined),
@@ -12599,13 +12840,11 @@ class _CatalogRegistrationDialogState
       ),
       actions: [
         TextButton(
-          onPressed:
-              _busy ? null : () => Navigator.of(context).pop(false),
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
         ),
         FilledButton.icon(
-          style: FilledButton.styleFrom(
-              backgroundColor: Colors.indigo),
+          style: FilledButton.styleFrom(backgroundColor: Colors.indigo),
           onPressed: _busy ? null : _submit,
           icon: _busy
               ? const SizedBox(
@@ -12639,8 +12878,7 @@ class _InventoryStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(8),
@@ -12659,8 +12897,7 @@ class _InventoryStat extends StatelessWidget {
                         fontSize: 18,
                         color: color)),
                 Text(label,
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.grey)),
+                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
           ],
@@ -12689,7 +12926,7 @@ class _KitchenProductionSectionState
   List<Map<String, dynamic>> _recipes = [];
   bool _loading = true;
   Map<String, dynamic>? _selected; // open session for detail view
-  String _shiftFilter = 'ALL'; // ALL | shift_a | shift_b
+  String _shiftFilter = 'ALL'; // ALL | morning | afternoon | night
 
   @override
   void initState() {
@@ -12702,7 +12939,7 @@ class _KitchenProductionSectionState
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
       final results = await Future.wait([
-        repo.getProductionSessions(),
+        repo.getKitchenShifts(),
         repo.getProductionRecipes(),
       ]);
       if (!mounted) return;
@@ -12713,12 +12950,54 @@ class _KitchenProductionSectionState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading sessions: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error loading kitchen shifts: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // Merges the nested {shift:{...}, items:[...], ...} detail response into a
+  // single flat map so the rest of the UI can keep reading top-level fields
+  // like s['shift_number'] / s['status'] the same way it does for list rows.
+  Map<String, dynamic> _flatten(Map<String, dynamic> detail) {
+    final shift = (detail['shift'] as Map?)?.cast<String, dynamic>() ?? {};
+    return {
+      ...shift,
+      'items': detail['items'] ?? [],
+      'productions': detail['productions'] ?? [],
+      'stock_take': detail['stock_take'] ?? [],
+      'approvals': detail['approvals'] ?? [],
+      'liability_cases': detail['liability_cases'] ?? [],
+      'shift_staff': detail['shift_staff'] ?? [],
+      'summary': detail['summary'] ?? {},
+    };
+  }
+
+  Future<void> _openShiftDetail(Map<String, dynamic> s) async {
+    setState(() => _selected = s);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final detail = await repo.getKitchenShiftDetail('${s['id']}');
+      if (mounted && _selected != null && _selected!['id'] == s['id']) {
+        setState(() => _selected = _flatten(detail));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Error loading shift detail: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _refreshSelected() async {
+    if (_selected != null) await _openShiftDetail(_selected!);
   }
 
   Future<void> _openNewSession() async {
@@ -12729,8 +13008,7 @@ class _KitchenProductionSectionState
         insetPadding: const EdgeInsets.all(20),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         clipBehavior: Clip.antiAlias,
-        child: _NewSessionSheet(
-          recipes: _recipes,
+        child: _NewKitchenShiftSheet(
           stock: widget.stock,
         ),
       ),
@@ -12740,7 +13018,7 @@ class _KitchenProductionSectionState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Session created — stock issued to kitchen'),
+            content: Text('Kitchen shift opened successfully'),
             backgroundColor: Colors.green,
           ),
         );
@@ -12748,48 +13026,152 @@ class _KitchenProductionSectionState
     }
   }
 
-  Future<void> _openComplete(Map<String, dynamic> session) async {
+  Future<void> _openIssueStock(Map<String, dynamic> shift) async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) =>
+          _IssueShiftStockSheet(shiftId: '${shift['id']}', stock: widget.stock),
+    );
+    if (result == true) {
+      await _refreshSelected();
+      await _load();
+    }
+  }
+
+  Future<void> _openRecordSpoilage(Map<String, dynamic> shift) async {
+    final items = (shift['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) =>
+          _RecordShiftSpoilageSheet(shiftId: '${shift['id']}', items: items),
+    );
+    if (result == true) {
+      await _refreshSelected();
+      await _load();
+    }
+  }
+
+  Future<void> _openRecordProduction(Map<String, dynamic> shift) async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _RecordKitchenProductionSheet(
+        shiftId: '${shift['id']}',
+        shift: shift,
+        recipes: _recipes,
+      ),
+    );
+    if (result == true) {
+      await _refreshSelected();
+      await _load();
+    }
+  }
+
+  Future<void> _confirmProductionActual(
+      Map<String, dynamic> shift, Map<String, dynamic> prod) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _ConfirmProductionDialog(
+        shiftId: '${shift['id']}',
+        productionId: '${prod['id']}',
+        producedItemName: '${prod['produced_item_name'] ?? ''}',
+        expectedQuantity: _fcNum(prod['produced_quantity']),
+        unit: '${prod['produced_unit'] ?? ''}',
+      ),
+    );
+    if (result == true) {
+      await _refreshSelected();
+    }
+  }
+
+  Future<void> _openComplete(Map<String, dynamic> shift) async {
     final result = await showModalBottomSheet<Map<String, dynamic>?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _RecordProductionSheet(session: session),
+      builder: (_) => _CloseKitchenShiftSheet(shift: shift),
     );
     if (result != null) {
       await _load();
       if (mounted) {
-        final penalty = result['total_penalty'] ?? 0;
-        final msg = penalty > 0
-            ? 'Session completed. Penalty KES ${(penalty as num).toStringAsFixed(2)} raised as credit bill.'
-            : 'Session completed — no variance penalty.';
+        final variance = result['total_variance_cost'] ?? 0;
+        final msg = variance != 0
+            ? 'Shift closed. Variance cost KES ${(variance as num).toStringAsFixed(2)}.'
+            : 'Shift closed — no variance.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(msg),
-            backgroundColor: penalty > 0 ? Colors.orange : Colors.green,
+            backgroundColor: variance != 0 ? Colors.orange : Colors.green,
             duration: const Duration(seconds: 5),
           ),
         );
-        // Refresh selected if open
-        if (_selected != null && _selected!['id'] == result['session_id']) {
-          setState(() => _selected = null);
+        if (_selected != null && _selected!['id'] == result['shift_id']) {
+          await _openShiftDetail(_selected!);
         }
+      }
+    }
+  }
+
+  Future<void> _submitForApproval(Map<String, dynamic> shift) async {
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.submitShiftForApproval('${shift['id']}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Submitted for chef confirmation'),
+              backgroundColor: Colors.green),
+        );
+      }
+      await _refreshSelected();
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to submit: $e'),
+              backgroundColor: Colors.red),
+        );
       }
     }
   }
 
   Color _statusColor(String? status) {
     switch (status) {
-      case 'completed': return Colors.green;
-      case 'closed': return Colors.grey;
-      default: return Colors.orange; // in_production
+      case 'approved':
+        return Colors.green;
+      case 'closed':
+        return Colors.grey;
+      case 'pending_chef_confirmation':
+        return Colors.amber;
+      case 'pending_accountant_review':
+        return Colors.orange;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.blue; // open
     }
   }
 
   String _statusLabel(String? status) {
     switch (status) {
-      case 'completed': return 'Completed';
-      case 'closed': return 'Closed';
-      default: return 'In Production';
+      case 'approved':
+        return 'Approved';
+      case 'closed':
+        return 'Closed';
+      case 'pending_chef_confirmation':
+        return 'Pending Chef';
+      case 'pending_accountant_review':
+        return 'Pending Review';
+      case 'rejected':
+        return 'Rejected';
+      default:
+        return 'Open';
     }
   }
 
@@ -12801,11 +13183,14 @@ class _KitchenProductionSectionState
       return _buildDetail(_selected!);
     }
 
-    final inProd = _sessions.where((s) => s['status'] == 'in_production').length;
-    final completed = _sessions.where((s) => s['status'] == 'completed').length;
-    final totalPenalty = _sessions.fold<double>(
+    final openCount = _sessions.where((s) => s['status'] == 'open').length;
+    final closedCount = _sessions.where((s) => s['status'] == 'closed').length;
+    final approvedCount =
+        _sessions.where((s) => s['status'] == 'approved').length;
+    final totalVariance = _sessions.fold<double>(
       0,
-      (sum, s) => sum + (double.tryParse('${s['total_penalty'] ?? 0}') ?? 0),
+      (sum, s) =>
+          sum + (double.tryParse('${s['total_variance_cost'] ?? 0}') ?? 0),
     );
 
     // Apply shift filter
@@ -12814,22 +13199,30 @@ class _KitchenProductionSectionState
         : _sessions.where((s) => s['shift_type'] == _shiftFilter).toList();
 
     return _Page(
-      title: 'Kitchen Sessions',
-      subtitle: 'Issue stock to kitchen, log actual production, track variance.',
+      title: 'Kitchen Shifts',
+      subtitle:
+          'Open kitchen shifts, issue stock, track production & variance.',
       actions: [
         _RefreshButton(onPressed: _load),
         FilledButton.icon(
           onPressed: _openNewSession,
           icon: const Icon(Icons.add, size: 16),
-          label: const Text('New Session'),
+          label: const Text('Open Shift'),
         ),
       ],
       children: [
         _StatGrid(cards: [
-          _StatCardData('In Production', '$inProd', Icons.soup_kitchen_outlined, Colors.orange),
-          _StatCardData('Completed', '$completed', Icons.check_circle_outline, Colors.green),
-          _StatCardData('Recipes Loaded', '${_recipes.length}', Icons.menu_book_outlined, AppColors.kPrimary),
-          _StatCardData('Total Penalties', 'KES ${totalPenalty.toStringAsFixed(0)}', Icons.money_off_outlined, AppColors.kError),
+          _StatCardData('Open Shifts', '$openCount',
+              Icons.soup_kitchen_outlined, Colors.blue),
+          _StatCardData('Closed', '$closedCount', Icons.check_circle_outline,
+              Colors.grey),
+          _StatCardData('Approved', '$approvedCount', Icons.verified_outlined,
+              Colors.green),
+          _StatCardData(
+              'Total Variance',
+              'KES ${totalVariance.toStringAsFixed(0)}',
+              Icons.money_off_outlined,
+              AppColors.kError),
         ]),
         // Shift filter tabs
         Padding(
@@ -12839,21 +13232,20 @@ class _KitchenProductionSectionState
             children: [
               for (final entry in const {
                 'ALL': 'All Shifts',
-                'shift_a': 'Shift A',
-                'shift_b': 'Shift B',
+                'morning': 'Morning',
+                'afternoon': 'Afternoon',
+                'night': 'Night',
               }.entries)
                 ChoiceChip(
                   label: Text(entry.value),
                   selected: _shiftFilter == entry.key,
                   onSelected: (_) => setState(() => _shiftFilter = entry.key),
-                  selectedColor: entry.key == 'shift_b'
-                      ? Colors.indigo.shade100
-                      : AppColors.kPrimary.withOpacity(0.15),
+                  selectedColor: AppColors.kPrimary.withOpacity(0.15),
                   labelStyle: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                     color: _shiftFilter == entry.key
-                        ? (entry.key == 'shift_b' ? Colors.indigo : AppColors.kPrimary)
+                        ? AppColors.kPrimary
                         : Colors.grey.shade700,
                   ),
                 ),
@@ -12862,18 +13254,19 @@ class _KitchenProductionSectionState
         ),
         if (filtered.isEmpty)
           _SectionCard(
-            title: 'No Sessions Yet',
+            title: 'No Shifts Yet',
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.soup_kitchen_outlined, size: 48, color: Colors.grey.shade400),
+                    Icon(Icons.soup_kitchen_outlined,
+                        size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 12),
                     Text(
                       _shiftFilter == 'ALL'
-                          ? 'Tap "New Session" when a cook comes to collect ingredients.'
-                          : 'No ${_shiftFilter == 'shift_a' ? 'Shift A' : 'Shift B'} sessions found.',
+                          ? 'Tap "Open Shift" to start a new kitchen shift.'
+                          : 'No $_shiftFilter shifts found.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey),
                     ),
@@ -12884,7 +13277,7 @@ class _KitchenProductionSectionState
           )
         else
           _SectionCard(
-            title: 'Sessions (${filtered.length})',
+            title: 'Shifts (${filtered.length})',
             child: Column(
               children: filtered.map((s) => _sessionTile(s)).toList(),
             ),
@@ -12895,19 +13288,20 @@ class _KitchenProductionSectionState
 
   Widget _sessionTile(Map<String, dynamic> s) {
     final status = '${s['status'] ?? ''}';
-    final variance = double.tryParse('${s['total_variance'] ?? 0}') ?? 0;
-    final penalty = double.tryParse('${s['total_penalty'] ?? 0}') ?? 0;
-    final entries = (s['entries'] as List?) ?? [];
+    final variance = double.tryParse('${s['total_variance_cost'] ?? 0}') ?? 0;
+    final revenue = double.tryParse('${s['total_revenue'] ?? 0}') ?? 0;
+    final cogs = double.tryParse('${s['total_cogs'] ?? 0}') ?? 0;
 
     return InkWell(
-      onTap: () => setState(() => _selected = s),
+      onTap: () => _openShiftDetail(s),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Row(
           children: [
             Container(
-              width: 10, height: 10,
+              width: 10,
+              height: 10,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: _statusColor(status),
@@ -12919,17 +13313,16 @@ class _KitchenProductionSectionState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Text('${s['session_number'] ?? 'Session'}',
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    Text('${s['shift_number'] ?? 'Shift'}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 13)),
                     const SizedBox(width: 6),
                     _ShiftBadge(s['shift_type']),
                   ]),
                   const SizedBox(height: 2),
-                  Text('Cook: ${s['staff_name'] ?? '—'}  •  ${s['session_date'] ?? ''}',
+                  Text(
+                      'Store Keeper: ${s['store_keeper']?['first_name'] ?? '—'}  •  ${s['shift_date'] ?? ''}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  if (entries.isNotEmpty)
-                    Text('${entries.length} item(s) planned',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 ],
               ),
             ),
@@ -12937,23 +13330,31 @@ class _KitchenProductionSectionState
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: _statusColor(status).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(_statusLabel(status),
-                      style: TextStyle(fontSize: 11, color: _statusColor(status), fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: _statusColor(status),
+                          fontWeight: FontWeight.w600)),
                 ),
-                if (penalty > 0) ...[
+                if (variance != 0) ...[
                   const SizedBox(height: 4),
-                  Text('−KES ${penalty.toStringAsFixed(0)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w700)),
-                ] else if (variance != 0 && status == 'completed') ...[
-                  const SizedBox(height: 4),
-                  Text('Var: ${variance > 0 ? '+' : ''}${variance.toStringAsFixed(1)}',
-                      style: TextStyle(fontSize: 12,
+                  Text('Var: KES ${variance.toStringAsFixed(0)}',
+                      style: TextStyle(
+                          fontSize: 12,
                           color: variance >= 0 ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.w600)),
+                ] else if (revenue > 0 && cogs > 0) ...[
+                  const SizedBox(height: 4),
+                  Text('GP: KES ${(revenue - cogs).toStringAsFixed(0)}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.green,
                           fontWeight: FontWeight.w600)),
                 ],
               ],
@@ -12968,30 +13369,59 @@ class _KitchenProductionSectionState
 
   Widget _buildDetail(Map<String, dynamic> s) {
     final status = '${s['status'] ?? ''}';
-    final issues = (s['issues'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final entries = (s['entries'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final canComplete = status == 'in_production';
+    final items = (s['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final productions =
+        (s['productions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final stockTake =
+        (s['stock_take'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final approvals =
+        (s['approvals'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final shiftStaff =
+        (s['shift_staff'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final canClose = status == 'open';
+    final canSubmit = status == 'closed';
+
+    final recipeById = {for (final r in _recipes) '${r['id']}': r};
 
     return _Page(
-      title: '${s['session_number'] ?? 'Session'}',
-      subtitle: 'Cook: ${s['staff_name']}  •  ${s['session_date'] ?? ''}',
+      title: '${s['shift_number'] ?? 'Shift'}',
+      subtitle:
+          'Store Keeper: ${s['store_keeper']?['first_name'] ?? '—'}  •  ${s['shift_date'] ?? ''}',
       actions: [
         OutlinedButton.icon(
           onPressed: () => setState(() => _selected = null),
           icon: const Icon(Icons.arrow_back, size: 16),
           label: const Text('Back'),
         ),
-        _RefreshButton(onPressed: () async {
-          final repo = ref.read(branchStorekeeperRepositoryProvider);
-          final detail = await repo.getProductionSessionDetail(s['id']);
-          if (mounted) setState(() => _selected = detail);
-        }),
-        if (canComplete)
+        _RefreshButton(onPressed: _refreshSelected),
+        if (canClose) ...[
+          OutlinedButton.icon(
+            onPressed: () => _openIssueStock(s),
+            icon: const Icon(Icons.add_box_outlined, size: 16),
+            label: const Text('Issue Stock'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _openRecordSpoilage(s),
+            icon: const Icon(Icons.delete_outline, size: 16),
+            label: const Text('Record Spoilage'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _openRecordProduction(s),
+            icon: const Icon(Icons.restaurant_outlined, size: 16),
+            label: const Text('Record Production'),
+          ),
           FilledButton.icon(
             onPressed: () => _openComplete(s),
             icon: const Icon(Icons.check, size: 16),
-            label: const Text('Record Production'),
+            label: const Text('Close Shift'),
             style: FilledButton.styleFrom(backgroundColor: Colors.green),
+          ),
+        ],
+        if (canSubmit)
+          FilledButton.icon(
+            onPressed: () => _submitForApproval(s),
+            icon: const Icon(Icons.send, size: 16),
+            label: const Text('Submit for Approval'),
           ),
       ],
       children: [
@@ -13009,920 +13439,487 @@ class _KitchenProductionSectionState
               Icon(Icons.info_outline, color: _statusColor(status), size: 18),
               const SizedBox(width: 8),
               Text(_statusLabel(status),
-                  style: TextStyle(color: _statusColor(status), fontWeight: FontWeight.w600)),
-              if (s['notes'] != null && '${s['notes']}'.isNotEmpty) ...[
+                  style: TextStyle(
+                      color: _statusColor(status),
+                      fontWeight: FontWeight.w600)),
+              if (s['closing_notes'] != null &&
+                  '${s['closing_notes']}'.isNotEmpty) ...[
                 const Text('  •  ', style: TextStyle(color: Colors.grey)),
-                Expanded(child: Text('${s['notes']}', style: const TextStyle(color: Colors.grey, fontSize: 12))),
+                Expanded(
+                    child: Text('${s['closing_notes']}',
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 12))),
               ],
             ],
           ),
         ),
-        // Issued ingredients
+        // Shift staff
+        if (shiftStaff.isNotEmpty)
+          _SectionCard(
+            title: 'Accountable Shift Team',
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: shiftStaff
+                  .map((staff) => Chip(
+                        avatar: const Icon(Icons.person, size: 16),
+                        label: Text(
+                            '${staff['name'] ?? ''} (${staff['role'] ?? ''})',
+                            style: const TextStyle(fontSize: 12)),
+                      ))
+                  .toList(),
+            ),
+          ),
+        // Shift items
         _SectionCard(
-          title: 'Ingredients Issued to Kitchen',
-          child: issues.isEmpty
-              ? const Text('No issues recorded.', style: TextStyle(color: Colors.grey))
+          title: 'Shift Items (${items.length})',
+          child: items.isEmpty
+              ? const Text('No items recorded.',
+                  style: TextStyle(color: Colors.grey))
               : Table(
-                  columnWidths: const {0: FlexColumnWidth(3), 1: FlexColumnWidth(2), 2: FlexColumnWidth(1)},
+                  columnWidths: const {
+                    0: FlexColumnWidth(3),
+                    1: FlexColumnWidth(2),
+                    2: FlexColumnWidth(2),
+                    3: FlexColumnWidth(2),
+                    4: FlexColumnWidth(2),
+                    5: FlexColumnWidth(2),
+                  },
                   children: [
                     TableRow(
-                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+                      decoration: BoxDecoration(
+                          border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade200))),
                       children: const [
-                        Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Ingredient', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                        Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Issued', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                        Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Unit', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
+                        Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Text('Item',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11))),
+                        Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Text('Opening',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11))),
+                        Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Text('Additions',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11))),
+                        Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Text('Used/Sold',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11))),
+                        Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Text('Spoilage',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11))),
+                        Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Text('Available',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11))),
                       ],
                     ),
-                    ...issues.map((i) => TableRow(children: [
-                      Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Text('${i['item_name']}', style: const TextStyle(fontSize: 13))),
-                      Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Text('${i['quantity_issued']}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-                      Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Text('${i['unit'] ?? ''}', style: const TextStyle(fontSize: 12, color: Colors.grey))),
-                    ])),
+                    ...items.map((i) => TableRow(children: [
+                          Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Text('${i['item_name']}',
+                                  style: const TextStyle(fontSize: 12))),
+                          Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Text(
+                                  '${_fcNum(i['opening_stock']).toStringAsFixed(1)} ${i['unit_of_measure'] ?? ''}',
+                                  style: const TextStyle(fontSize: 12))),
+                          Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Text(
+                                  '${_fcNum(i['additions']).toStringAsFixed(1)}',
+                                  style: const TextStyle(fontSize: 12))),
+                          Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Text(
+                                  '${_fcNum(i['sold_quantity']).toStringAsFixed(1)}',
+                                  style: const TextStyle(fontSize: 12))),
+                          Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Text(
+                                  '${_fcNum(i['spoilage_quantity']).toStringAsFixed(1)}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: _fcNum(i['spoilage_quantity']) > 0
+                                          ? Colors.orange.shade800
+                                          : null))),
+                          Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              child: Text(
+                                  '${_fcNum(i['system_closing_stock']).toStringAsFixed(1)}',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700))),
+                        ])),
                   ],
                 ),
         ),
-        // Production entries + variance
+        // Production records
         _SectionCard(
-          title: 'Production & Variance',
-          child: entries.isEmpty
-              ? const Text('No production entries.', style: TextStyle(color: Colors.grey))
+          title: 'Production (${productions.length})',
+          child: productions.isEmpty
+              ? const Text('No production records.',
+                  style: TextStyle(color: Colors.grey))
               : Column(
-                  children: [
-                    Table(
-                      columnWidths: const {
-                        0: FlexColumnWidth(3),
-                        1: FlexColumnWidth(2),
-                        2: FlexColumnWidth(2),
-                        3: FlexColumnWidth(2),
-                        4: FlexColumnWidth(2),
-                      },
-                      children: [
-                        TableRow(
-                          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
-                          children: const [
-                            Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Item', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
-                            Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Expected', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
-                            Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Actual', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
-                            Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Variance', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
-                            Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Penalty', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
-                          ],
-                        ),
-                        ...entries.map((e) {
-                          final variance = double.tryParse('${e['variance'] ?? 0}') ?? 0;
-                          final penalty = double.tryParse('${e['variance_penalty'] ?? 0}') ?? 0;
-                          final isNeg = variance < 0;
-                          return TableRow(children: [
-                            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('${e['menu_item_name']}', style: const TextStyle(fontSize: 12))),
-                            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('${e['expected_quantity'] ?? 0}', style: const TextStyle(fontSize: 12))),
-                            Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('${e['actual_quantity'] ?? 0}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Text(
-                                '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(1)}',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                                    color: isNeg ? Colors.red : Colors.green),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: penalty > 0
-                                  ? Text('KES ${penalty.toStringAsFixed(0)}',
-                                      style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w700))
-                                  : const Text('—', style: TextStyle(color: Colors.grey)),
-                            ),
-                          ]);
-                        }),
-                      ],
-                    ),
-                    if (status == 'completed') ...[
-                      const Divider(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: productions.map((p) {
+                    final recipe = recipeById['${p['recipe_id']}'];
+                    final needsConfirmation = recipe != null &&
+                        recipe['requires_yield_confirmation'] != false;
+                    final confirmed = p['actual_quantity'] != null;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Total Penalty Raised:', style: TextStyle(fontWeight: FontWeight.w700)),
-                          Text(
-                            'KES ${(double.tryParse('${s['total_penalty'] ?? 0}') ?? 0).toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                              color: (double.tryParse('${s['total_penalty'] ?? 0}') ?? 0) > 0
-                                  ? Colors.red : Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if ((double.tryParse('${s['total_penalty'] ?? 0}') ?? 0) > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.red.shade200),
-                            ),
-                            child: Row(
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.receipt_long_outlined, color: Colors.red, size: 16),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Credit bill of KES ${(double.tryParse('${s['total_penalty'] ?? 0}') ?? 0).toStringAsFixed(2)} raised against ${s['staff_name']} and sent to Branch Accountant for review.',
-                                    style: const TextStyle(fontSize: 12, color: Colors.red),
-                                  ),
+                                Text(
+                                  '${_fcNum(p['raw_quantity_used'])} ${p['raw_unit'] ?? ''} ${p['raw_item_name']}  →  ${_fcNum(p['produced_quantity'])} ${p['produced_unit'] ?? ''} ${p['produced_item_name']}',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  confirmed
+                                      ? 'Actual: ${_fcNum(p['actual_quantity'])} ${p['produced_unit'] ?? ''}'
+                                          '${_fcNum(p['variance_cost']) > 0 ? ' · Billed KES ${_fcNum(p['variance_cost']).toStringAsFixed(2)}' : ''}'
+                                      : (needsConfirmation
+                                          ? 'Awaiting actual yield confirmation'
+                                          : 'Finalized'),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: confirmed &&
+                                              _fcNum(p['variance_cost']) > 0
+                                          ? Colors.red
+                                          : Colors.grey),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                    ],
-                  ],
+                          if (needsConfirmation && !confirmed)
+                            TextButton(
+                              onPressed: () => _confirmProductionActual(s, p),
+                              child: const Text('Confirm Actual',
+                                  style: TextStyle(fontSize: 12)),
+                            ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
         ),
+        // Stock take / variance
+        if (stockTake.isNotEmpty)
+          _SectionCard(
+            title: 'Stock Take / Variance',
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(3),
+                1: FlexColumnWidth(2),
+                2: FlexColumnWidth(2),
+                3: FlexColumnWidth(2)
+              },
+              children: [
+                TableRow(
+                  decoration: BoxDecoration(
+                      border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade200))),
+                  children: const [
+                    Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Text('Item',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 11))),
+                    Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Text('System',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 11))),
+                    Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Text('Physical',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 11))),
+                    Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Text('Variance',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 11))),
+                  ],
+                ),
+                ...stockTake.map((st) {
+                  final variance = _fcNum(st['variance']);
+                  return TableRow(children: [
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Text('${st['item_name']}',
+                            style: const TextStyle(fontSize: 12))),
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Text(
+                            _fcNum(st['system_closing_stock'])
+                                .toStringAsFixed(2),
+                            style: const TextStyle(fontSize: 12))),
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Text(
+                            _fcNum(st['physical_count']).toStringAsFixed(2),
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600))),
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Text(
+                            '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(2)}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: variance >= 0
+                                    ? Colors.green
+                                    : Colors.red))),
+                  ]);
+                }),
+              ],
+            ),
+          ),
+        // Approvals
+        if (approvals.isNotEmpty)
+          _SectionCard(
+            title: 'Approval Workflow',
+            child: Column(
+              children: approvals.map((a) {
+                final stage = '${a['approval_stage'] ?? ''}';
+                final rejected = stage.contains('rejected');
+                final pending = stage.contains('submitted');
+                return ListTile(
+                  dense: true,
+                  leading: Icon(
+                    rejected
+                        ? Icons.cancel
+                        : pending
+                            ? Icons.pending
+                            : Icons.check_circle,
+                    color: rejected
+                        ? Colors.red
+                        : pending
+                            ? Colors.grey
+                            : Colors.green,
+                  ),
+                  title: Text(stage.replaceAll('_', ' '),
+                      style: const TextStyle(fontSize: 13)),
+                  subtitle: Text('${a['notes'] ?? ''}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  trailing: Text(
+                      '${a['approved_at']?.toString().split('T').first ?? ''}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                );
+              }).toList(),
+            ),
+          ),
+        if (status == 'closed' || status == 'approved')
+          _SectionCard(
+            title: 'Shift Summary',
+            child: Column(
+              children: [
+                _SummaryRow('Total Revenue',
+                    'KES ${(double.tryParse('${s['total_revenue'] ?? 0}') ?? 0).toStringAsFixed(2)}'),
+                _SummaryRow('Total COGS',
+                    'KES ${(double.tryParse('${s['total_cogs'] ?? 0}') ?? 0).toStringAsFixed(2)}'),
+                _SummaryRow('Total Variance Cost',
+                    'KES ${(double.tryParse('${s['total_variance_cost'] ?? 0}') ?? 0).toStringAsFixed(2)}',
+                    isNegative: true),
+                _SummaryRow('Total Spoilage Cost',
+                    'KES ${(double.tryParse('${s['total_spoilage_cost'] ?? 0}') ?? 0).toStringAsFixed(2)}',
+                    isNegative: true),
+                const Divider(),
+                _SummaryRow('Net Profit',
+                    'KES ${(double.tryParse('${s['net_profit'] ?? 0}') ?? 0).toStringAsFixed(2)}',
+                    isTotal: true),
+              ],
+            ),
+          ),
       ],
     );
   }
 }
 
-// ── New Session Bottom Sheet ─────────────────────────────────────────────────
+// ── New Kitchen Shift Sheet ─────────────────────────────────────────────────
 
-class _NewSessionSheet extends ConsumerStatefulWidget {
-  const _NewSessionSheet({required this.recipes, required this.stock});
-  final List<Map<String, dynamic>> recipes;
+class _NewKitchenShiftSheet extends ConsumerStatefulWidget {
+  const _NewKitchenShiftSheet({required this.stock});
   final List<Map<String, dynamic>> stock;
 
   @override
-  ConsumerState<_NewSessionSheet> createState() => _NewSessionSheetState();
+  ConsumerState<_NewKitchenShiftSheet> createState() =>
+      _NewKitchenShiftSheetState();
 }
 
-class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
-  final _notesCtrl = TextEditingController();
-  String _shiftType = 'shift_a';
+class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
+  static const _kitchenRoleKeywords = {
+    'head_chef',
+    'sous_chef',
+    'line_cook',
+    'kitchen',
+    'kitchen_operations',
+    'pos_kitchen',
+    'branch_storekeeper',
+    'storekeeper',
+    'central_storekeeper',
+  };
 
-  // Staff
-  List<Map<String, dynamic>> _staffList = [];
-  bool _staffLoading = false;
-  String _staffName = '';
-  String? _staffId;
-  final List<Map<String, dynamic>> _extraStaff = [];
+  String _shiftType = 'morning';
+  final List<Map<String, dynamic>> _items = [];
   bool _posting = false;
-
-  // Right panel: recipe → portions controller
-  final Map<String, TextEditingController> _portionCtrl = {};
-
-  // Left panel: sku → qty-to-issue controller
-  final Map<String, TextEditingController> _issuanceCtrl = {};
-  List<_IngredientNeed> _allIngredients = [];
+  bool _staffLoading = true;
+  List<Map<String, dynamic>> _staff = [];
+  final Set<String> _selectedChefIds = {};
 
   @override
   void initState() {
     super.initState();
+    _addItem();
     _loadStaff();
-    _buildIngredientList();
   }
 
-  void _buildIngredientList() {
-    final map = <String, _IngredientNeed>{};
-    for (final recipe in widget.recipes) {
-      _portionCtrl['${recipe['id']}'] = TextEditingController();
-      final ingredients = (recipe['ingredients'] as List?) ?? [];
-      for (final ing in ingredients.cast<Map<String, dynamic>>()) {
-        final sku = '${ing['item_sku']}';
-        if (!map.containsKey(sku)) {
-          map[sku] = _IngredientNeed(
-            sku: sku,
-            name: '${ing['item_name']}',
-            qty: 0,
-            unit: '${ing['unit'] ?? 'kg'}',
-          );
-          _issuanceCtrl[sku] = TextEditingController();
-        }
-      }
+  @override
+  void dispose() {
+    for (final it in _items) {
+      (it['searchCtrl'] as TextEditingController).dispose();
+      (it['quantity'] as TextEditingController).dispose();
+      (it['cost_price'] as TextEditingController).dispose();
     }
-    _allIngredients = map.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    super.dispose();
   }
 
-  // Auto-compute stock quantities from recipe portions and fill left panel
-  void _syncFromRecipes() {
-    final computed = <String, double>{};
-    for (final recipe in widget.recipes) {
-      final id = '${recipe['id']}';
-      final portions = double.tryParse(_portionCtrl[id]?.text.trim() ?? '') ?? 0;
-      if (portions <= 0) continue;
-      for (final ing in ((recipe['ingredients'] as List?) ?? []).cast<Map<String, dynamic>>()) {
-        final sku = '${ing['item_sku']}';
-        final qpp = double.tryParse('${ing['quantity_required']}') ?? 0;
-        computed[sku] = (computed[sku] ?? 0) + qpp * portions;
-      }
+  static bool _isKitchenStaff(Map<String, dynamic> s) {
+    final role = '${s['role'] ?? ''}'.toLowerCase();
+    final dept = '${s['department'] ?? ''}'.toLowerCase();
+    final position = '${s['position'] ?? ''}'.toLowerCase();
+    if (_kitchenRoleKeywords.contains(role) ||
+        _kitchenRoleKeywords.contains(dept)) {
+      return true;
     }
-    for (final ing in _allIngredients) {
-      final v = computed[ing.sku] ?? 0;
-      _issuanceCtrl[ing.sku]?.text = v > 0 ? v.toStringAsFixed(3) : '';
+    for (final kw in ['chef', 'cook', 'kitchen']) {
+      if (role.contains(kw) || dept.contains(kw) || position.contains(kw))
+        return true;
     }
-    setState(() {});
+    return false;
   }
 
   Future<void> _loadStaff() async {
     setState(() => _staffLoading = true);
     try {
-      final list = await ref.read(branchStorekeeperRepositoryProvider).branchStaff();
-      if (mounted) setState(() => _staffList = list);
-    } catch (_) {} finally {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final all = await repo.getStaffList();
+      final kitchenStaff = all.where(_isKitchenStaff).toList();
+      if (mounted) setState(() => _staff = kitchenStaff);
+    } catch (_) {
+    } finally {
       if (mounted) setState(() => _staffLoading = false);
     }
   }
 
-  @override
-  void dispose() {
-    _notesCtrl.dispose();
-    for (final c in _issuanceCtrl.values) c.dispose();
-    for (final c in _portionCtrl.values) c.dispose();
-    super.dispose();
+  void _addItem() {
+    setState(() {
+      _items.add({
+        'sku': '',
+        'name': '',
+        'searchCtrl': TextEditingController(),
+        'quantity': TextEditingController(),
+        'unit': 'kg',
+        'cost_price': TextEditingController(),
+        'available': 0.0,
+      });
+    });
   }
 
-  Future<void> _addExtraStaff() async {
-    Map<String, dynamic>? selected;
-    String role = 'cook';
-    bool accountable = true;
+  void _removeItem(int i) {
+    setState(() {
+      (_items[i]['searchCtrl'] as TextEditingController).dispose();
+      (_items[i]['quantity'] as TextEditingController).dispose();
+      (_items[i]['cost_price'] as TextEditingController).dispose();
+      _items.removeAt(i);
+    });
+  }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('Add Staff to Shift'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<Map<String, dynamic>>(
-                  decoration: const InputDecoration(labelText: 'Staff member', border: OutlineInputBorder()),
-                  items: _staffList.map((s) => DropdownMenuItem(
-                    value: s,
-                    child: Text('${s['full_name'] ?? ''}', style: const TextStyle(fontSize: 13)),
-                  )).toList(),
-                  onChanged: (v) => setS(() => selected = v),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: role,
-                  decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: 'cook', child: Text('Cook')),
-                    DropdownMenuItem(value: 'helper', child: Text('Helper')),
-                    DropdownMenuItem(value: 'supervisor', child: Text('Supervisor')),
-                  ],
-                  onChanged: (v) => setS(() => role = v ?? role),
-                ),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  dense: true,
-                  value: accountable,
-                  title: const Text('Accountable for variance', style: TextStyle(fontSize: 13)),
-                  subtitle: const Text('Will share credit bill if variance occurs', style: TextStyle(fontSize: 11)),
-                  onChanged: (v) => setS(() => accountable = v ?? true),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: selected == null ? null : () => Navigator.pop(ctx, true),
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed == true && selected != null) {
-      setState(() {
-        _extraStaff.add({
-          'staff_profile_id': selected!['id'],
-          'staff_name': selected!['full_name'] ?? '',
-          'role': role,
-          'is_accountable': accountable,
-        });
-      });
-    }
+  void _applyStockSelection(Map<String, dynamic> row, Map<String, dynamic> s) {
+    row['sku'] = '${s['item_sku'] ?? s['sku'] ?? ''}';
+    row['name'] = '${s['item_name'] ?? s['name'] ?? ''}';
+    row['unit'] = '${s['unit_of_measure'] ?? s['unit'] ?? 'kg'}';
+    row['available'] = _fcNum(s['quantity']);
+    (row['searchCtrl'] as TextEditingController).text = row['name'];
+    final cost = _fcNum(s['cost_price'] ?? s['unit_cost']);
+    if (cost > 0)
+      (row['cost_price'] as TextEditingController).text =
+          cost.toStringAsFixed(2);
   }
 
   Future<void> _submit() async {
-    if (_staffName.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select or enter a cook name'), backgroundColor: Colors.red),
-      );
-      return;
-    }
-    final issues = _allIngredients
-        .where((i) => (double.tryParse(_issuanceCtrl[i.sku]?.text.trim() ?? '') ?? 0) > 0)
-        .map((i) => {
-              'item_sku': i.sku,
-              'item_name': i.name,
-              'quantity_issued': double.parse(_issuanceCtrl[i.sku]!.text.trim()),
-              'unit': i.unit,
+    final openingItems = _items
+        .where((it) =>
+            '${it['sku']}'.isNotEmpty &&
+            '${it['name']}'.isNotEmpty &&
+            (double.tryParse((it['quantity'] as TextEditingController)
+                        .text
+                        .trim()) ??
+                    0) >
+                0)
+        .map((it) => {
+              'sku': it['sku'],
+              'name': it['name'],
+              'quantity': double.parse(
+                  (it['quantity'] as TextEditingController).text.trim()),
+              'unit': it['unit'],
+              'cost_price': double.tryParse(
+                      (it['cost_price'] as TextEditingController)
+                          .text
+                          .trim()) ??
+                  0,
             })
         .toList();
 
-    if (issues.isEmpty) {
+    if (openingItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter at least one stock quantity to issue'), backgroundColor: Colors.red),
+        const SnackBar(
+            content: Text('Add at least one item with quantity'),
+            backgroundColor: Colors.red),
       );
       return;
     }
 
-    // Planned recipes with portions (for system variance computation)
-    final plannedItems = widget.recipes
-        .where((r) => (double.tryParse(_portionCtrl['${r['id']}']?.text.trim() ?? '') ?? 0) > 0)
-        .map((r) {
-          final portions = double.parse(_portionCtrl['${r['id']}']!.text.trim());
-          return {
-            'recipe_id': r['id'],
-            'menu_item_id': r['menu_item_id'],
-            'menu_item_name': r['menu_item_name'] ?? r['recipe_name'],
-            'portions_planned': portions,
-          };
-        })
-        .toList();
-
-    setState(() => _posting = true);
-    try {
-      final allStaff = <Map<String, dynamic>>[
-        {'staff_profile_id': _staffId, 'staff_name': _staffName.trim(), 'role': 'cook', 'is_accountable': true},
-        ..._extraStaff,
-      ];
-      await ref.read(branchStorekeeperRepositoryProvider).createProductionSession(
-        staffName: _staffName.trim(),
-        staffId: _staffId,
-        shiftType: _shiftType,
-        sessionStaff: allStaff,
-        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        issues: issues,
-        plannedItems: plannedItems,
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-      }
-    } finally {
-      if (mounted) setState(() => _posting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final issuedCount = _allIngredients
-        .where((i) => (double.tryParse(_issuanceCtrl[i.sku]?.text.trim() ?? '') ?? 0) > 0)
-        .length;
-    final recipesWithPortions = widget.recipes
-        .where((r) => (double.tryParse(_portionCtrl['${r['id']}']?.text.trim() ?? '') ?? 0) > 0)
-        .length;
-
-    return SizedBox(
-      width: size.width * 0.94,
-      height: size.height * 0.90,
-      child: Column(
-        children: [
-          // ── Header ──────────────────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-            ),
-            child: Row(children: [
-              const Icon(Icons.soup_kitchen_outlined, color: AppColors.kPrimary),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('New Kitchen Session', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    Text('Select shift & staff · Link menu items to auto-compute stock · Issue to kitchen',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
-              ),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
-            ]),
-          ),
-          // ── Body: two panels ──────────────────────────────────────────
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── LEFT PANEL: Staff + Stock Issuance ─────────────────
-                SizedBox(
-                  width: size.width * 0.94 * 0.42,
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        color: Colors.grey.shade50,
-                        child: Row(children: [
-                          const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.kPrimary),
-                          const SizedBox(width: 6),
-                          const Expanded(child: Text('Stock to Issue', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
-                          if (issuedCount > 0)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.teal.shade100, borderRadius: BorderRadius.circular(10)),
-                              child: Text('$issuedCount items', style: const TextStyle(fontSize: 11, color: Colors.teal, fontWeight: FontWeight.w700)),
-                            ),
-                        ]),
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Shift selector
-                              Row(children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => setState(() => _shiftType = 'shift_a'),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 150),
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: _shiftType == 'shift_a' ? AppColors.kPrimary.withValues(alpha: 0.10) : Colors.grey.shade50,
-                                        border: Border.all(color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey.shade300, width: _shiftType == 'shift_a' ? 2 : 1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Column(children: [
-                                        Icon(Icons.wb_sunny_outlined, size: 18, color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey),
-                                        Text('Shift A', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _shiftType == 'shift_a' ? AppColors.kPrimary : Colors.grey.shade700)),
-                                        Text('Morning', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                                      ]),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => setState(() => _shiftType = 'shift_b'),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 150),
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: _shiftType == 'shift_b' ? Colors.indigo.withValues(alpha: 0.10) : Colors.grey.shade50,
-                                        border: Border.all(color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey.shade300, width: _shiftType == 'shift_b' ? 2 : 1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Column(children: [
-                                        Icon(Icons.nights_stay_outlined, size: 18, color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey),
-                                        Text('Shift B', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _shiftType == 'shift_b' ? Colors.indigo : Colors.grey.shade700)),
-                                        Text('Evening', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                                      ]),
-                                    ),
-                                  ),
-                                ),
-                              ]),
-                              const SizedBox(height: 12),
-                              // Cook autocomplete
-                              Autocomplete<Map<String, dynamic>>(
-                                optionsBuilder: (tv) {
-                                  if (_staffList.isEmpty) return const [];
-                                  if (tv.text.isEmpty) return _staffList;
-                                  final q = tv.text.toLowerCase();
-                                  return _staffList.where((s) => '${s['full_name'] ?? ''}'.toLowerCase().contains(q));
-                                },
-                                displayStringForOption: (s) => '${s['full_name'] ?? ''}',
-                                onSelected: (s) => setState(() { _staffName = '${s['full_name'] ?? ''}'; _staffId = '${s['id']}'; }),
-                                fieldViewBuilder: (_, ctrl, fn, __) => TextField(
-                                  controller: ctrl, focusNode: fn,
-                                  decoration: InputDecoration(
-                                    labelText: _staffLoading ? 'Loading staff…' : 'Primary Cook *',
-                                    prefixIcon: const Icon(Icons.person_outline, size: 18),
-                                    border: const OutlineInputBorder(),
-                                    isDense: true,
-                                    suffixIcon: _staffLoading ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))) : null,
-                                  ),
-                                  textCapitalization: TextCapitalization.words,
-                                  onChanged: (v) => setState(() { _staffName = v; if (_staffId != null && _staffList.every((s) => '${s['full_name']}' != v)) _staffId = null; }),
-                                ),
-                                optionsViewBuilder: (_, onSel, options) => Align(
-                                  alignment: Alignment.topLeft,
-                                  child: Material(elevation: 4, borderRadius: BorderRadius.circular(8),
-                                    child: ConstrainedBox(constraints: const BoxConstraints(maxHeight: 180),
-                                      child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: options.length,
-                                        itemBuilder: (_, i) {
-                                          final s = options.elementAt(i);
-                                          return ListTile(dense: true,
-                                            leading: CircleAvatar(radius: 13, backgroundColor: AppColors.kPrimary.withValues(alpha: 0.12),
-                                                child: Text('${s['first_name'] ?? '?'}'.substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kPrimary))),
-                                            title: Text('${s['full_name'] ?? ''}', style: const TextStyle(fontSize: 12)),
-                                            subtitle: Text('${s['role'] ?? ''}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                            onTap: () => onSel(s));
-                                        }),
-                                    )),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: _notesCtrl,
-                                decoration: const InputDecoration(labelText: 'Notes (optional)', prefixIcon: Icon(Icons.notes_outlined, size: 18), border: OutlineInputBorder(), isDense: true),
-                                maxLines: 1,
-                              ),
-                              const SizedBox(height: 10),
-                              // Extra staff
-                              Row(children: [
-                                Text('Shift Staff', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey.shade700)),
-                                const Spacer(),
-                                GestureDetector(
-                                  onTap: _addExtraStaff,
-                                  child: Text('+ Add', style: TextStyle(fontSize: 12, color: AppColors.kPrimary, fontWeight: FontWeight.w600)),
-                                ),
-                              ]),
-                              if (_extraStaff.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                ..._extraStaff.asMap().entries.map((entry) {
-                                  final i = entry.key; final s = entry.value;
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 4),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.shade200)),
-                                    child: Row(children: [
-                                      Expanded(child: Text('${s['staff_name']}', style: const TextStyle(fontSize: 12))),
-                                      DropdownButton<String>(value: s['role'] as String? ?? 'cook', isDense: true, underline: const SizedBox(),
-                                        items: const [
-                                          DropdownMenuItem(value: 'cook', child: Text('Cook', style: TextStyle(fontSize: 11))),
-                                          DropdownMenuItem(value: 'helper', child: Text('Helper', style: TextStyle(fontSize: 11))),
-                                          DropdownMenuItem(value: 'supervisor', child: Text('Supervisor', style: TextStyle(fontSize: 11))),
-                                        ],
-                                        onChanged: (v) => setState(() => s['role'] = v)),
-                                      Checkbox(value: s['is_accountable'] as bool? ?? true, onChanged: (v) => setState(() => s['is_accountable'] = v), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact),
-                                      GestureDetector(onTap: () => setState(() => _extraStaff.removeAt(i)), child: const Icon(Icons.close, size: 14, color: Colors.red)),
-                                    ]),
-                                  );
-                                }),
-                                Text('✓ = accountable for variance', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                              ],
-                              const SizedBox(height: 14),
-                              const Divider(),
-                              const SizedBox(height: 10),
-                              // Stock issuance list
-                              Text('Quantities to Issue', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey.shade700)),
-                              const SizedBox(height: 2),
-                              Text('Auto-filled from recipes or enter manually. Items with 0 are skipped.',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                              const SizedBox(height: 8),
-                              ..._allIngredients.map((ing) {
-                                final ctrl = _issuanceCtrl[ing.sku]!;
-                                final qty = double.tryParse(ctrl.text.trim()) ?? 0;
-                                final isIssued = qty > 0;
-                                final stockItem = widget.stock.firstWhere(
-                                  (s) => '${s['item_sku']}' == ing.sku || '${s['sku']}' == ing.sku,
-                                  orElse: () => <String, dynamic>{},
-                                );
-                                final available = double.tryParse('${stockItem['quantity'] ?? stockItem['current_stock'] ?? 0}') ?? 0;
-                                final overIssue = isIssued && qty > available && available > 0;
-
-                                return AnimatedContainer(
-                                  duration: const Duration(milliseconds: 100),
-                                  margin: const EdgeInsets.only(bottom: 6),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                                  decoration: BoxDecoration(
-                                    color: isIssued ? (overIssue ? Colors.red.shade50 : Colors.teal.shade50) : Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: isIssued ? (overIssue ? Colors.red.shade300 : Colors.teal.shade300) : Colors.grey.shade200, width: isIssued ? 1.5 : 1),
-                                  ),
-                                  child: Row(children: [
-                                    Expanded(
-                                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                        Text(ing.name, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isIssued ? (overIssue ? Colors.red.shade700 : Colors.teal.shade800) : Colors.black87)),
-                                        Row(children: [
-                                          Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
-                                              child: Text(ing.sku, style: const TextStyle(fontSize: 9, color: Colors.grey))),
-                                          const SizedBox(width: 6),
-                                          Text(available > 0 ? '${available.toStringAsFixed(1)} ${ing.unit} avail' : 'not in stock',
-                                              style: TextStyle(fontSize: 10, color: overIssue ? Colors.red : Colors.grey.shade500)),
-                                        ]),
-                                      ]),
-                                    ),
-                                    SizedBox(
-                                      width: 80,
-                                      child: TextField(
-                                        controller: ctrl,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                                        decoration: InputDecoration(
-                                          hintText: '0',
-                                          suffixText: ing.unit,
-                                          suffixStyle: const TextStyle(fontSize: 9),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6),
-                                              borderSide: BorderSide(color: overIssue ? Colors.red.shade400 : (isIssued ? Colors.teal : Colors.grey.shade300))),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                          isDense: true,
-                                        ),
-                                        onChanged: (_) => setState(() {}),
-                                      ),
-                                    ),
-                                  ]),
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // ── Divider ─────────────────────────────────────────────
-                const VerticalDivider(width: 1),
-                // ── RIGHT PANEL: Recipes / Menu Items ──────────────────
-                Expanded(
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        color: Colors.grey.shade50,
-                        child: Row(children: [
-                          const Icon(Icons.menu_book_outlined, size: 15, color: Colors.deepPurple),
-                          const SizedBox(width: 6),
-                          const Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text('Menu Items & Recipes', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                              Text('Enter portions → stock auto-computes. Variance tracked at shift close.',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey)),
-                            ]),
-                          ),
-                          if (recipesWithPortions > 0) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.deepPurple.shade50, borderRadius: BorderRadius.circular(10)),
-                              child: Text('$recipesWithPortions planned', style: const TextStyle(fontSize: 11, color: Colors.deepPurple, fontWeight: FontWeight.w700)),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          FilledButton.icon(
-                            onPressed: _syncFromRecipes,
-                            style: FilledButton.styleFrom(backgroundColor: Colors.teal, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                            icon: const Icon(Icons.sync, size: 14),
-                            label: const Text('Sync Stock', style: TextStyle(fontSize: 12)),
-                          ),
-                        ]),
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: widget.recipes.length,
-                          itemBuilder: (_, idx) {
-                            final recipe = widget.recipes[idx];
-                            final recipeId = '${recipe['id']}';
-                            final portCtrl = _portionCtrl[recipeId]!;
-                            final portions = double.tryParse(portCtrl.text.trim()) ?? 0;
-                            final isPlanned = portions > 0;
-                            final ingredients = ((recipe['ingredients'] as List?) ?? []).cast<Map<String, dynamic>>();
-
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 120),
-                              margin: const EdgeInsets.only(bottom: 10),
-                              decoration: BoxDecoration(
-                                color: isPlanned ? Colors.deepPurple.shade50 : Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isPlanned ? Colors.deepPurple.shade300 : Colors.grey.shade200,
-                                  width: isPlanned ? 1.5 : 1,
-                                ),
-                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))],
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(children: [
-                                      Expanded(
-                                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                          Text('${recipe['menu_item_name'] ?? recipe['recipe_name']}',
-                                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13,
-                                                  color: isPlanned ? Colors.deepPurple.shade800 : Colors.black87)),
-                                          Text('${recipe['recipe_name']}',
-                                              style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                        ]),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                        Text('Portions to cook', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-                                        const SizedBox(height: 3),
-                                        SizedBox(
-                                          width: 90,
-                                          child: TextField(
-                                            controller: portCtrl,
-                                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: isPlanned ? Colors.deepPurple : Colors.black87),
-                                            decoration: InputDecoration(
-                                              hintText: '0',
-                                              suffixText: recipe['output_unit'] ?? 'ptn',
-                                              suffixStyle: const TextStyle(fontSize: 9),
-                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6),
-                                                  borderSide: BorderSide(color: isPlanned ? Colors.deepPurple.shade300 : Colors.grey.shade300)),
-                                              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                              isDense: true,
-                                            ),
-                                            onChanged: (_) => setState(() {}),
-                                          ),
-                                        ),
-                                      ]),
-                                    ]),
-                                    if (ingredients.isNotEmpty) ...[
-                                      const SizedBox(height: 8),
-                                      const Divider(height: 1),
-                                      const SizedBox(height: 8),
-                                      // Show ingredients with computed quantities if portions set
-                                      ...ingredients.map((ing) {
-                                        final qpp = double.tryParse('${ing['quantity_required']}') ?? 0;
-                                        final total = portions > 0 ? qpp * portions : qpp;
-                                        final unit = '${ing['unit'] ?? 'kg'}';
-                                        return Padding(
-                                          padding: const EdgeInsets.only(bottom: 4),
-                                          child: Row(children: [
-                                            Container(
-                                              width: 6, height: 6,
-                                              decoration: BoxDecoration(color: isPlanned ? Colors.deepPurple : Colors.grey.shade400, shape: BoxShape.circle),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Expanded(child: Text('${ing['item_name']}', style: const TextStyle(fontSize: 11))),
-                                            Text(
-                                              portions > 0
-                                                  ? '${total.toStringAsFixed(3)} $unit'
-                                                  : '${qpp.toStringAsFixed(3)} $unit / ptn',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: portions > 0 ? FontWeight.w700 : FontWeight.normal,
-                                                color: portions > 0 ? Colors.deepPurple.shade700 : Colors.grey,
-                                              ),
-                                            ),
-                                          ]),
-                                        );
-                                      }),
-                                      if (isPlanned) ...[
-                                        const SizedBox(height: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(color: Colors.deepPurple.shade100, borderRadius: BorderRadius.circular(6)),
-                                          child: Row(children: [
-                                            const Icon(Icons.info_outline, size: 12, color: Colors.deepPurple),
-                                            const SizedBox(width: 4),
-                                            Expanded(child: Text(
-                                              'System will track: if ${portions.toStringAsFixed(0)} portions produced, '
-                                              'these exact quantities should be used. Variance = issued − used − physical closing.',
-                                              style: const TextStyle(fontSize: 10, color: Colors.deepPurple),
-                                            )),
-                                          ]),
-                                        ),
-                                      ],
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // ── Bottom bar ────────────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.shade200)),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, -2))],
-            ),
-            child: Row(children: [
-              if (issuedCount > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.teal.shade200)),
-                  child: Row(children: [
-                    const Icon(Icons.check_circle_outline, color: Colors.teal, size: 16),
-                    const SizedBox(width: 6),
-                    Text('$issuedCount stock items · ${recipesWithPortions > 0 ? '$recipesWithPortions recipes linked' : 'no recipes linked'}',
-                        style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              const Spacer(),
-              SizedBox(
-                height: 44,
-                child: FilledButton.icon(
-                  onPressed: _posting ? null : _submit,
-                  icon: _posting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.send_outlined, size: 18),
-                  label: Text(_posting ? 'Issuing Stock...' : 'Create Session & Issue Stock'),
-                ),
-              ),
-            ]),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _IngredientNeed {
-  _IngredientNeed({required this.sku, required this.name, required this.qty, required this.unit});
-  final String sku;
-  final String name;
-  double qty;
-  final String unit;
-}
-
-// ── Record Production Bottom Sheet ─────────────────────────────────────────
-
-class _RecordProductionSheet extends ConsumerStatefulWidget {
-  const _RecordProductionSheet({required this.session});
-  final Map<String, dynamic> session;
-
-  @override
-  ConsumerState<_RecordProductionSheet> createState() => _RecordProductionSheetState();
-}
-
-class _RecordProductionSheetState extends ConsumerState<_RecordProductionSheet> {
-  final Map<String, TextEditingController> _ctrlMap = {};
-  // closing stock: issue item_sku → TextEditingController for closing qty
-  final Map<String, TextEditingController> _closingCtrl = {};
-  bool _posting = false;
-
-  List<Map<String, dynamic>> get _entries =>
-      ((widget.session['entries'] as List?) ?? []).cast<Map<String, dynamic>>();
-  List<Map<String, dynamic>> get _issues =>
-      ((widget.session['issues'] as List?) ?? []).cast<Map<String, dynamic>>();
-
-  @override
-  void initState() {
-    super.initState();
-    for (final e in _entries) {
-      final id = '${e['id']}';
-      _ctrlMap[id] = TextEditingController(text: '${e['expected_quantity'] ?? 0}');
-    }
-    for (final i in _issues) {
-      final sku = '${i['item_sku']}';
-      _closingCtrl[sku] = TextEditingController(text: '0');
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final c in _ctrlMap.values) c.dispose();
-    for (final c in _closingCtrl.values) c.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
     setState(() => _posting = true);
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final entries = _entries.map((e) {
-        final id = '${e['id']}';
-        return {
-          'entry_id': id,
-          'actual_quantity': double.tryParse(_ctrlMap[id]?.text.trim() ?? '0') ?? 0,
-        };
-      }).toList();
-
-      final closingStock = _issues.map((i) {
-        final sku = '${i['item_sku']}';
-        return {
-          'item_sku': sku,
-          'item_name': i['item_name'] ?? sku,
-          'issued_quantity': i['quantity_issued'] ?? 0,
-          'unit': i['unit'] ?? 'kg',
-          'closing_quantity': double.tryParse(_closingCtrl[sku]?.text.trim() ?? '0') ?? 0,
-        };
-      }).toList();
-
-      final result = await repo.completeProductionSession(
-        sessionId: '${widget.session['id']}',
-        entries: entries,
-        closingStock: closingStock,
+      await repo.openKitchenShift(
+        shiftType: _shiftType,
+        shiftDate: DateTime.now().toIso8601String().split('T').first,
+        openingItems: openingItems,
+        assignedChefIds: _selectedChefIds.toList(),
       );
-      if (mounted) {
-        Navigator.of(context).pop({
-          ...result,
-          'session_id': widget.session['id'],
-          'total_penalty': result['total_penalty'],
-        });
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Failed to open shift: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -13932,132 +13929,416 @@ class _RecordProductionSheetState extends ConsumerState<_RecordProductionSheet> 
 
   @override
   Widget build(BuildContext context) {
-    final bottomPad = MediaQuery.of(context).viewInsets.bottom;
-
     return Container(
-      height: MediaQuery.of(context).size.height * 0.80,
+      constraints: const BoxConstraints(maxHeight: 760),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Open Kitchen Shift',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _shiftType,
+              decoration: const InputDecoration(
+                  labelText: 'Shift Type', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'morning', child: Text('Morning')),
+                DropdownMenuItem(value: 'afternoon', child: Text('Afternoon')),
+                DropdownMenuItem(value: 'night', child: Text('Night')),
+              ],
+              onChanged: (v) => setState(() => _shiftType = v ?? _shiftType),
+            ),
+            const SizedBox(height: 16),
+            const Text('Accountable Shift Team',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            const Text(
+              'Select the chefs/cooks accountable for this shift. Any production shortfall is billed to whoever produced it.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 160),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _staffLoading
+                  ? const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : _staff.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('No kitchen staff found for this branch.',
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 12)),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _staff.length,
+                          itemBuilder: (ctx, i) {
+                            final s = _staff[i];
+                            final id = '${s['user_id'] ?? s['id']}';
+                            final name =
+                                '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                    .trim();
+                            return CheckboxListTile(
+                              dense: true,
+                              value: _selectedChefIds.contains(id),
+                              title: Text(name.isEmpty ? id : name,
+                                  style: const TextStyle(fontSize: 13)),
+                              subtitle: Text(
+                                  '${s['role'] ?? s['position'] ?? ''}',
+                                  style: const TextStyle(fontSize: 11)),
+                              onChanged: (checked) => setState(() {
+                                if (checked == true) {
+                                  _selectedChefIds.add(id);
+                                } else {
+                                  _selectedChefIds.remove(id);
+                                }
+                              }),
+                            );
+                          },
+                        ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Opening Stock Items',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _items.length,
+                itemBuilder: (ctx, i) {
+                  final it = _items[i];
+                  final searchCtrl = it['searchCtrl'] as TextEditingController;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 4,
+                          child: Autocomplete<Map<String, dynamic>>(
+                            optionsBuilder: (tv) {
+                              final q = tv.text.toLowerCase().trim();
+                              if (q.isEmpty) return widget.stock.take(20);
+                              return widget.stock.where((s) {
+                                final sku = '${s['item_sku'] ?? s['sku'] ?? ''}'
+                                    .toLowerCase();
+                                final name =
+                                    '${s['item_name'] ?? s['name'] ?? ''}'
+                                        .toLowerCase();
+                                return sku.contains(q) || name.contains(q);
+                              }).take(20);
+                            },
+                            displayStringForOption: (s) =>
+                                '${s['item_name'] ?? s['name'] ?? ''}',
+                            optionsViewBuilder: (ctx, onSelected, options) =>
+                                Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4,
+                                child: SizedBox(
+                                  width: 320,
+                                  child: ListView(
+                                    padding: EdgeInsets.zero,
+                                    shrinkWrap: true,
+                                    children: options
+                                        .map((s) => ListTile(
+                                              dense: true,
+                                              title: Text(
+                                                  '${s['item_name'] ?? s['name'] ?? ''}',
+                                                  style: const TextStyle(
+                                                      fontSize: 13)),
+                                              subtitle: Text(
+                                                '${s['item_sku'] ?? s['sku'] ?? ''} · Available: ${_fcNum(s['quantity']).toStringAsFixed(1)} ${s['unit_of_measure'] ?? s['unit'] ?? ''}',
+                                                style: const TextStyle(
+                                                    fontSize: 11),
+                                              ),
+                                              onTap: () => onSelected(s),
+                                            ))
+                                        .toList(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            onSelected: (s) =>
+                                setState(() => _applyStockSelection(it, s)),
+                            fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
+                              if (ctrl.text != searchCtrl.text)
+                                ctrl.text = searchCtrl.text;
+                              return TextField(
+                                controller: ctrl,
+                                focusNode: focus,
+                                decoration: InputDecoration(
+                                  labelText: 'Item',
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                  helperText: '${it['sku']}'.isEmpty
+                                      ? null
+                                      : '${it['sku']} · avail ${(it['available'] as double).toStringAsFixed(1)} ${it['unit']}',
+                                  helperStyle: const TextStyle(fontSize: 10),
+                                ),
+                                onChanged: (v) {
+                                  searchCtrl.text = v;
+                                  it['name'] = v;
+                                  it['sku'] = '';
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              controller:
+                                  it['quantity'] as TextEditingController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Qty',
+                                  isDense: true,
+                                  border: OutlineInputBorder()),
+                              keyboardType: TextInputType.number,
+                            )),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            flex: 2,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: it['unit'],
+                              isDense: true,
+                              decoration: const InputDecoration(
+                                  labelText: 'Unit',
+                                  isDense: true,
+                                  border: OutlineInputBorder()),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'kg', child: Text('kg')),
+                                DropdownMenuItem(value: 'g', child: Text('g')),
+                                DropdownMenuItem(value: 'l', child: Text('l')),
+                                DropdownMenuItem(
+                                    value: 'ml', child: Text('ml')),
+                                DropdownMenuItem(
+                                    value: 'pcs', child: Text('pcs')),
+                                DropdownMenuItem(
+                                    value: 'portion', child: Text('portion')),
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => it['unit'] = v ?? 'kg'),
+                            )),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              controller:
+                                  it['cost_price'] as TextEditingController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Cost',
+                                  isDense: true,
+                                  border: OutlineInputBorder()),
+                              keyboardType: TextInputType.number,
+                            )),
+                        IconButton(
+                          icon: const Icon(Icons.delete,
+                              size: 18, color: Colors.red),
+                          onPressed: () => _removeItem(i),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _addItem,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add Item'),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: _posting ? null : _submit,
+                icon: _posting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.play_arrow),
+                label: Text(_posting ? 'Opening...' : 'Open Shift'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Close Kitchen Shift Bottom Sheet ─────────────────────────────────────────
+
+class _CloseKitchenShiftSheet extends ConsumerStatefulWidget {
+  const _CloseKitchenShiftSheet({required this.shift});
+  final Map<String, dynamic> shift;
+
+  @override
+  ConsumerState<_CloseKitchenShiftSheet> createState() =>
+      _CloseKitchenShiftSheetState();
+}
+
+class _CloseKitchenShiftSheetState
+    extends ConsumerState<_CloseKitchenShiftSheet> {
+  final List<Map<String, dynamic>> _physicalCounts = [];
+  final _notesCtrl = TextEditingController();
+  bool _posting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final items =
+        (widget.shift['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    for (final item in items) {
+      _physicalCounts.add({
+        'sku': item['item_sku'] ?? '',
+        'quantity': TextEditingController(),
+        'notes': TextEditingController(),
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _physicalCounts) {
+      (c['quantity'] as TextEditingController).dispose();
+      (c['notes'] as TextEditingController).dispose();
+    }
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final counts = _physicalCounts
+        .where((c) =>
+            '${c['sku']}'.isNotEmpty &&
+            (double.tryParse(
+                        (c['quantity'] as TextEditingController).text.trim()) ??
+                    0) >=
+                0)
+        .map((c) => {
+              'sku': c['sku'],
+              'quantity': double.parse(
+                  (c['quantity'] as TextEditingController).text.trim()),
+              'notes': (c['notes'] as TextEditingController).text.trim().isEmpty
+                  ? null
+                  : (c['notes'] as TextEditingController).text.trim(),
+            })
+        .toList();
+
+    setState(() => _posting = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final result = await repo.closeKitchenShift(
+        widget.shift['id'],
+        counts,
+        closingNotes:
+            _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      );
+      if (mounted) Navigator.pop(context, result);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to close shift: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items =
+        (widget.shift['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 12),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          Row(
+            children: [
+              const Expanded(
+                  child: Text('Close Kitchen Shift',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700))),
+              IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Shift: ${widget.shift['shift_number']}',
+              style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                const Icon(Icons.fact_check_outlined, color: Colors.green),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Record Actual Production', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                      Text('Cook: ${widget.session['staff_name']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                    ],
-                  ),
-                ),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
-              ],
-            ),
-          ),
-          const Divider(),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.amber.shade300),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.amber, size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Enter the ACTUAL number of items the cook produced. Negative variance = deduction from cook\'s credit bill.',
-                    style: TextStyle(fontSize: 12, color: Colors.black87),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.separated(
-              padding: EdgeInsets.fromLTRB(20, 8, 20, bottomPad + 100),
-              itemCount: _entries.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final e = _entries[i];
-                final id = '${e['id']}';
-                final expected = double.tryParse('${e['expected_quantity'] ?? 0}') ?? 0;
-                final price = double.tryParse('${e['menu_selling_price'] ?? 0}') ?? 0;
-                final actualText = _ctrlMap[id]?.text.trim() ?? '0';
-                final actual = double.tryParse(actualText) ?? 0;
-                final variance = actual - expected;
-                final penalty = variance < 0 ? (-variance * price) : 0.0;
-
+          const Text('Physical Stock Counts',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: items.length,
+              itemBuilder: (ctx, i) {
+                final item = items[i];
+                final ctrl =
+                    _physicalCounts[i]['quantity'] as TextEditingController;
+                final notesCtrl =
+                    _physicalCounts[i]['notes'] as TextEditingController;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${e['menu_item_name']}',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      Text(
+                          '${item['item_name']} (${item['item_sku']})  •  System: ${(item['current_quantity'] ?? 0).toStringAsFixed(2)} ${item['unit']}',
+                          style: const TextStyle(fontSize: 13)),
                       const SizedBox(height: 4),
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              'Expected: ${expected.toStringAsFixed(0)} portions  •  Price: KES ${price.toStringAsFixed(0)}',
-                              style: const TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
+                              flex: 2,
+                              child: TextFormField(
+                                controller: ctrl,
+                                decoration: const InputDecoration(
+                                    labelText: 'Physical Count',
+                                    isDense: true,
+                                    border: OutlineInputBorder()),
+                                keyboardType: TextInputType.number,
+                              )),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: TextField(
-                              controller: _ctrlMap[id],
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: 'Actual produced *',
-                                border: const OutlineInputBorder(),
-                                suffixText: 'portions',
-                                filled: variance < 0,
-                                fillColor: variance < 0 ? Colors.red.shade50 : null,
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          SizedBox(
-                            width: 110,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(1)}',
-                                  style: TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w800,
-                                    color: variance >= 0 ? Colors.green : Colors.red,
-                                  ),
-                                ),
-                                Text('variance', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                if (penalty > 0) ...[
-                                  const SizedBox(height: 2),
-                                  Text('−KES ${penalty.toStringAsFixed(0)}',
-                                      style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w700)),
-                                ],
-                              ],
-                            ),
-                          ),
+                              flex: 3,
+                              child: TextFormField(
+                                controller: notesCtrl,
+                                decoration: const InputDecoration(
+                                    labelText: 'Notes',
+                                    isDense: true,
+                                    border: OutlineInputBorder()),
+                              )),
                         ],
                       ),
                     ],
@@ -14066,111 +14347,891 @@ class _RecordProductionSheetState extends ConsumerState<_RecordProductionSheet> 
               },
             ),
           ),
-          // ── Closing stock section ───────────────────────────────────
-          if (_issues.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.teal.shade50,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.teal.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(children: [
-                    Icon(Icons.inventory_outlined, color: Colors.teal, size: 16),
-                    SizedBox(width: 6),
-                    Text('Closing Stock (items returned to store)',
-                        style: TextStyle(fontWeight: FontWeight.w700, color: Colors.teal, fontSize: 13)),
-                  ]),
-                  const SizedBox(height: 2),
-                  const Text('Enter how much of each ingredient was NOT used and returned.',
-                      style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  const SizedBox(height: 10),
-                  ..._issues.map((i) {
-                    final sku = '${i['item_sku']}';
-                    final issued = double.tryParse('${i['quantity_issued'] ?? 0}') ?? 0;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(children: [
-                        Expanded(
-                          flex: 3,
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('${i['item_name'] ?? sku}',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                            Text('Issued: ${issued.toStringAsFixed(3)} ${i['unit'] ?? 'kg'}',
-                                style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                          ]),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _notesCtrl,
+            decoration: const InputDecoration(
+                labelText: 'Closing Notes', border: OutlineInputBorder()),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: _posting ? null : _submit,
+              style: FilledButton.styleFrom(backgroundColor: Colors.green),
+              icon: _posting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.check),
+              label: Text(_posting ? 'Closing...' : 'Close Shift'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Issue Stock to Shift Sheet (mid-shift additions) ─────────────────────────
+
+class _IssueShiftStockSheet extends ConsumerStatefulWidget {
+  const _IssueShiftStockSheet({required this.shiftId, required this.stock});
+  final String shiftId;
+  final List<Map<String, dynamic>> stock;
+
+  @override
+  ConsumerState<_IssueShiftStockSheet> createState() =>
+      _IssueShiftStockSheetState();
+}
+
+class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
+  final List<Map<String, dynamic>> _items = [];
+  bool _posting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _addItem();
+  }
+
+  @override
+  void dispose() {
+    for (final it in _items) {
+      (it['searchCtrl'] as TextEditingController).dispose();
+      (it['quantity'] as TextEditingController).dispose();
+      (it['cost_price'] as TextEditingController).dispose();
+    }
+    super.dispose();
+  }
+
+  void _addItem() {
+    setState(() {
+      _items.add({
+        'sku': '',
+        'name': '',
+        'searchCtrl': TextEditingController(),
+        'quantity': TextEditingController(),
+        'unit': 'kg',
+        'cost_price': TextEditingController(),
+        'available': 0.0,
+      });
+    });
+  }
+
+  void _removeItem(int i) {
+    setState(() {
+      (_items[i]['searchCtrl'] as TextEditingController).dispose();
+      (_items[i]['quantity'] as TextEditingController).dispose();
+      (_items[i]['cost_price'] as TextEditingController).dispose();
+      _items.removeAt(i);
+    });
+  }
+
+  void _applyStockSelection(Map<String, dynamic> row, Map<String, dynamic> s) {
+    row['sku'] = '${s['item_sku'] ?? s['sku'] ?? ''}';
+    row['name'] = '${s['item_name'] ?? s['name'] ?? ''}';
+    row['unit'] = '${s['unit_of_measure'] ?? s['unit'] ?? 'kg'}';
+    row['available'] = _fcNum(s['quantity']);
+    (row['searchCtrl'] as TextEditingController).text = row['name'];
+    final cost = _fcNum(s['cost_price'] ?? s['unit_cost']);
+    if (cost > 0)
+      (row['cost_price'] as TextEditingController).text =
+          cost.toStringAsFixed(2);
+  }
+
+  Future<void> _submit() async {
+    final issueItems = _items
+        .where((it) =>
+            '${it['sku']}'.isNotEmpty &&
+            (double.tryParse((it['quantity'] as TextEditingController)
+                        .text
+                        .trim()) ??
+                    0) >
+                0)
+        .map((it) => {
+              'sku': it['sku'],
+              'name': it['name'],
+              'quantity': double.parse(
+                  (it['quantity'] as TextEditingController).text.trim()),
+              'unit': it['unit'],
+              'cost_price': double.tryParse(
+                      (it['cost_price'] as TextEditingController)
+                          .text
+                          .trim()) ??
+                  0,
+            })
+        .toList();
+
+    if (issueItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Add at least one item with quantity'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() => _posting = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.addShiftStock(widget.shiftId, issueItems);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to issue stock: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      constraints: const BoxConstraints(maxHeight: 640),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                  child: Text('Issue Stock to Kitchen',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700))),
+              IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context)),
+            ],
+          ),
+          const Text(
+              'Mid-shift additions get added to this shift\'s available stock.',
+              style: TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 12),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _items.length,
+              itemBuilder: (ctx, i) {
+                final it = _items[i];
+                final searchCtrl = it['searchCtrl'] as TextEditingController;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Autocomplete<Map<String, dynamic>>(
+                          optionsBuilder: (tv) {
+                            final q = tv.text.toLowerCase().trim();
+                            if (q.isEmpty) return widget.stock.take(20);
+                            return widget.stock.where((s) {
+                              final sku = '${s['item_sku'] ?? s['sku'] ?? ''}'
+                                  .toLowerCase();
+                              final name =
+                                  '${s['item_name'] ?? s['name'] ?? ''}'
+                                      .toLowerCase();
+                              return sku.contains(q) || name.contains(q);
+                            }).take(20);
+                          },
+                          displayStringForOption: (s) =>
+                              '${s['item_name'] ?? s['name'] ?? ''}',
+                          onSelected: (s) =>
+                              setState(() => _applyStockSelection(it, s)),
+                          fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
+                            if (ctrl.text != searchCtrl.text)
+                              ctrl.text = searchCtrl.text;
+                            return TextField(
+                              controller: ctrl,
+                              focusNode: focus,
+                              decoration: InputDecoration(
+                                labelText: 'Item',
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                                helperText: '${it['sku']}'.isEmpty
+                                    ? null
+                                    : '${it['sku']} · avail ${(it['available'] as double).toStringAsFixed(1)} ${it['unit']}',
+                                helperStyle: const TextStyle(fontSize: 10),
+                              ),
+                              onChanged: (v) {
+                                searchCtrl.text = v;
+                                it['name'] = v;
+                                it['sku'] = '';
+                              },
+                            );
+                          },
                         ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 100,
-                          child: TextField(
-                            controller: _closingCtrl[sku],
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: it['quantity'] as TextEditingController,
+                            decoration: const InputDecoration(
+                                labelText: 'Qty',
+                                isDense: true,
+                                border: OutlineInputBorder()),
                             keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'Returned',
-                              suffixText: i['unit'] ?? 'kg',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                      ]),
-                    );
-                  }),
-                ],
-              ),
+                          )),
+                      IconButton(
+                        icon: const Icon(Icons.delete,
+                            size: 18, color: Colors.red),
+                        onPressed: () => _removeItem(i),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          // Total penalty preview
-          if (_entries.isNotEmpty) Builder(builder: (ctx) {
-            double totalPenalty = 0;
-            for (final e in _entries) {
-              final id = '${e['id']}';
-              final expected = double.tryParse('${e['expected_quantity'] ?? 0}') ?? 0;
-              final price = double.tryParse('${e['menu_selling_price'] ?? 0}') ?? 0;
-              final actual = double.tryParse(_ctrlMap[id]?.text.trim() ?? '0') ?? 0;
-              final variance = actual - expected;
-              if (variance < 0) totalPenalty += -variance * price;
-            }
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              color: totalPenalty > 0 ? Colors.red.shade50 : Colors.green.shade50,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(totalPenalty > 0 ? 'Penalty to raise:' : 'No penalty',
-                      style: TextStyle(fontWeight: FontWeight.w600,
-                          color: totalPenalty > 0 ? Colors.red : Colors.green)),
-                  if (totalPenalty > 0)
-                    Text('KES ${totalPenalty.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.red)),
-                ],
-              ),
-            );
-          }),
-          Container(
-            padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).padding.bottom + 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          ),
+          TextButton.icon(
+            onPressed: _addItem,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Add Item'),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: _posting ? null : _submit,
+              icon: _posting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.add_box_outlined),
+              label: Text(_posting ? 'Issuing...' : 'Issue Stock'),
             ),
-            child: SizedBox(
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Record Spoilage Sheet ─────────────────────────────────────────────────
+
+class _RecordShiftSpoilageSheet extends ConsumerStatefulWidget {
+  const _RecordShiftSpoilageSheet({required this.shiftId, required this.items});
+  final String shiftId;
+  final List<Map<String, dynamic>> items;
+
+  @override
+  ConsumerState<_RecordShiftSpoilageSheet> createState() =>
+      _RecordShiftSpoilageSheetState();
+}
+
+class _RecordShiftSpoilageSheetState
+    extends ConsumerState<_RecordShiftSpoilageSheet> {
+  static const _reasons = [
+    'burnt_food',
+    'overcooked_food',
+    'expired_food',
+    'staff_meals',
+    'complimentary_meals',
+    'wastage',
+    'quality_issue',
+    'pest_damage',
+  ];
+
+  Map<String, dynamic>? _selectedItem;
+  String _reasonCategory = _reasons.first;
+  final _qtyCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _posting = false;
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  String _reasonLabel(String r) => r
+      .split('_')
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
+
+  Future<void> _submit() async {
+    if (_selectedItem == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Select an item'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final qty = double.tryParse(_qtyCtrl.text.trim()) ?? 0;
+    if (qty <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Enter a spoilage quantity greater than zero'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() => _posting = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.recordSpoilage(
+        widget.shiftId,
+        [
+          {
+            'sku': _selectedItem!['item_sku'],
+            'quantity': qty,
+            'reason_category': _reasonCategory,
+            'reason': _notesCtrl.text.trim().isEmpty
+                ? _reasonLabel(_reasonCategory)
+                : _notesCtrl.text.trim(),
+          }
+        ],
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to record spoilage: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                  child: Text('Record Spoilage',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w700))),
+              IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<Map<String, dynamic>>(
+            initialValue: _selectedItem,
+            decoration: const InputDecoration(
+                labelText: 'Item', border: OutlineInputBorder(), isDense: true),
+            items: widget.items
+                .map((it) => DropdownMenuItem(
+                      value: it,
+                      child: Text('${it['item_name']} (${it['item_sku']})',
+                          style: const TextStyle(fontSize: 13)),
+                    ))
+                .toList(),
+            onChanged: (v) => setState(() => _selectedItem = v),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _qtyCtrl,
+            decoration: InputDecoration(
+              labelText: 'Quantity Spoiled',
+              suffixText: '${_selectedItem?['unit_of_measure'] ?? ''}',
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _reasonCategory,
+            decoration: const InputDecoration(
+                labelText: 'Reason',
+                border: OutlineInputBorder(),
+                isDense: true),
+            items: _reasons
+                .map((r) =>
+                    DropdownMenuItem(value: r, child: Text(_reasonLabel(r))))
+                .toList(),
+            onChanged: (v) =>
+                setState(() => _reasonCategory = v ?? _reasonCategory),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _notesCtrl,
+            decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                border: OutlineInputBorder(),
+                isDense: true),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: _posting ? null : _submit,
+              style: FilledButton.styleFrom(
+                  backgroundColor: Colors.orange.shade800),
+              icon: _posting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.delete_outline),
+              label: Text(_posting ? 'Saving...' : 'Record Spoilage'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Record Kitchen Production Sheet ──────────────────────────────────────
+
+class _RecordKitchenProductionSheet extends ConsumerStatefulWidget {
+  const _RecordKitchenProductionSheet({
+    required this.shiftId,
+    required this.shift,
+    required this.recipes,
+  });
+  final String shiftId;
+  final Map<String, dynamic> shift;
+  final List<Map<String, dynamic>> recipes;
+
+  @override
+  ConsumerState<_RecordKitchenProductionSheet> createState() =>
+      _RecordKitchenProductionSheetState();
+}
+
+class _RecordKitchenProductionSheetState
+    extends ConsumerState<_RecordKitchenProductionSheet> {
+  Map<String, dynamic>? _selectedRecipe;
+  String? _producedBy;
+  final _rawQtyCtrl = TextEditingController();
+  final _producedQtyCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _posting = false;
+
+  List<Map<String, dynamic>> get _shiftStaff =>
+      (widget.shift['shift_staff'] as List?)?.cast<Map<String, dynamic>>() ??
+      [];
+
+  List<Map<String, dynamic>> get _availableRecipes {
+    final items =
+        (widget.shift['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final skus = items.map((i) => '${i['item_sku']}').toSet();
+    return widget.recipes
+        .where((r) => skus.contains('${r['raw_item_sku']}'))
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    _rawQtyCtrl.dispose();
+    _producedQtyCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onRecipeSelected(Map<String, dynamic> r) {
+    setState(() {
+      _selectedRecipe = r;
+      final rawQty = _fcNum(r['raw_quantity']);
+      if (rawQty > 0) _rawQtyCtrl.text = rawQty.toStringAsFixed(2);
+      _recalcExpectedYield();
+    });
+  }
+
+  void _recalcExpectedYield() {
+    final r = _selectedRecipe;
+    if (r == null) return;
+    final rawQty = _fcNum(r['raw_quantity']);
+    final producedQty = _fcNum(r['produced_quantity']);
+    final used = double.tryParse(_rawQtyCtrl.text.trim()) ?? 0;
+    if (rawQty > 0) {
+      final ratio = producedQty / rawQty;
+      _producedQtyCtrl.text = (used * ratio).toStringAsFixed(2);
+    }
+  }
+
+  Future<void> _submit() async {
+    final recipe = _selectedRecipe;
+    if (recipe == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Select a Food Control / recipe'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final rawQtyUsed = double.tryParse(_rawQtyCtrl.text.trim()) ?? 0;
+    final producedQty = double.tryParse(_producedQtyCtrl.text.trim()) ?? 0;
+    if (rawQtyUsed <= 0 || producedQty <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Raw quantity used and produced quantity must be greater than zero'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final rawQty = _fcNum(recipe['raw_quantity']);
+    final ratio = rawQty > 0 ? _fcNum(recipe['produced_quantity']) / rawQty : 0;
+
+    setState(() => _posting = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.recordProduction(widget.shiftId, [
+        {
+          'recipe_id': recipe['id'],
+          'raw_item_sku': recipe['raw_item_sku'],
+          'raw_item_name': recipe['raw_item_name'],
+          'raw_quantity_used': rawQtyUsed,
+          'raw_unit': recipe['raw_unit'],
+          'produced_item_name': recipe['produced_item_name'],
+          'produced_item_sku': recipe['produced_item_sku'],
+          'pos_outlet_item_id': recipe['pos_outlet_item_id'],
+          'produced_quantity': producedQty,
+          'produced_unit': recipe['produced_unit'],
+          'conversion_ratio': ratio,
+          'conversion_notes':
+              _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          if (_producedBy != null) 'produced_by': _producedBy,
+        }
+      ]);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to record production: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipes = _availableRecipes;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      constraints: const BoxConstraints(maxHeight: 680),
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                    child: Text('Record Production',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700))),
+                IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (recipes.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Text(
+                  'No Food Control links any raw material currently issued into this shift. Issue stock for an item that has a Food Control configured, or add one in Food Control.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              )
+            else
+              DropdownButtonFormField<Map<String, dynamic>>(
+                initialValue: _selectedRecipe,
+                decoration: const InputDecoration(
+                    labelText: 'Food Control / Recipe',
+                    border: OutlineInputBorder(),
+                    isDense: true),
+                items: recipes
+                    .map((r) => DropdownMenuItem(
+                          value: r,
+                          child: Text(
+                              '${r['raw_item_name']} → ${r['produced_item_name']}',
+                              style: const TextStyle(fontSize: 13)),
+                        ))
+                    .toList(),
+                onChanged: (v) => v == null ? null : _onRecipeSelected(v),
+              ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                  child: TextFormField(
+                controller: _rawQtyCtrl,
+                decoration: InputDecoration(
+                    labelText: 'Raw Qty Used',
+                    suffixText: '${_selectedRecipe?['raw_unit'] ?? ''}',
+                    border: const OutlineInputBorder(),
+                    isDense: true),
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _recalcExpectedYield(),
+              )),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: TextFormField(
+                controller: _producedQtyCtrl,
+                decoration: InputDecoration(
+                    labelText: 'Produced Qty',
+                    suffixText: '${_selectedRecipe?['produced_unit'] ?? ''}',
+                    border: const OutlineInputBorder(),
+                    isDense: true),
+                keyboardType: TextInputType.number,
+              )),
+            ]),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _producedBy,
+              decoration: const InputDecoration(
+                labelText: 'Produced By (chef)',
+                border: OutlineInputBorder(),
+                isDense: true,
+                helperText:
+                    'Any yield shortfall on confirmation is billed to this person',
+                helperStyle: TextStyle(fontSize: 10),
+              ),
+              items: _shiftStaff
+                  .map((staff) => DropdownMenuItem(
+                        value:
+                            '${staff['staff_profile_id'] ?? staff['user_id']}',
+                        child: Text('${staff['name'] ?? ''}',
+                            style: const TextStyle(fontSize: 13)),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() => _producedBy = v),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _notesCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  border: OutlineInputBorder(),
+                  isDense: true),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _posting ? null : _submit,
-                style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                onPressed: _posting || recipes.isEmpty ? null : _submit,
                 icon: _posting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.check),
-                label: Text(_posting ? 'Submitting...' : 'Complete Session'),
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.restaurant_outlined),
+                label: Text(_posting ? 'Saving...' : 'Record Production'),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Confirm Actual Production Yield Dialog ───────────────────────────────
+
+class _ConfirmProductionDialog extends ConsumerStatefulWidget {
+  const _ConfirmProductionDialog({
+    required this.shiftId,
+    required this.productionId,
+    required this.producedItemName,
+    required this.expectedQuantity,
+    required this.unit,
+  });
+  final String shiftId;
+  final String productionId;
+  final String producedItemName;
+  final double expectedQuantity;
+  final String unit;
+
+  @override
+  ConsumerState<_ConfirmProductionDialog> createState() =>
+      _ConfirmProductionDialogState();
+}
+
+class _ConfirmProductionDialogState
+    extends ConsumerState<_ConfirmProductionDialog> {
+  late final _actualCtrl =
+      TextEditingController(text: widget.expectedQuantity.toStringAsFixed(2));
+  bool _posting = false;
+
+  @override
+  void dispose() {
+    _actualCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final actual = double.tryParse(_actualCtrl.text.trim());
+    if (actual == null || actual < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Enter a valid actual quantity'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() => _posting = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final result = await repo.confirmProductionActual(
+          widget.shiftId, widget.productionId, actual);
+      final bill = result['credit_bill'];
+      if (mounted) {
+        Navigator.pop(context, true);
+        final variance = widget.expectedQuantity - actual;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              variance > 0 && bill != null
+                  ? 'Shortfall of ${variance.toStringAsFixed(2)} ${widget.unit} billed to producer.'
+                  : 'Actual yield confirmed — no shortfall.',
+            ),
+            backgroundColor: variance > 0 ? Colors.orange : Colors.green,
           ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to confirm actual yield: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Confirm Actual Yield'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${widget.producedItemName}',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(
+              'Expected: ${widget.expectedQuantity.toStringAsFixed(2)} ${widget.unit}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _actualCtrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+                labelText: 'Actual Quantity Produced',
+                suffixText: widget.unit,
+                border: const OutlineInputBorder(),
+                isDense: true),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Any shortfall below expected yield is billed to the chef who produced this batch.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: _posting ? null : () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _posting ? null : _submit,
+          child: _posting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Text('Confirm'),
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow(this.label, this.value,
+      {this.isNegative = false, this.isTotal = false});
+  final String label;
+  final String value;
+  final bool isNegative;
+  final bool isTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: isTotal ? 14 : 13)),
+          Text(value,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: isTotal ? 15 : 13,
+                color: isNegative
+                    ? Colors.red
+                    : isTotal
+                        ? AppColors.kPrimary
+                        : Colors.black87,
+              )),
         ],
       ),
     );
@@ -14183,8 +15244,16 @@ class _ShiftBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = shiftType == 'shift_b' ? 'Shift B' : 'Shift A';
-    final color = shiftType == 'shift_b' ? Colors.indigo : Colors.teal;
+    final label = switch (shiftType) {
+      'shift_a' => 'Shift A',
+      'shift_b' => 'Shift B',
+      _ => '$shiftType',
+    };
+    final color = switch (shiftType) {
+      'shift_a' => Colors.teal,
+      'shift_b' => Colors.indigo,
+      _ => Colors.grey,
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
@@ -14193,7 +15262,8 @@ class _ShiftBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+        style:
+            TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }

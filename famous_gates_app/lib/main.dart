@@ -81,11 +81,11 @@ class FamousGatesApp extends ConsumerWidget {
         final Widget wrapped = CallbackShortcuts(
           bindings: <ShortcutActivator, VoidCallback>{
             const SingleActivator(LogicalKeyboardKey.keyR, control: true): () =>
-                ref.read(globalRefreshTickProvider.notifier).state++,
+                triggerGlobalRefresh(ref),
             const SingleActivator(LogicalKeyboardKey.keyR, meta: true): () =>
-                ref.read(globalRefreshTickProvider.notifier).state++,
+                triggerGlobalRefresh(ref),
             const SingleActivator(LogicalKeyboardKey.f5): () =>
-                ref.read(globalRefreshTickProvider.notifier).state++,
+                triggerGlobalRefresh(ref),
           },
           child: Focus(
             autofocus: true,

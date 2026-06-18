@@ -22,7 +22,7 @@ import '../../auth/domain/auth_notifier.dart';
 import '../../branch_search/presentation/branch_search_screen.dart';
 import '../data/repository.dart';
 import '../domain/providers.dart';
-import 'financial_close_screen.dart';
+import 'daily_close_screen.dart';
 import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
@@ -33,7 +33,6 @@ enum BranchAccountantSection {
   cashierClearance,
   analytics,
   salesPayments,
-  financialWorkspace,
   financialClose,
   branchPayroll,
   payrollPolicies,
@@ -60,6 +59,7 @@ enum BranchAccountantSection {
   buffet,
   catering,
   budgets,
+  kitchenVariance,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -147,10 +147,8 @@ class _BranchAccountantDashboardState
         return const _AnalyticsSection();
       case BranchAccountantSection.salesPayments:
         return const BranchSalesPaymentsView();
-      case BranchAccountantSection.financialWorkspace:
-        return const _FinancialWorkspaceSection();
       case BranchAccountantSection.financialClose:
-        return const FinancialCloseScreen();
+        return const DailyCloseScreen();
       case BranchAccountantSection.branchPayroll:
         return const BranchPayrollScreen();
       case BranchAccountantSection.payrollPolicies:
@@ -204,6 +202,8 @@ class _BranchAccountantDashboardState
         return const _CateringSection();
       case BranchAccountantSection.budgets:
         return const _BudgetsSection();
+      case BranchAccountantSection.kitchenVariance:
+        return const _KitchenVarianceSection();
     }
   }
 
@@ -256,8 +256,6 @@ const _navItems = [
   _NavItem(
       BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
   // ── Finance & oversight ──
-  _NavItem(BranchAccountantSection.financialWorkspace, 'Financial Workspace',
-      Icons.calendar_month),
   _NavItem(
       BranchAccountantSection.financialClose, 'Daily Close', Icons.lock_clock),
   _NavItem(BranchAccountantSection.branchPayroll, 'Branch Payroll',
@@ -279,6 +277,8 @@ const _navItems = [
       Icons.account_tree),
   _NavItem(BranchAccountantSection.supplierFinance, 'Supplier Finance',
       Icons.account_balance_wallet),
+  _NavItem(BranchAccountantSection.kitchenVariance, 'Kitchen Variance',
+      Icons.soup_kitchen),
 ];
 
 class _BranchAccountantSideNav extends ConsumerWidget {
@@ -671,7 +671,7 @@ class _OverviewSection extends ConsumerWidget {
               capturedSales: analyticsRevenue,
               unpostedSales: unpostedSales,
               onOpenWorkspace: () =>
-                  onNavigate(BranchAccountantSection.financialWorkspace),
+                  onNavigate(BranchAccountantSection.financialClose),
             ),
             _ResponsiveGrid(children: [
               _MetricCard('Posted Revenue', _money(accountedRevenue),
@@ -946,9 +946,9 @@ class _QuickActions extends StatelessWidget {
         BranchAccountantSection.shiftOpenings
       ),
       (
-        'Financial Workspace',
-        Icons.calendar_month,
-        BranchAccountantSection.financialWorkspace
+        'Daily Close',
+        Icons.lock_clock,
+        BranchAccountantSection.financialClose
       ),
       ('Discrepancies', Icons.warning, BranchAccountantSection.discrepancies),
       ('Credit Bills', Icons.credit_card, BranchAccountantSection.creditBills),
@@ -2089,152 +2089,6 @@ class _AnalyticsTransactionTableState
         ],
       ),
     );
-  }
-}
-
-class _FinancialWorkspaceSection extends ConsumerStatefulWidget {
-  const _FinancialWorkspaceSection();
-
-  @override
-  ConsumerState<_FinancialWorkspaceSection> createState() =>
-      _FinancialWorkspaceSectionState();
-}
-
-class _FinancialWorkspaceSectionState
-    extends ConsumerState<_FinancialWorkspaceSection> {
-  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
-  late Future<List<Map<String, dynamic>>> _future = _load();
-
-  Future<List<Map<String, dynamic>>> _load() {
-    final start = DateTime(_month.year, _month.month, 1);
-    final end = DateTime(_month.year, _month.month + 1, 0);
-    return ref
-        .read(branchAccountantRepositoryProvider)
-        .getDailyRecords(startDate: _date(start), endDate: _date(end));
-  }
-
-  void _refresh() => setState(() {
-        _future = _load();
-      });
-
-  @override
-  Widget build(BuildContext context) {
-    final tasks = ref.watch(branchAccountantDirectorTasksProvider);
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) {
-          final totalRevenue =
-              items.fold<num>(0, (sum, e) => sum + _num(e['total_revenue']));
-          final totalProfit =
-              items.fold<num>(0, (sum, e) => sum + _num(e['net_profit']));
-          final unbanked =
-              items.fold<num>(0, (sum, e) => sum + _num(e['unbanked_cash']));
-          return _Page(
-            title: 'Financial Workspace',
-            subtitle:
-                'Daily revenue, payments, banking, COGS, expenses, monthly adjustments, and director tasks.',
-            actions: [
-              OutlinedButton.icon(
-                onPressed: () => _moveMonth(-1),
-                icon: const Icon(Icons.chevron_left),
-                label: const Text('Previous'),
-              ),
-              Text(DateFormat('MMMM yyyy').format(_month),
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
-              OutlinedButton.icon(
-                onPressed: () => _moveMonth(1),
-                icon: const Icon(Icons.chevron_right),
-                label: const Text('Next'),
-              ),
-              _RefreshButton(onPressed: _refresh),
-              FilledButton.tonalIcon(
-                onPressed: _monthlyAdjustments,
-                icon: const Icon(Icons.account_balance),
-                label: const Text('Monthly Adjustments'),
-              ),
-              FilledButton.icon(
-                onPressed: _exportMonth,
-                icon: const Icon(Icons.download),
-                label: const Text('Export Month'),
-              ),
-            ],
-            children: [
-              tasks.maybeWhen(
-                data: (items) => items.isEmpty
-                    ? const SizedBox.shrink()
-                    : _DirectorTasks(items: items),
-                orElse: () => const SizedBox.shrink(),
-              ),
-              _ResponsiveGrid(children: [
-                _MetricCard('Recorded Days', '${items.length}',
-                    Icons.event_note, Colors.blue),
-                _MetricCard('Revenue', _money(totalRevenue), Icons.trending_up,
-                    Colors.green),
-                _MetricCard('Net Profit', _money(totalProfit), Icons.wallet,
-                    totalProfit >= 0 ? Colors.green : Colors.red),
-                _MetricCard('Unbanked Cash', _money(unbanked), Icons.warning,
-                    unbanked > 0 ? Colors.red : Colors.green),
-              ]),
-              _MonthCalendarGrid(
-                month: _month,
-                records: items,
-                onDayTapped: _dailyEntry,
-                onNewEntry: () => _dailyEntry({
-                  'record_date': _today(),
-                  'status': 'DRAFT',
-                }),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _moveMonth(int delta) {
-    setState(() {
-      _month = DateTime(_month.year, _month.month + delta);
-      _future = _load();
-    });
-  }
-
-  Future<void> _dailyEntry(Map<String, dynamic> record) async {
-    final status = _text(record, ['status']).toUpperCase();
-    final isReadOnly = status == 'SUBMITTED' || status == 'REVIEWED';
-    // Auto-trigger LINA fill when the record has no revenue data yet
-    final hasData = _num(record['total_revenue']) > 0 ||
-        (record['revenue_data'] as Map?)?.isNotEmpty == true;
-    final autoFill = !isReadOnly && !hasData;
-    final saved = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _DailyEntryDialog(
-        existing: record,
-        isReadOnly: isReadOnly,
-        autoFill: autoFill,
-      ),
-    );
-    if (saved == true) _refresh();
-  }
-
-  Future<void> _monthlyAdjustments() async {
-    final saved = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) =>
-          _MonthlyAdjustmentsDialog(year: _month.year, month: _month.month),
-    );
-    if (saved == true) _refresh();
-  }
-
-  Future<void> _exportMonth() async {
-    final file = await ref
-        .read(branchAccountantRepositoryProvider)
-        .exportMonthlyStatement(year: _month.year, month: _month.month);
-    _toast('Monthly statement saved to ${file.path}');
   }
 }
 
@@ -10302,15 +10156,16 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     final supplierIds = suppliers.map((e) => _text(e, ['id'])).toSet();
     final pos = await repo.getPurchaseOrders();
     final readyToBill = await repo.getReadyToBillGRNs();
-    final invoices = <Map<String, dynamic>>[];
-    final payments = <Map<String, dynamic>>[];
-    final grns = <Map<String, dynamic>>[];
-
-    for (final supplierId in supplierIds.where((id) => id.isNotEmpty)) {
-      invoices.addAll(await repo.getSupplierInvoices(supplierId: supplierId));
-      payments.addAll(await repo.getSupplierPayments(supplierId: supplierId));
-      grns.addAll(await repo.getSupplierGRNs(supplierId: supplierId));
-    }
+    final ids = supplierIds.where((id) => id.isNotEmpty).toList();
+    final results = await Future.wait([
+      for (final supplierId in ids) repo.getSupplierInvoices(supplierId: supplierId),
+      for (final supplierId in ids) repo.getSupplierPayments(supplierId: supplierId),
+      for (final supplierId in ids) repo.getSupplierGRNs(supplierId: supplierId),
+    ]);
+    final invoices = results.take(ids.length).expand((e) => e).toList();
+    final payments =
+        results.skip(ids.length).take(ids.length).expand((e) => e).toList();
+    final grns = results.skip(ids.length * 2).expand((e) => e).toList();
 
     Map<String, dynamic> aging = {};
     try {
@@ -13615,6 +13470,474 @@ class _CateringSectionState extends ConsumerState<_CateringSection> {
         .cancelCateringEvent('${event['id']}', reason);
     _toast('Catering event cancelled');
     _refresh();
+  }
+}
+
+// ── Kitchen Variance / Credit Bill Approval ──────────────────────────────────
+
+class _KitchenVarianceSection extends ConsumerStatefulWidget {
+  const _KitchenVarianceSection();
+
+  @override
+  ConsumerState<_KitchenVarianceSection> createState() =>
+      _KitchenVarianceSectionState();
+}
+
+class _KitchenVarianceSectionState
+    extends ConsumerState<_KitchenVarianceSection> {
+  late Future<List<Map<String, dynamic>>> _future = _load();
+
+  Future<List<Map<String, dynamic>>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .getPendingKitchenShiftReviews();
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (shifts) {
+          final totalExposure = shifts.fold<num>(
+              0, (s, e) => s + _num(e['total_variance_cost']).abs());
+          return _Page(
+            title: 'Kitchen Variance Review',
+            subtitle:
+                'Closed kitchen shifts confirmed by the chef, awaiting your approval and liability decision.',
+            actions: [_RefreshButton(onPressed: _refresh)],
+            children: [
+              _ResponsiveGrid(children: [
+                _MetricCard('Pending Review', '${shifts.length}',
+                    Icons.pending_actions, Colors.orange),
+                _MetricCard('Total Variance Exposure', _money(totalExposure),
+                    Icons.warning_amber, Colors.red),
+              ]),
+              if (shifts.isEmpty)
+                _SectionCard(
+                  title: 'All Clear',
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(children: [
+                      Icon(Icons.check_circle_outline,
+                          color: Colors.green.shade400, size: 32),
+                      const SizedBox(width: 12),
+                      const Text(
+                          'No kitchen shifts pending variance review.'),
+                    ]),
+                  ),
+                ),
+              ...shifts.map((s) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _ActionCard(
+                      title:
+                          '${s['shift_number'] ?? 'Shift'} — ${_text(s, ['shift_date'])}',
+                      subtitle:
+                          'Store keeper: ${s['store_keeper']?['first_name'] ?? '—'}',
+                      trailing: _StatusPill(
+                          'Variance ${_money(_num(s['total_variance_cost']).abs())}'),
+                      rows: {
+                        'Revenue': _money(_num(s['total_revenue'])),
+                        'COGS': _money(_num(s['total_cogs'])),
+                        'Spoilage Cost':
+                            _money(_num(s['total_spoilage_cost'])),
+                        'Variance Cost':
+                            _money(_num(s['total_variance_cost']).abs()),
+                      },
+                      actions: [
+                        FilledButton.icon(
+                          onPressed: () => _review(s),
+                          icon: const Icon(Icons.fact_check_outlined,
+                              size: 16),
+                          label: const Text('Review & Decide'),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _review(Map<String, dynamic> shiftRow) async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    Map<String, dynamic> detail;
+    try {
+      detail = await repo.getKitchenShiftReviewDetail('${shiftRow['id']}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to load shift: $e'),
+            backgroundColor: Colors.red));
+      }
+      return;
+    }
+    if (!mounted) return;
+    final acted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _KitchenVarianceReviewDialog(detail: detail),
+    );
+    if (acted == true) _refresh();
+  }
+}
+
+class _KitchenVarianceReviewDialog extends ConsumerStatefulWidget {
+  const _KitchenVarianceReviewDialog({required this.detail});
+  final Map<String, dynamic> detail;
+
+  @override
+  ConsumerState<_KitchenVarianceReviewDialog> createState() =>
+      _KitchenVarianceReviewDialogState();
+}
+
+class _KitchenVarianceReviewDialogState
+    extends ConsumerState<_KitchenVarianceReviewDialog> {
+  String _liabilityAction = 'approve_only';
+  String? _selectedStaffId;
+  final Map<String, TextEditingController> _splitCtrls = {};
+  final _writeOffReasonCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _posting = false;
+
+  List<Map<String, dynamic>> get _staff =>
+      (widget.detail['shift_staff'] as List?)?.cast<Map<String, dynamic>>() ??
+      [];
+
+  num get _totalVariance =>
+      _num((widget.detail['shift'] as Map?)?['total_variance_cost']).abs();
+
+  @override
+  void initState() {
+    super.initState();
+    for (final st in _staff) {
+      _splitCtrls['${st['user_id']}'] = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _splitCtrls.values) {
+      c.dispose();
+    }
+    _writeOffReasonCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shift =
+        (widget.detail['shift'] as Map?)?.cast<String, dynamic>() ?? {};
+    final stockTake =
+        (widget.detail['stock_take'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${shift['shift_number'] ?? 'Shift'}',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700)),
+              Text(
+                  '${shift['shift_date'] ?? ''}  •  Variance cost ${_money(_totalVariance)}',
+                  style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 12),
+              if (stockTake.isNotEmpty)
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Variance Breakdown',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        ...stockTake.map((st) {
+                          final variance = _num(st['variance']);
+                          if (variance == 0) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                    child: Text(
+                                        '${st['item_name'] ?? st['item_sku']}',
+                                        style: const TextStyle(fontSize: 13))),
+                                Text(
+                                  '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(2)}  (${_money(_num(st['variance_value']).abs())})',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: variance > 0
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        const Divider(height: 20),
+                        const Text('Liability Decision',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        _liabilityRadio('approve_only',
+                            'Approve only (no charge to staff)'),
+                        _liabilityRadio(
+                            'single_staff', 'Charge a single staff member'),
+                        if (_liabilityAction == 'single_staff')
+                          _singleStaffPicker(),
+                        _liabilityRadio(
+                            'custom_split', 'Split liability (custom amounts)'),
+                        if (_liabilityAction == 'custom_split')
+                          _customSplitInputs(),
+                        _liabilityRadio(
+                            'split_shift', 'Split equally across whole shift'),
+                        if (_liabilityAction == 'split_shift')
+                          _splitShiftPreview(),
+                        _liabilityRadio('write_off', 'Write off (no recovery)'),
+                        if (_liabilityAction == 'write_off')
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32, top: 4, bottom: 8),
+                            child: TextField(
+                              controller: _writeOffReasonCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Write-off reason (required)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              maxLines: 2,
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _notesCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Notes (optional)',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          maxLines: 2,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _posting ? null : () => _submit(approved: false),
+                      icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                      label: const Text('Reject Shift'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _posting ? null : () => _submit(approved: true),
+                      icon: _posting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.check),
+                      label: Text(_posting ? 'Submitting...' : 'Approve'),
+                      style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _liabilityRadio(String value, String label) {
+    return RadioListTile<String>(
+      value: value,
+      groupValue: _liabilityAction,
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(label, style: const TextStyle(fontSize: 13)),
+      onChanged: (v) => setState(() => _liabilityAction = v ?? _liabilityAction),
+    );
+  }
+
+  Widget _singleStaffPicker() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 32, bottom: 8),
+      child: DropdownButtonFormField<String>(
+        initialValue: _selectedStaffId,
+        isExpanded: true,
+        decoration: const InputDecoration(
+            labelText: 'Staff member', isDense: true, border: OutlineInputBorder()),
+        items: _staff
+            .map((st) => DropdownMenuItem(
+                  value: '${st['user_id']}',
+                  child: Text('${st['name']} (${st['role']})',
+                      overflow: TextOverflow.ellipsis),
+                ))
+            .toList(),
+        onChanged: (v) => setState(() => _selectedStaffId = v),
+      ),
+    );
+  }
+
+  Widget _customSplitInputs() {
+    if (_staff.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 32, bottom: 8),
+        child: Text('No shift staff found to split liability across.',
+            style: TextStyle(color: Colors.grey, fontSize: 12)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(left: 32, bottom: 8),
+      child: Column(
+        children: _staff.map((st) {
+          final id = '${st['user_id']}';
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Expanded(
+                    child: Text('${st['name']} (${st['role']})',
+                        style: const TextStyle(fontSize: 13))),
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: _splitCtrls[id],
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        prefixText: 'KES ', isDense: true, border: OutlineInputBorder()),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _splitShiftPreview() {
+    if (_staff.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 32, bottom: 8),
+        child: Text('No shift staff found to split liability across.',
+            style: TextStyle(color: Colors.grey, fontSize: 12)),
+      );
+    }
+    final each = _totalVariance / _staff.length;
+    return Padding(
+      padding: const EdgeInsets.only(left: 32, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _staff
+            .map((st) => Text('${st['name']} (${st['role']}) — ${_money(each)}',
+                style: const TextStyle(fontSize: 13)))
+            .toList(),
+      ),
+    );
+  }
+
+  Future<void> _submit({required bool approved}) async {
+    final shiftId = '${(widget.detail['shift'] as Map?)?['id']}';
+    List<Map<String, dynamic>> allocations = [];
+    String? writeOffReason;
+    String liabilityAction = approved ? _liabilityAction : 'rejected';
+
+    if (approved) {
+      switch (_liabilityAction) {
+        case 'single_staff':
+          if (_selectedStaffId == null) {
+            _showError('Select a staff member to charge.');
+            return;
+          }
+          allocations = [
+            {
+              'user_id': _selectedStaffId,
+              'amount': _totalVariance,
+              'description': 'Kitchen variance — ${(widget.detail['shift'] as Map?)?['shift_number']}',
+            }
+          ];
+          break;
+        case 'custom_split':
+          allocations = _staff
+              .map((st) {
+                final id = '${st['user_id']}';
+                final amount = double.tryParse(_splitCtrls[id]?.text.trim() ?? '') ?? 0;
+                return {'user_id': id, 'amount': amount, 'description': 'Kitchen variance split'};
+              })
+              .where((a) => (a['amount'] as double) > 0)
+              .toList();
+          if (allocations.isEmpty) {
+            _showError('Enter at least one staff amount to split.');
+            return;
+          }
+          break;
+        case 'split_shift':
+          if (_staff.isEmpty) {
+            _showError('No shift staff found to split liability across.');
+            return;
+          }
+          final each = _totalVariance / _staff.length;
+          allocations = _staff
+              .map((st) => {
+                    'user_id': '${st['user_id']}',
+                    'amount': each,
+                    'description': 'Kitchen variance — equal shift split',
+                  })
+              .toList();
+          break;
+        case 'write_off':
+          writeOffReason = _writeOffReasonCtrl.text.trim();
+          if (writeOffReason.isEmpty) {
+            _showError('A write-off reason is required.');
+            return;
+          }
+          break;
+      }
+    }
+
+    setState(() => _posting = true);
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      await repo.reviewKitchenShiftVariance(
+        shiftId: shiftId,
+        approved: approved,
+        liabilityAction: liabilityAction,
+        allocations: allocations,
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        writeOffReason: writeOffReason,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      _showError('Failed to submit: $e');
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 }
 
@@ -17240,8 +17563,6 @@ String _shortLabel(BranchAccountantSection section) {
   switch (section) {
     case BranchAccountantSection.cashierClearance:
       return 'Cashier';
-    case BranchAccountantSection.financialWorkspace:
-      return 'Workspace';
     case BranchAccountantSection.discrepancies:
       return 'Flags';
     case BranchAccountantSection.shiftOpenings:

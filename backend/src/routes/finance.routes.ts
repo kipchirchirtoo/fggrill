@@ -44,6 +44,7 @@ import {
   getDailySnapshot,
   getBranchProfitability,
 } from "../controllers/financial-close.controller";
+import { getComprehensiveDailyData } from "../controllers/lina-comprehensive-fetch.controller";
 import {
   listPayrollBatches,
   getPayrollBatch,
@@ -285,6 +286,23 @@ router.get(
     UserRole.BRANCH_MANAGER,
   ]),
   getDailyAutofill,
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LINA AI COMPREHENSIVE DATA FETCH
+// Fetches ALL payment, cashier, and shift data from 16+ database tables
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get(
+  "/lina/comprehensive-fetch",
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.DIRECTOR,
+    UserRole.GENERAL_MANAGER,
+    UserRole.AUDITOR,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT,
+  ]),
+  getComprehensiveDailyData,
 );
 
 router.get(

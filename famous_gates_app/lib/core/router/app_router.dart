@@ -844,6 +844,12 @@ List<GoRoute> get _kitchenOperationsSectionRoutes => [
           initialSection: KitchenOperationsSection.spoilage,
         ),
       ),
+      GoRoute(
+        path: '/kitchen-operations/shift-confirmations',
+        builder: (context, state) => const KitchenOperationsDashboard(
+          initialSection: KitchenOperationsSection.shiftConfirmations,
+        ),
+      ),
     ];
 
 KitchenFoodTab _foodTabFromQuery(String? value) {
@@ -1375,8 +1381,8 @@ const _branchManagerSectionRouteSpecs =
 const _branchAccountantSectionRouteSpecs =
     <MapEntry<String, BranchAccountantSection>>[
   MapEntry('/branch-accountant/analytics', BranchAccountantSection.analytics),
-  MapEntry('/branch-accountant/financial-workspace',
-      BranchAccountantSection.financialWorkspace),
+  MapEntry('/branch-accountant/financial-close',
+      BranchAccountantSection.financialClose),
   MapEntry('/branch-accountant/supplier-finance',
       BranchAccountantSection.supplierFinance),
   MapEntry('/branch-accountant/discrepancies',

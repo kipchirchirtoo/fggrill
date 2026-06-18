@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../storage/secure_storage_provider.dart';
 import '../utils/working_directory_guard.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/domain/auth_notifier.dart';
 
 class AuthInterceptor extends Interceptor {
   AuthInterceptor(this._ref);
@@ -47,6 +48,10 @@ class AuthInterceptor extends Interceptor {
         final storage = _ref.read(secureStorageProvider);
         await storage.delete(key: AuthRepository.jwtKey);
         await storage.delete(key: AuthRepository.refreshKey);
+        // Without this, authNotifierProvider keeps reporting the stale
+        // logged-in user, so the router never redirects to /login — every
+        // subsequent request just 401s with "no token provided" forever.
+        _ref.read(authNotifierProvider.notifier).forceSessionExpired();
       }
     }
     return handler.next(err);

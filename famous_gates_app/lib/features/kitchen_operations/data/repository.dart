@@ -68,6 +68,31 @@ class KitchenOpsRepository {
     return _unwrapMap(response.data);
   }
 
+  Future<List<Map<String, dynamic>>> getShiftsPendingChefConfirmation() async {
+    final response = await _dio.get(
+      '/kitchen/shifts',
+      queryParameters: await _branchQuery({'status': 'pending_chef_confirmation'}),
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> getKitchenShiftDetail(String shiftId) async {
+    final response = await _dio.get('/kitchen/shifts/$shiftId');
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> chefConfirmShift(
+    String shiftId, {
+    required bool confirmed,
+    String? notes,
+  }) async {
+    final response = await _dio.post('/kitchen/shifts/$shiftId/chef-confirm', data: {
+      'confirmed': confirmed,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+    return _unwrapMap(response.data);
+  }
+
   Future<List<Map<String, dynamic>>> getStock({
     bool lowStock = false,
     String? search,

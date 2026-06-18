@@ -777,27 +777,54 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
 
     try {
       final user = ref.read(authNotifierProvider).valueOrNull;
+      final branchId = _outlet?.branchId?.toString() ?? user?.branchId;
+      final outletId = _outlet?.id;
+      final branchName = _outlet?.name ?? widget.title;
+      final tableNum = _isRestaurant && _orderType == 'dine_in'
+          ? _tableController.text.trim()
+          : null;
+      final roomNum = _isRestaurant && _orderType == 'room_service'
+          ? _roomController.text.trim()
+          : null;
+      final customerLabel = _orderCustomerLabel();
+      final barcodeVal = (order.shortCode?.trim().isNotEmpty ?? false)
+          ? order.shortCode
+          : order.orderNumber;
+
+      // FIRST PRINT: Customer Bill (given to customer at table)
       await printCustomerDocument(
         ref,
         templateKey: 'customer_bill',
         fallbackTitle: 'CUSTOMER BILL',
-        branchId: _outlet?.branchId?.toString() ?? user?.branchId,
-        outletId: _outlet?.id,
+        branchId: branchId,
+        outletId: outletId,
         sale: sale,
         items: receiptItems,
-        branchName: _outlet?.name ?? widget.title,
-        tableNumber: _isRestaurant && _orderType == 'dine_in'
-            ? _tableController.text.trim()
-            : null,
-        roomNumber: _isRestaurant && _orderType == 'room_service'
-            ? _roomController.text.trim()
-            : null,
-        customerName: _orderCustomerLabel(),
+        branchName: branchName,
+        tableNumber: tableNum,
+        roomNumber: roomNum,
+        customerName: customerLabel,
         staffLabel: 'Waiter',
         publicCode: order.shortCode,
-        barcodeValue: (order.shortCode?.trim().isNotEmpty ?? false)
-            ? order.shortCode
-            : order.orderNumber,
+        barcodeValue: barcodeVal,
+      );
+
+      // SECOND PRINT: Kitchen Captain Order (for kitchen preparation)
+      await printCustomerDocument(
+        ref,
+        templateKey: 'kitchen_captain_order',
+        fallbackTitle: 'KITCHEN COPY - CAPTAIN ORDER',
+        branchId: branchId,
+        outletId: outletId,
+        sale: sale,
+        items: receiptItems,
+        branchName: branchName,
+        tableNumber: tableNum,
+        roomNumber: roomNum,
+        customerName: customerLabel,
+        staffLabel: 'Waiter',
+        publicCode: order.shortCode,
+        barcodeValue: barcodeVal,
       );
     } catch (error) {
       if (!mounted) return;

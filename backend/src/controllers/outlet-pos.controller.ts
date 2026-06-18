@@ -615,13 +615,36 @@ const updateStockForItems = async (
 
     const { data: outletItem, error: itemError } = await supabase
       .from('pos_outlet_items')
-      .select('current_stock, outlet_id, track_stock')
+      .select('current_stock, outlet_id, track_stock, stock_pool_item_id, pool_fraction')
       .eq('id', outletItemId)
       .maybeSingle();
 
     if (itemError) throw itemError;
     if (!outletItem) continue;
     if (outletItem.track_stock === false) continue;
+
+    // Pool-aware deduction: items sharing a stock pool (e.g. Half/Quarter
+    // Chicken sharing the Full Chicken pool) have no independent stock of
+    // their own — deduct the pool-equivalent quantity from the pool item.
+    if (outletItem.stock_pool_item_id) {
+      const { data: poolItem, error: poolError } = await supabase
+        .from('pos_outlet_items')
+        .select('current_stock')
+        .eq('id', outletItem.stock_pool_item_id)
+        .maybeSingle();
+      if (poolError) throw poolError;
+      if (poolItem) {
+        const fraction = numberValue(outletItem.pool_fraction) || 1;
+        await supabase
+          .from('pos_outlet_items')
+          .update({
+            current_stock: Math.max(0, numberValue(poolItem.current_stock) - direction * quantity * fraction),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', outletItem.stock_pool_item_id);
+      }
+      continue;
+    }
 
     await supabase
       .from('pos_outlet_items')
@@ -920,6 +943,25 @@ const enrichOutletItems = (
   }));
 };
 
+// Items sharing a stock pool (e.g. Half/Quarter Chicken sharing the Full
+// Chicken pool) don't carry their own current_stock — derive what's
+// displayed from the pool item's stock divided by this item's fraction.
+const applyPoolDerivedStock = (
+  items: Array<Record<string, any>>
+): Array<Record<string, any>> => {
+  const byId = new Map(items.map((it) => [String(it.id), it]));
+  return items.map((item) => {
+    if (!item.stock_pool_item_id) return item;
+    const pool = byId.get(String(item.stock_pool_item_id));
+    if (!pool) return item;
+    const fraction = numberValue(item.pool_fraction) || 1;
+    return {
+      ...item,
+      current_stock: fraction > 0 ? numberValue(pool.current_stock) / fraction : 0
+    };
+  });
+};
+
 const loadActiveOutletItems = async (
   outlet: Record<string, any>,
   refreshFromSource = false
@@ -1188,7 +1230,7 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
 
       const merged: Array<Record<string, any>> = [];
       for (const branchOutlet of (outlets || []) as Array<Record<string, any>>) {
-        const items = await loadActiveOutletItems(branchOutlet, true);
+        const items = applyPoolDerivedStock(await loadActiveOutletItems(branchOutlet, true));
         const categorisedItems = await hydrateOutletItemCategories(branchOutlet, items);
         merged.push(...enrichOutletItems(branchOutlet, categorisedItems));
       }
@@ -1201,7 +1243,7 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
 
     const items = await hydrateOutletItemCategories(
       outlet,
-      await loadActiveOutletItems(outlet)
+      applyPoolDerivedStock(await loadActiveOutletItems(outlet))
     );
     res.json({
       success: true,

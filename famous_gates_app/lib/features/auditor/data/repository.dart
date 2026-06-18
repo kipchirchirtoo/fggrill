@@ -582,6 +582,15 @@ class AuditorRepository {
     return _unwrapList(res.data);
   }
 
+  Future<List<Map<String, dynamic>>> getWorkspaceSubmissions({String? status}) async {
+    final branchId = await _branchId;
+    final res = await _dio.get('/finance/workspace/submissions', queryParameters: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty) 'status': status,
+    });
+    return _unwrapList(res.data);
+  }
+
   Future<Map<String, dynamic>> getWorkspaceSubmission(String id) async {
     final res = await _dio.get('/finance/workspace/submissions/$id');
     return _unwrap(res.data);

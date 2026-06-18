@@ -233,6 +233,13 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
 
     setIsLoading(true);
     try {
+      // SECURITY: Strip reference numbers from banking entries for Branch Accountants
+      // References should only be added/verified by Auditors during review
+      const sanitizedBankingEntries = banking.entries.map(entry => ({
+        ...entry,
+        reference: '' // Clear any reference data
+      }));
+
       await financeAPI.workspace.saveDailyRecord({
         branch_id: branchId,
         record_date: format(date, 'yyyy-MM-dd'),
@@ -243,9 +250,10 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
         total_payments: totalPayments,
         banking_data: {
           ...banking,
+          entries: sanitizedBankingEntries,
           banked: totalBanked,
           primary_account: banking.account,
-          primary_reference: banking.ref
+          primary_reference: '' // Clear reference data
         },
         expected_cash: expectedCash,
         unbanked_cash: unbankedCash,
@@ -510,20 +518,8 @@ export function DailyEntryModal({ isOpen, onClose, date, branchId, existingRecor
                                 placeholder="Bank Acc"
                               />
                             </div>
-                            <div>
-                              <label className="text-[10px] font-bold text-stone-400 uppercase">Ref/Slip #</label>
-                              <Input 
-                                value={entry.reference} 
-                                onChange={(e) => {
-                                  const newEntries = [...banking.entries];
-                                  newEntries[idx].reference = e.target.value;
-                                  setBanking({ ...banking, entries: newEntries });
-                                }}
-                                disabled={isReadOnly}
-                                className="h-8"
-                                placeholder="Ref"
-                              />
-                            </div>
+                            {/* SECURITY: Reference field hidden from Branch Accountants to prevent figure manipulation */}
+                            {/* Only visible to Auditors/Directors during review */}
                           </div>
                           {!isReadOnly && (
                             <div className="flex justify-end">

@@ -427,7 +427,7 @@ class _DirectorDashboardState extends ConsumerState<DirectorDashboard> {
         return const AuditorDashboard();
       case DirectorSection.branchAccounting:
         return const BranchAccountantDashboard(
-          initialSection: BranchAccountantSection.financialWorkspace,
+          initialSection: BranchAccountantSection.financialClose,
         );
       case DirectorSection.hr:
         return const HRDashboard();

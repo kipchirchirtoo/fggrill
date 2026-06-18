@@ -401,6 +401,65 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
         const userMap = new Map((users || []).map(u => [u.id, u]));
         const branchMap = new Map((branches || []).map(b => [b.id, b]));
 
+        // ============ FETCH CREDIT BILLS FOR EACH PAYROLL RECORD ============
+        // Fetch all credit bills that were deducted in these payroll records
+        const payrollIds = data.map(p => p.id).filter(Boolean);
+        
+        let creditBillsData: any[] = [];
+        if (payrollIds.length > 0) {
+            const { data: creditBills, error: cbError } = await supabase
+                .from('staff_credit_bills')
+                .select('id, staff_id, amount, paid_amount, balance, status, description, bill_date, bill_number, deducted_in_payroll_id, created_at, source_cashier_credit_bill_id, source_pos_order_id')
+                .in('deducted_in_payroll_id', payrollIds);
+            
+            if (cbError) {
+                logger.warn('Failed to fetch credit bills for payroll records:', cbError);
+            } else {
+                creditBillsData = creditBills || [];
+            }
+        }
+
+        // Also fetch credit bills by staff_id and date range for the payroll period
+        // This catches bills that might not have deducted_in_payroll_id set yet
+        // INCLUDES PAID BILLS for complete history
+        const uniqueMonthYearPairs = [...new Set(data.map(p => `${p.month}-${p.year}`))];
+        for (const pair of uniqueMonthYearPairs) {
+            const [pMonth, pYear] = pair.split('-');
+            const startDate = new Date(Number(pYear), Number(pMonth) - 1, 1).toISOString();
+            const endDate = new Date(Number(pYear), Number(pMonth), 0, 23, 59, 59).toISOString();
+
+            const staffIdsForPeriod = data
+                .filter(p => p.month === pMonth && p.year === Number(pYear))
+                .map(p => p.staff_id);
+
+            if (staffIdsForPeriod.length > 0) {
+                const { data: periodCreditBills, error: pcbError } = await supabase
+                    .from('staff_credit_bills')
+                    .select('id, staff_id, amount, paid_amount, balance, status, description, bill_date, bill_number, deducted_in_payroll_id, created_at, source_cashier_credit_bill_id, source_pos_order_id')
+                    .in('staff_id', staffIdsForPeriod)
+                    .gte('created_at', startDate)
+                    .lte('created_at', endDate);
+
+                if (!pcbError && periodCreditBills) {
+                    // Merge with existing credit bills (avoid duplicates)
+                    const existingIds = new Set(creditBillsData.map(cb => cb.id));
+                    const newBills = periodCreditBills.filter(cb => !existingIds.has(cb.id));
+                    creditBillsData = [...creditBillsData, ...newBills];
+                }
+            }
+        }
+
+        // Group credit bills by staff_id and payroll_id
+        const creditBillsByStaffAndPayroll = new Map<string, any[]>();
+        for (const cb of creditBillsData) {
+            const key = `${cb.staff_id}-${cb.deducted_in_payroll_id || 'unlinked'}`;
+            if (!creditBillsByStaffAndPayroll.has(key)) {
+                creditBillsByStaffAndPayroll.set(key, []);
+            }
+            creditBillsByStaffAndPayroll.get(key)!.push(cb);
+        }
+        // ============ END CREDIT BILLS FETCHING ============
+
         // Filter by branch if requested
         const transformed = data
             .map(item => {
@@ -409,6 +468,23 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
                 const branch = sp ? branchMap.get(sp.branch_id) : null;
                 const firstName = user?.first_name || sp?.first_name || '';
                 const lastName = user?.last_name || sp?.last_name || '';
+                
+                // Get credit bills for this payroll record
+                const linkedKey = `${item.staff_id}-${item.id}`;
+                const unlinkedKey = `${item.staff_id}-unlinked`;
+                const allCreditBills = [
+                    ...(creditBillsByStaffAndPayroll.get(linkedKey) || []),
+                    ...(creditBillsByStaffAndPayroll.get(unlinkedKey) || [])
+                ];
+
+                // Separate credit bills by status
+                const pendingCreditBills = allCreditBills.filter(cb => 
+                    ['pending', 'partial', 'approved'].includes(cb.status)
+                );
+                const paidCreditBills = allCreditBills.filter(cb => 
+                    ['paid', 'paid_cash', 'deducted'].includes(cb.status)
+                );
+
                 return {
                     ...item,
                     staff_name: `${firstName} ${lastName}`.trim(),
@@ -421,7 +497,15 @@ export const getPayrollRecords = async (req: Request, res: Response, next: NextF
                         last_name: lastName,
                         email: user?.email || '',
                         phone_number: user?.phone_number || ''
-                    } : null
+                    } : null,
+                    // Include ALL credit bills (pending AND paid)
+                    credit_bills: allCreditBills,
+                    credit_bills_count: allCreditBills.length,
+                    // Separate pending and paid for easier filtering
+                    pending_credit_bills: pendingCreditBills,
+                    pending_credit_bills_count: pendingCreditBills.length,
+                    paid_credit_bills: paidCreditBills,
+                    paid_credit_bills_count: paidCreditBills.length
                 };
             })
             .filter(item => !branch_id || item.staff?.branch_id === Number(branch_id));
@@ -467,6 +551,154 @@ export const getPayrollSummary = async (req: Request, res: Response, next: NextF
             success: true,
             data: summary
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get detailed credit bills for a specific staff member's payroll
+ * Used by Branch Accountant, Auditor, and HR to see credit bill breakdown
+ * INCLUDES PAID BILLS (status: 'paid', 'paid_cash', 'deducted')
+ */
+export const getPayrollCreditBills = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { payroll_id, staff_id, month, year, include_paid } = req.query;
+
+        if (!payroll_id && !staff_id) {
+            throw new AppError('Either payroll_id or staff_id is required', 400);
+        }
+
+        // By default, include paid bills (set to 'false' to exclude)
+        const shouldIncludePaid = include_paid !== 'false';
+
+        let creditBillsQuery = supabase
+            .from('staff_credit_bills')
+            .select(`
+                id, 
+                staff_id, 
+                amount, 
+                paid_amount, 
+                balance, 
+                status, 
+                description, 
+                bill_date, 
+                bill_number,
+                deducted_in_payroll_id,
+                created_at,
+                updated_at,
+                source_cashier_credit_bill_id,
+                source_pos_order_id,
+                branch_id,
+                deducted_at,
+                paid_at
+            `)
+            .order('created_at', { ascending: false });
+
+        // Filter by payroll_id if provided
+        if (payroll_id) {
+            creditBillsQuery = creditBillsQuery.eq('deducted_in_payroll_id', payroll_id);
+        } else if (staff_id) {
+            // Filter by staff_id and optionally month/year
+            creditBillsQuery = creditBillsQuery.eq('staff_id', staff_id);
+            
+            if (month && year) {
+                const startDate = new Date(Number(year), Number(month) - 1, 1).toISOString();
+                const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59).toISOString();
+                creditBillsQuery = creditBillsQuery
+                    .gte('created_at', startDate)
+                    .lte('created_at', endDate);
+            }
+        }
+
+        // Apply branch filter for access control
+        creditBillsQuery = applyBranchFilter(creditBillsQuery, req);
+
+        const { data: creditBills, error } = await creditBillsQuery;
+        if (error) throw error;
+
+        // Fetch staff details for the credit bills
+        if (creditBills && creditBills.length > 0) {
+            const staffIds = [...new Set(creditBills.map(cb => cb.staff_id))];
+            const { data: staffProfiles } = await supabase
+                .from('staff_profiles')
+                .select('id, first_name, last_name, employee_number, role, department, branch_id, user_id')
+                .in('id', staffIds);
+
+            const staffMap = new Map((staffProfiles || []).map(s => [s.id, s]));
+
+            // Enrich credit bills with staff info and categorize by status
+            const enrichedCreditBills = creditBills.map(cb => {
+                const staff = staffMap.get(cb.staff_id);
+                const isPaid = ['paid', 'paid_cash', 'deducted'].includes(cb.status);
+                const remainingBalance = cb.balance || (Number(cb.amount || 0) - Number(cb.paid_amount || 0));
+                
+                return {
+                    ...cb,
+                    staff_name: staff ? `${staff.first_name || ''} ${staff.last_name || ''}`.trim() : 'Unknown',
+                    staff_employee_number: staff?.employee_number,
+                    staff_role: staff?.role,
+                    staff_department: staff?.department,
+                    remaining_balance: remainingBalance,
+                    is_paid: isPaid,
+                    is_pending: ['pending', 'partial', 'approved'].includes(cb.status),
+                    payment_date: cb.paid_at || cb.deducted_at || null
+                };
+            });
+
+            // Filter by payment status if needed
+            const filteredBills = shouldIncludePaid 
+                ? enrichedCreditBills 
+                : enrichedCreditBills.filter(cb => !cb.is_paid);
+
+            // Separate pending and paid bills for summary
+            const pendingBills = filteredBills.filter(cb => cb.is_pending);
+            const paidBills = filteredBills.filter(cb => cb.is_paid);
+
+            res.status(200).json({
+                success: true,
+                data: filteredBills,
+                summary: {
+                    total_count: filteredBills.length,
+                    total_amount: filteredBills.reduce((sum, cb) => sum + Number(cb.amount || 0), 0),
+                    total_balance: filteredBills.reduce((sum, cb) => sum + (cb.remaining_balance || 0), 0),
+                    pending_count: pendingBills.length,
+                    pending_amount: pendingBills.reduce((sum, cb) => sum + Number(cb.amount || 0), 0),
+                    pending_balance: pendingBills.reduce((sum, cb) => sum + (cb.remaining_balance || 0), 0),
+                    paid_count: paidBills.length,
+                    paid_amount: paidBills.reduce((sum, cb) => sum + Number(cb.amount || 0), 0)
+                },
+                filters: {
+                    include_paid: shouldIncludePaid,
+                    payroll_id: payroll_id || null,
+                    staff_id: staff_id || null,
+                    month: month || null,
+                    year: year || null
+                }
+            });
+        } else {
+            res.status(200).json({
+                success: true,
+                data: [],
+                summary: {
+                    total_count: 0,
+                    total_amount: 0,
+                    total_balance: 0,
+                    pending_count: 0,
+                    pending_amount: 0,
+                    pending_balance: 0,
+                    paid_count: 0,
+                    paid_amount: 0
+                },
+                filters: {
+                    include_paid: shouldIncludePaid,
+                    payroll_id: payroll_id || null,
+                    staff_id: staff_id || null,
+                    month: month || null,
+                    year: year || null
+                }
+            });
+        }
     } catch (error) {
         next(error);
     }

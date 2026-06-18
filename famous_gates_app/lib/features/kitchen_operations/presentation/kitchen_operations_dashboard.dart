@@ -18,6 +18,7 @@ enum KitchenOperationsSection {
   foodControls,
   sessions,
   spoilage,
+  shiftConfirmations,
 }
 
 enum KitchenFoodTab { rules, portions, expected, variance, reports }
@@ -125,6 +126,7 @@ class _KitchenOperationsDashboardState
       _safe(_repo.getRecipesWithIngredients(), <Map<String, dynamic>>[]),
       _safe(_repo.getKitchenStaff(), <Map<String, dynamic>>[]),
       _safe(_repo.getSpoilage(), <Map<String, dynamic>>[]),
+      _safe(_repo.getShiftsPendingChefConfirmation(), <Map<String, dynamic>>[]),
     ]);
     return _KitchenSnapshot(
       stats: Map<String, dynamic>.from(results[0] as Map),
@@ -149,6 +151,7 @@ class _KitchenOperationsDashboardState
       recipesWithIngredients: _rows(results[19]),
       staffProfiles: _rows(results[20]),
       spoilage: _rows(results[21]),
+      pendingShiftConfirmations: _rows(results[22]),
     );
   }
 
@@ -201,6 +204,8 @@ class _KitchenOperationsDashboardState
         return '/kitchen-operations/sessions';
       case KitchenOperationsSection.spoilage:
         return '/kitchen-operations/spoilage';
+      case KitchenOperationsSection.shiftConfirmations:
+        return '/kitchen-operations/shift-confirmations';
     }
   }
 
@@ -276,6 +281,12 @@ class _KitchenOperationsDashboardState
           group: 'Shifts',
         ),
         MasterNavItem(
+          section: KitchenOperationsSection.shiftConfirmations,
+          label: 'Shift Confirmations',
+          icon: Icons.fact_check,
+          group: 'Shifts',
+        ),
+        MasterNavItem(
           section: KitchenOperationsSection.spoilage,
           label: 'Spoilage',
           icon: Icons.warning_amber_outlined,
@@ -319,6 +330,8 @@ class _KitchenOperationsDashboardState
         return _sessions(data);
       case KitchenOperationsSection.spoilage:
         return _spoilage(data);
+      case KitchenOperationsSection.shiftConfirmations:
+        return _shiftConfirmations(data);
     }
   }
 
@@ -991,6 +1004,63 @@ class _KitchenOperationsDashboardState
         ],
       ),
     );
+  }
+
+  Widget _shiftConfirmations(_KitchenSnapshot data) {
+    return _Page(
+      title: 'Shift Confirmations',
+      subtitle: 'Closed kitchen shifts awaiting chef confirmation of production and variance.',
+      actions: [
+        _ActionButton(
+          label: 'Refresh',
+          icon: Icons.refresh,
+          onPressed: _refresh,
+        ),
+      ],
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          _SimpleRows(
+            rows: data.pendingShiftConfirmations,
+            empty: 'No shifts pending your confirmation.',
+            title: (row) => '${_value(row, ['shift_number'])} · ${_value(row, ['shift_date'])}',
+            subtitle: (row) {
+              final variance = _num(row['total_variance_cost']);
+              return 'Store keeper: ${row['store_keeper']?['first_name'] ?? '—'}'
+                  '${variance != 0 ? ' · Variance ${_money(variance)}' : ''}';
+            },
+            trailing: (row) => _RowActions(actions: [
+              _RowAction('Review', Icons.fact_check_outlined,
+                  () => _showChefConfirmDialog(row)),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showChefConfirmDialog(Map<String, dynamic> shiftRow) async {
+    Map<String, dynamic> detail;
+    try {
+      detail = await _repo.getKitchenShiftDetail('${shiftRow['id']}');
+    } catch (e) {
+      if (mounted) _snack('Failed to load shift: $e');
+      return;
+    }
+    if (!mounted) return;
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ChefConfirmDialog(detail: detail),
+    );
+    if (result == null) return;
+    final confirmed = result['confirmed'] == true;
+    final notes = '${result['notes'] ?? ''}'.trim();
+    await _run(() async {
+      await _repo.chefConfirmShift('${shiftRow['id']}', confirmed: confirmed, notes: notes.isEmpty ? null : notes);
+    },
+        successMessage:
+            confirmed ? 'Shift confirmed — sent to accountant for review' : 'Shift rejected back to store keeper');
   }
 
   // ── Session dialogs ───────────────────────────────────────────────────────
@@ -2991,6 +3061,7 @@ class _KitchenSnapshot {
     required this.recipesWithIngredients,
     required this.staffProfiles,
     required this.spoilage,
+    required this.pendingShiftConfirmations,
   });
 
   factory _KitchenSnapshot.empty() => const _KitchenSnapshot(
@@ -3016,6 +3087,7 @@ class _KitchenSnapshot {
         recipesWithIngredients: [],
         staffProfiles: [],
         spoilage: [],
+        pendingShiftConfirmations: [],
       );
 
   final Map<String, dynamic> stats;
@@ -3040,6 +3112,7 @@ class _KitchenSnapshot {
   final List<Map<String, dynamic>> recipesWithIngredients;
   final List<Map<String, dynamic>> staffProfiles;
   final List<Map<String, dynamic>> spoilage;
+  final List<Map<String, dynamic>> pendingShiftConfirmations;
 }
 
 class _Page extends StatelessWidget {
@@ -3729,3 +3802,130 @@ double _num(dynamic value) {
 String _money(dynamic value) => 'KES ${_num(value).toStringAsFixed(2)}';
 
 String _isoDate(DateTime date) => date.toIso8601String().split('T').first;
+
+// ── Chef Confirmation Dialog ────────────────────────────────────────────────
+
+class _ChefConfirmDialog extends StatefulWidget {
+  const _ChefConfirmDialog({required this.detail});
+  final Map<String, dynamic> detail;
+
+  @override
+  State<_ChefConfirmDialog> createState() => _ChefConfirmDialogState();
+}
+
+class _ChefConfirmDialogState extends State<_ChefConfirmDialog> {
+  final _notesCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shift = (widget.detail['shift'] as Map?)?.cast<String, dynamic>() ?? {};
+    final productions = (widget.detail['productions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final stockTake = (widget.detail['stock_take'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 640),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${shift['shift_number'] ?? 'Shift'}',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('${shift['shift_date'] ?? ''}', style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 16),
+              Text('Production (${productions.length})', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Flexible(
+                child: productions.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text('No production recorded.', style: TextStyle(color: Colors.grey)),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: productions.length,
+                        itemBuilder: (ctx, i) {
+                          final p = productions[i];
+                          return ListTile(
+                            dense: true,
+                            title: Text('${p['raw_item_name']} → ${p['produced_item_name']}', style: const TextStyle(fontSize: 13)),
+                            subtitle: Text(
+                              '${p['raw_quantity_used']} ${p['raw_unit']} used → ${p['produced_quantity']} ${p['produced_unit']}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              if (stockTake.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('Variance', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: stockTake.length,
+                    itemBuilder: (ctx, i) {
+                      final st = stockTake[i];
+                      final variance = _num(st['variance']);
+                      return ListTile(
+                        dense: true,
+                        title: Text('${st['item_name'] ?? st['item_sku']}', style: const TextStyle(fontSize: 13)),
+                        subtitle: Text(
+                          'System ${_num(st['system_closing_stock']).toStringAsFixed(2)} · Physical ${_num(st['physical_count']).toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        trailing: Text(
+                          '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: variance == 0 ? Colors.grey : (variance > 0 ? Colors.green : Colors.red),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notesCtrl,
+                decoration: const InputDecoration(labelText: 'Notes (optional)', border: OutlineInputBorder()),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(context, {'confirmed': false, 'notes': _notesCtrl.text}),
+                      icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                      label: const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(context, {'confirmed': true, 'notes': _notesCtrl.text}),
+                      icon: const Icon(Icons.check),
+                      label: const Text('Confirm Production'),
+                      style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

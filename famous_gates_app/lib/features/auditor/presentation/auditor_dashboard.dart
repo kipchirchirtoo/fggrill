@@ -9,6 +9,7 @@ import '../domain/models.dart';
 import '../data/repository.dart';
 import 'branch_orders_tab.dart';
 import 'auditor_sections.dart';
+import 'daily_close_review_screen.dart';
 import '../../lina/presentation/lina_screen.dart';
 import '../../shared/widgets/inventory_control_center_screen.dart';
 import '../../../core/widgets/branch_sales_payments_view.dart';
@@ -37,6 +38,10 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
             icon: PhosphorIcons.shieldCheck(),
             content: _AuditorOverviewTab(
                 onGoToApprovals: () => setState(() => _tab = 2))),
+        DashboardTab(
+            label: 'Daily Close Review',
+            icon: PhosphorIcons.clipboardText(),
+            content: const DailyCloseReviewScreen()),
         DashboardTab(
             label: 'Sales & Payments',
             icon: PhosphorIcons.creditCard(),

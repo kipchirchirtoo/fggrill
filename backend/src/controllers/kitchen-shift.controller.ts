@@ -7,6 +7,48 @@ const asyncWrap = (fn: (req: Request, res: Response) => Promise<void>) =>
     (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
 
 const n = (v: any) => Number.isFinite(Number(v)) ? Number(v) : 0;
+const absMoney = (v: any) => Math.abs(n(v));
+
+async function resolveStaffProfileId(value: any): Promise<string | null> {
+    if (!value) return null;
+    const id = String(value);
+    const { data: direct } = await supabase
+        .from('staff_profiles')
+        .select('id')
+        .eq('id', id)
+        .maybeSingle();
+    if (direct?.id) return direct.id;
+
+    const { data: byUser } = await supabase
+        .from('staff_profiles')
+        .select('id')
+        .eq('user_id', id)
+        .maybeSingle();
+    return byUser?.id || null;
+}
+
+async function staffProfileSummaries(userIds: string[]) {
+    const ids = [...new Set((userIds || []).filter(Boolean))];
+    if (!ids.length) return [];
+    const [{ data: users }, { data: profiles }] = await Promise.all([
+        supabase.from('users').select('id,first_name,last_name,role').in('id', ids),
+        supabase.from('staff_profiles').select('id,user_id,first_name,last_name,role,department,employee_number').in('user_id', ids)
+    ]);
+    const profileByUser = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+    return (users || []).map((u: any) => {
+        const profile = profileByUser.get(u.id) || {};
+        const first = profile.first_name || u.first_name || '';
+        const last = profile.last_name || u.last_name || '';
+        return {
+            user_id: u.id,
+            staff_profile_id: profile.id || null,
+            name: `${first} ${last}`.trim() || u.id,
+            role: profile.role || u.role || 'staff',
+            department: profile.department || null,
+            employee_number: profile.employee_number || null
+        };
+    });
+}
 
 // ── OPEN SHIFT ──────────────────────────────────────────────
 export const openKitchenShift = asyncWrap(async (req: Request, res: Response) => {
@@ -82,7 +124,7 @@ export const recordProduction = asyncWrap(async (req: Request, res: Response) =>
             raw_item_sku: p.raw_item_sku, raw_item_name: p.raw_item_name, raw_quantity_used: n(p.raw_quantity_used), raw_unit: p.raw_unit,
             produced_item_name: p.produced_item_name, produced_item_sku: p.produced_item_sku, pos_outlet_item_id: p.pos_outlet_item_id,
             produced_quantity: n(p.produced_quantity), produced_unit: p.produced_unit || 'portion', conversion_ratio: n(p.conversion_ratio),
-            conversion_notes: p.conversion_notes, produced_by: userId
+            conversion_notes: p.conversion_notes, produced_by: p.produced_by || userId
         }).select().single();
         results.push(prod);
 
@@ -92,10 +134,88 @@ export const recordProduction = asyncWrap(async (req: Request, res: Response) =>
     res.json({ success: true, data: results });
 });
 
+// Pool-aware POS stock increment: if the produced item shares stock with a
+// pool item (e.g. Half/Quarter Chicken sharing the Full Chicken pool), push
+// the pool-equivalent quantity into the pool instead of the item itself.
 async function addToPos(outletItemId: string, qty: number) {
-    const { data: oi } = await supabase.from('pos_outlet_items').select('current_stock').eq('id', outletItemId).single();
-    if (oi) await supabase.from('pos_outlet_items').update({ current_stock: n(oi.current_stock) + qty, updated_at: new Date().toISOString() }).eq('id', outletItemId);
+    const { data: oi } = await supabase.from('pos_outlet_items').select('current_stock,stock_pool_item_id,pool_fraction').eq('id', outletItemId).single();
+    if (!oi) return;
+    if (oi.stock_pool_item_id) {
+        const { data: pool } = await supabase.from('pos_outlet_items').select('current_stock').eq('id', oi.stock_pool_item_id).single();
+        if (pool) {
+            await supabase.from('pos_outlet_items').update({
+                current_stock: n(pool.current_stock) + qty * n(oi.pool_fraction || 1),
+                updated_at: new Date().toISOString()
+            }).eq('id', oi.stock_pool_item_id);
+        }
+        return;
+    }
+    await supabase.from('pos_outlet_items').update({ current_stock: n(oi.current_stock) + qty, updated_at: new Date().toISOString() }).eq('id', outletItemId);
 }
+
+// ── CONFIRM ACTUAL PRODUCTION YIELD ──────────────────────────
+// For yield-uncertain (baking) Food Controls: the expected quantity was
+// already pushed to POS at recordProduction time. This records what was
+// actually produced and, on a shortfall, bills the cost to the producer.
+export const confirmProductionActual = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id, production_id } = req.params;
+    const { actual_quantity } = req.body;
+    const userId = (req as any).user?.id;
+    if (actual_quantity === undefined || actual_quantity === null) throw new AppError('actual_quantity required', 400);
+
+    const { data: prod } = await supabase.from('kitchen_shift_production').select('*').eq('id', production_id).eq('shift_id', shift_id).maybeSingle();
+    if (!prod) throw new AppError('Production record not found', 404);
+    if (prod.actual_quantity !== null) throw new AppError('Actual yield already confirmed for this production record', 400);
+
+    const actual = n(actual_quantity);
+    const expected = n(prod.produced_quantity);
+    const shortfall = expected - actual;
+
+    let unitCost = 0;
+    if (prod.recipe_id) {
+        const { data: recipe } = await supabase.from('kitchen_production_recipes').select('cost_per_output').eq('id', prod.recipe_id).maybeSingle();
+        unitCost = n(recipe?.cost_per_output);
+    }
+    if (unitCost <= 0) {
+        const { data: rawItem } = await supabase.from('kitchen_shift_items').select('cost_price').eq('shift_id', shift_id).eq('item_sku', prod.raw_item_sku).maybeSingle();
+        const rawCost = n(rawItem?.cost_price) * n(prod.raw_quantity_used);
+        unitCost = expected > 0 ? rawCost / expected : 0;
+    }
+
+    const varianceCost = shortfall > 0 ? Math.round(shortfall * unitCost * 100) / 100 : 0;
+
+    let creditBill: any = null;
+    if (varianceCost > 0 && prod.produced_by) {
+        const staffId = await resolveStaffProfileId(prod.produced_by);
+        if (staffId) {
+            const { data: bill, error: billError } = await supabase.from('staff_credit_bills').insert({
+                staff_id: staffId,
+                amount: varianceCost,
+                description: `Production shortfall — ${prod.produced_item_name} (expected ${expected}, actual ${actual})`,
+                bill_date: new Date().toISOString().split('T')[0],
+                status: 'accountant_confirmed',
+                balance: varianceCost,
+                paid_amount: 0,
+                shift_id,
+                branch_id: prod.branch_id,
+                approved_at: new Date().toISOString(),
+                approved_by: userId
+            }).select().maybeSingle();
+            if (billError) logger.error('production shortfall credit bill insert', billError);
+            creditBill = bill;
+        }
+    }
+
+    const { data: updated } = await supabase.from('kitchen_shift_production').update({
+        actual_quantity: actual,
+        actual_recorded_by: userId,
+        actual_recorded_at: new Date().toISOString(),
+        variance_cost: varianceCost,
+        credit_bill_id: creditBill?.id || null
+    }).eq('id', production_id).select().single();
+
+    res.json({ success: true, data: { production: updated, credit_bill: creditBill } });
+});
 
 // ── RECORD SPOILAGE ─────────────────────────────────────────
 export const recordSpoilage = asyncWrap(async (req: Request, res: Response) => {
@@ -204,19 +324,87 @@ export const chefConfirmShift = asyncWrap(async (req: Request, res: Response) =>
 // ── ACCOUNTANT REVIEW ─────────────────────────────────────
 export const accountantReviewShift = asyncWrap(async (req: Request, res: Response) => {
     const { shift_id } = req.params;
-    const { approved, notes } = req.body;
+    const { approved, notes, liability_action, allocations, write_off_reason } = req.body;
     const userId = (req as any).user?.id;
-    const { data: shift } = await supabase.from('kitchen_shifts').select('id,branch_id,status').eq('id', shift_id).single();
+    const { data: shift } = await supabase
+        .from('kitchen_shifts')
+        .select('id,branch_id,status,shift_number,total_variance_cost')
+        .eq('id', shift_id)
+        .single();
     if (!shift) throw new AppError('Shift not found', 404);
     if (shift.status !== 'pending_accountant_review') throw new AppError('Not pending review', 400);
     const next = approved ? 'approved' : 'rejected';
+    const action = liability_action || (approved ? 'approve_only' : 'rejected');
+
+    if (approved && action === 'write_off' && !String(write_off_reason || notes || '').trim()) {
+        throw new AppError('Write-off reason is required', 400);
+    }
+
     const { data: upd } = await supabase.from('kitchen_shifts').update({
         status: next, accountant_reviewed_by: userId, accountant_reviewed_at: new Date().toISOString(),
         accountant_approved_by: approved ? userId : null, accountant_approved_at: approved ? new Date().toISOString() : null,
         accountant_rejection_reason: approved ? null : notes, updated_at: new Date().toISOString()
     }).eq('id', shift_id).select().single();
-    await supabase.from('kitchen_shift_approvals').insert({ shift_id, branch_id: shift.branch_id, approval_stage: approved ? 'accountant_approved' : 'accountant_rejected', approved_by: userId, notes: notes || `Accountant ${approved ? 'approved' : 'rejected'}` });
-    res.json({ success: true, data: upd });
+
+    let liabilityCase: any = null;
+    let creditBills: any[] = [];
+    const varianceCost = absMoney(shift.total_variance_cost);
+    const normalizedAllocations = Array.isArray(allocations) ? allocations : [];
+
+    if (approved && varianceCost > 0) {
+        const { data: lc } = await supabase.from('kitchen_shift_liability_cases').insert({
+            shift_id,
+            branch_id: shift.branch_id,
+            liability_action: action,
+            total_variance_cost: varianceCost,
+            status: action === 'write_off' ? 'written_off' : normalizedAllocations.length ? 'billed' : 'approved_no_charge',
+            write_off_reason: action === 'write_off' ? (write_off_reason || notes) : null,
+            allocations: normalizedAllocations,
+            approved_by: userId,
+            approved_at: new Date().toISOString(),
+            notes
+        }).select().maybeSingle();
+        liabilityCase = lc;
+
+        if (action !== 'write_off') {
+            for (const allocation of normalizedAllocations) {
+                const amount = absMoney(allocation.amount);
+                if (amount <= 0) continue;
+                const staffId = await resolveStaffProfileId(
+                    allocation.staff_profile_id || allocation.staff_id || allocation.user_id
+                );
+                if (!staffId) continue;
+                const { data: bill, error: billError } = await supabase
+                    .from('staff_credit_bills')
+                    .insert({
+                        staff_id: staffId,
+                        amount,
+                        description: allocation.description || `Kitchen variance liability - ${shift.shift_number}`,
+                        bill_date: new Date().toISOString().split('T')[0],
+                        status: 'accountant_confirmed',
+                        balance: amount,
+                        paid_amount: 0,
+                        shift_id,
+                        branch_id: shift.branch_id,
+                        approved_at: new Date().toISOString(),
+                        approved_by: userId
+                    })
+                    .select()
+                    .maybeSingle();
+                if (billError) logger.error('kitchen liability credit bill insert', billError);
+                if (bill) creditBills.push(bill);
+            }
+        }
+    }
+
+    await supabase.from('kitchen_shift_approvals').insert({
+        shift_id,
+        branch_id: shift.branch_id,
+        approval_stage: approved ? 'accountant_approved' : 'accountant_rejected',
+        approved_by: userId,
+        notes: notes || `Accountant ${approved ? 'approved' : 'rejected'} (${action})`
+    });
+    res.json({ success: true, data: { shift: upd, liability_case: liabilityCase, credit_bills: creditBills } });
 });
 
 // ── GET SHIFT ───────────────────────────────────────────────
@@ -224,11 +412,16 @@ export const getKitchenShift = asyncWrap(async (req: Request, res: Response) => 
     const { shift_id } = req.params;
     const { data: shift } = await supabase.from('kitchen_shifts').select(`*, store_keeper:users!store_keeper_id(first_name,last_name)`).eq('id', shift_id).single();
     if (!shift) throw new AppError('Shift not found', 404);
-    const [{ data: items }, { data: prods }, { data: st }, { data: aprv }] = await Promise.all([
+    const [{ data: items }, { data: prods }, { data: st }, { data: aprv }, { data: liabilityCases }] = await Promise.all([
         supabase.from('kitchen_shift_items').select('*').eq('shift_id', shift_id).order('item_name'),
         supabase.from('kitchen_shift_production').select('*').eq('shift_id', shift_id).order('produced_at', { ascending: false }),
         supabase.from('kitchen_shift_stock_take').select('*').eq('shift_id', shift_id).order('item_name'),
-        supabase.from('kitchen_shift_approvals').select('*').eq('shift_id', shift_id).order('approved_at', { ascending: false })
+        supabase.from('kitchen_shift_approvals').select('*').eq('shift_id', shift_id).order('approved_at', { ascending: false }),
+        supabase.from('kitchen_shift_liability_cases').select('*').eq('shift_id', shift_id).order('created_at', { ascending: false })
+    ]);
+    const staff = await staffProfileSummaries([
+        shift.store_keeper_id,
+        ...((shift.assigned_chef_ids || []) as string[])
     ]);
     const summary = (items || []).reduce((a: any, it: any) => ({
         opening_value: a.opening_value + n(it.opening_value), additions_value: a.additions_value + n(it.additions_value),
@@ -236,7 +429,7 @@ export const getKitchenShift = asyncWrap(async (req: Request, res: Response) => 
         variance_value: a.variance_value + n(it.variance_value), shortage: a.shortage + (n(it.variance) < 0 ? 1 : 0),
         overage: a.overage + (n(it.variance) > 0 ? 1 : 0), ok: a.ok + (n(it.variance) === 0 ? 1 : 0)
     }), { opening_value: 0, additions_value: 0, sold_value: 0, spoilage_value: 0, variance_value: 0, shortage: 0, overage: 0, ok: 0 });
-    res.json({ success: true, data: { shift, items: items || [], productions: prods || [], stock_take: st || [], approvals: aprv || [], summary } });
+    res.json({ success: true, data: { shift, items: items || [], productions: prods || [], stock_take: st || [], approvals: aprv || [], liability_cases: liabilityCases || [], shift_staff: staff, summary } });
 });
 
 // ── LIST SHIFTS ─────────────────────────────────────────────
@@ -253,16 +446,108 @@ export const listKitchenShifts = asyncWrap(async (req: Request, res: Response) =
     res.json({ success: true, data: data || [] });
 });
 
+// Links a POS item to a shared stock pool — used by Food Controls whose
+// output is a fraction of a base item (e.g. Half/Quarter Chicken sharing
+// the Full Chicken pool).
+async function applyPoolLink(posOutletItemId: string | null | undefined, poolItemId: string | null | undefined, poolFraction: any) {
+    if (!posOutletItemId || !poolItemId) return;
+    await supabase.from('pos_outlet_items').update({
+        stock_pool_item_id: poolItemId,
+        pool_fraction: n(poolFraction) > 0 ? n(poolFraction) : 1,
+        updated_at: new Date().toISOString()
+    }).eq('id', posOutletItemId);
+}
+
 // ── RECIPES ─────────────────────────────────────────────────
 export const createProductionRecipe = asyncWrap(async (req: Request, res: Response) => {
-    const { branch_id, recipe_name, raw_item_sku, raw_item_name, raw_quantity, raw_unit, produced_item_name, produced_item_sku, produced_quantity, produced_unit, pos_outlet_item_id } = req.body;
+    const {
+        branch_id,
+        recipe_name,
+        raw_item_sku,
+        raw_item_name,
+        raw_quantity,
+        raw_unit,
+        produced_item_name,
+        produced_item_sku,
+        produced_quantity,
+        produced_unit,
+        pos_outlet_item_id,
+        allowed_variance_percent,
+        spoilage_threshold_percent,
+        cost_per_output,
+        requires_yield_confirmation,
+        pool_item_id,
+        pool_fraction
+    } = req.body;
     const userId = (req as any).user?.id;
+    if (!branch_id || !raw_item_sku || !raw_item_name || !raw_quantity || !raw_unit || !produced_item_name || !produced_quantity) {
+        throw new AppError('branch_id, raw item, raw quantity, produced item, and yield are required', 400);
+    }
     const { data, error } = await supabase.from('kitchen_production_recipes').insert({
         branch_id, recipe_name, raw_item_sku, raw_item_name, raw_quantity: n(raw_quantity), raw_unit,
-        produced_item_name, produced_item_sku, produced_quantity: n(produced_quantity), produced_unit: produced_unit || 'portion', pos_outlet_item_id, created_by: userId
+        produced_item_name, produced_item_sku, produced_quantity: n(produced_quantity), produced_unit: produced_unit || 'portion',
+        pos_outlet_item_id: pos_outlet_item_id || null,
+        allowed_variance_percent: n(allowed_variance_percent || 2),
+        spoilage_threshold_percent: n(spoilage_threshold_percent || 1),
+        cost_per_output: n(cost_per_output),
+        requires_yield_confirmation: requires_yield_confirmation !== false,
+        created_by: userId
     }).select().single();
     if (error) throw new AppError(error.message, 500);
+    await applyPoolLink(pos_outlet_item_id, pool_item_id, pool_fraction);
     res.status(201).json({ success: true, data });
+});
+
+export const updateProductionRecipe = asyncWrap(async (req: Request, res: Response) => {
+    const { recipe_id } = req.params;
+    const payload: any = {};
+    for (const key of [
+        'recipe_name',
+        'raw_item_sku',
+        'raw_item_name',
+        'raw_unit',
+        'produced_item_name',
+        'produced_item_sku',
+        'produced_unit',
+        'pos_outlet_item_id',
+        'is_active'
+    ]) {
+        if (Object.prototype.hasOwnProperty.call(req.body, key)) payload[key] = req.body[key];
+    }
+    for (const key of [
+        'raw_quantity',
+        'produced_quantity',
+        'allowed_variance_percent',
+        'spoilage_threshold_percent',
+        'cost_per_output'
+    ]) {
+        if (Object.prototype.hasOwnProperty.call(req.body, key)) payload[key] = n(req.body[key]);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'requires_yield_confirmation')) {
+        payload.requires_yield_confirmation = req.body.requires_yield_confirmation !== false;
+    }
+    payload.updated_at = new Date().toISOString();
+    const { data, error } = await supabase
+        .from('kitchen_production_recipes')
+        .update(payload)
+        .eq('id', recipe_id)
+        .select()
+        .single();
+    if (error) throw new AppError(error.message, 500);
+    await applyPoolLink(data?.pos_outlet_item_id, req.body.pool_item_id, req.body.pool_fraction);
+    res.json({ success: true, data });
+});
+
+export const deactivateProductionRecipe = asyncWrap(async (req: Request, res: Response) => {
+    const { recipe_id } = req.params;
+    const { data, error } = await supabase
+        .from('kitchen_production_recipes')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', recipe_id)
+        .select()
+        .single();
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data });
 });
 
 export const listProductionRecipes = asyncWrap(async (req: Request, res: Response) => {
