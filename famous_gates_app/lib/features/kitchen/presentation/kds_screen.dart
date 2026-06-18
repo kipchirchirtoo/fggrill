@@ -113,16 +113,16 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
 
         // Print captain order asynchronously (BACKUP - primary print at backend)
         _printCaptainOrder(order).then((_) {
-          print('✅ Captain order ${order.orderNumber} printed at KDS (backup)');
+          debugPrint('✅ Captain order ${order.orderNumber} printed at KDS (backup)');
         }).catchError((error) {
-          print(
+          debugPrint(
               '⚠️ Failed to print captain order ${order.orderNumber} at KDS: $error');
           // Remove from printed set on failure so it can be retried
           _printedOrderIds.remove(order.id);
         });
       }
     } catch (error) {
-      print('❌ Error in KDS auto-print captain orders: $error');
+      debugPrint('❌ Error in KDS auto-print captain orders: $error');
     }
   }
 

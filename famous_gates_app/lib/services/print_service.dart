@@ -1,8 +1,12 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../features/pos/domain/models.dart';
 
 class PrintService {
@@ -14,6 +18,29 @@ class PrintService {
   final String companyAddress = 'Bomet, Kenya';
   final String companyPhone = '+254 706 782 828';
   final String companyEmail = 'info@famousgatehotels.com';
+  
+  // Python service URL for direct printing (no dialogs!)
+  final String pythonServiceUrl = Platform.environment['PYTHON_SERVICE_URL'] ?? 'http://localhost:5001';
+
+  /// Print directly via Python thermal printer service (NO DIALOG!)
+  Future<bool> _printViaPythonService(Map<String, dynamic> receiptData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$pythonServiceUrl/api/receipts/printer/print'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(receiptData),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        return result['success'] == true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Python print service error: $e');
+      return false;
+    }
+  }
 
   Future<void> printReceipt(
     SaleResult sale,
@@ -30,6 +57,42 @@ class PrintService {
     num? changeGiven,
     String? tillNumber,
   }) async {
+    // Try Python service first (NO DIALOG!)
+    try {
+      final receiptData = {
+        'receipt_type': receiptType,
+        'receipt_number': sale.receiptNumber,
+        'short_code': publicCode,
+        'barcode_value': barcodeValue ?? publicCode ?? sale.receiptNumber,
+        'lookup_code': publicCode,
+        'customer_name': customerName,
+        'table_number': tableNumber,
+        'room_number': roomNumber,
+        'cashier_name': sale.cashierName,
+        'items': items.map((item) => {
+          'name': item.name,
+          'quantity': item.qty,
+          'unit_price': item.unitPrice,
+          'total_price': item.lineTotal,
+        }).toList(),
+        'total_amount': sale.total,
+        'subtotal': sale.total / 1.16,
+        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt),
+        'payment_method': sale.paymentMethod,
+        'till_number': tillNumber,
+      };
+
+      final success = await _printViaPythonService(receiptData);
+      if (success) {
+        debugPrint('✅ Receipt printed via Python service (no dialog)');
+        return; // Success - exit early
+      }
+      debugPrint('⚠️ Python service print failed, falling back to Flutter PDF');
+    } catch (e) {
+      debugPrint('⚠️ Python service unavailable: $e, using Flutter PDF fallback');
+    }
+
+    // FALLBACK: Use Flutter PDF printing (may show dialog on some systems)
     final doc = pw.Document();
     final money = NumberFormat('#,##0.00', 'en_KE');
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt);
@@ -232,8 +295,11 @@ class PrintService {
       ),
     );
 
-    await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => doc.save());
+    // Direct print without dialog - send to default printer silently
+    await Printing.directPrintPdf(
+      printer: const Printer(url: ''),
+      onLayout: (PdfPageFormat format) async => doc.save(),
+    );
   }
 
   /// Print a captain order for kitchen preparation
@@ -250,6 +316,41 @@ class PrintService {
     String? waiterName,
     String? orderType,
   }) async {
+    // Try Python service first (NO DIALOG!)
+    try {
+      final receiptData = {
+        'receipt_type': 'CAPTAIN ORDER',
+        'is_captain_order': true,
+        'order_number': orderNumber,
+        'short_code': shortCode,
+        'barcode_value': shortCode ?? orderNumber,
+        'lookup_code': shortCode,
+        'customer_name': customerName ?? 'Walk-in',
+        'table_number': tableNumber,
+        'room_number': roomNumber,
+        'waiter_name': waiterName,
+        'order_type': orderType ?? 'dine_in',
+        'items': items.map((item) => {
+          'name': item.name,
+          'quantity': item.qty,
+          'unit_price': item.unitPrice,
+          'line_total': item.lineTotal,
+        }).toList(),
+        'total_amount': sale.total,
+        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt),
+      };
+
+      final success = await _printViaPythonService(receiptData);
+      if (success) {
+        debugPrint('✅ Captain order printed via Python service (no dialog)');
+        return; // Success - exit early
+      }
+      debugPrint('⚠️ Python service print failed for captain order, falling back to Flutter PDF');
+    } catch (e) {
+      debugPrint('⚠️ Python service unavailable for captain order: $e, using Flutter PDF fallback');
+    }
+
+    // FALLBACK: Use Flutter PDF printing (may show dialog on some systems)
     final doc = pw.Document();
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt);
     final code = (shortCode ?? orderNumber).trim();
@@ -445,8 +546,11 @@ class PrintService {
       ),
     );
 
-    await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => doc.save());
+    // Direct print without dialog - send to default printer silently
+    await Printing.directPrintPdf(
+      printer: const Printer(url: ''),
+      onLayout: (PdfPageFormat format) async => doc.save(),
+    );
   }
 
   /// Dedicated receipt for a STAFF CREDIT BILL. Unlike a payment receipt this
@@ -650,8 +754,11 @@ class PrintService {
       ),
     );
 
-    await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => doc.save());
+    // Direct print without dialog - send to default printer silently
+    await Printing.directPrintPdf(
+      printer: const Printer(url: ''),
+      onLayout: (PdfPageFormat format) async => doc.save(),
+    );
   }
 
   Future<void> printVoidOrderReceipt({
@@ -817,8 +924,11 @@ class PrintService {
       ),
     );
 
-    await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => doc.save());
+    // Direct print without dialog - send to default printer silently
+    await Printing.directPrintPdf(
+      printer: const Printer(url: ''),
+      onLayout: (PdfPageFormat format) async => doc.save(),
+    );
   }
 
   pw.Widget _dashedLine(pw.Context context) {

@@ -483,3 +483,121 @@ def get_thermal_printer(config: Dict[str, Any] = None) -> ThermalPrinter:
     if _thermal_printer_instance is None:
         _thermal_printer_instance = ThermalPrinter(config)
     return _thermal_printer_instance
+
+
+# Windows-specific printing using win32print
+try:
+    import win32print
+    import win32ui
+    from PIL import Image, ImageDraw, ImageFont
+    WIN32PRINT_AVAILABLE = True
+except ImportError:
+    WIN32PRINT_AVAILABLE = False
+    logger.warning("win32print not installed. Install with: pip install pywin32 pillow")
+
+
+def print_captain_order_windows(receipt_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Fallback: Print captain order using Windows win32print API
+    Used when ESC/POS fails or on Windows systems
+    """
+    if not WIN32PRINT_AVAILABLE:
+        return {'success': False, 'error': 'win32print not available'}
+    
+    try:
+        # Get default printer
+        printer_name = win32print.GetDefaultPrinter()
+        
+        # Create a device context
+        hDC = win32ui.CreateDC()
+        hDC.CreatePrinterDC(printer_name)
+        hDC.StartDoc('Captain Order')
+        hDC.StartPage()
+        
+        # Thermal printer width (80mm = ~300px at 96 DPI)
+        width = 300
+        y = 10
+        
+        # Header
+        hDC.SetMapMode(1)  # MM_TEXT
+        hDC.TextOut(width//2 - 60, y, "CAPTAIN ORDER")
+        y += 30
+        hDC.TextOut(width//2 - 60, y, "KITCHEN COPY")
+        y += 40
+        
+        # Order info
+        order_no = receipt_data.get('order_number', 'N/A')
+        short_code = receipt_data.get('short_code', '')
+        
+        if short_code:
+            hDC.TextOut(10, y, f"CODE: {short_code}")
+            y += 25
+        
+        hDC.TextOut(10, y, f"ORDER: {order_no}")
+        y += 25
+        
+        # Table/Room
+        table_no = receipt_data.get('table_number')
+        if table_no:
+            hDC.TextOut(10, y, f"TABLE: {table_no}")
+            y += 25
+            
+        room_no = receipt_data.get('room_number')
+        if room_no:
+            hDC.TextOut(10, y, f"ROOM: {room_no}")
+            y += 25
+        
+        # Customer & Waiter
+        customer = receipt_data.get('customer_name', 'Walk-in')
+        waiter = receipt_data.get('waiter_name', 'Staff')
+        hDC.TextOut(10, y, f"GUEST: {customer}")
+        y += 25
+        hDC.TextOut(10, y, f"WAITER: {waiter}")
+        y += 35
+        
+        # Items
+        hDC.TextOut(10, y, "ITEMS TO PREPARE:")
+        y += 25
+        hDC.TextOut(10, y, "-" * 40)
+        y += 25
+        
+        items = receipt_data.get('items', [])
+        for item in items:
+            qty = item.get('quantity', 1)
+            name = item.get('name', 'Item')
+            notes = item.get('notes', '')
+            
+            hDC.TextOut(10, y, f"{qty}x {name.upper()}")
+            y += 25
+            
+            if notes:
+                hDC.TextOut(20, y, f"NOTE: {notes}")
+                y += 20
+            
+            y += 10
+        
+        # Footer
+        y += 20
+        hDC.TextOut(10, y, "-" * 40)
+        y += 25
+        hDC.TextOut(width//2 - 80, y, "KITCHEN PREPARATION ORDER")
+        y += 20
+        hDC.TextOut(width//2 - 80, y, "DO NOT GIVE TO CUSTOMER")
+        
+        # End page and document
+        hDC.EndPage()
+        hDC.EndDoc()
+        hDC.DeleteDC()
+        
+        return {
+            'success': True,
+            'message': 'Captain order printed via Windows API',
+            'receipt_number': order_no
+        }
+        
+    except Exception as e:
+        logger.error(f"Error printing with win32print: {e}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
