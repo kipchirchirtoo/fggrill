@@ -32,6 +32,12 @@ Future<void> printCustomerDocument(
   );
   final sections = doc?.sections ?? const [];
   if (sections.isNotEmpty) {
+    // The pre-payment Customer Bill omits the VAT 16% breakdown (folded back
+    // into the subtotal) and carries a reminder to collect the fiscal ETR
+    // receipt at the cashier. The Customer Receipt (post-payment, with ETR)
+    // keeps the full VAT breakdown. The CL 2% / SC 3% levies are inclusive on
+    // both documents and never change the printed total.
+    final isCustomerBill = templateKey == 'customer_bill';
     final data = _templateData(
       sale: sale,
       items: items,
@@ -45,6 +51,10 @@ Future<void> printCustomerDocument(
       barcodeValue: barcodeValue,
       amountTendered: amountTendered,
       changeGiven: changeGiven,
+      showVat: !isCustomerBill,
+      noticeText: isCustomerBill
+          ? 'Collect Official Receipt with ETR at the Cashier'
+          : null,
     );
     await TemplatePrintRenderer().printThermal(sections, data);
     return;
@@ -232,6 +242,8 @@ TemplatePrintData _templateData({
   String? barcodeValue,
   num? amountTendered,
   num? changeGiven,
+  bool showVat = true,
+  String? noticeText,
   Map<String, String> extraValues = const {},
   List<MapEntry<String, String>> extraKvRows = const [],
   Map<String, String> staff = const {},
@@ -239,8 +251,19 @@ TemplatePrintData _templateData({
   final money = NumberFormat('#,##0.00', 'en_KE');
   final date = _dateString(sale.createdAt);
   final total = sale.total;
-  final subtotal = total > 0 ? total / 1.16 : 0;
-  final tax = total - subtotal;
+
+  // Price is all-inclusive of VAT 16%, Catering Levy (CL) 2% and Service
+  // Charge (SC) 3% — these are disclosed as a breakdown of the unchanged
+  // total, never added on top of or subtracted from it.
+  const vatRate = 0.16, clRate = 0.02, scRate = 0.03;
+  final base = total > 0 ? total / (1 + vatRate + clRate + scRate) : 0;
+  final vatAmount = base * vatRate;
+  final cateringLevy = base * clRate;
+  final serviceCharge = base * scRate;
+  // When VAT isn't itemized (customer bill), fold it back into the subtotal
+  // line so SUBTOTAL + CL + SC + TOTAL still reconciles exactly.
+  final subtotal = showVat ? base : base + vatAmount;
+  final tax = vatAmount;
   final method = sale.paymentMethod.trim();
   final isPending = ['pending', 'unpaid'].contains(method.toLowerCase().trim());
   final paid = isPending ? 0 : total;
@@ -309,6 +332,10 @@ TemplatePrintData _templateData({
     staff: staff,
     barcodeValue: _clean(barcodeValue) ?? code ?? receiptNumber,
     code: code,
+    showVat: showVat,
+    cateringLevy: cateringLevy,
+    serviceCharge: serviceCharge,
+    noticeText: noticeText,
   );
 }
 

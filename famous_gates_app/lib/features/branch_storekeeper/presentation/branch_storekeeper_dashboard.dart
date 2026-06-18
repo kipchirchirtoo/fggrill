@@ -117,6 +117,7 @@ class _BranchStorekeeperDashboardState
   String _branchName = '';
   String _branchId = '';
   bool _outletItemsLoading = false;
+  bool _bulkIssuingBar = false;
   Map<String, dynamic>? _stockTakeDetail;
   List<Map<String, dynamic>> _stockTakeItems = [];
   String _analyticsPeriod = 'month';
@@ -4049,6 +4050,19 @@ class _BranchStorekeeperDashboardState
               ? FilledButton.styleFrom(backgroundColor: Colors.amber.shade700)
               : null,
         ),
+        if (isBarSelected)
+          OutlinedButton.icon(
+            onPressed: selected == null || _bulkIssuingBar
+                ? null
+                : () => _issueAllBarStock(selected),
+            icon: _bulkIssuingBar
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.playlist_add_check_circle_outlined),
+            label: Text(_bulkIssuingBar ? 'Issuing All...' : 'Issue All'),
+          ),
         if (!isBarSelected)
           OutlinedButton.icon(
             onPressed: () => setState(
@@ -6914,6 +6928,117 @@ class _BranchStorekeeperDashboardState
     'outside_catering': (label: 'Event Name', pax: true),
     'accommodation_breakfast': (label: 'Guest / Room', pax: false),
   };
+
+  // Issues branch stock for every item in a bar outlet in one go, so the
+  // whole bar menu becomes sellable on POS without issuing item-by-item.
+  // Intended for quickly seeding a bar outlet to test POS in production.
+  Future<void> _issueAllBarStock(Map<String, dynamic> outlet) async {
+    final outletId = _outletId(outlet);
+    final items = _stockForOutlet(outletId);
+    if (items.isEmpty) {
+      _showSnack('No bar items found for ${_outletDisplayName(outlet)}',
+          error: true);
+      return;
+    }
+
+    const testQty = 50.0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Issue All Bar Items'),
+        content: Text(
+          'Tops up branch stock into all ${items.length} item(s) in '
+          '${_outletDisplayName(outlet)} (up to ${_qtyText(testQty)} units each, '
+          'limited by what is available in branch store) so the whole bar menu '
+          'is available to sell on POS. Existing stock is added to, not reduced.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Issue All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _bulkIssuingBar = true);
+    var issuedCount = 0;
+    var skippedCount = 0;
+    try {
+      for (final output in items) {
+        final outputSku = _outletItemSku(output);
+        final matches = _stockOptions.where((item) {
+          return _optionSku(item) == outputSku ||
+              _itemName(item).toLowerCase() ==
+                  _outletItemName(output).toLowerCase();
+        }).toList();
+        if (matches.isEmpty) {
+          skippedCount++;
+          continue;
+        }
+        final source = matches.first;
+        final available = _num(source['quantity']);
+        final qty = available < testQty ? available : testQty;
+        if (qty <= 0) {
+          skippedCount++;
+          continue;
+        }
+        try {
+          await _repo.createProductionRun({
+            'destination_outlet_id': outletId,
+            'production_area': 'pos_outlet_issue',
+            'batch_reference':
+                'BULK-${DateTime.now().millisecondsSinceEpoch}-$issuedCount',
+            'inputs': [
+              {
+                'item_sku': _optionSku(source),
+                'item_name': _itemName(source),
+                'quantity': qty,
+                'unit': source['unit_of_measure'] ?? source['unit'] ?? 'units',
+                'unit_cost': _num(source['cost_price'] ??
+                    source['unit_cost'] ??
+                    source['unit_price']),
+              }
+            ],
+            'outputs': [
+              {
+                'outlet_item_id': _outletItemId(output),
+                'item_sku': outputSku,
+                'item_name': _outletItemName(output),
+                'quantity': qty,
+                'unit': output['unit'] ?? 'units',
+                'unit_cost': _num(output['cost_price'] ??
+                    source['cost_price'] ??
+                    source['unit_cost']),
+                'category': output['category'],
+                'metadata': {
+                  'source': 'branch_store_pos_outlet_issue_bulk',
+                  'source_sku': _optionSku(source),
+                },
+              }
+            ],
+            'remarks':
+                'Bulk issue-all to ${_outletDisplayName(outlet)} (POS testing)',
+          });
+          issuedCount++;
+        } catch (_) {
+          skippedCount++;
+        }
+      }
+      await _loadAll();
+      _showSnack(
+        'Issued $issuedCount item(s) to ${_outletDisplayName(outlet)}'
+        '${skippedCount > 0 ? ' • $skippedCount skipped (no matching/available branch stock)' : ''}',
+      );
+    } finally {
+      if (mounted) setState(() => _bulkIssuingBar = false);
+    }
+  }
 
   void _showPosOutletIssueForm(
     Map<String, dynamic> outlet, {

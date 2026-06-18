@@ -599,6 +599,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                             case 'recall':
                               _recallOrder(order);
                               break;
+                            case 'reprint':
+                              _reprintBill(order);
+                              break;
                             case 'split':
                               _showSplitOrderDialog(order);
                               break;
@@ -615,6 +618,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                               dense: true,
                               leading: Icon(Icons.restore),
                               title: Text('Recall bill'),
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'reprint',
+                            child: ListTile(
+                              dense: true,
+                              leading: Icon(Icons.print_outlined),
+                              title: Text('Reprint bill'),
                             ),
                           ),
                           PopupMenuItem(
@@ -836,6 +847,75 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     }
   }
 
+  // Reprints the Customer Bill for a past order with the exact details it
+  // was originally printed with — pulled from the saved order record, not
+  // the live cart (which has since moved on to other items).
+  Future<void> _reprintBill(OutletShiftOrder order) async {
+    final reprintItems = order.items.map((raw) {
+      final m = Map<String, dynamic>.from(raw as Map);
+      final qty = (m['quantity'] is num)
+          ? (m['quantity'] as num).toInt()
+          : int.tryParse('${m['quantity']}') ?? 0;
+      final unitPrice = (m['unit_price'] is num)
+          ? (m['unit_price'] as num).toDouble()
+          : double.tryParse('${m['unit_price']}') ?? 0;
+      return CartItem(
+        productId: '${m['outlet_item_id'] ?? ''}',
+        name: '${m['name'] ?? ''}',
+        unitPrice: unitPrice,
+        qty: qty,
+      );
+    }).toList();
+
+    final sale = SaleResult(
+      transactionId: order.id,
+      createdAt: order.createdAt ?? DateTime.now(),
+      receiptNumber: order.orderNumber,
+      cashierName: order.waiterName,
+      total: order.totalAmount,
+      paymentMethod: 'pending',
+    );
+
+    try {
+      final user = ref.read(authNotifierProvider).valueOrNull;
+      final branchId = _outlet?.branchId?.toString() ?? user?.branchId;
+      final outletId = _outlet?.id;
+      final branchName = _outlet?.name ?? widget.title;
+      final barcodeVal = (order.shortCode?.trim().isNotEmpty ?? false)
+          ? order.shortCode
+          : order.orderNumber;
+
+      await printCustomerDocument(
+        ref,
+        templateKey: 'customer_bill',
+        fallbackTitle: 'CUSTOMER BILL (REPRINT)',
+        branchId: branchId,
+        outletId: outletId,
+        sale: sale,
+        items: reprintItems,
+        branchName: branchName,
+        tableNumber: order.tableNumber,
+        roomNumber: order.roomNumber,
+        customerName: order.customerName,
+        staffLabel: 'Waiter',
+        publicCode: order.shortCode,
+        barcodeValue: barcodeVal,
+      );
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(content: Text('Bill reprinted')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text('Reprint failed: $error')),
+      );
+    }
+  }
+
   bool get _isRestaurant =>
       (_outlet?.outletType ?? widget.outletType).toLowerCase() == 'restaurant';
 
@@ -974,25 +1054,25 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       builder: (context) => const _ReasonDialog(title: 'Request void approval'),
     );
     if (reason == null || reason.trim().isEmpty) return;
-    
+
     setState(() => _busy = true);
     try {
       final repo = ref.read(outletPosRepositoryProvider);
-      
+
       // Request void with explicit error handling
       await repo.requestVoidOrder(
         shiftId: _shift!.id,
         orderId: order.id,
         reason: reason.trim(),
       );
-      
+
       // Refresh orders list to show updated status
       final updatedOrders = await repo.getOrders(_shift!.id);
       setState(() {
         _orders = updatedOrders;
         _busy = false;
       });
-      
+
       if (mounted) {
         AppNotifier.showSnackBar(
           context,

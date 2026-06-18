@@ -19,6 +19,10 @@ class TemplatePrintData {
     this.staff = const {},
     this.barcodeValue,
     this.code,
+    this.showVat = true,
+    this.cateringLevy = 0,
+    this.serviceCharge = 0,
+    this.noticeText,
   });
 
   final Map<String, String> values; // placeholder token (without braces) → text
@@ -30,6 +34,10 @@ class TemplatePrintData {
   final Map<String, String> staff; // name, employee_id, department
   final String? barcodeValue;
   final String? code;
+  final bool showVat; // VAT 16% breakdown line — hidden on the customer bill
+  final num cateringLevy; // CL 2% — all-inclusive, does not change the total
+  final num serviceCharge; // SC 3% — all-inclusive, does not change the total
+  final String? noticeText; // auto-injected notice (e.g. "collect ETR receipt")
 }
 
 class TemplateLineItem {
@@ -170,20 +178,41 @@ class TemplatePrintRenderer {
       }
     }
 
-    if (till == null) return ordered;
+    final etrNotice = _etrNoticeSection(data, ordered);
+
+    if (till == null && etrNotice == null) return ordered;
 
     final result = <TemplateSection>[];
     var inserted = false;
     for (final section in ordered) {
       result.add(section);
       if (!inserted && _isThankYouSection(section)) {
-        result.add(_tillComplianceSection(till));
+        if (etrNotice != null) result.add(etrNotice);
+        if (till != null) result.add(_tillComplianceSection(till));
         inserted = true;
       }
     }
 
-    if (!inserted) result.add(_tillComplianceSection(till));
+    if (!inserted) {
+      if (etrNotice != null) result.add(etrNotice);
+      if (till != null) result.add(_tillComplianceSection(till));
+    }
     return result;
+  }
+
+  TemplateSection? _etrNoticeSection(
+      TemplatePrintData data, List<TemplateSection> ordered) {
+    final text = (data.noticeText ?? '').trim();
+    if (text.isEmpty) return null;
+    final alreadyPresent =
+        ordered.any((s) => (s.content ?? '').toLowerCase().contains('etr'));
+    if (alreadyPresent) return null;
+    return TemplateSection(
+      id: 'collect_receipt_notice',
+      type: 'notice',
+      content: text,
+      visible: true,
+    );
   }
 
   bool _isTillSection(TemplateSection s) {
@@ -384,7 +413,14 @@ class TemplatePrintRenderer {
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             _totalRow('SUBTOTAL', 'KES ${_money.format(data.subtotal)}', 9),
-            _totalRow('TAX (16% incl.)', 'KES ${_money.format(data.tax)}', 9),
+            if (data.showVat)
+              _totalRow('VAT (16% incl.)', 'KES ${_money.format(data.tax)}', 9),
+            if (data.cateringLevy > 0)
+              _totalRow('CL (2% incl.)',
+                  'KES ${_money.format(data.cateringLevy)}', 9),
+            if (data.serviceCharge > 0)
+              _totalRow('SC (3% incl.)',
+                  'KES ${_money.format(data.serviceCharge)}', 9),
             pw.SizedBox(height: 2),
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.center,
