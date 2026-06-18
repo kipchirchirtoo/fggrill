@@ -6,6 +6,7 @@ import '../../features/auth/domain/auth_notifier.dart';
 import '../theme/app_theme.dart';
 import 'app_update_button.dart';
 import 'notification_button.dart';
+import 'printer_settings_dialog.dart';
 
 class MasterNavItem<T> {
   const MasterNavItem({
@@ -341,21 +342,47 @@ class _MasterSideNav<T> extends ConsumerWidget {
             Padding(
               padding: EdgeInsets.all(isCollapsed ? 10 : 16),
               child: isCollapsed
-                  ? IconButton(
-                      tooltip: 'Logout',
-                      onPressed: () =>
-                          ref.read(authNotifierProvider.notifier).logout(),
-                      icon: Icon(PhosphorIcons.signOut(),
-                          color: palette?.mutedText ?? Colors.grey.shade600),
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Printer Settings',
+                          onPressed: () => showPrinterSettingsDialog(context),
+                          icon: Icon(PhosphorIcons.printer(),
+                              color:
+                                  palette?.mutedText ?? Colors.grey.shade600),
+                        ),
+                        IconButton(
+                          tooltip: 'Logout',
+                          onPressed: () =>
+                              ref.read(authNotifierProvider.notifier).logout(),
+                          icon: Icon(PhosphorIcons.signOut(),
+                              color:
+                                  palette?.mutedText ?? Colors.grey.shade600),
+                        ),
+                      ],
                     )
-                  : OutlinedButton.icon(
-                      onPressed: () =>
-                          ref.read(authNotifierProvider.notifier).logout(),
-                      icon: Icon(PhosphorIcons.signOut(), size: 18),
-                      label: const Text('Logout'),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 44),
-                      ),
+                  : Column(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => showPrinterSettingsDialog(context),
+                          icon: Icon(PhosphorIcons.printer(), size: 18),
+                          label: const Text('Printer Settings'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 40),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              ref.read(authNotifierProvider.notifier).logout(),
+                          icon: Icon(PhosphorIcons.signOut(), size: 18),
+                          label: const Text('Logout'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 44),
+                          ),
+                        ),
+                      ],
                     ),
             ),
           ],
@@ -525,12 +552,24 @@ class _MasterTopBar extends ConsumerWidget {
             onSelected: (value) {
               if (value == 'logout') {
                 ref.read(authNotifierProvider.notifier).logout();
+              } else if (value == 'printer') {
+                showPrinterSettingsDialog(context);
               }
             },
             itemBuilder: (context) => [
               PopupMenuItem(
                 enabled: false,
                 child: Text(email.isEmpty ? name : email),
+              ),
+              PopupMenuItem(
+                value: 'printer',
+                child: Row(
+                  children: [
+                    Icon(PhosphorIcons.printer(), size: 18),
+                    const SizedBox(width: 12),
+                    const Text('Printer Settings'),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: 'logout',

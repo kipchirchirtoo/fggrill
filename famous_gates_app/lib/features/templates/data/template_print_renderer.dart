@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import '../../../core/services/silent_printer.dart';
 import '../domain/template_models.dart';
 
 /// Data context supplied to a template at print time. Placeholders in section
@@ -116,7 +116,10 @@ class TemplatePrintRenderer {
       },
     ));
 
-    await Printing.layoutPdf(onLayout: (f) async => doc.save());
+    await SilentPrinter.print(
+      onLayout: (f) async => doc.save(),
+      format: fmt,
+    );
   }
 
   List<TemplateSection> _thermalOrder(

@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../core/services/silent_printer.dart';
 import '../features/pos/domain/models.dart';
 
 class PrintService {
@@ -295,10 +295,11 @@ class PrintService {
       ),
     );
 
-    // Direct print without dialog - send to default printer silently
-    await Printing.directPrintPdf(
-      printer: const Printer(url: ''),
+    // Direct print without dialog - resolves a real printer first instead
+    // of an invalid blank-url placeholder (which forced the OS dialog).
+    await SilentPrinter.print(
       onLayout: (PdfPageFormat format) async => doc.save(),
+      format: receiptFormat,
     );
   }
 
@@ -546,10 +547,11 @@ class PrintService {
       ),
     );
 
-    // Direct print without dialog - send to default printer silently
-    await Printing.directPrintPdf(
-      printer: const Printer(url: ''),
+    // Direct print without dialog - resolves a real printer first instead
+    // of an invalid blank-url placeholder (which forced the OS dialog).
+    await SilentPrinter.print(
       onLayout: (PdfPageFormat format) async => doc.save(),
+      format: receiptFormat,
     );
   }
 
@@ -754,10 +756,11 @@ class PrintService {
       ),
     );
 
-    // Direct print without dialog - send to default printer silently
-    await Printing.directPrintPdf(
-      printer: const Printer(url: ''),
+    // Direct print without dialog - resolves a real printer first instead
+    // of an invalid blank-url placeholder (which forced the OS dialog).
+    await SilentPrinter.print(
       onLayout: (PdfPageFormat format) async => doc.save(),
+      format: receiptFormat,
     );
   }
 
@@ -924,10 +927,11 @@ class PrintService {
       ),
     );
 
-    // Direct print without dialog - send to default printer silently
-    await Printing.directPrintPdf(
-      printer: const Printer(url: ''),
+    // Direct print without dialog - resolves a real printer first instead
+    // of an invalid blank-url placeholder (which forced the OS dialog).
+    await SilentPrinter.print(
       onLayout: (PdfPageFormat format) async => doc.save(),
+      format: receiptFormat,
     );
   }
 
