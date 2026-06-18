@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "3.7.0",
+  "version": "3.8.0",
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next dev -p 3001",
