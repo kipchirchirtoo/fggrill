@@ -34,7 +34,10 @@ class TemplatePrintData {
   final Map<String, String> staff; // name, employee_id, department
   final String? barcodeValue;
   final String? code;
-  final bool showVat; // VAT 16% breakdown line — hidden on the customer bill
+  // Controls the whole SUBTOTAL/VAT/CL/SC breakdown block on the 'totals'
+  // section. False on the customer bill (shows only TOTAL); true on the
+  // customer receipt (shows the full inclusive breakdown).
+  final bool showVat;
   final num cateringLevy; // CL 2% — all-inclusive, does not change the total
   final num serviceCharge; // SC 3% — all-inclusive, does not change the total
   final String? noticeText; // auto-injected notice (e.g. "collect ETR receipt")
@@ -409,18 +412,22 @@ class TemplatePrintRenderer {
         ));
 
       case 'totals':
+        // The Customer Bill shows only the TOTAL — no SUBTOTAL/VAT/CL/SC
+        // breakdown at all. The Customer Receipt (post-payment, with ETR)
+        // is the only document that itemizes the inclusive breakdown.
         return pad(pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            _totalRow('SUBTOTAL', 'KES ${_money.format(data.subtotal)}', 9),
-            if (data.showVat)
+            if (data.showVat) ...[
+              _totalRow('SUBTOTAL', 'KES ${_money.format(data.subtotal)}', 9),
               _totalRow('VAT (16% incl.)', 'KES ${_money.format(data.tax)}', 9),
-            if (data.cateringLevy > 0)
-              _totalRow('CL (2% incl.)',
-                  'KES ${_money.format(data.cateringLevy)}', 9),
-            if (data.serviceCharge > 0)
-              _totalRow('SC (3% incl.)',
-                  'KES ${_money.format(data.serviceCharge)}', 9),
+              if (data.cateringLevy > 0)
+                _totalRow('CL (2% incl.)',
+                    'KES ${_money.format(data.cateringLevy)}', 9),
+              if (data.serviceCharge > 0)
+                _totalRow('SC (3% incl.)',
+                    'KES ${_money.format(data.serviceCharge)}', 9),
+            ],
             pw.SizedBox(height: 2),
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.center,

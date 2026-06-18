@@ -198,6 +198,38 @@ class _DocumentTemplatesSectionState
       Text(t.description,
           style:
               const TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+      if (t.key == 'customer_bill' || t.key == 'customer_receipt') ...[
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                t.key == 'customer_bill'
+                    ? 'Business rule (not editable here): the Totals section on this '
+                        'document prints ONLY the TOTAL — no SUBTOTAL, VAT, CL or SC '
+                        'lines. A "Collect Official Receipt with ETR at the Cashier" '
+                        'notice is auto-added near the bottom. The till number box '
+                        'shown below comes from the POS Till Numbers screen.'
+                    : 'Business rule (not editable here): the Totals section on this '
+                        'document prints the full breakdown — SUBTOTAL, VAT (16% '
+                        'incl.), Catering Levy (2% incl.) and Service Charge (3% '
+                        'incl.) — all inclusive of the unchanged total. The till '
+                        'number box shown below comes from the POS Till Numbers screen.',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.blue.shade900, height: 1.4),
+              ),
+            ),
+          ]),
+        ),
+      ],
       const SizedBox(height: 12),
       // Placeholder palette
       if (t.placeholders.isNotEmpty)
@@ -217,6 +249,7 @@ class _DocumentTemplatesSectionState
           Expanded(
             flex: 3,
             child: _SectionList(
+              templateKey: t.key,
               sections: t.sections,
               onChanged: _markDirty,
               registerActive: (c) => _activeContent = c,
@@ -239,7 +272,7 @@ class _DocumentTemplatesSectionState
           // Live preview
           Expanded(
             flex: 2,
-            child: _ThermalPreview(sections: t.sections),
+            child: _ThermalPreview(sections: t.sections, templateKey: t.key),
           ),
         ]),
       ),
@@ -308,6 +341,7 @@ class _TemplateTile extends StatelessWidget {
 
 class _SectionList extends StatelessWidget {
   const _SectionList({
+    required this.templateKey,
     required this.sections,
     required this.onChanged,
     required this.registerActive,
@@ -315,6 +349,7 @@ class _SectionList extends StatelessWidget {
     required this.onDelete,
     required this.onAdd,
   });
+  final String templateKey;
   final List<TemplateSection> sections;
   final VoidCallback onChanged;
   final void Function(TextEditingController) registerActive;
@@ -356,6 +391,7 @@ class _SectionList extends StatelessWidget {
               key: ValueKey(s.id),
               index: i,
               section: s,
+              templateKey: templateKey,
               onChanged: onChanged,
               registerActive: registerActive,
               onDelete: () => onDelete(i),
@@ -372,12 +408,14 @@ class _SectionCard extends StatefulWidget {
     super.key,
     required this.index,
     required this.section,
+    required this.templateKey,
     required this.onChanged,
     required this.registerActive,
     required this.onDelete,
   });
   final int index;
   final TemplateSection section;
+  final String templateKey;
   final VoidCallback onChanged;
   final void Function(TextEditingController) registerActive;
   final VoidCallback onDelete;
@@ -433,6 +471,21 @@ class _SectionCardState extends State<_SectionCard> {
                   size: 18, color: AppColors.kError),
             ),
           ]),
+          if (s.type == 'totals')
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                widget.templateKey == 'customer_bill'
+                    ? 'Auto: prints TOTAL only on the Customer Bill (no VAT/CL/SC).'
+                    : widget.templateKey == 'customer_receipt'
+                        ? 'Auto: prints SUBTOTAL, VAT 16%, CL 2% and SC 3% on the Customer Receipt.'
+                        : 'Auto: prints SUBTOTAL + TAX breakdown then TOTAL.',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.blue.shade700),
+              ),
+            ),
           if (s.label != null || s.type == 'code_box')
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -524,8 +577,9 @@ class _AlignToggle extends StatelessWidget {
 /// A live thermal-receipt preview that mirrors the print renderer using sample
 /// data, so SuperAdmins see changes before publishing.
 class _ThermalPreview extends StatelessWidget {
-  const _ThermalPreview({required this.sections});
+  const _ThermalPreview({required this.sections, required this.templateKey});
   final List<TemplateSection> sections;
+  final String templateKey;
 
   static const _sample = {
     'company_name': 'FamousGate Hotels',
@@ -661,35 +715,41 @@ class _ThermalPreview extends StatelessWidget {
         ordered.add(_autoEmailSection());
       }
     }
-    if (till == null) return ordered;
+    final etrNotice = templateKey == 'customer_bill' &&
+            !ordered.any((s) => (s.content ?? '').toLowerCase().contains('etr'))
+        ? TemplateSection(
+            id: 'collect_receipt_notice',
+            type: 'notice',
+            content: 'Collect Official Receipt with ETR at the Cashier',
+            visible: true,
+          )
+        : null;
+
+    if (till == null && etrNotice == null) return ordered;
+
+    TemplateSection tillComplianceSection() => TemplateSection(
+          id: 'till_compliance',
+          type: 'text',
+          content: till!.content,
+          visible: till.visible,
+          align: 'center',
+          bold: true,
+          size: till.size == null || till.size! < 12 ? 13.0 : till.size!,
+        );
 
     final result = <TemplateSection>[];
     var inserted = false;
     for (final section in ordered) {
       result.add(section);
       if (!inserted && _isThankYouSection(section)) {
-        result.add(TemplateSection(
-          id: 'till_compliance',
-          type: 'text',
-          content: till.content,
-          visible: till.visible,
-          align: 'center',
-          bold: true,
-          size: till.size == null || till.size! < 12 ? 13.0 : till.size!,
-        ));
+        if (etrNotice != null) result.add(etrNotice);
+        if (till != null) result.add(tillComplianceSection());
         inserted = true;
       }
     }
     if (!inserted) {
-      result.add(TemplateSection(
-        id: 'till_compliance',
-        type: 'text',
-        content: till.content,
-        visible: till.visible,
-        align: 'center',
-        bold: true,
-        size: till.size == null || till.size! < 12 ? 13.0 : till.size!,
-      ));
+      if (etrNotice != null) result.add(etrNotice);
+      if (till != null) result.add(tillComplianceSection());
     }
     return result;
   }
@@ -849,9 +909,17 @@ class _ThermalPreview extends StatelessWidget {
           ]),
         ];
       case 'totals':
+        // Mirrors the live renderer's business rule: the Customer Bill shows
+        // only TOTAL; the Customer Receipt shows the full inclusive
+        // breakdown (VAT 16% + Catering Levy 2% + Service Charge 3%).
+        final showBreakdown = templateKey != 'customer_bill';
         return [
-          txt('SUBTOTAL            KES 301.72', size: 9),
-          txt('TAX (16% incl.)     KES 48.28', size: 9),
+          if (showBreakdown) ...[
+            txt('SUBTOTAL            KES 282.26', size: 9),
+            txt('VAT (16% incl.)     KES 45.16', size: 9),
+            txt('CL (2% incl.)       KES 5.65', size: 9),
+            txt('SC (3% incl.)       KES 8.47', size: 9),
+          ],
           txt('TOTAL:              KES 350.00', bold: true, size: 11),
         ];
       case 'staff_box':

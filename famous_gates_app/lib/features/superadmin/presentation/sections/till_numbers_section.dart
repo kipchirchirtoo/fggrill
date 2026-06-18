@@ -18,7 +18,8 @@ class TillNumbersSection extends ConsumerWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           const Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('POS Till Numbers',
                   style: TextStyle(
                       fontSize: 22,
@@ -26,9 +27,9 @@ class TillNumbersSection extends ConsumerWidget {
                       color: AppColors.kTextPrimary)),
               SizedBox(height: 4),
               Text(
-                  'Set a till number per POS outlet. Branch default is used when an outlet has none. Shown on every customer bill & receipt.',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.kTextSecondary)),
+                  'Set a till number per POS outlet. Branch default is used when an outlet has none. Shown on every customer bill & receipt — if neither is set, the till box is silently omitted from print.',
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
             ]),
           ),
           OutlinedButton.icon(
@@ -40,14 +41,60 @@ class TillNumbersSection extends ConsumerWidget {
         const SizedBox(height: 20),
         Expanded(
           child: tills.when(
-            data: (branches) => branches.isEmpty
-                ? const Center(child: Text('No branches found'))
-                : ListView.separated(
-                    itemCount: branches.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (_, i) =>
-                        _BranchTillCard(branch: branches[i]),
+            data: (branches) {
+              if (branches.isEmpty) {
+                return const Center(child: Text('No branches found'));
+              }
+              final missing = branches.where((b) {
+                final branchSet =
+                    '${b['default_till_number'] ?? ''}'.trim().isNotEmpty;
+                final outlets = (b['outlets'] as List?) ?? [];
+                final allOutletsSet = outlets.isNotEmpty &&
+                    outlets.every((o) =>
+                        '${Map<String, dynamic>.from(o as Map)['till_number'] ?? ''}'
+                            .trim()
+                            .isNotEmpty);
+                return !branchSet && !allOutletsSet;
+              }).length;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (missing > 0)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: Colors.red.shade700, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '$missing branch(es) have no till number set (neither a branch default nor a till on every outlet). '
+                            'Customer bills/receipts for those branches print without a till number box.',
+                            style: TextStyle(
+                                color: Colors.red.shade900,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: branches.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      itemBuilder: (_, i) =>
+                          _BranchTillCard(branch: branches[i]),
+                    ),
                   ),
+                ],
+              );
+            },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text(apiErrorMessage(e))),
           ),
@@ -64,6 +111,7 @@ class _BranchTillCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final outlets = (branch['outlets'] as List?) ?? [];
+    final branchDefault = '${branch['default_till_number'] ?? ''}'.trim();
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -83,7 +131,7 @@ class _BranchTillCard extends ConsumerWidget {
           const SizedBox(width: 10),
           _TillField(
             label: 'Branch default till',
-            value: '${branch['default_till_number'] ?? ''}',
+            value: branchDefault,
             onSave: (v) async {
               await ref
                   .read(templateRepositoryProvider)
@@ -106,9 +154,22 @@ class _BranchTillCard extends ConsumerWidget {
         else
           ...outlets.map((o) {
             final outlet = Map<String, dynamic>.from(o as Map);
+            final outletTill = '${outlet['till_number'] ?? ''}'.trim();
+            final hasEffectiveTill =
+                outletTill.isNotEmpty || branchDefault.isNotEmpty;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(children: [
+                if (!hasEffectiveTill)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Tooltip(
+                      message:
+                          'No till number — outlet has none and branch has no default. Bills/receipts print without a till box.',
+                      child: Icon(Icons.error_outline,
+                          color: Colors.red.shade600, size: 18),
+                    ),
+                  ),
                 Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,14 +177,24 @@ class _BranchTillCard extends ConsumerWidget {
                         Text('${outlet['outlet_name'] ?? ''}',
                             style: const TextStyle(
                                 fontWeight: FontWeight.w600, fontSize: 13.5)),
-                        Text('${outlet['outlet_type'] ?? ''}',
-                            style: const TextStyle(
-                                fontSize: 11, color: AppColors.kTextSecondary)),
+                        Text(
+                          outletTill.isEmpty && branchDefault.isNotEmpty
+                              ? '${outlet['outlet_type'] ?? ''} · using branch default'
+                              : '${outlet['outlet_type'] ?? ''}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: !hasEffectiveTill
+                                  ? Colors.red.shade600
+                                  : AppColors.kTextSecondary,
+                              fontWeight: !hasEffectiveTill
+                                  ? FontWeight.w700
+                                  : FontWeight.normal),
+                        ),
                       ]),
                 ),
                 _TillField(
                   label: 'Till number',
-                  value: '${outlet['till_number'] ?? ''}',
+                  value: outletTill,
                   onSave: (v) async {
                     await ref
                         .read(templateRepositoryProvider)
@@ -200,7 +271,9 @@ class _TillFieldState extends State<_TillField> {
                 },
           icon: _busy
               ? const SizedBox(
-                  width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.save, color: AppColors.kPrimary),
         ),
       ]),
