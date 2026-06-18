@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../services/print_service.dart';
+import '../../pos/domain/models.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
 
@@ -25,6 +27,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   late Future<_KitchenModuleSnapshot> _future;
   Timer? _timer;
   String _notificationStatus = 'unread';
+
+  // Track printed order IDs to avoid duplicate printing
+  final Set<String> _printedOrderIds = {};
 
   KitchenRepository get _repo => ref.read(kitchenRepositoryProvider);
 
@@ -62,17 +67,109 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         category: 'restaurant_order',
       ),
     ]);
-    return _KitchenModuleSnapshot(
+    final snapshot = _KitchenModuleSnapshot(
       activeOrders: (results[0] as List<KitchenOrder>),
       history: (results[1] as List<KitchenOrder>),
       notifications: (results[2] as List<Map<String, dynamic>>),
     );
+
+    // Auto-print new captain orders when they arrive
+    _autoPrintNewCaptainOrders(snapshot.activeOrders);
+
+    return snapshot;
   }
 
   void _refresh() {
     setState(() {
       _future = _load();
     });
+  }
+
+  /// Automatically print captain order tickets as backup.
+  /// Primary printing happens at backend (Python service) when order is created.
+  /// This KDS auto-print serves as a backup in case backend printing fails,
+  /// ensuring kitchen always gets the ticket even if there's a network/service issue.
+  void _autoPrintNewCaptainOrders(List<KitchenOrder> orders) {
+    try {
+      for (final order in orders) {
+        // Skip if already printed (by this KDS instance)
+        if (_printedOrderIds.contains(order.id)) {
+          continue;
+        }
+
+        // Skip if order is voided or has void request (don't print cancelled orders)
+        if (order.isVoided || order.hasPendingVoidRequest) {
+          continue;
+        }
+
+        // Only print new/pending orders (not already preparing/ready/served)
+        final status = order.status.toLowerCase();
+        if (status != 'pending' && status != 'confirmed') {
+          continue;
+        }
+
+        // Mark as printed immediately to avoid duplicate printing
+        _printedOrderIds.add(order.id);
+
+        // Print captain order asynchronously (BACKUP - primary print at backend)
+        _printCaptainOrder(order).then((_) {
+          print('✅ Captain order ${order.orderNumber} printed at KDS (backup)');
+        }).catchError((error) {
+          print(
+              '⚠️ Failed to print captain order ${order.orderNumber} at KDS: $error');
+          // Remove from printed set on failure so it can be retried
+          _printedOrderIds.remove(order.id);
+        });
+      }
+    } catch (error) {
+      print('❌ Error in KDS auto-print captain orders: $error');
+    }
+  }
+
+  /// Print a captain order receipt for the kitchen
+  Future<void> _printCaptainOrder(KitchenOrder order) async {
+    final printService = PrintService();
+
+    // Convert kitchen order items to cart items for printing
+    final cartItems = order.items.map((item) {
+      // Calculate estimated price based on total order amount divided by total quantity
+      final totalQuantity =
+          order.items.fold<int>(0, (sum, i) => sum + i.quantity);
+      final estimatedPrice =
+          totalQuantity > 0 ? order.total / totalQuantity : 0.0;
+
+      return CartItem(
+        productId: item.id,
+        name: item.notes != null && item.notes!.trim().isNotEmpty
+            ? '${item.name} [${item.notes}]'
+            : item.name,
+        unitPrice: estimatedPrice,
+        qty: item.quantity,
+      );
+    }).toList();
+
+    // Create a minimal SaleResult for the captain order
+    final saleResult = SaleResult(
+      transactionId: order.id,
+      receiptNumber: order.shortCode ?? order.orderNumber,
+      total: order.total,
+      paymentMethod: 'PENDING', // Captain orders are not yet paid
+      cashierName: order.waiterName ?? 'Waiter',
+      createdAt: order.createdAt,
+    );
+
+    await printService.printCaptainOrder(
+      sale: saleResult,
+      items: cartItems,
+      branchName: 'FamousGate Hotels',
+      orderNumber: order.orderNumber,
+      shortCode: order.shortCode,
+      tableNumber: order.tableNumber?.toString(),
+      roomNumber: order.roomNumber,
+      customerName: order.customerName,
+      waiterName: order.waiterName,
+      orderType: order.orderTypeLabel,
+    );
   }
 
   @override

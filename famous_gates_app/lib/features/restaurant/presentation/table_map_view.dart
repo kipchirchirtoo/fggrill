@@ -10,6 +10,7 @@ import '../../auth/data/auth_repository.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../kitchen/domain/models.dart';
 import '../../kitchen/domain/providers.dart';
+import '../../pos/data/outlet_pos_repository.dart';
 import '../../pos/domain/models.dart';
 import '../../pos/domain/pos_providers.dart';
 import '../../templates/data/document_printer.dart';
@@ -393,12 +394,26 @@ class _TableMapViewState extends ConsumerState<TableMapView>
 
     try {
       final user = ref.read(authNotifierProvider).valueOrNull;
+      // The logged-in user's outletId is only set for PIN-based outlet
+      // logins. Waiters using the table map authenticate at branch level, so
+      // resolve the branch's actual Restaurant POS outlet here — that's the
+      // outlet whose till number (set in SuperAdmin) must print on the bill.
+      String? outletId = user?.outletId;
+      try {
+        final branchIdInt = int.tryParse(user?.branchId ?? '');
+        final outlets = await ref
+            .read(outletPosRepositoryProvider)
+            .getOutlets(outletType: 'restaurant', branchId: branchIdInt);
+        if (outlets.isNotEmpty) outletId = outlets.first.id;
+      } catch (_) {
+        // Fall back to user?.outletId if the lookup fails.
+      }
       await printCustomerDocument(
         ref,
         templateKey: 'customer_bill',
         fallbackTitle: 'CUSTOMER BILL',
         branchId: user?.branchId,
-        outletId: user?.outletId,
+        outletId: outletId,
         sale: sale,
         items: items,
         branchName: branchName,

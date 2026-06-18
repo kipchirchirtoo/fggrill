@@ -1553,8 +1553,8 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
     
-    // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR RESTAURANT ============
-    // Only print captain orders for restaurant outlets (not bar outlets)
+    // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR KITCHEN ============
+    // Print captain order IMMEDIATELY to kitchen printer (no waiting for KDS poll)
     const outletType = String(outlet?.outlet_type || '').toLowerCase();
     const isRestaurantOutlet = outletType === 'restaurant';
     
@@ -1584,7 +1584,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
           created_at: order.created_at
         }).then((result) => {
           if (result.success) {
-            logger.info(`✅ Captain order ${order.order_number} printed to kitchen`);
+            logger.info(`✅ Captain order ${order.order_number} printed to kitchen IMMEDIATELY`);
             
             // Update captain_printed_at timestamp
             supabase
@@ -1601,7 +1601,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
           logger.error(`❌ Captain order print error for ${order.order_number}:`, printError);
         });
         
-        logger.info(`📄 Captain order ${order.order_number} sent to kitchen printer (restaurant outlet)`);
+        logger.info(`📄 Captain order ${order.order_number} sent to kitchen printer IMMEDIATELY (restaurant outlet)`);
       } catch (printError) {
         // Don't block order creation if printing fails
         logger.error('Captain order printing service error:', printError);

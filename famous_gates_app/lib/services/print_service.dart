@@ -236,6 +236,219 @@ class PrintService {
         onLayout: (PdfPageFormat format) async => doc.save());
   }
 
+  /// Print a captain order for kitchen preparation
+  /// This is a simplified kitchen ticket focused on order fulfillment, not payment
+  Future<void> printCaptainOrder({
+    required SaleResult sale,
+    required List<CartItem> items,
+    required String branchName,
+    required String orderNumber,
+    String? shortCode,
+    String? tableNumber,
+    String? roomNumber,
+    String? customerName,
+    String? waiterName,
+    String? orderType,
+  }) async {
+    final doc = pw.Document();
+    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt);
+    final code = (shortCode ?? orderNumber).trim();
+
+    pw.MemoryImage? logoImage;
+    try {
+      final logoBytes =
+          await rootBundle.load('assets/frontend_public/fglogo.png');
+      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+    } catch (_) {}
+
+    const receiptFormat = PdfPageFormat(
+      _paperWidthMm * PdfPageFormat.mm,
+      double.infinity,
+      marginLeft: _safeMarginMm * PdfPageFormat.mm,
+      marginRight: _safeMarginMm * PdfPageFormat.mm,
+      marginTop: _safeMarginMm * PdfPageFormat.mm,
+      marginBottom: _safeMarginMm * PdfPageFormat.mm,
+    );
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: receiptFormat,
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              if (logoImage != null)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 4),
+                  child: pw.Image(logoImage,
+                      width: 24 * PdfPageFormat.mm,
+                      height: 24 * PdfPageFormat.mm),
+                ),
+              pw.Text(companyName,
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 14)),
+              pw.SizedBox(height: 2),
+              pw.Text(branchName.isEmpty ? companyAddress : branchName,
+                  style: const pw.TextStyle(fontSize: 8)),
+              pw.SizedBox(height: 4),
+              pw.Text('🍳 KITCHEN ORDER 🍳',
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 13)),
+              pw.SizedBox(height: 4),
+              pw.Container(
+                width: double.infinity,
+                padding:
+                    const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(width: 1.2),
+                ),
+                child: pw.Column(children: [
+                  pw.Text('ORDER CODE',
+                      style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.SizedBox(height: 2),
+                  pw.Text(code.toUpperCase(),
+                      style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold, fontSize: 20)),
+                ]),
+              ),
+              pw.SizedBox(height: 4),
+              _dashedLine(context),
+              pw.SizedBox(height: 4),
+              _infoRow('Order #:', orderNumber),
+              _infoRow('Time:', dateStr),
+              if (tableNumber != null && tableNumber.trim().isNotEmpty)
+                _infoRow('Table:', tableNumber.trim()),
+              if (roomNumber != null && roomNumber.trim().isNotEmpty)
+                _infoRow('Room:', roomNumber.trim()),
+              if (orderType != null && orderType.trim().isNotEmpty)
+                _infoRow('Type:', orderType.trim().toUpperCase()),
+              if (customerName != null && customerName.trim().isNotEmpty)
+                _infoRow('Customer:', customerName.trim()),
+              if (waiterName != null && waiterName.trim().isNotEmpty)
+                _infoRow('Waiter:', waiterName.trim()),
+              pw.SizedBox(height: 4),
+              _dashedLine(context),
+              pw.SizedBox(height: 6),
+              // Large, readable items for kitchen staff
+              pw.Container(
+                width: double.infinity,
+                padding:
+                    const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(width: 0.8),
+                ),
+                child: pw.Text('ITEMS TO PREPARE',
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              ),
+              pw.SizedBox(height: 6),
+              ...items.map((item) {
+                // Extract notes if embedded in name with [notes] format
+                final namePattern = RegExp(r'^(.*?)\s*\[(.*?)\]$');
+                final match = namePattern.firstMatch(item.name);
+                final itemName = match?.group(1)?.trim() ?? item.name;
+                final itemNotes = match?.group(2)?.trim();
+                
+                return pw.Container(
+                  width: double.infinity,
+                  margin: const pw.EdgeInsets.only(bottom: 6),
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(width: 0.8),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.black,
+                              borderRadius: pw.BorderRadius.circular(4),
+                            ),
+                            child: pw.Text('${item.qty}x',
+                                style: pw.TextStyle(
+                                  color: PdfColors.white,
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 14,
+                                )),
+                          ),
+                          pw.SizedBox(width: 8),
+                          pw.Expanded(
+                            child: pw.Text(itemName,
+                                style: pw.TextStyle(
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 12,
+                                )),
+                          ),
+                        ],
+                      ),
+                      if (itemNotes != null && itemNotes.isNotEmpty)
+                        pw.Container(
+                          margin: const pw.EdgeInsets.only(top: 4),
+                          padding: const pw.EdgeInsets.all(4),
+                          decoration: pw.BoxDecoration(
+                            color: PdfColors.grey200,
+                            borderRadius: pw.BorderRadius.circular(3),
+                          ),
+                          child: pw.Text('⚠ NOTE: $itemNotes',
+                              style: pw.TextStyle(
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 9,
+                              )),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+              pw.SizedBox(height: 6),
+              _dashedLine(context),
+              pw.SizedBox(height: 6),
+              pw.Container(
+                width: double.infinity,
+                padding:
+                    const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
+                child: pw.Column(children: [
+                  pw.Text('NOT A CUSTOMER BILL',
+                      style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('For kitchen preparation only',
+                      style: const pw.TextStyle(fontSize: 7)),
+                  pw.Text('Payment handled at cashier',
+                      style: const pw.TextStyle(fontSize: 7)),
+                ]),
+              ),
+              pw.SizedBox(height: 8),
+              pw.BarcodeWidget(
+                data: code.toUpperCase(),
+                barcode: pw.Barcode.code128(),
+                width: _barcodeWidthMm * PdfPageFormat.mm,
+                height: 28,
+                drawText: false,
+              ),
+              pw.Text(code.toUpperCase(),
+                  style: const pw.TextStyle(fontSize: 7)),
+              pw.SizedBox(height: 6),
+              pw.Text('Printed: ${DateFormat('HH:mm:ss').format(DateTime.now())}',
+                  style: const pw.TextStyle(fontSize: 6)),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save());
+  }
+
   /// Dedicated receipt for a STAFF CREDIT BILL. Unlike a payment receipt this
   /// records an unpaid credit owed by a named staff member, and states the
   /// settlement route: paid to the Branch Accountant OR deducted from payroll.

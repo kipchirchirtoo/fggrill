@@ -802,7 +802,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
           ? order.shortCode
           : order.orderNumber;
 
-      // FIRST PRINT: Customer Bill (given to customer at table)
+      // PRINT: Customer Bill (given to customer at table)
       await printCustomerDocument(
         ref,
         templateKey: 'customer_bill',
@@ -820,23 +820,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         barcodeValue: barcodeVal,
       );
 
-      // SECOND PRINT: Kitchen Captain Order (for kitchen preparation)
-      await printCustomerDocument(
-        ref,
-        templateKey: 'kitchen_captain_order',
-        fallbackTitle: 'KITCHEN COPY - CAPTAIN ORDER',
-        branchId: branchId,
-        outletId: outletId,
-        sale: sale,
-        items: receiptItems,
-        branchName: branchName,
-        tableNumber: tableNum,
-        roomNumber: roomNum,
-        customerName: customerLabel,
-        staffLabel: 'Waiter',
-        publicCode: order.shortCode,
-        barcodeValue: barcodeVal,
-      );
+      // NOTE: Captain order now prints automatically at Kitchen Display (KDS)
+      // No need to print at POS - kitchen gets it directly on their screen's printer
     } catch (error) {
       if (!mounted) return;
       AppNotifier.showSnackBar(
