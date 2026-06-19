@@ -23,6 +23,7 @@ Future<void> printCustomerDocument(
   String? barcodeValue,
   num? amountTendered,
   num? changeGiven,
+  String? duplicateLabel,
 }) async {
   final doc = await resolveDocumentCached(
     ref,
@@ -55,6 +56,7 @@ Future<void> printCustomerDocument(
       noticeText: isCustomerBill
           ? 'Collect Official Receipt with ETR at the Cashier'
           : null,
+      duplicateLabel: duplicateLabel,
     );
     await TemplatePrintRenderer().printThermal(sections, data);
     return;
@@ -74,6 +76,7 @@ Future<void> printCustomerDocument(
     amountTendered: amountTendered,
     changeGiven: changeGiven,
     tillNumber: doc?.tillNumber,
+    duplicateLabel: duplicateLabel,
   );
 }
 
@@ -244,6 +247,7 @@ TemplatePrintData _templateData({
   num? changeGiven,
   bool showVat = true,
   String? noticeText,
+  String? duplicateLabel,
   Map<String, String> extraValues = const {},
   List<MapEntry<String, String>> extraKvRows = const [],
   Map<String, String> staff = const {},
@@ -338,6 +342,7 @@ TemplatePrintData _templateData({
     cateringLevy: cateringLevy,
     serviceCharge: serviceCharge,
     noticeText: noticeText,
+    duplicateLabel: _clean(duplicateLabel),
   );
 }
 

@@ -764,12 +764,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       if (recalled == null) {
         // New order: the cart IS the full order, safe to print client-side.
         await _printCaptainOrderReceipt(order);
+      } else {
+        // Recalled order: backend still attempts the kitchen/cloud print flow,
+        // but the customer bill should always print locally from the desktop
+        // app using the fully merged order returned by updateOrder.
+        await _printCustomerBillFromSavedOrder(order);
       }
-      // Recalled order: the backend already printed one consolidated bill
-      // (previous items + new items merged) and the kitchen ticket for the
-      // newly added items, right when updateOrder succeeded above — printing
-      // again here from the local cart would only show the new items, not
-      // the full bill, so it's intentionally skipped.
       _cart = [];
       _recalledOrder = null;
       _orders = await repo.getOrders(_shift!.id);
@@ -844,8 +844,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   // Reprints the Customer Bill for a past order with the exact details it
   // was originally printed with — pulled from the saved order record, not
   // the live cart (which has since moved on to other items).
-  Future<void> _reprintBill(OutletShiftOrder order) async {
-    final reprintItems = order.items.map((raw) {
+  Future<void> _printCustomerBillFromSavedOrder(
+    OutletShiftOrder order, {
+    String fallbackTitle = 'CUSTOMER BILL',
+  }) async {
+    final savedItems = order.items.map((raw) {
       final m = Map<String, dynamic>.from(raw as Map);
       final qty = (m['quantity'] is num)
           ? (m['quantity'] as num).toInt()
@@ -882,11 +885,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       await printCustomerDocument(
         ref,
         templateKey: 'customer_bill',
-        fallbackTitle: 'CUSTOMER BILL (REPRINT)',
+        fallbackTitle: fallbackTitle,
         branchId: branchId,
         outletId: outletId,
         sale: sale,
-        items: reprintItems,
+        items: savedItems,
         branchName: branchName,
         tableNumber: order.tableNumber,
         roomNumber: order.roomNumber,
@@ -894,6 +897,24 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         staffLabel: 'Waiter',
         publicCode: order.shortCode,
         barcodeValue: barcodeVal,
+        duplicateLabel:
+            fallbackTitle.toUpperCase().contains('REPRINT') ? 'DUPLICATE' : null,
+      );
+    } catch (error) {
+      if (!mounted) rethrow;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text('$fallbackTitle failed: $error')),
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _reprintBill(OutletShiftOrder order) async {
+    try {
+      await _printCustomerBillFromSavedOrder(
+        order,
+        fallbackTitle: 'CUSTOMER BILL (REPRINT)',
       );
       if (mounted) {
         AppNotifier.showSnackBar(
@@ -903,10 +924,6 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       }
     } catch (error) {
       if (!mounted) return;
-      AppNotifier.showSnackBar(
-        context,
-        SnackBar(content: Text('Reprint failed: $error')),
-      );
     }
   }
 

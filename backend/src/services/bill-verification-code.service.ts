@@ -16,7 +16,19 @@ interface BillVerificationCodeResult {
   code: string;
 }
 
-const generateCode = (): string => String(randomInt(100000, 1000000));
+const SHORT_CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+const SHORT_CODE_LENGTH = 6;
+const SHORT_CODE_PATTERN = new RegExp(
+  `^[${SHORT_CODE_ALPHABET}]{${SHORT_CODE_LENGTH}}$`
+);
+
+const generateCode = (): string => {
+  let code = '';
+  for (let index = 0; index < SHORT_CODE_LENGTH; index += 1) {
+    code += SHORT_CODE_ALPHABET[randomInt(0, SHORT_CODE_ALPHABET.length)];
+  }
+  return code;
+};
 
 // Generates the human-readable code printed on a bill/receipt so a customer
 // can verify it at the front desk. Reuses an existing code (e.g. an
@@ -25,6 +37,9 @@ const generateCode = (): string => String(randomInt(100000, 1000000));
 export const createBillVerificationCode = async (
   input: BillVerificationCodeInput
 ): Promise<BillVerificationCodeResult> => {
-  const code = input.code && String(input.code).trim() ? String(input.code).trim() : generateCode();
+  const existingCode = String(input.code ?? '').trim().toUpperCase();
+  const code = SHORT_CODE_PATTERN.test(existingCode)
+    ? existingCode
+    : generateCode();
   return { code };
 };

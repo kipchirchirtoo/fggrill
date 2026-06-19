@@ -104,9 +104,12 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           continue;
         }
 
-        // Only print new/pending orders (not already preparing/ready/served)
+        // Print freshly created tickets and recalled batches. Recalled orders
+        // arrive with status=recalled and need a fresh kitchen ticket too.
         final status = order.status.toLowerCase();
-        if (status != 'pending' && status != 'confirmed') {
+        if (status != 'pending' &&
+            status != 'confirmed' &&
+            status != 'recalled') {
           continue;
         }
 

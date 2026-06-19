@@ -23,6 +23,7 @@ class TemplatePrintData {
     this.cateringLevy = 0,
     this.serviceCharge = 0,
     this.noticeText,
+    this.duplicateLabel,
   });
 
   final Map<String, String> values; // placeholder token (without braces) → text
@@ -41,6 +42,7 @@ class TemplatePrintData {
   final num cateringLevy; // CL 2% — all-inclusive, does not change the total
   final num serviceCharge; // SC 3% — all-inclusive, does not change the total
   final String? noticeText; // auto-injected notice (e.g. "collect ETR receipt")
+  final String? duplicateLabel;
 }
 
 class TemplateLineItem {
@@ -194,6 +196,17 @@ class TemplatePrintRenderer {
       ordered.insert(insertAfter >= 0 ? insertAfter + 1 : 0, codeBox);
     }
 
+    final duplicateBadge = _duplicateBadgeSection(data, ordered);
+    if (duplicateBadge != null) {
+      final insertAfter = ordered.indexWhere((s) =>
+          s.visible != false &&
+          (s.type == 'title' ||
+              s.id == 'title' ||
+              s.type == 'code_box' ||
+              (s.content ?? '').contains('{{receipt_number}}')));
+      ordered.insert(insertAfter >= 0 ? insertAfter + 1 : 0, duplicateBadge);
+    }
+
     final etrNotice = _etrNoticeSection(data, ordered);
 
     if (till == null && etrNotice == null) return ordered;
@@ -248,6 +261,26 @@ class TemplatePrintRenderer {
       type: 'code_box',
       label: 'BILL VERIFICATION CODE',
       visible: true,
+    );
+  }
+
+  TemplateSection? _duplicateBadgeSection(
+      TemplatePrintData data, List<TemplateSection> ordered) {
+    final text = (data.duplicateLabel ?? '').trim();
+    if (text.isEmpty) return null;
+    final alreadyPresent = ordered.any((s) =>
+        s.visible != false &&
+        (s.id == 'duplicate_badge_auto' ||
+            (s.content ?? '').toLowerCase().contains(text.toLowerCase())));
+    if (alreadyPresent) return null;
+    return TemplateSection(
+      id: 'duplicate_badge_auto',
+      type: 'duplicate_badge',
+      content: text,
+      visible: true,
+      align: 'center',
+      bold: true,
+      size: 11,
     );
   }
 
@@ -514,6 +547,26 @@ class TemplatePrintRenderer {
           padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
           decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
           child: pw.Text(text, style: const pw.TextStyle(fontSize: 8)),
+        ));
+
+      case 'duplicate_badge':
+        final text = _subst(s.content, v);
+        if (text.isEmpty) return null;
+        return pad(pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(width: 1),
+            color: PdfColors.grey300,
+          ),
+          child: pw.Text(
+            text.toUpperCase(),
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
         ));
 
       case 'barcode':

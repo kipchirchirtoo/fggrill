@@ -56,6 +56,7 @@ class PrintService {
     num? amountTendered,
     num? changeGiven,
     String? tillNumber,
+    String? duplicateLabel,
   }) async {
     final billCode = (publicCode ?? '').trim();
     // Try Python service first (NO DIALOG!)
@@ -83,6 +84,7 @@ class PrintService {
         'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt),
         'payment_method': sale.paymentMethod,
         'till_number': tillNumber,
+        'duplicate_label': duplicateLabel,
       };
 
       final success = await _printViaPythonService(receiptData);
@@ -152,6 +154,26 @@ class PrintService {
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 11)),
               pw.SizedBox(height: 4),
+              if ((duplicateLabel ?? '').trim().isNotEmpty) ...[
+                pw.Container(
+                  width: double.infinity,
+                  padding:
+                      const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 6),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(width: 1),
+                    color: PdfColors.grey300,
+                  ),
+                  child: pw.Text(
+                    duplicateLabel!.trim().toUpperCase(),
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+              ],
               if (billCode.isNotEmpty) ...[
                 pw.Container(
                   width: double.infinity,
