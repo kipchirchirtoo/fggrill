@@ -31,7 +31,6 @@ enum SuperAdminSection {
   tillNumbers,
   restaurantMenu,
   barMenu,
-  posOutletMenu,
   menuPricing,
   kyogongServices,
   cashierStationConfig,

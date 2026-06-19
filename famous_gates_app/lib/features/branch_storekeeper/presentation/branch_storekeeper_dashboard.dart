@@ -4209,7 +4209,7 @@ class _BranchStorekeeperDashboardState
                         ? null
                         : () => _showPosOutletIssueForm(
                               selected,
-                              presetSource: item,
+                              presetOutput: item,
                             ),
                     child: const Text('Issue'),
                   ),

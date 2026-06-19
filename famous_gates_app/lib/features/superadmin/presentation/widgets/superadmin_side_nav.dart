@@ -115,10 +115,6 @@ class SuperAdminNavItem {
                 label: 'Bar Menu',
                 icon: PhosphorIcons.wine()),
             SuperAdminNavItem(
-                section: SuperAdminSection.posOutletMenu,
-                label: 'POS Outlet Menu',
-                icon: PhosphorIcons.storefront()),
-            SuperAdminNavItem(
                 section: SuperAdminSection.menuPricing,
                 label: 'Menu Pricing & Cost',
                 icon: PhosphorIcons.tag()),

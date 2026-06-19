@@ -1515,7 +1515,6 @@ const _superAdminSectionRouteSpecs = <MapEntry<String, SuperAdminSection>>[
   MapEntry('/superadmin/roles', SuperAdminSection.rolesPermissions),
   MapEntry('/admin/restaurant/menu', SuperAdminSection.restaurantMenu),
   MapEntry('/admin/bar/menu', SuperAdminSection.barMenu),
-  MapEntry('/superadmin/pos-outlet-menu', SuperAdminSection.posOutletMenu),
   MapEntry('/admin/kyogong/services', SuperAdminSection.kyogongServices),
   MapEntry('/admin/wastage', SuperAdminSection.inventory),
   MapEntry('/admin/system/roles/migration', SuperAdminSection.rolesPermissions),
