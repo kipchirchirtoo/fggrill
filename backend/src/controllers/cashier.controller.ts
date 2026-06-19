@@ -3028,6 +3028,49 @@ export const processCashierPayment = async (
 };
 
 /**
+ * Backend fallback receipt printer — NOT the primary print path.
+ * The cashier app prints the customer receipt client-side immediately after
+ * a successful payment (see _printStationReceipt in cashier_dashboard.dart).
+ * This endpoint is only called from that flow's catch block, i.e. when the
+ * client-side print itself fails (printer offline, app crash, etc.), as a
+ * last-resort attempt to still get a receipt out via the thermal printer
+ * service.
+ */
+export const printCashierReceiptFallback = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { order_number, short_code, customer_name, items, amount_paid, payment_method, outlet_name } = req.body;
+        if (!order_number || !Array.isArray(items) || !items.length) {
+            throw new AppError('order_number and items are required', 400);
+        }
+
+        const { customerReceiptPrintService } = await import('../services/customerReceiptPrint.service');
+        const result = await customerReceiptPrintService.printCustomerReceipt({
+            order_number,
+            short_code,
+            customer_name,
+            items,
+            amount_paid: Number(amount_paid) || 0,
+            payment_method,
+            cashier_name: `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim(),
+            outlet_name
+        });
+
+        if (result.success) {
+            logger.info(`✅ Fallback receipt printed for ${order_number} (client-side print had failed)`);
+        } else {
+            logger.warn(`⚠️ Fallback receipt print also failed for ${order_number}: ${result.error}`);
+        }
+        res.json({ success: result.success, message: result.message, error: result.error });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Verify a pending payment
  */
 export const verifyPayment = async (

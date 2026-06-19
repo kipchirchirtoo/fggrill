@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
     getBillDetails,
     processCashierPayment,
+    printCashierReceiptFallback,
     verifyPayment,
     getUnpaidBills,
     createUnpaidBill,
@@ -114,6 +115,7 @@ router.get('/bill/:bookingId', getBillDetails);
 
 // Process payment
 router.post('/pay', processCashierPayment);
+router.post('/print-receipt-fallback', printCashierReceiptFallback);
 
 // Verify payment
 router.post('/verify-payment/:paymentId', verifyPayment);

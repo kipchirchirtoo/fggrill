@@ -1391,7 +1391,54 @@ class _StationTabState extends ConsumerState<_StationTab> {
         changeGiven: changeGiven,
       );
     } catch (error) {
-      _snack('Payment recorded, but receipt failed: ${apiErrorMessage(error)}');
+      _snack('Payment recorded, but receipt failed: ${apiErrorMessage(error)}'
+          ' — trying backend fallback print...');
+      await _tryFallbackPrint(
+        bill: bill,
+        amount: amount,
+        method: method,
+        response: response,
+        fallbackReference: fallbackReference,
+      );
+    }
+  }
+
+  /// Last-resort backend print, only reached when the client-side print in
+  /// _printStationReceipt above has already thrown.
+  Future<void> _tryFallbackPrint({
+    required Map<String, dynamic> bill,
+    required num amount,
+    required String method,
+    required Map<String, dynamic> response,
+    required String fallbackReference,
+  }) async {
+    try {
+      final payload = _payload(response);
+      final data = _payload(payload['data']);
+      final reference = _text(data, ['reference', 'id']).isNotEmpty
+          ? _text(data, ['reference', 'id'])
+          : fallbackReference;
+      final receiptItems = _receiptItemsFromBill(bill, amount);
+      final nav = ref.read(dashboardNavProvider);
+
+      await ref.read(cashierRepositoryProvider).printReceiptFallback(
+            orderNumber: reference.isEmpty ? 'CASH-${DateTime.now().millisecondsSinceEpoch}' : reference,
+            customerName: _customerName(bill),
+            items: receiptItems
+                .map((item) => {
+                      'name': item.name,
+                      'quantity': item.qty,
+                      'unit_price': item.unitPrice,
+                      'line_total': item.lineTotal,
+                    })
+                .toList(),
+            amountPaid: amount,
+            paymentMethod: method,
+            outletName: nav.branchName,
+          );
+      _snack('Backend fallback receipt printed');
+    } catch (fallbackError) {
+      _snack('Backend fallback print also failed: ${apiErrorMessage(fallbackError)}');
     }
   }
 

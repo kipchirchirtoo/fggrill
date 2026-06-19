@@ -61,6 +61,29 @@ class CashierRepository {
   Future<Map<String, dynamic>> verifyPayment(String paymentId) =>
       _postMap('/cashier/verify-payment/$paymentId', {});
 
+  /// Backend fallback print — only call this when the client-side receipt
+  /// print itself has already failed. The payment has already succeeded by
+  /// this point; this is a last-resort attempt to still get a receipt out.
+  Future<Map<String, dynamic>> printReceiptFallback({
+    required String orderNumber,
+    String? shortCode,
+    String? customerName,
+    required List<Map<String, dynamic>> items,
+    required num amountPaid,
+    String? paymentMethod,
+    String? outletName,
+  }) {
+    return _postMap('/cashier/print-receipt-fallback', {
+      'order_number': orderNumber,
+      if (shortCode != null && shortCode.isNotEmpty) 'short_code': shortCode,
+      'customer_name': customerName ?? 'Walk-in',
+      'items': items,
+      'amount_paid': amountPaid,
+      'payment_method': paymentMethod ?? 'cash',
+      'outlet_name': outletName ?? 'Restaurant',
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getUnpaidBills({
     String? status,
     String? billType,
