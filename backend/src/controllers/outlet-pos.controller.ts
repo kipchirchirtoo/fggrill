@@ -1717,6 +1717,52 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
       .single();
     if (error || !data) throw error || new AppError('Failed to update recalled bill', 500);
 
+    // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR RECALLED BILLS ============
+    // Recalling a bill resets kitchen_status to 'pending', so the kitchen needs a
+    // fresh ticket for the items just added — same mechanism used on order creation.
+    const outletType = String(outlet?.outlet_type || '').toLowerCase();
+    if (outletType === 'restaurant') {
+      try {
+        const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
+        const recalledItemsTotal = orderItemsTotal(normalizedItems);
+
+        captainOrderPrintService.printCaptainOrder({
+          order_number: data.order_number,
+          short_code: data.short_code,
+          customer_name: data.customer_name || 'Walk-in',
+          table_number: data.table_number,
+          room_number: data.room_number,
+          order_type: data.order_type || 'dine_in',
+          items: normalizedItems.map((item: any) => ({
+            name: item.name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            line_total: item.line_total,
+            notes: item.notes || item.special_instructions || ''
+          })),
+          total_amount: recalledItemsTotal,
+          waiter_name: data.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
+          outlet_name: outlet?.name || 'Restaurant',
+          outlet_type: outlet?.outlet_type,
+          created_at: data.updated_at
+        }).then((result) => {
+          if (result.success) {
+            logger.info(`✅ Recalled bill ${data.order_number} printed to kitchen`);
+          } else {
+            logger.warn(`⚠️ Recalled bill ${data.order_number} print failed: ${result.error}`);
+          }
+        }).catch((printError) => {
+          logger.error(`❌ Recalled bill print error for ${data.order_number}:`, printError);
+        });
+
+        logger.info(`📄 Recalled bill ${data.order_number} sent to kitchen printer (restaurant outlet)`);
+      } catch (printError) {
+        // Don't block the recall response if printing fails
+        logger.error('Recalled bill printing service error:', printError);
+      }
+    }
+    // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
+
     res.json({ success: true, data });
   } catch (error) {
     next(error);
