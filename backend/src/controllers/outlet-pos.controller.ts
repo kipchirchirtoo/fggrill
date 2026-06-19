@@ -810,7 +810,6 @@ const seedOutletItemsFromExistingMenus = async (
         outlet_id: outlet.id,
         source_table: 'restaurant_menu_items',
         source_item_id: item.id,
-        menu_item_id: item.id,
         sku,
         name: item.name,
         category: categoryText(item.category) || 'Restaurant',
