@@ -747,6 +747,17 @@ const seedOutletItemsFromExistingMenus = async (
   const branchId = outlet.branch_id;
   let sourceRows: Array<Record<string, any>> = [];
 
+  // Preserve any manually-set track_stock/current_stock on existing rows instead of
+  // resetting them every sync — otherwise a one-off "always available" override
+  // would get silently reverted the next time this outlet's items are fetched.
+  const { data: existingRows } = await supabase
+    .from('pos_outlet_items')
+    .select('sku, track_stock, current_stock')
+    .eq('outlet_id', outlet.id);
+  const existingBySku = new Map(
+    (existingRows || []).map((row: any) => [row.sku, row])
+  );
+
   if (outletType === 'restaurant') {
     let query = supabase
       .from('restaurant_menu_items')
@@ -756,21 +767,25 @@ const seedOutletItemsFromExistingMenus = async (
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
     const { data, error } = await query;
     if (error) throw error;
-    sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => ({
-      outlet_id: outlet.id,
-      source_table: 'restaurant_menu_items',
-      source_item_id: item.id,
-      sku: `R-${item.id}`,
-      name: item.name,
-      category: categoryText(item.category) || 'Restaurant',
-      unit: 'each',
-      cost_price: 0,
-      selling_price: item.price || 0,
-      opening_stock: 0,
-      current_stock: 0,
-      track_stock: true,
-      is_active: true
-    }));
+    sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => {
+      const sku = `R-${item.id}`;
+      const existing = existingBySku.get(sku);
+      return {
+        outlet_id: outlet.id,
+        source_table: 'restaurant_menu_items',
+        source_item_id: item.id,
+        sku,
+        name: item.name,
+        category: categoryText(item.category) || 'Restaurant',
+        unit: 'each',
+        cost_price: 0,
+        selling_price: item.price || 0,
+        opening_stock: 0,
+        current_stock: existing?.current_stock ?? 0,
+        track_stock: existing?.track_stock ?? true,
+        is_active: true
+      };
+    });
   }
 
   if (outletType === 'main_bar' || outletType === 'executive_bar' ||
@@ -800,22 +815,26 @@ const seedOutletItemsFromExistingMenus = async (
       outletType === 'main_bar' ? 'M' :
       outletType === 'executive_bar' ? 'E' :
       outletType === 'kyogong_executive_bar' ? 'KX' : 'KS';
-    sourceRows = rows.map((item) => ({
-      outlet_id: outlet.id,
-      source_table: 'bar_drinks',
-      source_item_id: item.id,
-      sku: `${prefix}-${item.id}`,
-      name: item.name,
-      category: categoryById.get(String(item.category_id)) ||
-        (outletType.includes('executive') ? 'Executive Bar' : 'Main Bar'),
-      unit: item.unit || 'each',
-      cost_price: item.cost_price || 0,
-      selling_price: item.price || 0,
-      opening_stock: 0,
-      current_stock: 0,
-      track_stock: true,
-      is_active: true
-    }));
+    sourceRows = rows.map((item) => {
+      const sku = `${prefix}-${item.id}`;
+      const existing = existingBySku.get(sku);
+      return {
+        outlet_id: outlet.id,
+        source_table: 'bar_drinks',
+        source_item_id: item.id,
+        sku,
+        name: item.name,
+        category: categoryById.get(String(item.category_id)) ||
+          (outletType.includes('executive') ? 'Executive Bar' : 'Main Bar'),
+        unit: item.unit || 'each',
+        cost_price: item.cost_price || 0,
+        selling_price: item.price || 0,
+        opening_stock: 0,
+        current_stock: existing?.current_stock ?? 0,
+        track_stock: existing?.track_stock ?? true,
+        is_active: true
+      };
+    });
   }
 
   if (outletType === 'kyogong_spa') {
