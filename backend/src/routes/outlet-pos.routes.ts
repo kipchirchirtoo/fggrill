@@ -6,6 +6,7 @@ import {
   createOutlet,
   createOutletItem,
   getActiveShift,
+  getBarCaptainOrders,
   getPendingPosVoidRequests,
   getOutletItems,
   getOutletStaff,
@@ -76,6 +77,7 @@ router.use((req, res, next) => {
 });
 
 router.get('/printer/status', getPrinterStatus);
+router.get('/captain-orders', getBarCaptainOrders);
 router.get('/outlets', getOutlets);
 router.post('/outlets', createOutlet);
 router.get('/staff', getOutletStaff);

@@ -71,7 +71,7 @@ class _MaintenanceDashboardState extends ConsumerState<MaintenanceDashboard> {
               );
               if (confirmed == true && context.mounted) {
                 await ref.read(authNotifierProvider.notifier).logout();
-                if (context.mounted) context.go('/login');
+                if (context.mounted) context.go('/terminal');
               }
             },
             icon: const Icon(Icons.logout, color: Colors.white70),

@@ -89,6 +89,10 @@ String getRoleRoute(String role) {
     case 'driver':
       return '/driver';
     default:
-      return '/login';
+      // Unmapped role: send to the PIN terminal (the system's main screen)
+      // rather than the back-office login, since most callers of this
+      // fallback are PIN-authenticated POS staff with no email/password
+      // account to log into there.
+      return '/terminal';
   }
 }

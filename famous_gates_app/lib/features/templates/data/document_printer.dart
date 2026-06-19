@@ -346,8 +346,13 @@ TemplatePrintData _templateData({
   );
 }
 
+// Africa/Nairobi is a fixed UTC+3 offset with no DST, so receipts always
+// show Kenyan time regardless of the printing device's own timezone/clock.
+DateTime _toKenyaTime(DateTime value) =>
+    value.toUtc().add(const Duration(hours: 3));
+
 String _dateString(DateTime value) =>
-    DateFormat('MM/dd/yyyy, hh:mm:ss a').format(value);
+    DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(value));
 
 String? _clean(String? value) {
   final text = value?.trim() ?? '';

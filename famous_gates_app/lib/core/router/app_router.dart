@@ -83,14 +83,18 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       return auth.when(
         loading: () => null,
-        // Auth errors on a protected route → back-office login page.
-        error: (_, __) => '/login',
+        // Auth errors on a protected route → the PIN terminal, same as a
+        // plain logout (see below). The back-office login is reachable from
+        // there via the "BACKOFFICE" link, never the automatic default.
+        error: (_, __) => '/terminal',
         data: (user) {
-          // Null user on a protected route means the user just logged out
-          // from a back-office session → send to /login, not /terminal.
-          // (The /terminal initial-launch case is already handled above by
-          // the _publicRoutes check, which returns null and stays put.)
-          if (user == null) return '/login';
+          // Null user on a protected route means *some* session just ended —
+          // PIN/POS, cashier, kitchen, or back-office alike. The terminal PIN
+          // screen is the system's main/default screen, so every logout
+          // lands there, not on the back-office login page. Back-office
+          // staff can still reach /login explicitly via the terminal's
+          // "BACKOFFICE" button.
+          if (user == null) return '/terminal';
           if (user.role == 'super_admin' ||
               user.roles.contains('super_admin')) {
             return null;

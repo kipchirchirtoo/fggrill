@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,10 +11,21 @@ import '../../../core/storage/secure_storage_provider.dart';
 import '../../../core/utils/api_error_message.dart';
 import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../services/print_service.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../kitchen/domain/models.dart' show KitchenOrder;
 import '../../pos/domain/models.dart';
 import '../../templates/data/document_printer.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
+
+// Only these station roles handle Main Bar / Executive Bar captain orders;
+// every other cashier role (reception, restaurant, non-consumables, etc.)
+// must stay silent so the same bar ticket isn't auto-printed everywhere.
+const _kBarCaptainOrderCashierRoles = {
+  'main_bar_cashier',
+  'executive_bar_cashier',
+};
 
 enum CashierTab {
   station,
@@ -434,6 +447,24 @@ class _StationTabState extends ConsumerState<_StationTab> {
     });
   }
 
+  // Main Bar / Executive Bar captain orders auto-printed at this cashier
+  // station, mirroring the KDS backup-print pattern. Gated to bar cashier
+  // roles only (see _kBarCaptainOrderCashierRoles) so reception/restaurant/
+  // other cashier stations never auto-print bar tickets.
+  Timer? _captainOrderTimer;
+  final Set<String> _printedCaptainOrderIds = {};
+
+  Future<void> _initBarCaptainOrderFeed() async {
+    final storage = ref.read(secureStorageProvider);
+    final role = (await storage.read(key: AuthRepository.roleKey) ?? '')
+        .trim()
+        .toLowerCase();
+    if (!mounted || !_kBarCaptainOrderCashierRoles.contains(role)) return;
+    _pollBarCaptainOrders();
+    _captainOrderTimer =
+        Timer.periodic(const Duration(seconds: 5), (_) => _pollBarCaptainOrders());
+  }
+
   @override
   void initState() {
     super.initState();
@@ -457,16 +488,103 @@ class _StationTabState extends ConsumerState<_StationTab> {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _lookupBill(keepAmount: true));
     }
+    _initBarCaptainOrderFeed();
   }
 
   @override
   void dispose() {
+    _captainOrderTimer?.cancel();
     _lookupController.dispose();
     _amountController.dispose();
     _referenceController.dispose();
     _mpesaPhoneController.dispose();
     _tenderedController.dispose();
     super.dispose();
+  }
+
+  /// Pulls Main Bar / Executive Bar captain orders (new + recalled) for the
+  /// cashier's branch and auto-prints a copy as a backup, the same way the
+  /// Kitchen Display auto-prints restaurant captain orders.
+  Future<void> _pollBarCaptainOrders() async {
+    try {
+      final raw =
+          await ref.read(cashierRepositoryProvider).getBarCaptainOrders();
+      if (!mounted) return;
+      final orders = raw.map(KitchenOrder.fromJson).toList();
+      for (final order in orders) {
+        final printKey = order.kdsPrintKey;
+        if (_printedCaptainOrderIds.contains(printKey)) continue;
+        if (order.isVoided || order.hasPendingVoidRequest) continue;
+
+        final status = order.status.toLowerCase();
+        if (status != 'pending' &&
+            status != 'confirmed' &&
+            status != 'recalled') {
+          continue;
+        }
+
+        _printedCaptainOrderIds.add(printKey);
+        _printBarCaptainOrder(order).then((_) {
+          debugPrint(
+              '✅ Bar captain order ${order.orderNumber} printed at cashier station');
+        }).catchError((error) {
+          debugPrint(
+              '⚠️ Failed to print bar captain order ${order.orderNumber} at cashier station: $error');
+          _printedCaptainOrderIds.remove(printKey);
+        });
+      }
+    } catch (error) {
+      debugPrint('❌ Error polling bar captain orders at cashier station: $error');
+    }
+  }
+
+  Future<void> _printBarCaptainOrder(KitchenOrder order) async {
+    final printService = PrintService();
+    final printItems =
+        order.hasRecalledItems ? order.recalledItems : order.items;
+    final printTotal = printItems.fold<double>(
+      0,
+      (sum, item) => sum + (item.unitPrice * item.quantity),
+    );
+    final effectiveTotal = printTotal > 0 ? printTotal : order.total;
+
+    final cartItems = printItems.map((item) {
+      return CartItem(
+        productId: item.id,
+        name: [
+          if (item.isRecalledItem) 'RECALLED',
+          item.name,
+          if (item.notes != null && item.notes!.trim().isNotEmpty)
+            '[${item.notes}]',
+        ].join(' '),
+        unitPrice: item.unitPrice,
+        qty: item.quantity,
+      );
+    }).toList();
+
+    final saleResult = SaleResult(
+      transactionId: order.id,
+      receiptNumber: order.shortCode ?? order.orderNumber,
+      total: effectiveTotal,
+      paymentMethod: 'PENDING',
+      cashierName: order.waiterName ?? 'Waiter',
+      createdAt: order.createdAt,
+    );
+
+    await printService.printCaptainOrder(
+      sale: saleResult,
+      items: cartItems,
+      branchName: 'FamousGate Hotels',
+      orderNumber: order.hasRecalledItems
+          ? '${order.orderNumber} RECALL'
+          : order.orderNumber,
+      shortCode: order.shortCode,
+      tableNumber: order.tableNumber?.toString(),
+      roomNumber: order.roomNumber,
+      customerName: order.customerName,
+      waiterName: order.waiterName,
+      orderType: order.orderTypeLabel,
+    );
   }
 
   @override
@@ -1386,7 +1504,13 @@ class _StationTabState extends ConsumerState<_StationTab> {
         items: receiptItems,
         branchName: nav.branchName,
         customerName: _customerName(bill),
-        publicCode: _lookupController.text.trim(),
+        // The bill's own alphanumeric short_code must win over whatever the
+        // cashier typed/scanned to look it up (which may be a plain numeric
+        // order/booking id) — otherwise the receipt prints that raw number
+        // as the "short code" instead of a proper letter+number code.
+        publicCode: _billShortCode(bill).isNotEmpty
+            ? _billShortCode(bill)
+            : _lookupController.text.trim(),
         amountTendered: amountTendered,
         changeGiven: changeGiven,
       );
@@ -1421,8 +1545,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final receiptItems = _receiptItemsFromBill(bill, amount);
       final nav = ref.read(dashboardNavProvider);
 
+      final shortCode = _billShortCode(bill);
       await ref.read(cashierRepositoryProvider).printReceiptFallback(
             orderNumber: reference.isEmpty ? 'CASH-${DateTime.now().millisecondsSinceEpoch}' : reference,
+            shortCode: shortCode.isNotEmpty ? shortCode : null,
             customerName: _customerName(bill),
             items: receiptItems
                 .map((item) => {
@@ -5252,6 +5378,23 @@ String _text(Map<String, dynamic> row, List<String> keys) {
     final value = row[key];
     if (value != null && value.toString().trim().isNotEmpty) {
       return value.toString();
+    }
+  }
+  return '';
+}
+
+/// Finds a bill's real short_code, which getBillDetails nests under a
+/// different sub-key depending on bill type (order/invoice/payment/booking/
+/// bill/transaction/etc.) rather than always at the top level. Checks the
+/// top level first, then one level of nesting into any sub-map.
+String _billShortCode(Map<String, dynamic> bill) {
+  final direct = _text(bill, ['short_code', 'shortCode']);
+  if (direct.isNotEmpty) return direct;
+  for (final value in bill.values) {
+    if (value is Map) {
+      final nested =
+          _text(Map<String, dynamic>.from(value), ['short_code', 'shortCode']);
+      if (nested.isNotEmpty) return nested;
     }
   }
   return '';

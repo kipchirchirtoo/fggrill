@@ -5,8 +5,17 @@ Generates professional receipts, invoices, and inventory receipts with branding
 
 import os
 import io
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
+
+# Africa/Nairobi is a fixed UTC+3 offset with no DST. The printer service
+# can run on a host in any timezone, so every printed timestamp must be
+# computed in Kenyan time explicitly rather than via the host clock.
+KENYA_TZ = timezone(timedelta(hours=3))
+
+
+def _now_kenya() -> datetime:
+    return datetime.now(KENYA_TZ)
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib.units import mm, inch
@@ -117,26 +126,25 @@ class ReceiptGenerator:
         c.setFont("Helvetica", 8)
         receipt_no = receipt_data.get('receipt_number', 'N/A')
         
-        # Handle date formatting - ensure it's a valid date string
+        # Handle date formatting - always render in Kenyan local time,
+        # converting any ISO/UTC timestamp rather than trusting the host
+        # clock's own timezone.
         date_input = receipt_data.get('date')
-        if date_input:
+        if isinstance(date_input, datetime):
+            kenya_dt = date_input if date_input.tzinfo else date_input.replace(tzinfo=timezone.utc)
+            kenya_dt = kenya_dt.astimezone(KENYA_TZ)
+            date_str = kenya_dt.strftime('%m/%d/%Y, %I:%M:%S %p')
+        elif isinstance(date_input, str) and date_input.strip() and date_input != 'Invalid Date':
             try:
-                # If it's already a formatted string, use it
-                if isinstance(date_input, str):
-                    # Try to parse and reformat to ensure consistency
-                    try:
-                        parsed_date = datetime.fromisoformat(date_input.replace('Z', '+00:00'))
-                        date_str = parsed_date.strftime('%m/%d/%Y, %I:%M:%S %p')
-                    except:
-                        # If parsing fails, use the string as-is if it looks valid
-                        date_str = date_input if date_input != 'Invalid Date' else datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
-                else:
-                    # If it's a datetime object
-                    date_str = date_input.strftime('%m/%d/%Y, %I:%M:%S %p')
-            except:
-                date_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
+                parsed_date = datetime.fromisoformat(date_input.strip().replace('Z', '+00:00'))
+                if parsed_date.tzinfo is None:
+                    parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+                date_str = parsed_date.astimezone(KENYA_TZ).strftime('%m/%d/%Y, %I:%M:%S %p')
+            except ValueError:
+                # Not a parseable timestamp (e.g. already a display string) - use as-is.
+                date_str = date_input
         else:
-            date_str = datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p')
+            date_str = _now_kenya().strftime('%m/%d/%Y, %I:%M:%S %p')
         
         c.drawString(5*mm, y, f"Receipt #: {receipt_no}")
         y -= 4 * mm
@@ -382,7 +390,7 @@ class InvoiceGenerator:
         
         # === INVOICE DETAILS ===
         invoice_no = invoice_data.get('invoice_number', 'N/A')
-        invoice_date = invoice_data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        invoice_date = invoice_data.get('date', _now_kenya().strftime('%Y-%m-%d'))
         due_date = invoice_data.get('due_date', '')
         
         customer_name = invoice_data.get('customer_name', '')
@@ -585,7 +593,7 @@ class InventoryReceiptGenerator:
         
         receipt_no = receipt_data.get('receipt_number', 'N/A')
         lookup_code = self._lookup_code(receipt_data)
-        receipt_date = receipt_data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        receipt_date = receipt_data.get('date', _now_kenya().strftime('%Y-%m-%d'))
         
         header_right = f"""
         <b>Receipt #:</b> {receipt_no}<br/>

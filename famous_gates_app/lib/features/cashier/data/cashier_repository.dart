@@ -35,6 +35,12 @@ class CashierRepository {
 
   Future<Map<String, dynamic>> getStats() => _getMap('/cashier/stats');
 
+  /// Main Bar / Executive Bar captain orders (new + recalled) for this
+  /// branch, so the cashier station can auto-print a copy alongside the
+  /// bar ticket. Returns the same shape as the kitchen KDS feed.
+  Future<List<Map<String, dynamic>>> getBarCaptainOrders() =>
+      _getList('/pos/captain-orders');
+
   Future<Map<String, dynamic>> getBillDetails(String id) =>
       _getMap('/cashier/bill/${Uri.encodeComponent(id)}');
 

@@ -44,7 +44,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     final hasLicense = await ref.read(hasStoredLicenseProvider.future);
     if (!mounted) return;
-    context.go(hasLicense ? '/login' : '/license');
+    context.go(hasLicense ? '/terminal' : '/license');
   }
 
   @override

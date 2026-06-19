@@ -9,7 +9,35 @@ import io
 import socket
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# Africa/Nairobi is a fixed UTC+3 offset with no DST. The printer service
+# can run on a host in any timezone, so every printed timestamp must be
+# computed in Kenyan time explicitly rather than via the host clock.
+KENYA_TZ = timezone(timedelta(hours=3))
+
+
+def _now_kenya() -> datetime:
+    return datetime.now(KENYA_TZ)
+
+
+def _parse_to_kenya(value: Optional[Any]) -> datetime:
+    """Parses a caller-supplied timestamp (ISO string or datetime) into
+    Kenyan local time. Falls back to the current Kenyan time when the value
+    is missing or unparseable, so a receipt always prints a sane time."""
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            dt = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        except ValueError:
+            return _now_kenya()
+    else:
+        return _now_kenya()
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(KENYA_TZ)
 
 # Try to import escpos library for thermal printing
 try:
@@ -136,7 +164,7 @@ class ThermalPrinter:
             p.text("\n")
             
             # === ORDER INFO ===
-            order_no = receipt_data.get('order_number', f"ORD-{datetime.now().strftime('%H%M%S')}")
+            order_no = receipt_data.get('order_number', f"ORD-{_now_kenya().strftime('%H%M%S')}")
             lookup_code = (
                 receipt_data.get('short_code')
                 or receipt_data.get('shortCode')
@@ -179,9 +207,11 @@ class ThermalPrinter:
             waiter = receipt_data.get('waiter_name', 'Staff')
             p.text(f"WAITER: {waiter}\n")
             
-            # Time
-            time_str = datetime.now().strftime('%I:%M %p')
-            date_str = datetime.now().strftime('%m/%d/%Y')
+            # Time — caller usually sends an ISO timestamp in 'date'; convert
+            # it to Kenyan local time rather than trusting the host clock.
+            kenya_dt = _parse_to_kenya(receipt_data.get('time') or receipt_data.get('date'))
+            time_str = kenya_dt.strftime('%I:%M %p')
+            date_str = kenya_dt.strftime('%m/%d/%Y')
             p.text(f"TIME: {time_str} - {date_str}\n")
             
             p.text("\n")
@@ -293,7 +323,7 @@ class ThermalPrinter:
             p.text("\n")
             
             # === ORDER INFO ===
-            receipt_no = receipt_data.get('receipt_number', f"ORD-{datetime.now().strftime('%H%M%S')}")
+            receipt_no = receipt_data.get('receipt_number', f"ORD-{_now_kenya().strftime('%H%M%S')}")
             public_code = (
                 receipt_data.get('verification_code')
                 or receipt_data.get('verificationCode')
@@ -306,8 +336,12 @@ class ThermalPrinter:
                 or ''
             )
             public_code = str(public_code).strip().upper()
-            date_str = receipt_data.get('date', datetime.now().strftime('%m/%d/%Y'))
-            time_str = receipt_data.get('time', datetime.now().strftime('%I:%M %p'))
+            # The caller usually sends an ISO timestamp in 'date'; parse it
+            # to Kenyan local time rather than printing the raw ISO string
+            # or trusting the host clock's own timezone.
+            kenya_dt = _parse_to_kenya(receipt_data.get('date'))
+            date_str = kenya_dt.strftime('%m/%d/%Y')
+            time_str = kenya_dt.strftime('%I:%M %p')
 
             if public_code:
                 p.set(align='center', font='a', bold=True, double_height=True)
@@ -391,7 +425,7 @@ class ThermalPrinter:
             p.text(f"AUTHORIZATION:         APPROVED\n")
             
             # Generate payment code
-            payment_code = receipt_data.get('payment_code', datetime.now().strftime('%Y%m%d%H%M%S'))
+            payment_code = receipt_data.get('payment_code', _now_kenya().strftime('%Y%m%d%H%M%S'))
             p.text(f"PAYMENT CODE:          {payment_code}\n")
             
             if payment_method in ['CARD', 'MPESA']:

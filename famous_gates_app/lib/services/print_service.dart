@@ -9,6 +9,11 @@ import 'dart:convert';
 import '../core/services/silent_printer.dart';
 import '../features/pos/domain/models.dart';
 
+// Africa/Nairobi is a fixed UTC+3 offset with no DST, so receipts always
+// show Kenyan time regardless of the printing device's own timezone/clock.
+DateTime _toKenyaTime(DateTime value) =>
+    value.toUtc().add(const Duration(hours: 3));
+
 class PrintService {
   static const double _paperWidthMm = 80;
   static const double _safeMarginMm = 2;
@@ -81,7 +86,7 @@ class PrintService {
         }).toList(),
         'total_amount': sale.total,
         'subtotal': sale.total / 1.16,
-        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt),
+        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt)),
         'payment_method': sale.paymentMethod,
         'till_number': tillNumber,
         'duplicate_label': duplicateLabel,
@@ -100,7 +105,7 @@ class PrintService {
     // FALLBACK: Use Flutter PDF printing (may show dialog on some systems)
     final doc = pw.Document();
     final money = NumberFormat('#,##0.00', 'en_KE');
-    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt);
+    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt));
 
     final totalAmount = sale.total;
     final baseAmount = totalAmount > 0 ? totalAmount / 1.16 : 0;
@@ -364,7 +369,7 @@ class PrintService {
           'line_total': item.lineTotal,
         }).toList(),
         'total_amount': sale.total,
-        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt),
+        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt)),
       };
 
       final success = await _printViaPythonService(receiptData);
@@ -379,7 +384,7 @@ class PrintService {
 
     // FALLBACK: Use Flutter PDF printing (may show dialog on some systems)
     final doc = pw.Document();
-    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(sale.createdAt);
+    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt));
     final code = (shortCode ?? orderNumber).trim();
 
     pw.MemoryImage? logoImage;
@@ -565,7 +570,7 @@ class PrintService {
               pw.Text(code.toUpperCase(),
                   style: const pw.TextStyle(fontSize: 7)),
               pw.SizedBox(height: 6),
-              pw.Text('Printed: ${DateFormat('HH:mm:ss').format(DateTime.now())}',
+              pw.Text('Printed: ${DateFormat('HH:mm:ss').format(_toKenyaTime(DateTime.now()))}',
                   style: const pw.TextStyle(fontSize: 6)),
             ],
           );
@@ -599,7 +604,7 @@ class PrintService {
     final doc = pw.Document();
     final money = NumberFormat('#,##0.00', 'en_KE');
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
-        .format(createdAt ?? DateTime.now());
+        .format(_toKenyaTime(createdAt ?? DateTime.now()));
     final code = (creditNumber ?? '').trim();
 
     pw.MemoryImage? logoImage;
@@ -805,8 +810,8 @@ class PrintService {
   }) async {
     final doc = pw.Document();
     final money = NumberFormat('#,##0.00', 'en_KE');
-    final dateStr =
-        DateFormat('MM/dd/yyyy, hh:mm:ss a').format(voidedAt ?? DateTime.now());
+    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(_toKenyaTime(voidedAt ?? DateTime.now()));
 
     pw.MemoryImage? logoImage;
     try {

@@ -1323,6 +1323,116 @@ export const getPrinterStatus = async (req: Request, res: Response, next: NextFu
   }
 };
 
+const captainOrderNormalizeStatus = (value: any): string => {
+  const status = String(value || 'pending').toLowerCase();
+  return ['pending', 'confirmed'].includes(status) ? 'pending' : status;
+};
+
+const captainOrderItemKey = (item: any, index: number): string => {
+  const base = String(item?.outlet_item_id || item?.id || item?.menu_item_id || item?.sku || item?.name || 'item');
+  const recallBatch = item?.recall_batch_id ? `:${item.recall_batch_id}` : '';
+  return `${base}${recallBatch}:${index}`;
+};
+
+const captainOrderActiveStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
+const CAPTAIN_ORDER_FEED_LOOKBACK_HOURS = 36;
+
+// Feeds Main Bar / Executive Bar captain orders (new + recalled) to the
+// Cashier station module, mirroring the restaurant KDS feed at
+// GET /restaurant/kitchen/orders so the cashier can auto-print a copy
+// alongside the bar ticket without waiting on the customer bill.
+export const getBarCaptainOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = branchIdFor(req);
+    const lookbackSince = new Date(Date.now() - CAPTAIN_ORDER_FEED_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+
+    let shiftQuery = supabase
+      .from('pos_outlet_shifts')
+      .select('id, branch_id, outlet_id, status, opened_at, outlet:pos_outlets(name, outlet_type)')
+      .or(`status.eq.open,opened_at.gte.${lookbackSince}`)
+      .order('opened_at', { ascending: false })
+      .limit(250);
+
+    if (branchId) shiftQuery = shiftQuery.eq('branch_id', branchId);
+
+    const { data: outletShifts, error: shiftError } = await shiftQuery;
+    if (shiftError) throw shiftError;
+
+    const barShiftIds = (outletShifts || [])
+      .filter((shift: any) => {
+        const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+        return CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES.has(String(outlet?.outlet_type || '') as OutletType);
+      })
+      .map((shift: any) => shift.id);
+    const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
+
+    let barOrders: any[] = [];
+    if (barShiftIds.length) {
+      const { data: posOrders, error: posOrdersError } = await supabase
+        .from('pos_shift_orders')
+        .select('*')
+        .in('shift_id', barShiftIds)
+        .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready,recalled)')
+        .order('created_at', { ascending: true });
+
+      if (posOrdersError) throw posOrdersError;
+
+      barOrders = (posOrders || []).map((order: any) => {
+        const shift = shiftsById.get(order.shift_id) || {};
+        const orderItems = Array.isArray(order.items) ? order.items : [];
+        return {
+          id: `pos:${order.id}`,
+          source: 'pos_shift_order',
+          source_id: order.id,
+          order_number: order.order_number,
+          short_code: order.short_code,
+          branch_id: shift.branch_id,
+          outlet_id: order.outlet_id,
+          shift_id: order.shift_id,
+          order_type: order.order_type || 'bar',
+          table_number: order.table_number ?? null,
+          room_number: order.room_number ?? null,
+          waiter_name: order.waiter_name,
+          customer_name: order.customer_name || 'Walk-in',
+          status: captainOrderNormalizeStatus(order.kitchen_status || order.status),
+          order_status: order.status,
+          payment_status: order.payment_status,
+          void_request_status: order.void_request_status,
+          void_reason: order.void_reason,
+          voided_at: order.voided_at,
+          voided_by: order.voided_by,
+          created_at: order.created_at,
+          elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
+          items_count: orderItems.length,
+          total: order.total_amount,
+          total_amount: order.total_amount,
+          items: orderItems.map((item: any, index: number) => {
+            const itemStatus = captainOrderNormalizeStatus(item.kitchen_status || item.status || order.kitchen_status);
+            return {
+              id: captainOrderItemKey(item, index),
+              name: item.name || item.item_name || 'Bar item',
+              quantity: Number(item.quantity || item.qty || 1),
+              unit_price: Number(item.unit_price || item.price || 0),
+              notes: item.notes,
+              is_recalled_item: item.is_recalled_item === true,
+              recall_batch_id: item.recall_batch_id || null,
+              recalled_at: item.recalled_at || null,
+              recall_note: item.recall_note || null,
+              status: itemStatus,
+              is_ready: itemStatus === 'ready'
+            };
+          })
+        };
+      }).filter((order: any) => captainOrderActiveStatuses.has(captainOrderNormalizeStatus(order.status)));
+    }
+
+    res.json({ success: true, data: barOrders });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getOutlets = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);

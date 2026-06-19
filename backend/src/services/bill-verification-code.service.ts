@@ -21,6 +21,12 @@ const SHORT_CODE_LENGTH = 6;
 const SHORT_CODE_PATTERN = new RegExp(
   `^[${SHORT_CODE_ALPHABET}]{${SHORT_CODE_LENGTH}}$`
 );
+// Digits 2-9 are part of the alphabet (for readability on a 6-char code),
+// so a code made entirely of digits still matches SHORT_CODE_PATTERN. Bills
+// must show an actual letter+number mix, so reuse additionally requires at
+// least one letter — this also forces legacy all-numeric short codes to be
+// regenerated into proper alphanumeric ones the next time they're touched.
+const HAS_LETTER_PATTERN = /[A-Z]/;
 
 const generateCode = (): string => {
   let code = '';
@@ -38,8 +44,9 @@ export const createBillVerificationCode = async (
   input: BillVerificationCodeInput
 ): Promise<BillVerificationCodeResult> => {
   const existingCode = String(input.code ?? '').trim().toUpperCase();
-  const code = SHORT_CODE_PATTERN.test(existingCode)
-    ? existingCode
-    : generateCode();
+  const code =
+    SHORT_CODE_PATTERN.test(existingCode) && HAS_LETTER_PATTERN.test(existingCode)
+      ? existingCode
+      : generateCode();
   return { code };
 };
