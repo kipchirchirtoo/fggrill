@@ -1028,10 +1028,39 @@ export const getBranchSaleTransaction = async (req: Request, res: Response): Pro
     const userBranchId = (req as any).user?.branch_id;
     const branchScoped = ['branch_manager', 'branch_accountant'].includes(userRole);
 
+    logger.info('getBranchSaleTransaction request:', { 
+      source, 
+      id, 
+      userRole, 
+      userBranchId, 
+      branchScoped 
+    });
+
     const num = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-    const denyIfOtherBranch = (rowBranch: any): boolean =>
-      branchScoped && userBranchId != null && Number(rowBranch) !== Number(userBranchId);
+    const denyIfOtherBranch = (rowBranch: any): boolean => {
+      // If user is not branch-scoped, allow access
+      if (!branchScoped || userBranchId == null) return false;
+      
+      // If record has no branch_id (null), allow access for now
+      // This handles legacy/migrated records that may not have branch_id set
+      if (rowBranch == null) {
+        logger.warn('Transaction has null branch_id, allowing access:', { id, source, rowBranch });
+        return false;
+      }
+      
+      // Otherwise, check if branch matches
+      const deny = Number(rowBranch) !== Number(userBranchId);
+      if (deny) {
+        logger.warn('Branch access denied:', { 
+          id, 
+          source, 
+          recordBranch: rowBranch, 
+          userBranch: userBranchId 
+        });
+      }
+      return deny;
+    };
 
     let detail: Record<string, any> | null = null;
 
@@ -1211,44 +1240,92 @@ export const getBranchSaleTransaction = async (req: Request, res: Response): Pro
         items: [],
       };
     } else if (source === 'pos') {
+      // First try pos_shift_orders
       const { data: order, error } = await supabase
         .from('pos_shift_orders')
         .select('id, branch_id, outlet_id, order_number, short_code, customer_name, waiter_name, table_number, payment_method, payment_status, status, total_amount, amount_paid, items, created_at')
         .eq('id', id)
         .maybeSingle();
-      if (error) throw error;
-      if (!order || denyIfOtherBranch(order.branch_id)) {
-        res.status(404).json({ error: 'POS order not found in your branch' });
-        return;
+      
+      if (error) {
+        logger.error('Error fetching POS shift order:', { id, error: error.message });
       }
-      const rawItems: any[] = Array.isArray(order.items) ? order.items : [];
-      detail = {
-        source,
-        id: String(order.id),
-        code: order.order_number || order.short_code || String(order.id),
-        short_code: order.short_code || (order.order_number ? String(order.order_number).slice(-6) : null),
-        outlet: rawItems[0]?.outlet_name || 'POS Outlet',
-        waiter_name: order.waiter_name || null,
-        customer_name: order.customer_name || null,
-        table_number: order.table_number || null,
-        payment_method: order.payment_method || null,
-        payment_status: order.payment_status || null,
-        status: order.status || null,
-        date: order.created_at,
-        paid_at: order.created_at,
-        subtotal: num(order.total_amount),
-        service_charge: 0,
-        tax_amount: 0,
-        discount_amount: 0,
-        total: num(order.total_amount),
-        items: rawItems.map((i: any) => ({
-          name: i.name || 'Item',
-          quantity: num(i.quantity),
-          unit_price: num(i.unit_price),
-          total_price: num(i.line_total ?? (i.unit_price * i.quantity)),
-          notes: null,
-        })),
-      };
+      
+      if (!order || denyIfOtherBranch(order?.branch_id)) {
+        // Fallback: try pos_transactions table
+        const { data: posTransaction, error: posError } = await supabase
+          .from('pos_transactions')
+          .select('id, branch_id, transaction_ref, transaction_number, customer_name, cashier_name, payment_method, status, total_amount, created_at')
+          .eq('id', id)
+          .maybeSingle();
+        
+        if (posError) {
+          logger.error('Error fetching POS transaction:', { id, error: posError.message });
+        }
+        
+        if (!posTransaction || denyIfOtherBranch(posTransaction?.branch_id)) {
+          logger.warn('POS transaction not found in any table:', { id, source });
+          res.status(404).json({ 
+            error: 'POS transaction not found', 
+            transaction_id: id,
+            searched_tables: ['pos_shift_orders', 'pos_transactions']
+          });
+          return;
+        }
+        
+        // Use pos_transactions data
+        detail = {
+          source,
+          id: String(posTransaction.id),
+          code: posTransaction.transaction_ref || posTransaction.transaction_number || String(posTransaction.id),
+          short_code: posTransaction.transaction_ref ? String(posTransaction.transaction_ref).slice(-6) : null,
+          outlet: 'POS',
+          waiter_name: posTransaction.cashier_name || null,
+          customer_name: posTransaction.customer_name || null,
+          table_number: null,
+          payment_method: posTransaction.payment_method || null,
+          payment_status: posTransaction.status || null,
+          status: posTransaction.status || null,
+          date: posTransaction.created_at,
+          paid_at: posTransaction.created_at,
+          subtotal: num(posTransaction.total_amount),
+          service_charge: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          total: num(posTransaction.total_amount),
+          items: [] // pos_transactions items need separate query
+        };
+      } else {
+        // Use pos_shift_orders data
+        const rawItems: any[] = Array.isArray(order.items) ? order.items : [];
+        detail = {
+          source,
+          id: String(order.id),
+          code: order.order_number || order.short_code || String(order.id),
+          short_code: order.short_code || (order.order_number ? String(order.order_number).slice(-6) : null),
+          outlet: rawItems[0]?.outlet_name || 'POS Outlet',
+          waiter_name: order.waiter_name || null,
+          customer_name: order.customer_name || null,
+          table_number: order.table_number || null,
+          payment_method: order.payment_method || null,
+          payment_status: order.payment_status || null,
+          status: order.status || null,
+          date: order.created_at,
+          paid_at: order.created_at,
+          subtotal: num(order.total_amount),
+          service_charge: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          total: num(order.total_amount),
+          items: rawItems.map((i: any) => ({
+            name: i.name || 'Item',
+            quantity: num(i.quantity),
+            unit_price: num(i.unit_price),
+            total_price: num(i.line_total ?? (i.unit_price * i.quantity)),
+            notes: null,
+          })),
+        };
+      }
     } else {
       res.status(400).json({ error: 'Unknown transaction source' });
       return;

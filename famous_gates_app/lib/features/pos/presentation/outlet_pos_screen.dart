@@ -620,9 +620,10 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                               title: Text('Recall bill'),
                             ),
                           ),
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'reprint',
-                            child: ListTile(
+                            enabled: order.paymentStatus == 'unpaid',
+                            child: const ListTile(
                               dense: true,
                               leading: Icon(Icons.print_outlined),
                               title: Text('Reprint bill'),

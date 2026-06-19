@@ -2669,7 +2669,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
 
     const [menuItemsRes, barInventoryRes] = await Promise.all([
       menuItemIds.length
-        ? supabase.from('restaurant_menu_items').select('id, name').in('id', menuItemIds)
+        ? supabase.from('restaurant_menu_items').select('id, name, item_code').in('id', menuItemIds)
         : Promise.resolve({ data: [], error: null } as any),
       drinkIds.length
         ? supabase.from('restaurant_bar_inventory').select('id, name, category').in('id', drinkIds)
@@ -2681,6 +2681,11 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
 
     const menuItemNameMap = (menuItemsRes.data || []).reduce((acc: Record<string, string>, item: any) => {
       acc[String(item.id)] = item.name;
+      return acc;
+    }, {});
+
+    const menuItemCodeMap = (menuItemsRes.data || []).reduce((acc: Record<string, string>, item: any) => {
+      if (item.item_code) acc[String(item.id)] = item.item_code;
       return acc;
     }, {});
 
@@ -2814,6 +2819,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         addSoldItem({
           branchId: branchKey,
           itemId,
+          sku: menuItemCodeMap[itemId] || itemId,
           name,
           quantity,
           revenue,

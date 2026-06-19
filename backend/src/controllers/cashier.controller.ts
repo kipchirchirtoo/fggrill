@@ -3,6 +3,8 @@ import { supabase } from '../config/supabase';
 import db from '../db';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { performanceMonitor } from '../utils/performance-monitor';
+import { billCache, BillCache } from '../utils/bill-cache';
 import { migratePendingBills } from '../jobs/migrate-pending-bills.job';
 import { paymentVerificationService } from '../services/payment.verification.service';
 import { mpesaService } from '../services/mpesa.service';
@@ -613,6 +615,200 @@ async function resolveCashierShortCode(
     return null;
 }
 
+
+type OutletPosOrderResolution = {
+    order: any;
+    shift: any;
+    originalOrder?: any;
+};
+
+async function loadOutletPosShiftIdsForLookup(req: Request): Promise<string[] | null> {
+    const requestedBranchId = parseBranchId(req.query.branch_id);
+    const userBranchId = parseBranchId(req.user?.branch_id ?? req.user?.branchId);
+
+    if (!isGlobalRole(req.user?.role)) {
+        if (requestedBranchId && userBranchId && requestedBranchId !== userBranchId) {
+            throw new AppError('Forbidden: cannot access POS bills from another branch', 403);
+        }
+
+        if (!userBranchId) return [];
+
+        const { data: shifts, error } = await supabase
+            .from('pos_outlet_shifts')
+            .select('id')
+            .eq('branch_id', userBranchId);
+
+        if (error) throw new AppError(`POS shift lookup failed: ${error.message}`, 500);
+        return (shifts || []).map((shift: any) => String(shift.id));
+    }
+
+    if (!requestedBranchId) return null;
+
+    const { data: shifts, error } = await supabase
+        .from('pos_outlet_shifts')
+        .select('id')
+        .eq('branch_id', requestedBranchId);
+
+    if (error) throw new AppError(`POS shift lookup failed: ${error.message}`, 500);
+    return (shifts || []).map((shift: any) => String(shift.id));
+}
+
+async function queryOutletPosOrderByColumn(
+    column: 'id' | 'order_number' | 'short_code',
+    value: string,
+    shiftIds: string[] | null
+): Promise<any | null> {
+    let query = supabase
+        .from('pos_shift_orders')
+        .select('*')
+        .eq(column, value)
+        .limit(1);
+
+    if (shiftIds) {
+        if (!shiftIds.length) return null;
+        query = query.in('shift_id', shiftIds);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+        throw new AppError(`POS bill lookup failed: ${error.message}`, 500);
+    }
+
+    return data?.[0] || null;
+}
+
+async function findOutletPosOrderByReference(
+    reference: unknown,
+    req: Request
+): Promise<OutletPosOrderResolution | null> {
+    const rawReference = normalizeSearchTerm(reference);
+    if (!rawReference) return null;
+
+    const normalized = rawReference.toUpperCase();
+    const shiftIds = await loadOutletPosShiftIdsForLookup(req);
+    const uuid = normalizeUuidOrNull(rawReference);
+
+    const candidates: Array<{ column: 'id' | 'order_number' | 'short_code'; value: string }> = [];
+    if (uuid) candidates.push({ column: 'id', value: uuid });
+    candidates.push({ column: 'order_number', value: normalized });
+    candidates.push({ column: 'short_code', value: normalized });
+
+    let order: any | null = null;
+    for (const candidate of candidates) {
+        order = await queryOutletPosOrderByColumn(candidate.column, candidate.value, shiftIds);
+        if (order) break;
+    }
+
+    if (!order) return null;
+
+    let targetOrder = order;
+    if (order.is_merged && order.merged_into) {
+        const mergedTarget = await queryOutletPosOrderByColumn('id', String(order.merged_into), shiftIds);
+        if (mergedTarget) targetOrder = mergedTarget;
+    }
+
+    const { data: shift, error: shiftError } = await supabase
+        .from('pos_outlet_shifts')
+        .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
+        .eq('id', targetOrder.shift_id)
+        .maybeSingle();
+
+    if (shiftError) throw new AppError(`POS shift lookup failed: ${shiftError.message}`, 500);
+    if (!shift) return null;
+
+    const userBranchId = parseBranchId(req.user?.branch_id ?? req.user?.branchId);
+    if (!isGlobalRole(req.user?.role) && userBranchId && Number(shift.branch_id) !== userBranchId) {
+        return null;
+    }
+
+    return {
+        order: targetOrder,
+        shift,
+        originalOrder: targetOrder.id === order.id ? undefined : order
+    };
+}
+
+function buildOutletPosBillResponse(resolution: OutletPosOrderResolution): Record<string, unknown> {
+    const posOrder = resolution.order;
+    const items = Array.isArray(posOrder.items) ? posOrder.items : [];
+    const totalAmount = Number(posOrder.total_amount || 0);
+    const amountPaid = Number(posOrder.amount_paid || 0);
+    const balance = Number(posOrder.balance_amount ?? Math.max(0, totalAmount - amountPaid));
+    const outlet = Array.isArray(resolution.shift?.outlet)
+        ? resolution.shift.outlet[0]
+        : resolution.shift?.outlet;
+
+    return {
+        success: true,
+        data: {
+            type: 'pos_shift_order',
+            source: 'pos',
+            merged_from: resolution.originalOrder ? {
+                id: resolution.originalOrder.id,
+                order_number: resolution.originalOrder.order_number,
+                short_code: resolution.originalOrder.short_code
+            } : undefined,
+            order: {
+                id: posOrder.id,
+                order_number: posOrder.order_number,
+                short_code: posOrder.short_code,
+                guest_name: posOrder.customer_name || 'Walk-in',
+                waiter_name: posOrder.waiter_name,
+                station_name: outlet?.name,
+                station_type: outlet?.outlet_type,
+                status: posOrder.payment_status === 'paid' ? 'cleared' : 'unpaid',
+                items: items.map((item: any) => ({
+                    name: item.name || item.item_name || 'POS item',
+                    quantity: Number(item.quantity || item.qty || 1),
+                    price: Number(item.unit_price || item.price || 0),
+                    total: Number(item.line_total || item.total || 0)
+                }))
+            },
+            financials: {
+                total_amount: totalAmount,
+                amount_paid: amountPaid,
+                balance,
+                currency: 'KES'
+            },
+            payment_status: posOrder.payment_status === 'paid' ? 'cleared' : posOrder.payment_status
+        }
+    };
+}
+
+// Helper function to determine lookup strategy based on ID format
+function determineLookupStrategy(searchId: string): { type: string, prefix?: string } {
+    // UUID pattern
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchId)) {
+        return { type: 'uuid' };
+    }
+    
+    // Prefix patterns
+    if (searchId.startsWith('INV')) return { type: 'invoice', prefix: 'INV' };
+    if (searchId.startsWith('HTL')) return { type: 'hotel', prefix: 'HTL' };
+    if (searchId.startsWith('ORD')) return { type: 'restaurant', prefix: 'ORD' };
+    if (searchId.startsWith('BAR')) return { type: 'bar', prefix: 'BAR' };
+    if (searchId.startsWith('CNF')) return { type: 'conference', prefix: 'CNF' };
+    if (searchId.startsWith('CS')) return { type: 'pos', prefix: 'CS' };
+    if (searchId.startsWith('POS')) return { type: 'pos_captain', prefix: 'POS' };
+    
+    // Kyogong pattern: PREFIX-DATE-RANDOM
+    const kyogongPattern = /^[A-Z]+-\d{8}-\d{4}$/;
+    if (kyogongPattern.test(searchId) || searchId.includes('-202')) {
+        return { type: 'kyogong' };
+    }
+    
+    // Other bill prefixes
+    const billPrefixes = ['CON', 'POL', 'CWS', 'BILL'];
+    for (const prefix of billPrefixes) {
+        if (searchId.startsWith(prefix)) {
+            return { type: 'bill', prefix };
+        }
+    }
+    
+    // Fallback to room lookup for simple numbers/strings
+    return { type: 'room' };
+}
+
 /**
  * Get Bill Details by Booking ID (or Barcode)
  */
@@ -621,14 +817,32 @@ export const getBillDetails = async (
     res: Response,
     next: NextFunction
 ): Promise<void> => {
+    const timer = performanceMonitor.startTimer('getBillDetails');
+    
     try {
         const { bookingId } = req.params;
 
         if (!bookingId) {
+            timer.end(false, 'Missing bookingId parameter');
             throw new AppError('ID is required', 400);
         }
 
         let searchId = bookingId.toUpperCase();
+        const branchId = req.user?.branch_id;
+        
+        // Check cache first
+        const cacheKey = BillCache.generateKey(searchId, branchId);
+        const cachedResult = billCache.get(cacheKey);
+        if (cachedResult) {
+            timer.end(true);
+            res.json(cachedResult);
+            return;
+        }
+        
+        // Quick prefix-based routing to avoid unnecessary lookups
+        let lookupStrategy = determineLookupStrategy(searchId);
+        
+        // Handle scanned codes and short codes first
         const scannedCodeResolution = await resolveCashierScannedCode(searchId, req);
         if (scannedCodeResolution) {
             searchId = scannedCodeResolution.lookupId;
@@ -638,7 +852,7 @@ export const getBillDetails = async (
         if (shortCodeResolution) {
             if (shortCodeResolution.source === 'payment') {
                 const payment = shortCodeResolution.row;
-                res.json({
+                const responseData = {
                     success: true,
                     data: {
                         type: 'payment_receipt',
@@ -657,26 +871,63 @@ export const getBillDetails = async (
                         },
                         payment_status: payment.status || 'completed'
                     }
-                });
+                };
+                
+                // Cache for a shorter time since payments are sensitive
+                billCache.set(cacheKey, responseData, 2 * 60 * 1000); // 2 minutes
+                timer.end(true);
+                res.json(responseData);
                 return;
             }
             searchId = shortCodeResolution.lookupId;
         }
 
-        // Check if it's an accounting invoice (starts with INV)
-        if (searchId.startsWith('INV')) {
-            // First check accounting_ar_invoices
-            const { data: arInvoice, error: arError } = await supabase
-                .from('accounting_ar_invoices')
-                .select(`
-                    *,
-                    customer:accounting_customers(id, customer_name, email, phone)
-                `)
-                .eq('invoice_number', searchId)
-                .single();
+        lookupStrategy = determineLookupStrategy(searchId);
 
-            if (!arError && arInvoice) {
-                res.json({
+        const outletPosLookupReference = shortCodeResolution?.source === 'pos_shift_order' && shortCodeResolution.row?.id
+            ? shortCodeResolution.row.id
+            : searchId;
+        const shouldTryOutletPosLookup = shortCodeResolution?.source === 'pos_shift_order'
+            || searchId.startsWith('POS')
+            || searchId.startsWith('MERGE-')
+            || searchId.startsWith('SPLIT-')
+            || isPublicShortCode(searchId)
+            || Boolean(normalizeUuidOrNull(searchId));
+
+        if (shouldTryOutletPosLookup) {
+            const outletPosOrder = await findOutletPosOrderByReference(outletPosLookupReference, req);
+            if (outletPosOrder) {
+                const responseData = buildOutletPosBillResponse(outletPosOrder);
+                billCache.set(cacheKey, responseData);
+                timer.end(true);
+                res.json(responseData);
+                return;
+            }
+        }
+
+        // Route to specific handlers based on prefix for better performance
+        if (lookupStrategy.type === 'invoice') {
+            // Optimized invoice lookup - check both tables in parallel
+            const [arInvoiceResult, finInvoiceResult] = await Promise.allSettled([
+                supabase
+                    .from('accounting_ar_invoices')
+                    .select(`
+                        *,
+                        customer:accounting_customers(id, customer_name, email, phone)
+                    `)
+                    .eq('invoice_number', searchId)
+                    .single(),
+                supabase
+                    .from('finance_invoices')
+                    .select('*')
+                    .eq('invoice_number', searchId)
+                    .single()
+            ]);
+
+            // Check AR invoice first
+            if (arInvoiceResult.status === 'fulfilled' && arInvoiceResult.value.data) {
+                const arInvoice = arInvoiceResult.value.data;
+                const responseData = {
                     success: true,
                     data: {
                         type: 'invoice',
@@ -702,18 +953,17 @@ export const getBillDetails = async (
                         },
                         payment_status: arInvoice.status === 'paid' ? 'paid' : (arInvoice.balance < arInvoice.total_amount ? 'partial' : 'unpaid')
                     }
-                });
+                };
+                
+                billCache.set(cacheKey, responseData);
+                timer.end(true);
+                res.json(responseData);
                 return;
             }
 
-            // If not found in accounting, check finance_invoices
-            const { data: finInvoice, error: finError } = await supabase
-                .from('finance_invoices')
-                .select('*')
-                .eq('invoice_number', searchId)
-                .single();
-
-            if (finInvoice) {
+            // Check finance invoice second
+            if (finInvoiceResult.status === 'fulfilled' && finInvoiceResult.value.data) {
+                const finInvoice = finInvoiceResult.value.data;
                 res.json({
                     success: true,
                     data: {
@@ -725,7 +975,7 @@ export const getBillDetails = async (
                             short_code: finInvoice.short_code,
                             customer_name: finInvoice.customer_name || 'Walk-in',
                             status: finInvoice.status,
-                            items: [] // finance_invoices might need a joined query for items if detail is needed
+                            items: []
                         },
                         financials: {
                             total_amount: finInvoice.total_amount,
@@ -739,11 +989,12 @@ export const getBillDetails = async (
                 return;
             }
 
+            timer.end(false, 'Invoice not found in any ledger');
             throw new AppError('Invoice not found in any ledger', 404);
         }
 
-        // Check if it's a hotel reservation (starts with HTL)
-        if (searchId.startsWith('HTL')) {
+        // Hotel reservation lookup (HTL prefix)
+        if (lookupStrategy.type === 'hotel') {
             let hotelQuery = supabase
                 .from('reservations')
                 .select(`
@@ -754,7 +1005,14 @@ export const getBillDetails = async (
 
             const { data: reservation, error: resError } = await hotelQuery.single();
 
-            if (resError || !reservation) {
+            if (resError) {
+                if (resError.code === 'PGRST116') {
+                    throw new AppError('Hotel reservation not found', 404);
+                }
+                throw resError;
+            }
+
+            if (!reservation) {
                 throw new AppError('Hotel reservation not found', 404);
             }
 
@@ -762,7 +1020,7 @@ export const getBillDetails = async (
             const paidAmount = parseFloat(reservation.amount_paid || reservation.deposit_amount || 0);
             const balance = totalAmount - paidAmount;
 
-            res.json({
+            const responseData = {
                 success: true,
                 data: {
                     type: 'hotel',
@@ -791,11 +1049,16 @@ export const getBillDetails = async (
                     },
                     payment_status: balance <= 0 ? 'paid' : (paidAmount > 0 ? 'partial' : 'unpaid')
                 }
-            });
+            };
+
+            billCache.set(cacheKey, responseData);
+            timer.end(true);
+            res.json(responseData);
             return;
         }
 
-        // Check if it's a restaurant order (starts with ORD)
+        // For other types, fall back to the original implementation for now
+        // This maintains backward compatibility while we optimize incrementally
         if (searchId.startsWith('ORD')) {
             // Fetch restaurant order details
             let restaurantQuery = supabase
@@ -1395,30 +1658,152 @@ export const getBillDetails = async (
             }
         }
 
-        // Fallback: Check if it's a Room Number for an active (checked-in) booking
-        let roomQuery = supabase
-            .from('reservations')
-            .select(`
-                *,
-                room:rooms!room_id!inner(number, branch_id, type:room_types(name, price))
-            `)
-            .eq('room.number', bookingId)
-            .eq('status', 'checked_in');
+        // Fallback: For numeric IDs (like 924094), check multiple tables in parallel
+        if (/^\d+$/.test(searchId)) {
+            const numericFallbacks = await Promise.allSettled([
+                // Check unpaid_bills by bill_number
+                supabase
+                    .from('unpaid_bills')
+                    .select('*')
+                    .eq('bill_number', searchId)
+                    .maybeSingle()
+                    .then(({ data }) => ({ type: 'unpaid_bill', data })),
+                
+                // Check restaurant_bills by bill_number
+                supabase
+                    .from('restaurant_bills')
+                    .select('*')
+                    .eq('bill_number', searchId)
+                    .maybeSingle()
+                    .then(({ data }) => ({ type: 'restaurant_bill', data })),
+                
+                // Check room number for active bookings
+                supabase
+                    .from('reservations')
+                    .select(`
+                        *,
+                        room:rooms!room_id!inner(number, branch_id, type:room_types(name, price))
+                    `)
+                    .eq('room.number', searchId)
+                    .eq('status', 'checked_in')
+                    .maybeSingle()
+                    .then(({ data }) => ({ type: 'room_booking', data }))
+            ]);
 
-        if (req.user?.branch_id) {
-            roomQuery = roomQuery.eq('room.branch_id', req.user.branch_id);
+            for (const result of numericFallbacks) {
+                if (result.status === 'fulfilled' && result.value.data) {
+                    const { type, data } = result.value;
+                    
+                    if (type === 'unpaid_bill') {
+                        const bill = data;
+                        const responseData = {
+                            success: true,
+                            data: {
+                                type: 'unpaid_bill',
+                                bill_type: bill.bill_type,
+                                revenue_type: bill.revenue_type || bill.bill_type,
+                                bill: {
+                                    id: bill.id,
+                                    bill_number: bill.bill_number,
+                                    short_code: bill.short_code,
+                                    customer_name: bill.customer_name,
+                                    room_number: bill.room_number,
+                                    status: bill.status,
+                                    due_date: bill.due_date,
+                                    remarks: bill.remarks
+                                },
+                                financials: {
+                                    total_amount: bill.total_amount,
+                                    amount_paid: bill.paid_amount || 0,
+                                    balance: bill.balance_amount || (bill.total_amount - (bill.paid_amount || 0)),
+                                    currency: 'KES'
+                                }
+                            }
+                        };
+                        billCache.set(cacheKey, responseData);
+                        timer.end(true);
+                        res.json(responseData);
+                        return;
+                    }
+                    
+                    if (type === 'restaurant_bill') {
+                        const bill = data;
+                        const responseData = {
+                            success: true,
+                            data: {
+                                type: 'restaurant_bill',
+                                bill_type: 'restaurant',
+                                revenue_type: 'RESTAURANT',
+                                bill: {
+                                    id: bill.id,
+                                    bill_number: bill.bill_number,
+                                    short_code: bill.short_code,
+                                    customer_name: bill.guest_name || 'Walk-in',
+                                    room_number: bill.room_number,
+                                    status: bill.status,
+                                    remarks: bill.internal_notes
+                                },
+                                financials: {
+                                    total_amount: bill.total_amount,
+                                    amount_paid: bill.paid_amount || 0,
+                                    balance: bill.balance || 0,
+                                    currency: 'KES'
+                                },
+                                payment_status: bill.status === 'PAID' ? 'paid' : 'unpaid'
+                            }
+                        };
+                        billCache.set(cacheKey, responseData);
+                        timer.end(true);
+                        res.json(responseData);
+                        return;
+                    }
+                    
+                    if (type === 'room_booking') {
+                        await fetchHotelBillResponse(data, res);
+                        timer.end(true);
+                        return;
+                    }
+                }
+            }
         }
 
-        const { data: roomBooking, error: roomError } = await roomQuery.maybeSingle();
+        // Fallback: Check if it's a Room Number for an active (checked-in) booking (non-numeric)
+        if (!/^\d+$/.test(searchId)) {
+            let roomQuery = supabase
+                .from('reservations')
+                .select(`
+                    *,
+                    room:rooms!room_id!inner(number, branch_id, type:room_types(name, price))
+                `)
+                .eq('room.number', searchId)
+                .eq('status', 'checked_in');
 
-        if (roomBooking) {
-            await fetchHotelBillResponse(roomBooking, res);
-            return;
+            if (req.user?.branch_id) {
+                roomQuery = roomQuery.eq('room.branch_id', req.user.branch_id);
+            }
+
+            const { data: roomBooking, error: roomError } = await roomQuery.maybeSingle();
+
+            if (roomBooking) {
+                await fetchHotelBillResponse(roomBooking, res);
+                timer.end(true);
+                return;
+            }
         }
 
+        timer.end(false, 'Bill or Booking not found');
         throw new AppError('Bill or Booking not found', 404);
 
-    } catch (error) {
+    } catch (error: any) {
+        // Enhanced error logging for debugging performance issues
+        timer.end(false, error.message);
+        logger.error('Error in getBillDetails:', {
+            bookingId: req.params.bookingId,
+            searchId: req.params.bookingId?.toUpperCase(),
+            userBranch: req.user?.branch_id,
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
         next(error);
     }
 };
@@ -2190,7 +2575,23 @@ export const processCashierPayment = async (
         }
 
         // Check if it's a POS outlet captain order (generated by restaurant/bar/non-consumable POS)
-        if (resolvedSource === 'pos_shift_order' || bookingId.startsWith('POS-')) {
+        const posPaymentLookupReference = shortCodeResolution?.source === 'pos_shift_order' && shortCodeResolution.row?.id
+            ? shortCodeResolution.row.id
+            : bookingId;
+        const shouldTryPosPaymentLookup = resolvedSource === 'pos_shift_order'
+            || bookingId.startsWith('POS')
+            || bookingId.startsWith('MERGE-')
+            || bookingId.startsWith('SPLIT-')
+            || isPublicShortCode(bookingId)
+            || Boolean(normalizeUuidOrNull(bookingId));
+        const outletPosPaymentOrder = shouldTryPosPaymentLookup
+            ? await findOutletPosOrderByReference(posPaymentLookupReference, req)
+            : null;
+
+        if (outletPosPaymentOrder || resolvedSource === 'pos_shift_order' || bookingId.startsWith('POS') || bookingId.startsWith('MERGE-') || bookingId.startsWith('SPLIT-')) {
+            if (!outletPosPaymentOrder) throw new AppError('POS order not found', 404);
+
+            const { order, shift } = outletPosPaymentOrder;
             const normalizedMethod = String(method || 'cash').toLowerCase().replace(/[\s_-]/g, '_');
             const paymentMethod = normalizedMethod.includes('mpesa')
                 ? 'mpesa'
@@ -2202,38 +2603,6 @@ export const processCashierPayment = async (
 
             if (!['cash', 'mpesa', 'card', 'credit_bill'].includes(paymentMethod)) {
                 throw new AppError('Unsupported POS payment method', 400);
-            }
-
-            const resolvedPosOrderId = shortCodeResolution?.source === 'pos_shift_order' &&
-                UUID_PATTERN.test(String(shortCodeResolution.row?.id || ''))
-                ? String(shortCodeResolution.row.id)
-                : null;
-
-            let orderQuery = supabase
-                .from('pos_shift_orders')
-                .select('*');
-
-            orderQuery = resolvedPosOrderId
-                ? orderQuery.eq('id', resolvedPosOrderId)
-                : orderQuery.eq('order_number', bookingId);
-
-            const { data: order, error: orderError } = await orderQuery.maybeSingle();
-
-            if (orderError) throw new AppError(`POS order lookup failed: ${orderError.message}`, 500);
-            if (!order) throw new AppError('POS order not found', 404);
-
-            const { data: shift, error: shiftError } = await supabase
-                .from('pos_outlet_shifts')
-                .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
-                .eq('id', order.shift_id)
-                .maybeSingle();
-
-            if (shiftError) throw new AppError(`POS shift lookup failed: ${shiftError.message}`, 500);
-            if (!shift) throw new AppError('POS shift not found for order', 404);
-
-            const userBranchId = parseBranchId(req.user?.branch_id ?? req.user?.branchId);
-            if (!isGlobalRole(req.user?.role) && userBranchId && Number(shift.branch_id) !== userBranchId) {
-                throw new AppError('Forbidden: POS order belongs to another branch', 403);
             }
 
             if (['paid', 'credit_bill', 'voided'].includes(String(order.payment_status || '').toLowerCase())) {

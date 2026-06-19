@@ -28,7 +28,13 @@ async function buildReportData(id: string, variant: StockTakeVariant, requester:
     .select('*, branch:branches(name)')
     .eq('id', id)
     .single();
-  if (error) throw error;
+  
+  if (error) {
+    if (error.code === 'PGRST116') {
+      throw new Error(`Stock take with ID ${id} not found`);
+    }
+    throw error;
+  }
   if (!header) throw new Error('Stock take not found');
 
   const items = await getEnrichedStockCountItems(id, header.branch_id);
@@ -74,23 +80,75 @@ async function buildReportData(id: string, variant: StockTakeVariant, requester:
 export const downloadBranchStockTakeReportPDF = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid stock take ID format',
+        code: 'INVALID_UUID'
+      });
+    }
+    
     const variant = resolveVariant(req.query.variant);
     const data = await buildReportData(id, variant, (req as any).user);
     await generateBranchStockTakeReportPDF(res, data);
   } catch (error: any) {
     logger.error('Error generating branch stock take PDF:', error);
-    if (!res.headersSent) res.status(500).json({ success: false, message: error.message });
+    
+    if (!res.headersSent) {
+      if (error.message?.includes('not found')) {
+        res.status(404).json({ 
+          success: false, 
+          message: error.message,
+          code: 'STOCK_TAKE_NOT_FOUND'
+        });
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          message: 'Failed to generate stock take PDF report',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      }
+    }
   }
 };
 
 export const downloadBranchStockTakeWorkbook = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid stock take ID format',
+        code: 'INVALID_UUID'
+      });
+    }
+    
     const variant = resolveVariant(req.query.variant);
     const data = await buildReportData(id, variant, (req as any).user);
     await generateBranchStockTakeWorkbook(res, data);
   } catch (error: any) {
     logger.error('Error generating branch stock take workbook:', error);
-    if (!res.headersSent) res.status(500).json({ success: false, message: error.message });
+    
+    if (!res.headersSent) {
+      if (error.message?.includes('not found')) {
+        res.status(404).json({ 
+          success: false, 
+          message: error.message,
+          code: 'STOCK_TAKE_NOT_FOUND'
+        });
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          message: 'Failed to generate stock take workbook report',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      }
+    }
   }
 };

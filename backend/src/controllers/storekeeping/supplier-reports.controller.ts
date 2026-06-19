@@ -476,6 +476,7 @@ export const getSupplierLedger = async (
         const ledgerEntries: any[] = [];
 
         // 1. Get GRNs (Goods Received Notes)
+        // Note: store_grn table has po_id column but may need to join to get it
         const { data: grns, error: grnError } = await supabase
             .from('store_grn')
             .select('id, grn_number, grn_date, created_at, total_value, total_quantity, status, invoice_number, po_id')
@@ -484,34 +485,67 @@ export const getSupplierLedger = async (
             .order('created_at', { ascending: false })
             .limit(100);
 
-        if (grnError) throw grnError;
+        if (grnError) {
+            // If po_id column doesn't exist in this schema version, fetch without it
+            if (grnError.code === '42703' && grnError.message?.includes('po_id')) {
+                logger.warn('store_grn.po_id column not found, fetching GRNs without PO reference');
+                const { data: grnsWithoutPo, error: retryError } = await supabase
+                    .from('store_grn')
+                    .select('id, grn_number, grn_date, created_at, total_value, total_quantity, status, invoice_number')
+                    .eq('supplier_id', supplierId)
+                    .order('grn_date', { ascending: false })
+                    .order('created_at', { ascending: false })
+                    .limit(100);
 
-        // Get PO numbers for GRNs
-        const poIds = (grns || []).map(g => g.po_id).filter(Boolean);
-        const { data: pos } = poIds.length > 0 ? await supabase
-            .from('store_purchase_orders')
-            .select('id, po_number')
-            .in('id', poIds) : { data: [] };
-        
-        const poMap = new Map((pos || []).map(po => [po.id, po]));
+                if (retryError) throw retryError;
 
-        (grns || []).forEach((grn: any) => {
-            const po = poMap.get(grn.po_id);
-            ledgerEntries.push({
-                id: `grn:${grn.id}`,
-                source_type: 'grn',
-                grn_id: grn.id,
-                transaction_date: grn.grn_date || grn.created_at,
-                transaction_type: 'goods_received',
-                reference_number: grn.grn_number,
-                description: `GRN received${po?.po_number ? ` for PO ${po.po_number}` : ''}${grn.invoice_number ? ` / Invoice ${grn.invoice_number}` : ''}`,
-                debit_amount: Number(grn.total_value || 0),
-                credit_amount: 0,
-                running_balance: null,
-                status: grn.status,
-                quantity: grn.total_quantity
+                (grnsWithoutPo || []).forEach((grn: any) => {
+                    ledgerEntries.push({
+                        id: `grn:${grn.id}`,
+                        source_type: 'grn',
+                        grn_id: grn.id,
+                        transaction_date: grn.grn_date || grn.created_at,
+                        transaction_type: 'goods_received',
+                        reference_number: grn.grn_number,
+                        description: `GRN received${grn.invoice_number ? ` / Invoice ${grn.invoice_number}` : ''}`,
+                        debit_amount: Number(grn.total_value || 0),
+                        credit_amount: 0,
+                        running_balance: null,
+                        status: grn.status,
+                        quantity: grn.total_quantity
+                    });
+                });
+            } else {
+                throw grnError;
+            }
+        } else {
+            // Get PO numbers for GRNs
+            const poIds = (grns || []).map(g => g.po_id).filter(Boolean);
+            const { data: pos } = poIds.length > 0 ? await supabase
+                .from('store_purchase_orders')
+                .select('id, po_number')
+                .in('id', poIds) : { data: [] };
+            
+            const poMap = new Map((pos || []).map(po => [po.id, po]));
+
+            (grns || []).forEach((grn: any) => {
+                const po = poMap.get(grn.po_id);
+                ledgerEntries.push({
+                    id: `grn:${grn.id}`,
+                    source_type: 'grn',
+                    grn_id: grn.id,
+                    transaction_date: grn.grn_date || grn.created_at,
+                    transaction_type: 'goods_received',
+                    reference_number: grn.grn_number,
+                    description: `GRN received${po?.po_number ? ` for PO ${po.po_number}` : ''}${grn.invoice_number ? ` / Invoice ${grn.invoice_number}` : ''}`,
+                    debit_amount: Number(grn.total_value || 0),
+                    credit_amount: 0,
+                    running_balance: null,
+                    status: grn.status,
+                    quantity: grn.total_quantity
+                });
             });
-        });
+        }
 
         // 2. Get Supplier Invoices
         const { data: invoices, error: invoiceError } = await supabase
