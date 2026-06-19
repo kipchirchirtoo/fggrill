@@ -1888,11 +1888,13 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     if (error || !data) throw error || new AppError('Failed to update recalled bill', 500);
 
     // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR RECALLED BILLS ============
-    // Recalled items get a captain order printed to the kitchen printer AND the
+    // Recalled items get a captain order printed (kitchen printer for
+    // restaurant, that outlet's own cashier printer for Main Bar / Executive
+    // Bar — same outlets that auto-print on initial order placement) AND the
     // order is marked 'recalled' (not 'served') so it still shows on the KDS
-    // digital display with a RECALL badge until kitchen staff dismiss it.
+    // digital display with a RECALL badge until kitchen/bar staff dismiss it.
     const outletType = String(outlet?.outlet_type || '').toLowerCase();
-    if (outletType === 'restaurant') {
+    if (isCaptainOrderAutoPrintOutlet(outletType)) {
       try {
         const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
 
@@ -1923,7 +1925,7 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
           is_recall: true
         }).then((result) => {
           if (result.success) {
-            logger.info(`✅ Recalled bill ${data.order_number} printed to kitchen`);
+            logger.info(`✅ Recalled bill ${data.order_number} printed (${outletType} outlet)`);
           } else {
             logger.warn(`⚠️ Recalled bill ${data.order_number} print failed: ${result.error}`);
           }
@@ -1931,11 +1933,13 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
           logger.error(`❌ Recalled bill print error for ${data.order_number}:`, printError);
         });
 
-        logger.info(`📄 Recalled bill ${data.order_number} sent to kitchen printer (restaurant outlet)`);
+        logger.info(`📄 Recalled bill ${data.order_number} sent to print (${outletType} outlet)`);
       } catch (printError) {
         // Don't block the recall response if printing fails
         logger.error('Recalled bill printing service error:', printError);
       }
+    } else {
+      logger.info(`ℹ️ Skipping captain order printing for recalled ${outletType} bill (only restaurant/main_bar/executive_bar outlets auto-print captain orders)`);
     }
     // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
 
