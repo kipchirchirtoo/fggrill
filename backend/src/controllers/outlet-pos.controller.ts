@@ -1243,7 +1243,7 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
 
     const items = await hydrateOutletItemCategories(
       outlet,
-      applyPoolDerivedStock(await loadActiveOutletItems(outlet))
+      applyPoolDerivedStock(await loadActiveOutletItems(outlet, true))
     );
     res.json({
       success: true,
