@@ -51,6 +51,23 @@ const FOOD_AND_BAR_OUTLET_TYPES = new Set<OutletType>([
 const isFoodOrBarOutlet = (outletType: unknown): boolean =>
   FOOD_AND_BAR_OUTLET_TYPES.has(String(outletType || '') as OutletType);
 
+// Outlets whose bartender/waiter-placed orders auto-print a captain order.
+// Restaurant orders print to the kitchen printer. Main Bar and Executive Bar
+// orders print at that outlet's own cashier station instead — the bar
+// cashier owns stock control there and needs the ticket the moment a
+// bartender rings an order, not just at payment time. Every outlet type in
+// this codebase runs its captain-order print on its own physically
+// configured local printer (see python-services/receipts), so adding an
+// outlet type here only affects that outlet's printer, not other outlets'.
+const CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES = new Set<OutletType>([
+  'restaurant',
+  'main_bar',
+  'executive_bar'
+]);
+
+const isCaptainOrderAutoPrintOutlet = (outletType: unknown): boolean =>
+  CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES.has(String(outletType || '') as OutletType);
+
 const outletItemGroup = (outletType: unknown): 'restaurant' | 'bar' | 'other' => {
   const type = String(outletType || '');
   if (type === 'restaurant') return 'restaurant';
@@ -1728,12 +1745,15 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
     
-    // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR KITCHEN ============
-    // Print captain order IMMEDIATELY to kitchen printer (no waiting for KDS poll)
+    // ============ AUTOMATIC CAPTAIN ORDER PRINTING ============
+    // Print captain order IMMEDIATELY (no waiting for KDS poll). Restaurant
+    // orders print to the kitchen printer; Main Bar / Executive Bar orders
+    // print at that outlet's own cashier printer so the bartender's order is
+    // on the cashier's desk the moment it is placed, since the bar cashier
+    // owns stock control for that outlet.
     const outletType = String(outlet?.outlet_type || '').toLowerCase();
-    const isRestaurantOutlet = outletType === 'restaurant';
-    
-    if (isRestaurantOutlet) {
+
+    if (isCaptainOrderAutoPrintOutlet(outletType)) {
       try {
         const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
         
@@ -1759,8 +1779,8 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
           created_at: order.created_at
         }).then((result) => {
           if (result.success) {
-            logger.info(`✅ Captain order ${order.order_number} printed to kitchen IMMEDIATELY`);
-            
+            logger.info(`✅ Captain order ${order.order_number} printed IMMEDIATELY (${outletType} outlet)`);
+
             // Update captain_printed_at timestamp
             supabase
               .from('pos_shift_orders')
@@ -1775,14 +1795,14 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
         }).catch((printError) => {
           logger.error(`❌ Captain order print error for ${order.order_number}:`, printError);
         });
-        
-        logger.info(`📄 Captain order ${order.order_number} sent to kitchen printer IMMEDIATELY (restaurant outlet)`);
+
+        logger.info(`📄 Captain order ${order.order_number} sent to print IMMEDIATELY (${outletType} outlet)`);
       } catch (printError) {
         // Don't block order creation if printing fails
         logger.error('Captain order printing service error:', printError);
       }
     } else {
-      logger.info(`ℹ️ Skipping captain order printing for ${outletType} outlet (only restaurant outlets print to kitchen)`);
+      logger.info(`ℹ️ Skipping captain order printing for ${outletType} outlet (only restaurant/main_bar/executive_bar outlets auto-print captain orders)`);
     }
     // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
     
