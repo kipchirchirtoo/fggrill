@@ -1399,6 +1399,7 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
 
       barOrders = (posOrders || []).map((order: any) => {
         const shift = shiftsById.get(order.shift_id) || {};
+        const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
         const orderItems = Array.isArray(order.items) ? order.items : [];
         return {
           id: `pos:${order.id}`,
@@ -1408,6 +1409,8 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
           short_code: order.short_code,
           branch_id: shift.branch_id,
           outlet_id: order.outlet_id,
+          outlet_type: shiftOutlet?.outlet_type || null,
+          outlet_name: shiftOutlet?.name || null,
           shift_id: order.shift_id,
           order_type: order.order_type || 'bar',
           table_number: order.table_number ?? null,
@@ -1886,7 +1889,19 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
     if (isCaptainOrderAutoPrintOutlet(outletType)) {
       try {
         const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
-        
+
+        // Mark printed the moment the attempt is dispatched, not only once
+        // the printer confirms delivery. If the print queue/printer is down
+        // or unreachable, gating this on success would make every KDS/
+        // cashier poll retry the SAME order forever (every 5s, and again on
+        // every login) — a printer outage must not turn into a print-spam
+        // outage too. Staff keep a manual reprint button for genuine misses.
+        supabase
+          .from('pos_shift_orders')
+          .update({ captain_printed_at: new Date().toISOString() })
+          .eq('id', order.id)
+          .then(() => {});
+
         // Print captain order asynchronously (don't block response)
         captainOrderPrintService.printCaptainOrder({
           order_number: order.order_number,
@@ -1910,15 +1925,6 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
         }).then((result) => {
           if (result.success) {
             logger.info(`✅ Captain order ${order.order_number} printed IMMEDIATELY (${outletType} outlet)`);
-
-            // Update captain_printed_at timestamp
-            supabase
-              .from('pos_shift_orders')
-              .update({ captain_printed_at: new Date().toISOString() })
-              .eq('id', order.id)
-              .then(() => {
-                logger.info(`Updated captain_printed_at for order ${order.order_number}`);
-              });
           } else {
             logger.warn(`⚠️ Captain order ${order.order_number} print failed: ${result.error}`);
           }
@@ -2051,6 +2057,16 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
       try {
         const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
 
+        // Mark printed the moment the attempt is dispatched, not only once
+        // the printer confirms delivery — see the matching comment in
+        // recordShiftOrder. A printer outage must not turn into every poll
+        // (and every login) retrying this same recall forever.
+        supabase
+          .from('pos_shift_orders')
+          .update({ captain_printed_at: new Date().toISOString() })
+          .eq('id', data.id)
+          .then(() => {});
+
         // Print ONLY the newly recalled items as a "RECALLED CAPTAIN ORDER"
         // ticket — kitchen/bar staff already have the original ticket for
         // items already prepared, so reprinting those would just be noise
@@ -2079,17 +2095,6 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         }).then((result) => {
           if (result.success) {
             logger.info(`✅ Recalled bill ${data.order_number} printed (${outletType} outlet)`);
-
-            // Update captain_printed_at so KDS/cashier backup polling knows
-            // this recall has already been printed and won't reprint it
-            // (e.g. after the staff member logs out and back in).
-            supabase
-              .from('pos_shift_orders')
-              .update({ captain_printed_at: new Date().toISOString() })
-              .eq('id', data.id)
-              .then(() => {
-                logger.info(`Updated captain_printed_at for recalled order ${data.order_number}`);
-              });
           } else {
             logger.warn(`⚠️ Recalled bill ${data.order_number} print failed: ${result.error}`);
           }

@@ -533,21 +533,26 @@ class _StationTabState extends ConsumerState<_StationTab> {
           continue;
         }
 
+        // Mark as printed immediately to avoid duplicate printing. This is
+        // deliberately NOT rolled back on a print failure below — a stuck
+        // printer must not turn into this same order being retried on every
+        // 5s poll (and again on every login) forever. Staff have a manual
+        // reprint button for genuine misses.
         _printedCaptainOrderIds.add(printKey);
+        final shiftId = order.shiftId;
+        if (shiftId != null && shiftId.isNotEmpty) {
+          ref.read(cashierRepositoryProvider).markBarCaptainOrderPrinted(
+                shiftId: shiftId,
+                orderId: order.id.replaceFirst('pos:', ''),
+              );
+        }
+
         _printBarCaptainOrder(order).then((_) {
           debugPrint(
               '✅ Bar captain order ${order.orderNumber} printed at cashier station');
-          final shiftId = order.shiftId;
-          if (shiftId != null && shiftId.isNotEmpty) {
-            ref.read(cashierRepositoryProvider).markBarCaptainOrderPrinted(
-                  shiftId: shiftId,
-                  orderId: order.id.replaceFirst('pos:', ''),
-                );
-          }
         }).catchError((error) {
           debugPrint(
               '⚠️ Failed to print bar captain order ${order.orderNumber} at cashier station: $error');
-          _printedCaptainOrderIds.remove(printKey);
         });
       }
     } catch (error) {
@@ -603,6 +608,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       waiterName: order.waiterName,
       orderType: order.orderTypeLabel,
       isRecall: order.hasRecalledItems,
+      outletType: order.outletType,
     );
   }
 
@@ -629,6 +635,19 @@ class _StationTabState extends ConsumerState<_StationTab> {
               final txns = _num(shift['transaction_count']).toInt();
               final unpaidCount = unpaidBills.maybeWhen(
                   data: (bills) => bills.length, orElse: () => null);
+              final unpaidTotal = unpaidBills.maybeWhen(
+                data: (bills) => bills.fold<num>(
+                  0,
+                  (sum, bill) =>
+                      sum +
+                      _num(
+                        bill['balance_amount'] ??
+                            bill['balance'] ??
+                            bill['total_amount'],
+                      ),
+                ),
+                orElse: () => null,
+              );
               return Row(
                 children: [
                   Expanded(
@@ -643,7 +662,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   Expanded(
                     child: StatCard(
                       label: 'Unpaid Bills',
-                      value: unpaidCount == null ? '…' : '$unpaidCount',
+                      value: unpaidCount == null || unpaidTotal == null
+                          ? '...'
+                          : '$unpaidCount | ${_money(unpaidTotal)}',
                       icon: Icons.receipt_long,
                       color: AppColors.kWarning,
                     ),

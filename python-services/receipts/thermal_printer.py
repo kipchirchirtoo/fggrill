@@ -150,14 +150,25 @@ class ThermalPrinter:
             
             p = self.printer
             is_recall = receipt_data.get('is_recall', False)
+            outlet_type = str(receipt_data.get('outlet_type') or '').strip().lower()
+
+            # Main Bar / Executive Bar tickets must say so instead of the
+            # generic "CAPTAIN ORDER" / "KITCHEN COPY" — they're handed to
+            # that outlet's own cashier/bar, not the kitchen.
+            if outlet_type == 'main_bar':
+                base_label = 'MAIN BAR ORDER'
+                copy_label = 'BAR COPY'
+            elif outlet_type == 'executive_bar':
+                base_label = 'EXECUTIVE BAR ORDER'
+                copy_label = 'BAR COPY'
+            else:
+                base_label = 'CAPTAIN ORDER'
+                copy_label = 'KITCHEN COPY'
 
             # === HEADER ===
             p.set(align='center', font='a', bold=True, double_height=True)
-            if is_recall:
-                p.text("RECALLED CAPTAIN ORDER\n")
-            else:
-                p.text("CAPTAIN ORDER\n")
-            p.text("KITCHEN COPY\n")
+            p.text(f"RECALLED {base_label}\n" if is_recall else f"{base_label}\n")
+            p.text(f"{copy_label}\n")
 
             p.set(align='center', font='a', bold=False, double_height=False)
             p.text(f"{self.company_name}\n")
@@ -233,12 +244,14 @@ class ThermalPrinter:
 
                 # Already-made items (from before a recall) are underlined so
                 # kitchen staff know to skip them; new/recalled items print
-                # bold and double-width same as a normal new order line.
+                # bold (but normal width — double-width wastes a lot of
+                # paper by wrapping any item name longer than ~16 chars
+                # onto extra lines) so it still stands out clearly.
                 if already_served:
                     p.set(align='left', font='a', bold=False, underline=True, double_width=False)
                     p.text(f"{qty}x {name.upper()} (ALREADY MADE)\n")
                 else:
-                    p.set(align='left', font='a', bold=True, double_width=True)
+                    p.set(align='left', font='a', bold=True, double_width=False)
                     p.text(f"{qty}x {name.upper()}\n")
 
                 # Special instructions (if any)
@@ -247,7 +260,6 @@ class ThermalPrinter:
                     p.text(f"   NOTE: {notes}\n")
 
                 p.set(align='left', font='a', bold=False, underline=False, double_width=False)
-                p.text("\n")
             
             p.text("=" * 32 + "\n")
             p.text("\n")
@@ -263,10 +275,9 @@ class ThermalPrinter:
             # === FOOTER ===
             p.set(align='center', font='a', bold=False)
             p.text("-" * 32 + "\n")
-            p.text("KITCHEN PREPARATION ORDER\n")
-            p.text("DO NOT GIVE TO CUSTOMER\n")
+            p.text(f"{copy_label} - DO NOT GIVE TO CUSTOMER\n")
             p.text("\n")
-            
+
             # Cut paper
             p.cut()
             

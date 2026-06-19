@@ -14,6 +14,18 @@ import '../features/pos/domain/models.dart';
 DateTime _toKenyaTime(DateTime value) =>
     value.toUtc().add(const Duration(hours: 3));
 
+// Main Bar / Executive Bar captain orders must say so on the ticket instead
+// of the generic "KITCHEN ORDER" heading, since they're handed to that
+// outlet's own cashier/bar, not the kitchen.
+String _captainOrderLabel(String? outletType, {required bool isRecall}) {
+  final base = switch (outletType) {
+    'main_bar' => 'MAIN BAR ORDER',
+    'executive_bar' => 'EXECUTIVE BAR ORDER',
+    _ => 'CAPTAIN ORDER',
+  };
+  return isRecall ? 'RECALLED $base' : base;
+}
+
 class PrintService {
   static const double _paperWidthMm = 80;
   static const double _safeMarginMm = 2;
@@ -348,13 +360,16 @@ class PrintService {
     String? waiterName,
     String? orderType,
     bool isRecall = false,
+    String? outletType,
   }) async {
+    final label = _captainOrderLabel(outletType, isRecall: isRecall);
     // Try Python service first (NO DIALOG!)
     try {
       final receiptData = {
-        'receipt_type': isRecall ? 'RECALLED CAPTAIN ORDER' : 'CAPTAIN ORDER',
+        'receipt_type': label,
         'is_captain_order': true,
         'is_recall': isRecall,
+        'outlet_type': outletType,
         'order_number': orderNumber,
         'short_code': shortCode,
         'barcode_value': shortCode ?? orderNumber,
@@ -426,8 +441,7 @@ class PrintService {
               pw.Text(branchName.isEmpty ? companyAddress : branchName,
                   style: const pw.TextStyle(fontSize: 8)),
               pw.SizedBox(height: 4),
-              pw.Text(
-                  isRecall ? '🍳 RECALLED CAPTAIN ORDER 🍳' : '🍳 KITCHEN ORDER 🍳',
+              pw.Text('🍳 $label 🍳',
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 13)),
               pw.SizedBox(height: 4),
@@ -490,11 +504,12 @@ class PrintService {
                 
                 return pw.Container(
                   width: double.infinity,
-                  margin: const pw.EdgeInsets.only(bottom: 6),
-                  padding: const pw.EdgeInsets.all(8),
+                  margin: const pw.EdgeInsets.only(bottom: 3),
+                  padding:
+                      const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                   decoration: pw.BoxDecoration(
-                    border: pw.Border.all(width: 0.8),
-                    borderRadius: pw.BorderRadius.circular(4),
+                    border: pw.Border.all(width: 0.6),
+                    borderRadius: pw.BorderRadius.circular(3),
                   ),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -504,47 +519,47 @@ class PrintService {
                         children: [
                           pw.Container(
                             padding: const pw.EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                                horizontal: 5, vertical: 2),
                             decoration: pw.BoxDecoration(
                               color: PdfColors.black,
-                              borderRadius: pw.BorderRadius.circular(4),
+                              borderRadius: pw.BorderRadius.circular(3),
                             ),
                             child: pw.Text('${item.qty}x',
                                 style: pw.TextStyle(
                                   color: PdfColors.white,
                                   fontWeight: pw.FontWeight.bold,
-                                  fontSize: 14,
+                                  fontSize: 10,
                                 )),
                           ),
-                          pw.SizedBox(width: 8),
+                          pw.SizedBox(width: 5),
                           pw.Expanded(
                             child: pw.Text(itemName,
                                 style: pw.TextStyle(
                                   fontWeight: pw.FontWeight.bold,
-                                  fontSize: 12,
+                                  fontSize: 10,
                                 )),
                           ),
                         ],
                       ),
                       if (itemNotes != null && itemNotes.isNotEmpty)
                         pw.Container(
-                          margin: const pw.EdgeInsets.only(top: 4),
-                          padding: const pw.EdgeInsets.all(4),
+                          margin: const pw.EdgeInsets.only(top: 2),
+                          padding: const pw.EdgeInsets.all(3),
                           decoration: pw.BoxDecoration(
                             color: PdfColors.grey200,
-                            borderRadius: pw.BorderRadius.circular(3),
+                            borderRadius: pw.BorderRadius.circular(2),
                           ),
                           child: pw.Text('⚠ NOTE: $itemNotes',
                               style: pw.TextStyle(
                                 fontWeight: pw.FontWeight.bold,
-                                fontSize: 9,
+                                fontSize: 8,
                               )),
                         ),
                     ],
                   ),
                 );
               }),
-              pw.SizedBox(height: 6),
+              pw.SizedBox(height: 4),
               _dashedLine(context),
               pw.SizedBox(height: 6),
               pw.Container(

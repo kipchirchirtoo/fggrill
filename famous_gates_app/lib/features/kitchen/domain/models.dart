@@ -17,6 +17,7 @@ class KitchenOrder {
   final DateTime? bumpedAt;
   final bool captainOrderAlreadyPrinted;
   final String? shiftId;
+  final String? outletType;
 
   const KitchenOrder({
     required this.id,
@@ -37,6 +38,7 @@ class KitchenOrder {
     this.bumpedAt,
     this.captainOrderAlreadyPrinted = false,
     this.shiftId,
+    this.outletType,
   });
 
   factory KitchenOrder.fromJson(Map<String, dynamic> json) {
@@ -70,6 +72,7 @@ class KitchenOrder {
       bumpedAt: DateTime.tryParse('${json['bumped_at'] ?? ''}'),
       captainOrderAlreadyPrinted: json['captain_order_already_printed'] == true,
       shiftId: _optionalString(json['shift_id']),
+      outletType: _optionalString(json['outlet_type']),
     );
   }
 

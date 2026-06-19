@@ -123,19 +123,21 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           continue;
         }
 
-        // Mark as printed immediately to avoid duplicate printing
+        // Mark as printed immediately to avoid duplicate printing. This is
+        // deliberately NOT rolled back on a print failure below — a stuck
+        // printer must not turn into this same order being retried on every
+        // 5s poll (and again on every login) forever. Staff have a manual
+        // reprint button for genuine misses.
         _printedOrderIds.add(printKey);
+        _repo.markCaptainOrderPrinted(order.id);
 
         // Print captain order asynchronously (BACKUP - primary print at backend)
         _printCaptainOrder(order).then((_) {
           debugPrint(
               '✅ Captain order ${order.orderNumber} printed at KDS (backup)');
-          _repo.markCaptainOrderPrinted(order.id);
         }).catchError((error) {
           debugPrint(
               '⚠️ Failed to print captain order ${order.orderNumber} at KDS: $error');
-          // Remove from printed set on failure so it can be retried
-          _printedOrderIds.remove(printKey);
         });
       }
     } catch (error) {
