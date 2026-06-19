@@ -4412,14 +4412,11 @@ class _BillList extends StatelessWidget {
             ])),
             subtitle: Builder(builder: (context) {
               final customer = _text(row, ['customer_name', 'guest_name']);
-              final isWalkIn =
-                  customer.isEmpty || customer.toLowerCase().contains('walk');
-              final notPaid = _num(row['paid_amount']) <= 0 &&
-                  status.toLowerCase() != 'paid';
-              // Show the waiter only for a walk-in order that hasn't been paid;
-              // the credit bill itself is assigned to a selected staff member.
-              final showWaiter =
-                  row['is_waiter_order'] == true && isWalkIn && notPaid;
+              // Show the waiter on every waiter-placed order regardless of
+              // customer/table name, so any cashier in any outlet can tell
+              // who is holding the bill. Credit bills (no is_waiter_order
+              // flag) are assigned to a staff member instead, not a waiter.
+              final showWaiter = row['is_waiter_order'] == true;
               return Text(
                 [
                   if (_text(row, ['short_code', 'scan_reference']).isNotEmpty)
@@ -4443,6 +4440,8 @@ class _BillList extends StatelessWidget {
                 'Type': _text(row, ['bill_type', 'reference_type']),
                 'Order': _text(row, ['order_number', 'bill_number']),
                 'Short code': _text(row, ['short_code', 'scan_reference']),
+                if (row['is_waiter_order'] == true)
+                  'Waiter': _text(row, ['waiter_name']),
                 'Date': _date(row['bill_date'] ?? row['created_at']),
                 'Total': _money(row['total_amount'] ?? row['amount']),
                 'Paid': _money(row['paid_amount'] ?? row['amount_paid']),

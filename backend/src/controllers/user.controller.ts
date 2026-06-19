@@ -27,6 +27,22 @@ export const getUsers = async (
 
     if (error) throw error;
 
+    const userIds = (data || []).map((user: any) => user.id).filter(Boolean);
+    const { data: staffProfiles, error: staffError } = userIds.length
+      ? await supabase
+          .from('staff_profiles')
+          .select(
+            'id, user_id, first_name, last_name, email, phone, phone_number, employee_number, employee_id, department, role, position, branch_id'
+          )
+          .in('user_id', userIds)
+      : { data: [], error: null };
+
+    if (staffError) throw staffError;
+
+    const staffByUserId = new Map(
+      (staffProfiles || []).map((profile: any) => [profile.user_id, profile])
+    );
+
     // Transform the data to include branch_name for frontend compatibility
     const transformedData = data?.map(user => {
       let profile_photo_url = null;
@@ -37,11 +53,18 @@ export const getUsers = async (
         profile_photo_url = publicUrl;
       }
 
+      const linkedStaff = staffByUserId.get(user.id) || null;
+
       return {
         ...user,
         branch_name: user.branch?.name || null,
         branch_code: user.branch?.code || null,
-        profile_photo_url
+        profile_photo_url,
+        staff_profile_id: linkedStaff?.id || null,
+        staff_profile: linkedStaff,
+        linked_staff_name: linkedStaff
+          ? `${linkedStaff.first_name || ''} ${linkedStaff.last_name || ''}`.trim()
+          : null
       };
     });
 
@@ -280,6 +303,54 @@ export const updateUser = async (
 ): Promise<void> => {
   try {
     const { password, ...fields } = req.body;
+    const hasStaffProfileField =
+      Object.prototype.hasOwnProperty.call(fields, 'staff_profile_id') ||
+      Object.prototype.hasOwnProperty.call(fields, 'staffProfileId');
+    const requestedStaffProfileId =
+      fields.staff_profile_id ?? fields.staffProfileId ?? null;
+
+    const { data: existingUser, error: existingUserError } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('id', req.params.id)
+      .single();
+
+    if (existingUserError || !existingUser) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+      return;
+    }
+
+    let selectedStaffProfile: any = null;
+    if (hasStaffProfileField && requestedStaffProfileId) {
+      const { data: staffProfile, error: staffProfileError } = await supabase
+        .from('staff_profiles')
+        .select(
+          'id, user_id, first_name, last_name, email, phone, phone_number, employee_number, employee_id, department, role, position, branch_id'
+        )
+        .eq('id', requestedStaffProfileId)
+        .single();
+
+      if (staffProfileError || !staffProfile) {
+        res.status(404).json({
+          success: false,
+          message: 'Staff profile not found'
+        });
+        return;
+      }
+
+      if (staffProfile.user_id && staffProfile.user_id !== req.params.id) {
+        res.status(409).json({
+          success: false,
+          message: 'This staff profile is already linked to another user account'
+        });
+        return;
+      }
+
+      selectedStaffProfile = staffProfile;
+    }
 
     // Explicitly map fields to snake_case for Supabase
     const userFields: Record<string, any> = {
@@ -312,6 +383,46 @@ export const updateUser = async (
 
     if (error) throw error;
 
+    const profileEmail = data?.email || userFields.email || existingUser.email || null;
+
+    if (hasStaffProfileField) {
+      const { error: unlinkError } = await supabase
+        .from('staff_profiles')
+        .update({ user_id: null })
+        .eq('user_id', req.params.id)
+        .neq('id', requestedStaffProfileId || '');
+
+      if (unlinkError) throw unlinkError;
+
+      if (requestedStaffProfileId) {
+        const staffUpdate: Record<string, any> = {
+          user_id: req.params.id
+        };
+        if (profileEmail) {
+          staffUpdate.email = profileEmail;
+        }
+
+        const { error: linkError } = await supabase
+          .from('staff_profiles')
+          .update(staffUpdate)
+          .eq('id', requestedStaffProfileId);
+
+        if (linkError) throw linkError;
+      } else {
+        const { error: clearLinkError } = await supabase
+          .from('staff_profiles')
+          .update({ user_id: null })
+          .eq('user_id', req.params.id);
+
+        if (clearLinkError) throw clearLinkError;
+      }
+    } else if (profileEmail && profileEmail !== existingUser.email) {
+      await supabase
+        .from('staff_profiles')
+        .update({ email: profileEmail })
+        .eq('user_id', req.params.id);
+    }
+
     // Update password in local database fallback and Supabase Auth if provided
     if (password) {
       // 1. Update hash in users table
@@ -336,7 +447,11 @@ export const updateUser = async (
 
     res.status(200).json({
       success: true,
-      data
+      data: {
+        ...data,
+        staff_profile_id: requestedStaffProfileId,
+        staff_profile: selectedStaffProfile
+      }
     });
   } catch (error) {
     next(error);
