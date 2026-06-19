@@ -750,7 +750,7 @@ const seedOutletItemsFromExistingMenus = async (
   if (outletType === 'restaurant') {
     let query = supabase
       .from('restaurant_menu_items')
-      .select('id, name, selling_price, category_id, category:restaurant_menu_categories(id, name), is_available, branch_id')
+      .select('id, name, price, category_id, category:restaurant_menu_categories(id, name), is_available, branch_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
@@ -765,7 +765,7 @@ const seedOutletItemsFromExistingMenus = async (
       category: categoryText(item.category) || 'Restaurant',
       unit: 'each',
       cost_price: 0,
-      selling_price: item.selling_price || 0,
+      selling_price: item.price || 0,
       opening_stock: 0,
       current_stock: 0,
       track_stock: true,
@@ -912,6 +912,20 @@ const seedOutletItemsFromExistingMenus = async (
     .from('pos_outlet_items')
     .upsert(sourceRows, { onConflict: 'outlet_id,sku' });
   if (upsertError) throw upsertError;
+
+  // Deactivate snapshot rows whose source item no longer exists (deleted/renamed
+  // upstream) so removed menu items stop showing up as orderable in POS.
+  const sourceTable = sourceRows[0]?.source_table;
+  const currentSkus = sourceRows.map((row) => row.sku);
+  if (sourceTable && currentSkus.length) {
+    await supabase
+      .from('pos_outlet_items')
+      .update({ is_active: false })
+      .eq('outlet_id', outlet.id)
+      .eq('source_table', sourceTable)
+      .eq('is_active', true)
+      .not('sku', 'in', `(${currentSkus.map((sku) => `"${sku}"`).join(',')})`);
+  }
 
   const { data, error } = await supabase
     .from('pos_outlet_items')
