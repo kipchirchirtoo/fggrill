@@ -106,6 +106,21 @@ class KitchenOrder {
 
   Duration get elapsed => DateTime.now().difference(createdAt);
   bool get isUrgent => elapsed.inMinutes > 15;
+  List<KitchenOrderItem> get recalledItems =>
+      items.where((item) => item.isRecalledItem).toList();
+  bool get hasRecalledItems => recalledItems.isNotEmpty;
+
+  String get kdsPrintKey {
+    final batches = recalledItems
+        .map((item) => item.recallBatchId ?? item.recalledAt?.toIso8601String())
+        .whereType<String>()
+        .where((value) => value.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    if (batches.isEmpty) return id;
+    return '$id:recall:${batches.join('|')}';
+  }
 
   static String? _optionalString(dynamic value) {
     if (value == null) return null;
@@ -131,14 +146,24 @@ class KitchenOrderItem {
   final String name;
   final int quantity;
   final String? notes;
+  final double unitPrice;
   final bool isReady;
+  final bool isRecalledItem;
+  final String? recallBatchId;
+  final DateTime? recalledAt;
+  final String? recallNote;
 
   const KitchenOrderItem({
     required this.id,
     required this.name,
     this.quantity = 1,
     this.notes,
+    this.unitPrice = 0,
     this.isReady = false,
+    this.isRecalledItem = false,
+    this.recallBatchId,
+    this.recalledAt,
+    this.recallNote,
   });
 
   factory KitchenOrderItem.fromJson(Map<String, dynamic> json) {
@@ -147,8 +172,16 @@ class KitchenOrderItem {
       name:
           '${json['name'] ?? json['item_name'] ?? json['menu_item_name'] ?? ''}',
       quantity: KitchenOrder._intValue(json['quantity'] ?? json['qty']) ?? 1,
+      unitPrice: KitchenOrder._doubleValue(json['unit_price'] ?? json['price']),
       notes: KitchenOrder._optionalString(
           json['notes'] ?? json['special_instructions']),
+      isRecalledItem:
+          json['is_recalled_item'] == true || json['isRecalledItem'] == true,
+      recallBatchId: KitchenOrder._optionalString(
+          json['recall_batch_id'] ?? json['recallBatchId']),
+      recalledAt: DateTime.tryParse('${json['recalled_at'] ?? ''}'),
+      recallNote: KitchenOrder._optionalString(
+          json['recall_note'] ?? json['recallNote']),
       isReady: json['is_ready'] == true ||
           json['isReady'] == true ||
           '${json['status'] ?? ''}'.toLowerCase() == 'ready',

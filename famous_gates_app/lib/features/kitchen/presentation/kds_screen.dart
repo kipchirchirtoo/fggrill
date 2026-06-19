@@ -92,8 +92,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   void _autoPrintNewCaptainOrders(List<KitchenOrder> orders) {
     try {
       for (final order in orders) {
-        // Skip if already printed (by this KDS instance)
-        if (_printedOrderIds.contains(order.id)) {
+        final printKey = order.kdsPrintKey;
+
+        // Skip if this order or recalled batch was already printed by this KDS.
+        if (_printedOrderIds.contains(printKey)) {
           continue;
         }
 
@@ -109,16 +111,17 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         }
 
         // Mark as printed immediately to avoid duplicate printing
-        _printedOrderIds.add(order.id);
+        _printedOrderIds.add(printKey);
 
         // Print captain order asynchronously (BACKUP - primary print at backend)
         _printCaptainOrder(order).then((_) {
-          debugPrint('✅ Captain order ${order.orderNumber} printed at KDS (backup)');
+          debugPrint(
+              '✅ Captain order ${order.orderNumber} printed at KDS (backup)');
         }).catchError((error) {
           debugPrint(
               '⚠️ Failed to print captain order ${order.orderNumber} at KDS: $error');
           // Remove from printed set on failure so it can be retried
-          _printedOrderIds.remove(order.id);
+          _printedOrderIds.remove(printKey);
         });
       }
     } catch (error) {
@@ -129,21 +132,25 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   /// Print a captain order receipt for the kitchen
   Future<void> _printCaptainOrder(KitchenOrder order) async {
     final printService = PrintService();
+    final printItems =
+        order.hasRecalledItems ? order.recalledItems : order.items;
+    final printTotal = printItems.fold<double>(
+      0,
+      (sum, item) => sum + (item.unitPrice * item.quantity),
+    );
+    final effectiveTotal = printTotal > 0 ? printTotal : order.total;
 
     // Convert kitchen order items to cart items for printing
-    final cartItems = order.items.map((item) {
-      // Calculate estimated price based on total order amount divided by total quantity
-      final totalQuantity =
-          order.items.fold<int>(0, (sum, i) => sum + i.quantity);
-      final estimatedPrice =
-          totalQuantity > 0 ? order.total / totalQuantity : 0.0;
-
+    final cartItems = printItems.map((item) {
       return CartItem(
         productId: item.id,
-        name: item.notes != null && item.notes!.trim().isNotEmpty
-            ? '${item.name} [${item.notes}]'
-            : item.name,
-        unitPrice: estimatedPrice,
+        name: [
+          if (item.isRecalledItem) 'RECALLED',
+          item.name,
+          if (item.notes != null && item.notes!.trim().isNotEmpty)
+            '[${item.notes}]',
+        ].join(' '),
+        unitPrice: item.unitPrice,
         qty: item.quantity,
       );
     }).toList();
@@ -152,7 +159,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     final saleResult = SaleResult(
       transactionId: order.id,
       receiptNumber: order.shortCode ?? order.orderNumber,
-      total: order.total,
+      total: effectiveTotal,
       paymentMethod: 'PENDING', // Captain orders are not yet paid
       cashierName: order.waiterName ?? 'Waiter',
       createdAt: order.createdAt,
@@ -162,7 +169,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       sale: saleResult,
       items: cartItems,
       branchName: 'FamousGate Hotels',
-      orderNumber: order.orderNumber,
+      orderNumber: order.hasRecalledItems
+          ? '${order.orderNumber} RECALL'
+          : order.orderNumber,
       shortCode: order.shortCode,
       tableNumber: order.tableNumber?.toString(),
       roomNumber: order.roomNumber,
@@ -768,19 +777,22 @@ class _OrderTicket extends StatelessWidget {
     final status = order.status.toLowerCase();
     final urgent = order.isUrgent;
     final isStopTicket = order.hasPendingVoidRequest || order.isVoided;
+    final hasRecalledTicket = order.hasRecalledItems;
     final stopLabel = order.isVoided ? 'VOID' : 'VOID REQUESTED';
     final stopMessage = order.isVoided
         ? 'VOIDED - do not prepare. Acknowledge after kitchen has seen it.'
         : 'VOID REQUESTED - stop preparation until approval is complete.';
     final color = order.isVoided
         ? AppColors.kError
-        : status == 'ready'
-            ? AppColors.kSuccess
-            : status == 'preparing'
-                ? Colors.blue
-                : urgent
-                    ? AppColors.kError
-                    : AppColors.kWarning;
+        : hasRecalledTicket
+            ? Colors.deepOrange
+            : status == 'ready'
+                ? AppColors.kSuccess
+                : status == 'preparing'
+                    ? Colors.blue
+                    : urgent
+                        ? AppColors.kError
+                        : AppColors.kWarning;
     final itemCount =
         order.items.fold<int>(0, (sum, item) => sum + item.quantity);
     return Card(
@@ -852,6 +864,26 @@ class _OrderTicket extends StatelessWidget {
                               stopLabel,
                               style: const TextStyle(
                                 color: AppColors.kError,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (hasRecalledTicket) ...[
+                          if (_isNew || isStopTicket) const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'RECALL',
+                              style: TextStyle(
+                                color: Colors.deepOrange,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 12,
                                 letterSpacing: 1,
@@ -999,6 +1031,11 @@ class _OrderTicket extends StatelessWidget {
                     if (order.isCaptainOrder)
                       const _MetaPill(
                           label: 'Captain', icon: Icons.point_of_sale),
+                    if (hasRecalledTicket)
+                      const _MetaPill(
+                        label: 'Recalled items',
+                        icon: Icons.replay_outlined,
+                      ),
                     if (order.paymentStatus != null &&
                         order.paymentStatus!.isNotEmpty)
                       _MetaPill(
@@ -1026,17 +1063,22 @@ class _OrderTicket extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final item = order.items[index];
+                final isRecalledItem = item.isRecalledItem;
                 return Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isStopTicket
                         ? AppColors.kError.withValues(alpha: 0.04)
-                        : AppColors.kSurface,
+                        : isRecalledItem
+                            ? Colors.deepOrange.withValues(alpha: 0.08)
+                            : AppColors.kSurface,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isStopTicket
                           ? AppColors.kError.withValues(alpha: 0.24)
-                          : AppColors.kDivider,
+                          : isRecalledItem
+                              ? Colors.deepOrange.withValues(alpha: 0.35)
+                              : AppColors.kDivider,
                     ),
                   ),
                   child: Row(
@@ -1047,7 +1089,9 @@ class _OrderTicket extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.kPrimary,
+                          color: isRecalledItem
+                              ? Colors.deepOrange
+                              : AppColors.kPrimary,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -1075,6 +1119,19 @@ class _OrderTicket extends StatelessWidget {
                                   decorationColor: AppColors.kError,
                                   decorationThickness: 2.5,
                                 )),
+                            if (isRecalledItem)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 3),
+                                child: Text(
+                                  'RECALLED ITEM',
+                                  style: TextStyle(
+                                    color: Colors.deepOrange,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                              ),
                             if (item.notes != null && item.notes!.isNotEmpty)
                               Text(
                                 'Note: ${item.notes}',

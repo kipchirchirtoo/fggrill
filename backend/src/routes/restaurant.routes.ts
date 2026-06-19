@@ -72,8 +72,11 @@ const resolveKitchenBranchId = (req: express.Request): number | undefined => {
   return undefined;
 };
 
-const posItemKey = (item: any, index: number): string =>
-  String(item?.outlet_item_id || item?.id || item?.menu_item_id || item?.sku || item?.name || index);
+const posItemKey = (item: any, index: number): string => {
+  const base = String(item?.outlet_item_id || item?.id || item?.menu_item_id || item?.sku || item?.name || 'item');
+  const recallBatch = item?.recall_batch_id ? `:${item.recall_batch_id}` : '';
+  return `${base}${recallBatch}:${index}`;
+};
 
 const posOrderType = (order: any): string => {
   const explicit = String(order?.order_type || '').trim().toLowerCase();
@@ -399,6 +402,10 @@ router.get('/kitchen/orders',
                 quantity: Number(item.quantity || item.qty || 1),
                 unit_price: Number(item.unit_price || item.price || 0),
                 notes: item.notes,
+                is_recalled_item: item.is_recalled_item === true,
+                recall_batch_id: item.recall_batch_id || null,
+                recalled_at: item.recalled_at || null,
+                recall_note: item.recall_note || null,
                 status: itemStatus,
                 is_ready: itemStatus === 'ready'
               };
@@ -553,6 +560,10 @@ router.get('/kitchen/orders/history',
                   quantity: Number(item.quantity || item.qty || 1),
                   unit_price: Number(item.unit_price || item.price || 0),
                   notes: item.notes,
+                  is_recalled_item: item.is_recalled_item === true,
+                  recall_batch_id: item.recall_batch_id || null,
+                  recalled_at: item.recalled_at || null,
+                  recall_note: item.recall_note || null,
                   status: itemStatus,
                   is_ready: itemStatus === 'ready'
                 };
