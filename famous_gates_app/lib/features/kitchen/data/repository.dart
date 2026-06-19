@@ -84,6 +84,19 @@ class KitchenRepository {
     await _dio.put('/restaurant/kitchen/orders/$orderId/items/$itemId/ready');
   }
 
+  /// Reports that this KDS screen successfully printed [orderId]'s current
+  /// state (creation or latest recall), so the server-side dedup flag is
+  /// set even if the backend's own auto-print attempt failed. Without this,
+  /// "already printed" state only ever lived in this screen's memory and
+  /// was lost every time the screen remounted (e.g. after logging out).
+  Future<void> markCaptainOrderPrinted(String orderId) async {
+    try {
+      await _dio.put('/restaurant/kitchen/orders/$orderId/printed');
+    } catch (e) {
+      debugPrint('KitchenRepository.markCaptainOrderPrinted error: $e');
+    }
+  }
+
   Future<void> updateOrderStatus(String orderId, String status) async {
     if (orderId.startsWith('pos:')) {
       // Captain orders stay unpaid/partial until cashier clearance, but the

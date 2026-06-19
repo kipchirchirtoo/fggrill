@@ -48,6 +48,24 @@ const normalizeKitchenStatus = (value: any): string => {
 const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
 const KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS = 36;
 
+// True once captain_printed_at covers the order's current state: for a
+// recalled order that means printed at/after the latest recall, not just
+// printed at some point in the past. KDS auto-print uses this to skip
+// reprinting an order it's already ticketed, instead of relying on
+// in-memory dedup that's lost whenever the screen remounts (e.g. logout).
+const isCaptainOrderAlreadyPrinted = (order: any, items: Array<Record<string, any>>): boolean => {
+  if (!order?.captain_printed_at) return false;
+  const printedAt = new Date(order.captain_printed_at).getTime();
+  if (!Number.isFinite(printedAt)) return false;
+  const latestRecalledAt = items
+    .filter((item) => item?.is_recalled_item)
+    .map((item) => new Date(item?.recalled_at || 0).getTime())
+    .filter((time) => Number.isFinite(time))
+    .reduce((max, time) => Math.max(max, time), 0);
+  if (!latestRecalledAt) return true;
+  return printedAt >= latestRecalledAt;
+};
+
 const isKitchenVisiblePosOrder = (order: any): boolean => {
   const orderStatus = String(order?.status || '').toLowerCase();
   const paymentStatus = String(order?.payment_status || '').toLowerCase();
@@ -318,6 +336,7 @@ router.get('/kitchen/orders',
           elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
           items_count: items.length,
           total: order.total_amount,
+          captain_order_already_printed: isCaptainOrderAlreadyPrinted(order, items),
           items: items.map((item: any) => ({
             id: item.id,
             name: item.item_name || `Item #${item.menu_item_id}`,
@@ -394,6 +413,7 @@ router.get('/kitchen/orders',
               items_count: orderItems.length,
               total: order.total_amount,
               total_amount: order.total_amount,
+              captain_order_already_printed: isCaptainOrderAlreadyPrinted(order, orderItems),
               items: orderItems.map((item: any, index: number) => {
                 const itemStatus = normalizeKitchenStatus(item.kitchen_status || item.status || order.kitchen_status);
                 return {
@@ -618,6 +638,39 @@ router.put('/kitchen/orders/:orderId/status',
 
       if (error) throw error;
       return res.json({ success: true, data: updatedOrder });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Kitchen Display - report a successful client-side backup print, so this
+// order's current state (creation or latest recall) is marked printed and
+// won't be reprinted on the next poll or after the KDS screen remounts
+// (e.g. the operator logging out and back in).
+router.put('/kitchen/orders/:orderId/printed',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
+  async (req, res, next) => {
+    try {
+      const { orderId } = req.params;
+      const printedAt = new Date().toISOString();
+
+      if (orderId.startsWith('pos:')) {
+        const realId = orderId.replace(/^pos:/, '');
+        const { error } = await supabase
+          .from('pos_shift_orders')
+          .update({ captain_printed_at: printedAt })
+          .eq('id', realId);
+        if (error) throw error;
+        return res.json({ success: true });
+      }
+
+      const { error } = await supabase
+        .from('restaurant_orders')
+        .update({ captain_printed_at: printedAt })
+        .eq('id', orderId);
+      if (error) throw error;
+      return res.json({ success: true });
     } catch (error) {
       next(error);
     }

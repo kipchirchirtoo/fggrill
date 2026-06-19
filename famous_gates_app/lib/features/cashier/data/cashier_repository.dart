@@ -41,6 +41,24 @@ class CashierRepository {
   Future<List<Map<String, dynamic>>> getBarCaptainOrders() =>
       _getList('/pos/captain-orders');
 
+  /// Reports that this cashier station successfully printed a bar captain
+  /// order's current state, so the server-side dedup flag is set even if
+  /// the backend's own auto-print attempt failed — and survives this
+  /// screen logging out/back in, unlike the in-memory dedup set alone.
+  Future<void> markBarCaptainOrderPrinted({
+    required String shiftId,
+    required String orderId,
+  }) async {
+    try {
+      await _patchMap(
+          '/pos/shifts/${Uri.encodeComponent(shiftId)}/orders/${Uri.encodeComponent(orderId)}/captain-printed',
+          {});
+    } catch (_) {
+      // Best-effort — a failed report just means the next poll may
+      // reprint; it should never block or surface an error to the cashier.
+    }
+  }
+
   Future<Map<String, dynamic>> getBillDetails(String id) =>
       _getMap('/cashier/bill/${Uri.encodeComponent(id)}');
 

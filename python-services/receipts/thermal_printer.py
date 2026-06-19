@@ -154,7 +154,7 @@ class ThermalPrinter:
             # === HEADER ===
             p.set(align='center', font='a', bold=True, double_height=True)
             if is_recall:
-                p.text("RECALLED BILL\n")
+                p.text("RECALLED CAPTAIN ORDER\n")
             else:
                 p.text("CAPTAIN ORDER\n")
             p.text("KITCHEN COPY\n")
@@ -220,7 +220,7 @@ class ThermalPrinter:
             
             # === ITEMS (LARGE AND CLEAR FOR KITCHEN) ===
             p.set(align='left', font='a', bold=True)
-            p.text("ITEMS TO PREPARE:\n")
+            p.text("RECALLED ITEMS TO PREPARE:\n" if is_recall else "ITEMS TO PREPARE:\n")
             p.text("-" * 32 + "\n")
             
             items = receipt_data.get('items', [])

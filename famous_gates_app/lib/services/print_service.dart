@@ -347,12 +347,14 @@ class PrintService {
     String? customerName,
     String? waiterName,
     String? orderType,
+    bool isRecall = false,
   }) async {
     // Try Python service first (NO DIALOG!)
     try {
       final receiptData = {
-        'receipt_type': 'CAPTAIN ORDER',
+        'receipt_type': isRecall ? 'RECALLED CAPTAIN ORDER' : 'CAPTAIN ORDER',
         'is_captain_order': true,
+        'is_recall': isRecall,
         'order_number': orderNumber,
         'short_code': shortCode,
         'barcode_value': shortCode ?? orderNumber,
@@ -424,7 +426,8 @@ class PrintService {
               pw.Text(branchName.isEmpty ? companyAddress : branchName,
                   style: const pw.TextStyle(fontSize: 8)),
               pw.SizedBox(height: 4),
-              pw.Text('🍳 KITCHEN ORDER 🍳',
+              pw.Text(
+                  isRecall ? '🍳 RECALLED CAPTAIN ORDER 🍳' : '🍳 KITCHEN ORDER 🍳',
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 13)),
               pw.SizedBox(height: 4),
@@ -471,7 +474,8 @@ class PrintService {
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(width: 0.8),
                 ),
-                child: pw.Text('ITEMS TO PREPARE',
+                child: pw.Text(
+                    isRecall ? 'RECALLED ITEMS TO PREPARE' : 'ITEMS TO PREPARE',
                     textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold, fontSize: 9)),

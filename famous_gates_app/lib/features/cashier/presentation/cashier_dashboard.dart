@@ -514,6 +514,16 @@ class _StationTabState extends ConsumerState<_StationTab> {
       for (final order in orders) {
         final printKey = order.kdsPrintKey;
         if (_printedCaptainOrderIds.contains(printKey)) continue;
+
+        // Skip if the server already has this order's current state marked
+        // printed (by the backend's own attempt, or another cashier/KDS
+        // screen). This is what actually survives a logout/login — the
+        // in-memory set above only protects this one screen instance.
+        if (order.captainOrderAlreadyPrinted) {
+          _printedCaptainOrderIds.add(printKey);
+          continue;
+        }
+
         if (order.isVoided || order.hasPendingVoidRequest) continue;
 
         final status = order.status.toLowerCase();
@@ -527,6 +537,13 @@ class _StationTabState extends ConsumerState<_StationTab> {
         _printBarCaptainOrder(order).then((_) {
           debugPrint(
               '✅ Bar captain order ${order.orderNumber} printed at cashier station');
+          final shiftId = order.shiftId;
+          if (shiftId != null && shiftId.isNotEmpty) {
+            ref.read(cashierRepositoryProvider).markBarCaptainOrderPrinted(
+                  shiftId: shiftId,
+                  orderId: order.id.replaceFirst('pos:', ''),
+                );
+          }
         }).catchError((error) {
           debugPrint(
               '⚠️ Failed to print bar captain order ${order.orderNumber} at cashier station: $error');
@@ -548,11 +565,12 @@ class _StationTabState extends ConsumerState<_StationTab> {
     );
     final effectiveTotal = printTotal > 0 ? printTotal : order.total;
 
+    // The document header already says "RECALLED CAPTAIN ORDER" when
+    // isRecall is true, so there's no need to also prefix every line.
     final cartItems = printItems.map((item) {
       return CartItem(
         productId: item.id,
         name: [
-          if (item.isRecalledItem) 'RECALLED',
           item.name,
           if (item.notes != null && item.notes!.trim().isNotEmpty)
             '[${item.notes}]',
@@ -584,6 +602,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       customerName: order.customerName,
       waiterName: order.waiterName,
       orderType: order.orderTypeLabel,
+      isRecall: order.hasRecalledItems,
     );
   }
 

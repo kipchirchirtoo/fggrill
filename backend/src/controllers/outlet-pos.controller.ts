@@ -1337,6 +1337,25 @@ const captainOrderItemKey = (item: any, index: number): string => {
 const captainOrderActiveStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
 const CAPTAIN_ORDER_FEED_LOOKBACK_HOURS = 36;
 
+// True once captain_printed_at covers the order's current state: for a
+// recalled order that means printed at/after the latest recall, not just
+// printed at some point in the past (an older creation-time print doesn't
+// count for a newer recall). KDS/cashier backup polling uses this to skip
+// reprinting an order that's already been ticketed, instead of relying on
+// in-memory dedup that's lost whenever the screen remounts (e.g. logout).
+const isCaptainOrderAlreadyPrinted = (order: any, items: Array<Record<string, any>>): boolean => {
+  if (!order?.captain_printed_at) return false;
+  const printedAt = new Date(order.captain_printed_at).getTime();
+  if (!Number.isFinite(printedAt)) return false;
+  const latestRecalledAt = items
+    .filter((item) => item?.is_recalled_item)
+    .map((item) => new Date(item?.recalled_at || 0).getTime())
+    .filter((time) => Number.isFinite(time))
+    .reduce((max, time) => Math.max(max, time), 0);
+  if (!latestRecalledAt) return true;
+  return printedAt >= latestRecalledAt;
+};
+
 // Feeds Main Bar / Executive Bar captain orders (new + recalled) to the
 // Cashier station module, mirroring the restaurant KDS feed at
 // GET /restaurant/kitchen/orders so the cashier can auto-print a copy
@@ -1407,6 +1426,7 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
           items_count: orderItems.length,
           total: order.total_amount,
           total_amount: order.total_amount,
+          captain_order_already_printed: isCaptainOrderAlreadyPrinted(order, orderItems),
           items: orderItems.map((item: any, index: number) => {
             const itemStatus = captainOrderNormalizeStatus(item.kitchen_status || item.status || order.kitchen_status);
             return {
@@ -1935,6 +1955,29 @@ export const getShiftOrder = async (req: Request, res: Response, next: NextFunct
   }
 };
 
+// Lets a backup printer (cashier-station bar feed, KDS) report that it has
+// already printed an order's current state, so captain_printed_at is set
+// even when the backend's own auto-print attempt failed but the client's
+// succeeded. Without this, the only path that ever marks an order "printed"
+// is the backend's own immediate attempt at creation/recall.
+export const markCaptainOrderPrinted = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
+    const { error } = await supabase
+      .from('pos_shift_orders')
+      .update({ captain_printed_at: new Date().toISOString() })
+      .eq('id', orderId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
@@ -2008,10 +2051,11 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
       try {
         const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
 
-        // Print the FULL ticket (original + newly recalled items), not just the
-        // new lines, so kitchen sees the whole order as it stands. Items already
-        // prepared before this recall are flagged already_served so the printer
-        // (and the KDS screen) mark them as done instead of re-cooking them.
+        // Print ONLY the newly recalled items as a "RECALLED CAPTAIN ORDER"
+        // ticket — kitchen/bar staff already have the original ticket for
+        // items already prepared, so reprinting those would just be noise
+        // (and risk re-cooking something already made).
+        const recallTotal = normalizedItems.reduce((sum, item: any) => sum + numberValue(item.line_total), 0);
         captainOrderPrintService.printCaptainOrder({
           order_number: data.order_number,
           short_code: data.short_code,
@@ -2019,15 +2063,14 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
           table_number: data.table_number,
           room_number: data.room_number,
           order_type: data.order_type || 'dine_in',
-          items: nextItems.map((item: any) => ({
+          items: normalizedItems.map((item: any) => ({
             name: item.name,
             quantity: item.quantity,
             unit_price: item.unit_price,
             line_total: item.line_total,
-            notes: item.notes || item.special_instructions || (item.is_recalled_item ? item.recall_note : undefined),
-            already_served: !item.is_recalled_item
+            notes: item.notes || item.special_instructions || item.recall_note
           })),
-          total_amount: totalAmount,
+          total_amount: recallTotal,
           waiter_name: data.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
           outlet_name: outlet?.name || 'Restaurant',
           outlet_type: outlet?.outlet_type,
@@ -2036,6 +2079,17 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         }).then((result) => {
           if (result.success) {
             logger.info(`✅ Recalled bill ${data.order_number} printed (${outletType} outlet)`);
+
+            // Update captain_printed_at so KDS/cashier backup polling knows
+            // this recall has already been printed and won't reprint it
+            // (e.g. after the staff member logs out and back in).
+            supabase
+              .from('pos_shift_orders')
+              .update({ captain_printed_at: new Date().toISOString() })
+              .eq('id', data.id)
+              .then(() => {
+                logger.info(`Updated captain_printed_at for recalled order ${data.order_number}`);
+              });
           } else {
             logger.warn(`⚠️ Recalled bill ${data.order_number} print failed: ${result.error}`);
           }

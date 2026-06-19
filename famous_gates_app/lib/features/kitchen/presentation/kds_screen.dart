@@ -99,6 +99,16 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           continue;
         }
 
+        // Skip if the server already has this order's current state marked
+        // printed (by the backend's own attempt, or by another KDS/cashier
+        // screen). This is what actually survives a logout/login — the
+        // in-memory _printedOrderIds set above only protects this one
+        // screen instance for as long as it stays mounted.
+        if (order.captainOrderAlreadyPrinted) {
+          _printedOrderIds.add(printKey);
+          continue;
+        }
+
         // Skip if order is voided or has void request (don't print cancelled orders)
         if (order.isVoided || order.hasPendingVoidRequest) {
           continue;
@@ -120,6 +130,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         _printCaptainOrder(order).then((_) {
           debugPrint(
               '✅ Captain order ${order.orderNumber} printed at KDS (backup)');
+          _repo.markCaptainOrderPrinted(order.id);
         }).catchError((error) {
           debugPrint(
               '⚠️ Failed to print captain order ${order.orderNumber} at KDS: $error');
@@ -143,12 +154,13 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     );
     final effectiveTotal = printTotal > 0 ? printTotal : order.total;
 
-    // Convert kitchen order items to cart items for printing
+    // Convert kitchen order items to cart items for printing. The document
+    // header already says "RECALLED CAPTAIN ORDER" when isRecall is true, so
+    // there's no need to also prefix every single line with "RECALLED".
     final cartItems = printItems.map((item) {
       return CartItem(
         productId: item.id,
         name: [
-          if (item.isRecalledItem) 'RECALLED',
           item.name,
           if (item.notes != null && item.notes!.trim().isNotEmpty)
             '[${item.notes}]',
@@ -181,6 +193,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       customerName: order.customerName,
       waiterName: order.waiterName,
       orderType: order.orderTypeLabel,
+      isRecall: order.hasRecalledItems,
     );
   }
 

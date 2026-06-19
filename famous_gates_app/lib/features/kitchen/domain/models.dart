@@ -15,6 +15,8 @@ class KitchenOrder {
   final List<KitchenOrderItem> items;
   final DateTime createdAt;
   final DateTime? bumpedAt;
+  final bool captainOrderAlreadyPrinted;
+  final String? shiftId;
 
   const KitchenOrder({
     required this.id,
@@ -33,6 +35,8 @@ class KitchenOrder {
     this.items = const [],
     required this.createdAt,
     this.bumpedAt,
+    this.captainOrderAlreadyPrinted = false,
+    this.shiftId,
   });
 
   factory KitchenOrder.fromJson(Map<String, dynamic> json) {
@@ -64,6 +68,8 @@ class KitchenOrder {
           DateTime.tryParse('${json['created_at'] ?? json['createdAt']}') ??
               DateTime.now(),
       bumpedAt: DateTime.tryParse('${json['bumped_at'] ?? ''}'),
+      captainOrderAlreadyPrinted: json['captain_order_already_printed'] == true,
+      shiftId: _optionalString(json['shift_id']),
     );
   }
 

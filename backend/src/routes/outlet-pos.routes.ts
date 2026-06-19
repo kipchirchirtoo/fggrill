@@ -16,6 +16,7 @@ import {
   getShiftOrders,
   getShiftSummary,
   getStockCount,
+  markCaptainOrderPrinted,
   mergeShiftOrders,
   openShift,
   payShiftOrder,
@@ -97,6 +98,7 @@ router.post('/shifts/:shiftId/orders', recordShiftOrder);
 router.post('/shifts/:shiftId/orders/merge', mergeShiftOrders);
 router.get('/shifts/:shiftId/orders/:orderId', getShiftOrder);
 router.patch('/shifts/:shiftId/orders/:orderId', updateShiftOrder);
+router.patch('/shifts/:shiftId/orders/:orderId/captain-printed', markCaptainOrderPrinted);
 router.post('/shifts/:shiftId/orders/:orderId/split', splitShiftOrder);
 router.post('/shifts/:shiftId/orders/:orderId/void-request', requestVoidShiftOrder);
 router.post('/shifts/:shiftId/orders/:orderId/pay', payShiftOrder);
