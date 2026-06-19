@@ -2399,6 +2399,44 @@ export const payShiftOrder = async (req: Request, res: Response, next: NextFunct
         .eq('id', orderId);
     }
 
+    // ============ AUTOMATIC CUSTOMER RECEIPT PRINTING ============
+    // Print the customer receipt the moment a cashier records a payment, instead
+    // of relying on a manual "print" tap that's easy to forget mid-rush.
+    const orderItemsForReceipt = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
+    const outletForReceipt = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+    try {
+      const { customerReceiptPrintService } = await import('../services/customerReceiptPrint.service');
+
+      customerReceiptPrintService.printCustomerReceipt({
+        order_number: order.order_number,
+        short_code: order.short_code,
+        customer_name: order.customer_name || 'Walk-in',
+        items: orderItemsForReceipt.map((item: any) => ({
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          line_total: item.line_total
+        })),
+        amount_paid: amount,
+        payment_method: method,
+        cashier_name: `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
+        outlet_name: outletForReceipt?.name || 'Restaurant',
+        created_at: payment.created_at
+      }).then((result) => {
+        if (result.success) {
+          logger.info(`✅ Customer receipt for ${order.order_number} printed at cashier`);
+        } else {
+          logger.warn(`⚠️ Customer receipt print failed for ${order.order_number}: ${result.error}`);
+        }
+      }).catch((printError) => {
+        logger.error(`❌ Customer receipt print error for ${order.order_number}:`, printError);
+      });
+    } catch (printError) {
+      // Don't block payment recording if printing fails
+      logger.error('Customer receipt printing service error:', printError);
+    }
+    // ============ END AUTOMATIC CUSTOMER RECEIPT PRINTING ============
+
     res.json({
       success: true,
       data: {
