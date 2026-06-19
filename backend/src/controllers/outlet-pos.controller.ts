@@ -1546,6 +1546,7 @@ export const getShiftOrders = async (req: Request, res: Response, next: NextFunc
       .from('pos_shift_orders')
       .select('*')
       .eq('shift_id', shiftId)
+      .not('status', 'eq', 'cancelled')
       .order('created_at', { ascending: false });
     if (shouldScopeOrdersToOwner(req)) {
       query = query.or(`waiter_id.eq.${req.user.id},created_by.eq.${req.user.id}`);
@@ -1698,7 +1699,16 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     if (!items.length) throw new AppError('At least one item is required', 400);
     const appendItems = req.body.append_items === true || req.body.appendOnly === true || req.body.mode === 'append';
     const existingItems = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
-    const normalizedItems = normalizeOrderItems(items);
+    const recalledAt = new Date().toISOString();
+    const recallBatchId = `recall-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const normalizedItems = normalizeOrderItems(items).map((item: any) => ({
+      ...item,
+      is_recalled_item: true,
+      recall_batch_id: recallBatchId,
+      recalled_at: recalledAt,
+      recall_note: 'RECALLED BILL',
+      kitchen_status: 'served'
+    }));
     const nextItems = appendItems ? [...existingItems, ...normalizedItems] : normalizedItems;
     await assertPosStockAvailable(Number(shift.branch_id), shift.outlet_id, appendItems ? normalizedItems : nextItems);
     const totalAmount = orderItemsTotal(nextItems);
@@ -1723,13 +1733,13 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         balance_amount: Math.max(0, totalAmount - amountPaid),
         payment_status: amountPaid > 0 ? 'partial' : 'unpaid',
         status: 'open',
-        kitchen_status: 'pending',
-        kitchen_started_at: null,
-        kitchen_ready_at: null,
-        kitchen_served_at: null,
+        kitchen_status: 'served',
+        kitchen_started_at: recalledAt,
+        kitchen_ready_at: recalledAt,
+        kitchen_served_at: recalledAt,
         void_request_status: null,
         items: nextItems,
-        updated_at: new Date().toISOString()
+        updated_at: recalledAt
       })
       .eq('id', orderId)
       .eq('shift_id', shiftId)
@@ -1738,8 +1748,8 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     if (error || !data) throw error || new AppError('Failed to update recalled bill', 500);
 
     // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR RECALLED BILLS ============
-    // Recalling a bill resets kitchen_status to 'pending', so the kitchen needs a
-    // fresh ticket for the items just added — same mechanism used on order creation.
+    // Recalled items get a captain order printed to the kitchen printer, but the
+    // order is marked 'served' so it does NOT appear on the KDS digital display.
     const outletType = String(outlet?.outlet_type || '').toLowerCase();
     if (outletType === 'restaurant') {
       try {
@@ -1754,11 +1764,11 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
           room_number: data.room_number,
           order_type: data.order_type || 'dine_in',
           items: normalizedItems.map((item: any) => ({
-            name: item.name,
+            name: `RECALLED - ${item.name}`,
             quantity: item.quantity,
             unit_price: item.unit_price,
             line_total: item.line_total,
-            notes: item.notes || item.special_instructions || ''
+            notes: item.notes || item.special_instructions || item.recall_note || 'RECALLED BILL'
           })),
           total_amount: recalledItemsTotal,
           waiter_name: data.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
@@ -1843,6 +1853,9 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
 
     const usedIndexes = new Set<number>();
     const childOrders: Array<Record<string, any>> = [];
+    const splitServedAt = new Date().toISOString();
+    const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+
     for (const split of splits) {
       const indexes = Array.isArray(split.item_indexes) ? split.item_indexes.map((i: unknown) => Number(i)) : [];
       if (!indexes.length) throw new AppError('Each split must include at least one item', 400);
@@ -1855,6 +1868,7 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
         return items[index];
       });
       const totalAmount = splitItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
+      const splitItemsWithStatus = splitItems.map((item: any) => ({ ...item, kitchen_status: 'served' }));
       const { data: child, error } = await supabase
         .from('pos_shift_orders')
         .insert({
@@ -1871,12 +1885,15 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
           waiter_name: order.waiter_name ||
           `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
           status: 'open',
-          kitchen_status: 'pending',
+          kitchen_status: 'served',
+          kitchen_started_at: splitServedAt,
+          kitchen_ready_at: splitServedAt,
+          kitchen_served_at: splitServedAt,
           payment_status: 'unpaid',
           total_amount: totalAmount,
           amount_paid: 0,
           balance_amount: totalAmount,
-          items: splitItems,
+          items: splitItemsWithStatus,
           split_parent_order_id: order.id,
           split_type: 'by_items',
           created_by: req.user.id
@@ -1894,13 +1911,53 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
       .update({
         is_split: true,
         status: 'cancelled',
-        kitchen_status: 'cancelled',
+        // NOT 'cancelled' — isKitchenVisiblePosOrder() treats kitchen_status
+        // 'cancelled'/'voided' as a void notice worth showing on KDS. A split
+        // isn't a kitchen-relevant void (the food was already made under the
+        // original ticket), so use the same hidden state as the child orders.
+        kitchen_status: 'served',
         payment_status: 'voided',
         balance_amount: 0,
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId);
     if (updateError) throw updateError;
+
+    // ============ AUTOMATIC CUSTOMER RECEIPT PRINTING FOR SPLIT BILLS ============
+    try {
+      const { customerReceiptPrintService } = await import('../services/customerReceiptPrint.service');
+
+      for (const child of childOrders) {
+        const childItems = Array.isArray(child.items) ? child.items : [];
+        customerReceiptPrintService.printCustomerReceipt({
+          order_number: child.order_number,
+          short_code: child.short_code,
+          customer_name: child.customer_name || 'Walk-in',
+          items: childItems.map((item: any) => ({
+            name: item.name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            line_total: item.line_total
+          })),
+          amount_paid: 0,
+          payment_method: 'pending',
+          cashier_name: child.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
+          outlet_name: outlet?.name || 'Restaurant',
+          created_at: child.created_at
+        }).then((result) => {
+          if (result.success) {
+            logger.info(`✅ Split bill ${child.order_number} printed at POS`);
+          } else {
+            logger.warn(`⚠️ Split bill ${child.order_number} print failed: ${result.error}`);
+          }
+        }).catch((printError) => {
+          logger.error(`❌ Split bill print error for ${child.order_number}:`, printError);
+        });
+      }
+    } catch (printError) {
+      logger.error('Split bill printing service error:', printError);
+    }
+    // ============ END AUTOMATIC CUSTOMER RECEIPT PRINTING ============
 
     res.status(201).json({ success: true, data: childOrders });
   } catch (error) {

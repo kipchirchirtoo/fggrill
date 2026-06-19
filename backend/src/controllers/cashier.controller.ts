@@ -662,6 +662,8 @@ async function queryOutletPosOrderByColumn(
         .from('pos_shift_orders')
         .select('*')
         .eq(column, value)
+        .not('status', 'eq', 'cancelled')
+        .not('payment_status', 'eq', 'voided')
         .limit(1);
 
     if (shiftIds) {
@@ -1335,7 +1337,9 @@ export const getBillDetails = async (
             let posOrderQuery = supabase
                 .from('pos_shift_orders')
                 .select('*')
-                .or(`order_number.eq.${searchId},short_code.eq.${searchId}`);
+                .or(`order_number.eq.${searchId},short_code.eq.${searchId}`)
+                .not('status', 'eq', 'cancelled')
+                .not('payment_status', 'eq', 'voided');
 
             const effectiveBranchId = parseBranchId(req.query.branch_id) ||
                 parseBranchId(req.user?.branch_id ?? req.user?.branchId);
