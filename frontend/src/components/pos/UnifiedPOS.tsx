@@ -299,7 +299,8 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
         return items.filter(item => {
             const matchesCategory = selectedCategoryId === 'all' || item.category_id === selectedCategoryId;
             const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesCategory && matchesSearch && item.is_available;
+            // Allow all items to show, regardless of stock status
+            return matchesCategory && matchesSearch;
         });
     }, [items, selectedCategoryId, searchQuery]);
 
@@ -786,12 +787,7 @@ export function UnifiedPOS({ mode, onOrderCreated }: UnifiedPOSProps) {
                                             </div>
                                         </div>
 
-                                        {/* Status Badge */}
-                                        {!item.is_available && (
-                                            <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] rounded-3xl flex items-center justify-center z-10">
-                                                <div className="bg-white border border-stone-200 px-3 py-1 rounded-full text-[10px] font-black text-stone-400">OUT OF STOCK</div>
-                                            </div>
-                                        )}
+                                        {/* Stock status removed - allow selling even with zero stock */}
                                     </div>
                                 ))}
                             </div>

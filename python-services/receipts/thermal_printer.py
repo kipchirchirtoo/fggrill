@@ -113,7 +113,12 @@ class ThermalPrinter:
         """
         try:
             if not self.printer:
-                self.connect()
+                connected = self.connect()
+                if not connected or not self.printer:
+                    return {
+                        'success': False,
+                        'error': 'Thermal printer not configured or unavailable. Please configure printer in system settings.'
+                    }
             
             p = self.printer
             
@@ -237,10 +242,11 @@ class ThermalPrinter:
             }
             
         except Exception as e:
-            logger.error(f"Error printing captain order: {e}")
+            logger.error(f"Error printing captain order: {e}", exc_info=True)
+            error_msg = str(e) if str(e) else 'Unknown printer error occurred'
             return {
                 'success': False,
-                'error': str(e)
+                'error': error_msg
             }
     
     def print_receipt(self, receipt_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -257,7 +263,12 @@ class ThermalPrinter:
         
         try:
             if not self.printer:
-                self.connect()
+                connected = self.connect()
+                if not connected or not self.printer:
+                    return {
+                        'success': False,
+                        'error': 'Thermal printer not configured or unavailable. Please configure printer in system settings.'
+                    }
             
             p = self.printer
             
@@ -418,10 +429,11 @@ class ThermalPrinter:
             }
             
         except Exception as e:
-            logger.error(f"Error printing receipt: {e}")
+            logger.error(f"Error printing receipt: {e}", exc_info=True)
+            error_msg = str(e) if str(e) else 'Unknown printer error occurred'
             return {
                 'success': False,
-                'error': str(e)
+                'error': error_msg
             }
     
     def print_raw_text(self, text: str) -> bool:

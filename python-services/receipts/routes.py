@@ -171,14 +171,20 @@ def print_receipt():
                 'receipt_number': result.get('receipt_number')
             })
         else:
+            error_msg = result.get('error', 'Unknown error')
+            logger.warning(f"Print failed: {error_msg}")
             return jsonify({
                 'success': False,
-                'error': result.get('error', 'Unknown error')
+                'error': error_msg
             }), 500
             
     except Exception as e:
-        logger.error(f"Error printing receipt: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        error_msg = str(e) if str(e) else 'Unknown error occurred during printing'
+        logger.error(f"Error printing receipt: {error_msg}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': error_msg
+        }), 500
 
 
 @receipts_bp.route('/printer/print-and-generate', methods=['POST'])

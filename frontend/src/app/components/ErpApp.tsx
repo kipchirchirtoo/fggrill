@@ -449,17 +449,12 @@ function POSModule() {
 
   const addToCart = (product: any) => {
     const stock = product.current_stock || product.stock || 0;
-    if (stock === 0) {
-      toast.error('Product out of stock!');
-      return;
-    }
+    // Allow adding to cart even with zero stock (overselling allowed)
+    // Stock will be reconciled during stock take
 
     const existingItem = cart.find(item => item.id === product.id);
     if (existingItem) {
-      if (existingItem.quantity >= stock) {
-        toast.error('Not enough stock!');
-        return;
-      }
+      // Allow adding more even if exceeding stock (negative stock allowed)
       setState(prev => ({
         ...prev,
         cart: prev.cart.map((item: any) =>
@@ -641,7 +636,7 @@ function POSModule() {
             return (
               <div
                 key={product.id}
-                className={`rounded-ios-lg bg-white p-4 shadow-md transition-colors ${stock === 0 ? 'opacity-50' : ''}`}
+                className="rounded-ios-lg bg-white p-4 shadow-md transition-colors"
               >
                 <div className="mb-4 text-center text-4xl">{product.image || '🍔'}</div>
                 <div className="mb-4 text-center">
@@ -653,8 +648,7 @@ function POSModule() {
                 </div>
                 <button
                   onClick={() => addToCart(product)}
-                  disabled={stock === 0}
-                  className="w-full rounded-ios-lg bg-indigo-600 py-2 text-white transition-colors hover:bg-indigo-700 disabled:bg-slate-300"
+                  className="w-full rounded-ios-lg bg-indigo-600 py-2 text-white transition-colors hover:bg-indigo-700"
                 >
                   Add to Cart
                 </button>

@@ -29,14 +29,23 @@ class BarPOSTab extends ConsumerWidget {
                   value: drinksAsync,
                   data: (drinks) {
                     final selectedCat = ref.watch(selectedBarCategoryProvider);
-                    final filtered = selectedCat == null
+                    
+                    // Filter by category
+                    var filtered = selectedCat == null
                         ? drinks
                         : drinks
                             .where((d) => d.categoryId == selectedCat)
                             .toList();
+                    
+                    // Filter out unavailable items (out of stock or disabled)
+                    // Only show items that are available and have stock > 0
+                    filtered = filtered.where((d) => 
+                      d.isAvailable && (d.stockQuantity == null || d.stockQuantity! > 0)
+                    ).toList();
+                    
                     if (filtered.isEmpty) {
                       return const EmptyState(
-                          message: 'No drinks in this category');
+                          message: 'No drinks available in this category');
                     }
                     return RefreshIndicator(
                       onRefresh: () => ref.refresh(barDrinksProvider.future),
@@ -151,89 +160,134 @@ class _DrinkCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final stockQty = drink.stockQuantity ?? 999;
+    final isOutOfStock = stockQty <= 0;
+    
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
+        onTap: isOutOfStock ? null : () {
+          // Check stock before adding to cart
+          if (stockQty <= 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${drink.name} is out of stock'),
+                backgroundColor: AppColors.kError,
+              ),
+            );
+            return;
+          }
+          
           ref.read(barCartProvider.notifier).update((state) {
             final next = Map<String, int>.from(state);
             next.update(drink.id, (v) => v + 1, ifAbsent: () => 1);
             return next;
           });
         },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                color: AppColors.kSurface,
-                child: Stack(
-                  children: [
-                    Center(
-                      child: Icon(
-                        PhosphorIcons.wine(),
-                        size: 40,
-                        color: AppColors.kDivider,
+        child: Opacity(
+          opacity: isOutOfStock ? 0.5 : 1.0,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  color: AppColors.kSurface,
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Icon(
+                          PhosphorIcons.wine(),
+                          size: 40,
+                          color: isOutOfStock ? AppColors.kError : AppColors.kDivider,
+                        ),
                       ),
-                    ),
-                    if (drink.stockQuantity != null &&
-                        drink.stockQuantity! < 10)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.kError,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'LOW',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
+                      if (stockQty <= 0)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.kError,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'OUT',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
+                        )
+                      else if (stockQty < 10)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.kWarning,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'LOW',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      drink.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 13,
+                        color: isOutOfStock ? AppColors.kTextSecondary : AppColors.kTextPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'KES ${drink.price.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        color: isOutOfStock ? AppColors.kTextSecondary : AppColors.kAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (drink.stockQuantity != null)
+                      Text(
+                        isOutOfStock 
+                          ? 'Out of Stock' 
+                          : 'Stock: ${drink.stockQuantity!.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          color: isOutOfStock ? AppColors.kError : AppColors.kTextSecondary, 
+                          fontSize: 10,
+                          fontWeight: isOutOfStock ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                   ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    drink.name,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 13),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'KES ${drink.price.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      color: AppColors.kAccent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (drink.stockQuantity != null)
-                    Text(
-                      'Stock: ${drink.stockQuantity!.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                          color: AppColors.kTextSecondary, fontSize: 10),
-                    ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

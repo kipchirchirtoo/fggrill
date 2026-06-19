@@ -46,17 +46,59 @@ class BarRepository {
 
   // --- Drinks ---
 
+  /// Fetches drinks from POS outlet items (with real-time stock sync)
+  /// for the main bar POS. This ensures stock quantities match database.
   Future<List<BarDrink>> getDrinks({String? categoryId}) async {
     final branchId = await _branchId;
-    final response = await _dio.get('/bar/drinks', queryParameters: {
+    
+    // First, get the main bar POS outlet for this branch
+    final outletsResponse = await _dio.get('/outlets/pos/outlets', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
-      if (categoryId != null) 'category_id': categoryId,
+      'outlet_type': 'main_bar',
     });
+    
+    final outlets = _unwrapList(outletsResponse.data);
+    if (outlets.isEmpty) {
+      // Fallback to regular drinks API if no POS outlet configured
+      final response = await _dio.get('/bar/drinks', queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        if (categoryId != null) 'category_id': categoryId,
+      });
+      final list = _unwrapList(response.data);
+      return list
+          .whereType<Map>()
+          .map((json) => BarDrink.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
+    }
+    
+    final outletId = outlets.first['id'].toString();
+    
+    // Fetch POS outlet items with real-time stock
+    final response = await _dio.get('/outlets/pos/outlets/$outletId/items');
     final list = _unwrapList(response.data);
-    return list
-        .whereType<Map>()
-        .map((json) => BarDrink.fromJson(Map<String, dynamic>.from(json)))
-        .toList();
+    
+    // Map POS outlet items to BarDrink format
+    final drinks = list.whereType<Map>().map((json) {
+      final item = Map<String, dynamic>.from(json);
+      return BarDrink.fromJson({
+        'id': item['id'],
+        'name': item['name'],
+        'category_id': item['category_id'],
+        'category_name': item['category_name'],
+        'price': item['selling_price'] ?? item['price'] ?? 0,
+        'unit': item['unit'],
+        'is_available': (item['is_active'] ?? true) && 
+                       (item['current_stock'] ?? 0) > 0,
+        'stock_quantity': item['current_stock'] ?? 0,
+      });
+    }).toList();
+    
+    // Filter by category if specified
+    if (categoryId != null) {
+      return drinks.where((d) => d.categoryId == categoryId).toList();
+    }
+    
+    return drinks;
   }
 
   // --- Categories ---

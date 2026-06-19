@@ -1083,16 +1083,23 @@ export async function assertPosStockAvailable(branchId: number, outletId: string
       const outletItem = outletItemById.get(outletItemId);
       if (!outletItem || outletItem.track_stock === false) continue;
       const currentStock = numberValue(outletItem.current_stock);
+      
+      // Allow negative stock (overselling) for POS - track in stock but don't block sale
+      // This allows continuous operations even when stock runs out
       if (currentStock < soldQty) {
-        outletShortfalls.push(
-          `${outletItem.name || outletItem.sku || outletItemId} has ${currentStock}, needs ${soldQty}`
-        );
+        logger.warn(`⚠️ Low/Negative stock warning: ${outletItem.name || outletItem.sku} has ${currentStock}, selling ${soldQty}`);
+        // Don't add to shortfalls - allow the sale to proceed
+        // outletShortfalls.push(
+        //   `${outletItem.name || outletItem.sku || outletItemId} has ${currentStock}, needs ${soldQty}`
+        // );
       }
     }
 
-    if (outletShortfalls.length > 0) {
-      throw new AppError(`POS outlet stock unavailable: ${outletShortfalls.join(', ')}`, 409);
-    }
+    // Commented out to allow sales even with insufficient stock
+    // Stock will go negative, which can be reconciled during stock take
+    // if (outletShortfalls.length > 0) {
+    //   throw new AppError(`POS outlet stock unavailable: ${outletShortfalls.join(', ')}`, 409);
+    // }
   }
 
   const consumptionRows = await loadPosConsumptionRows(branchId, outletId, items);
@@ -1111,11 +1118,16 @@ export async function assertPosStockAvailable(branchId: number, outletId: string
   for (const stock of stockRows || []) quantityBySku.set(String(stock.item_sku), numberValue(stock.quantity));
 
   const shortfalls = consumptionRows.filter((row) => numberValue(quantityBySku.get(row.itemSku)) < row.quantity);
+  
+  // Allow negative stock for POS operations - log warning but don't block
   if (shortfalls.length > 0) {
-    throw new AppError(
-      `Out of stock: ${shortfalls.map((row) => `${row.itemSku} needs ${row.quantity}`).join(', ')}`,
-      409
-    );
+    logger.warn(`⚠️ Branch stock shortfalls detected but allowing sale: ${shortfalls.map((row) => `${row.itemSku} needs ${row.quantity}`).join(', ')}`);
+    // Don't throw error - allow sale to proceed with negative stock
+    // Stock can be reconciled during stock take or restock
+    // throw new AppError(
+    //   `Out of stock: ${shortfalls.map((row) => `${row.itemSku} needs ${row.quantity}`).join(', ')}`,
+    //   409
+    // );
   }
 }
 
@@ -1152,8 +1164,12 @@ export async function postPosInventorySale(input: {
         .eq('item_sku', row.itemSku)
         .maybeSingle();
       if (stockError) throw stockError;
+      
+      // Allow negative stock - log warning but don't block POS sale
       if (numberValue(stock?.quantity) < row.quantity) {
-        throw new AppError(`Out of stock: ${row.itemSku} needs ${row.quantity}`, 409);
+        logger.warn(`⚠️ Insufficient stock for ${row.itemSku}: has ${numberValue(stock?.quantity)}, needs ${row.quantity}. Allowing sale with negative stock.`);
+        // Don't throw error - allow sale to proceed
+        // throw new AppError(`Out of stock: ${row.itemSku} needs ${row.quantity}`, 409);
       }
     }
 
