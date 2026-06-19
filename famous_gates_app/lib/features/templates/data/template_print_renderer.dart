@@ -184,6 +184,16 @@ class TemplatePrintRenderer {
       }
     }
 
+    final codeBox = _autoCodeBoxSection(data, ordered);
+    if (codeBox != null) {
+      final insertAfter = ordered.indexWhere((s) =>
+          s.visible != false &&
+          (s.type == 'title' ||
+              s.id == 'title' ||
+              (s.content ?? '').contains('{{receipt_number}}')));
+      ordered.insert(insertAfter >= 0 ? insertAfter + 1 : 0, codeBox);
+    }
+
     final etrNotice = _etrNoticeSection(data, ordered);
 
     if (till == null && etrNotice == null) return ordered;
@@ -217,6 +227,26 @@ class TemplatePrintRenderer {
       id: 'collect_receipt_notice',
       type: 'notice',
       content: text,
+      visible: true,
+    );
+  }
+
+  TemplateSection? _autoCodeBoxSection(
+      TemplatePrintData data, List<TemplateSection> ordered) {
+    final code = (data.code ?? '').trim();
+    if (code.isEmpty) return null;
+    final alreadyPresent = ordered.any((s) {
+      final content = (s.content ?? '').toLowerCase();
+      return s.visible != false &&
+          (s.type == 'code_box' ||
+              content.contains('{{public_code}}') ||
+              content.contains('{{verification_code}}'));
+    });
+    if (alreadyPresent) return null;
+    return TemplateSection(
+      id: 'bill_verification_code_auto',
+      type: 'code_box',
+      label: 'BILL VERIFICATION CODE',
       visible: true,
     );
   }
@@ -332,7 +362,7 @@ class TemplatePrintRenderer {
           padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
           decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
           child: pw.Column(children: [
-            pw.Text(s.label ?? 'CODE',
+            pw.Text(s.label ?? 'BILL VERIFICATION CODE',
                 style:
                     pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
             pw.SizedBox(height: 2),

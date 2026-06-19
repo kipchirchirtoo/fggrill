@@ -20,7 +20,7 @@ import base64
 
 
 def _receipt_lookup_code(receipt_data: Dict[str, Any]) -> str:
-    for key in ('short_code', 'shortCode', 'public_code', 'publicCode', 'lookup_code', 'lookupCode'):
+    for key in ('verification_code', 'verificationCode', 'short_code', 'shortCode', 'public_code', 'publicCode', 'lookup_code', 'lookupCode'):
         value = receipt_data.get(key)
         if value:
             return str(value).strip().upper()
@@ -28,7 +28,7 @@ def _receipt_lookup_code(receipt_data: Dict[str, Any]) -> str:
 
 
 def _receipt_barcode_value(receipt_data: Dict[str, Any], fallback: str = 'N/A') -> str:
-    for key in ('barcode_value', 'barcodeValue', 'barcode', 'short_code', 'shortCode', 'public_code', 'publicCode'):
+    for key in ('barcode_value', 'barcodeValue', 'barcode', 'verification_code', 'verificationCode', 'short_code', 'shortCode', 'public_code', 'publicCode'):
         value = receipt_data.get(key)
         if value:
             return str(value).strip().upper()
@@ -100,7 +100,7 @@ class ReceiptGenerator:
             c.setLineWidth(0.8)
             c.rect(8*mm, y - 13*mm, width - 16*mm, 11*mm, stroke=1, fill=0)
             c.setFont("Helvetica-Bold", 7)
-            c.drawCentredString(center_x, y - 5*mm, "PAYMENT LOOKUP CODE")
+            c.drawCentredString(center_x, y - 5*mm, "BILL VERIFICATION CODE")
             c.setFont("Helvetica-Bold", 18)
             c.drawCentredString(center_x, y - 11*mm, lookup_code)
             y -= 17 * mm
@@ -589,7 +589,7 @@ class InventoryReceiptGenerator:
         
         header_right = f"""
         <b>Receipt #:</b> {receipt_no}<br/>
-        {f"<b>Lookup Code:</b> {lookup_code}<br/>" if lookup_code else ""}
+        {f"<b>Bill Code:</b> {lookup_code}<br/>" if lookup_code else ""}
         <b>Date:</b> {receipt_date}
         """
         

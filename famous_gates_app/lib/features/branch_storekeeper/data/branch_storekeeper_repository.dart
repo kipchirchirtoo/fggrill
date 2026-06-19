@@ -144,6 +144,89 @@ class BranchStorekeeperRepository {
     await _dio.post('/store/items', data: data, options: await _authOptions);
   }
 
+  // ---------------------------------------------------------------------
+  // Bar stock ledger — built on bar_stock, the table actually decremented
+  // when a bar sale completes (see backend decrement_bar_stock()).
+  // ---------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> barStockLedger({String? search}) async {
+    final response = await _dio.get(
+      '/bar/stock-ledger',
+      queryParameters: await _branchQuery({
+        if (search != null && search.isNotEmpty) 'search': search,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> restockBarDrink(
+    String drinkId,
+    double quantity, {
+    double? costPerUnit,
+    String? notes,
+  }) async {
+    await _dio.post(
+      '/bar/stock-ledger/$drinkId/restock',
+      data: {
+        'quantity': quantity,
+        if (costPerUnit != null) 'cost_per_unit': costPerUnit,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+        ...await _branchQuery(),
+      },
+      options: await _authOptions,
+    );
+  }
+
+  Future<void> submitBarStockTake(
+    List<Map<String, dynamic>> counts, {
+    String? notes,
+  }) async {
+    await _dio.post(
+      '/bar/stock-ledger/stock-take',
+      data: {
+        'counts': counts,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+        ...await _branchQuery(),
+      },
+      options: await _authOptions,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> barStockMovements({
+    String? drinkId,
+    int limit = 100,
+  }) async {
+    final response = await _dio.get(
+      '/bar/stock-ledger/movements',
+      queryParameters: await _branchQuery({
+        if (drinkId != null) 'drink_id': drinkId,
+        'limit': limit,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> updateBarDrinkPricing(
+    String drinkId, {
+    double? price,
+    double? costPrice,
+  }) async {
+    await _dio.put(
+      '/bar/drinks/$drinkId',
+      data: {
+        if (price != null) 'price': price,
+        if (costPrice != null) 'cost_price': costPrice,
+      },
+      options: await _authOptions,
+    );
+  }
+
+  Future<void> createBarDrink(Map<String, dynamic> data) async {
+    await _dio.post('/bar/drinks', data: data, options: await _authOptions);
+  }
+
   Future<void> adjustBranchStock(Map<String, dynamic> data) async {
     await _dio.post(
       '/store/branch-stock/adjustment',

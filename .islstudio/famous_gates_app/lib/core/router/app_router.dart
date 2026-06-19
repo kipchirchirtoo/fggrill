@@ -4,6 +4,7 @@ import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/license_screen.dart';
 import '../../features/pos/presentation/pos_screen.dart';
+import '../../features/branch_storekeeper/presentation/pos_outlet_issue_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -24,6 +25,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/pos',
         builder: (context, state) => const POSScreen(),
+      ),
+      GoRoute(
+        path: '/branch-store/pos-outlet-issue',
+        builder: (context, state) => const PosOutletIssueScreen(),
       ),
     ],
   );

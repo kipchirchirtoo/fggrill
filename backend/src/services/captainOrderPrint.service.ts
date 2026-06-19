@@ -17,12 +17,14 @@ interface CaptainOrderPrintData {
     line_total: number;
     notes?: string;
     special_instructions?: string;
+    already_served?: boolean;
   }>;
   total_amount: number;
   waiter_name?: string;
   outlet_name?: string;
   outlet_type?: string;
   created_at?: string;
+  is_recall?: boolean;
 }
 
 /**
@@ -65,7 +67,8 @@ class CaptainOrderPrintService {
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_price: item.line_total,
-          notes: item.notes || item.special_instructions || ''
+          notes: item.notes || item.special_instructions || '',
+          already_served: item.already_served === true
         })),
         
         // Totals
@@ -80,7 +83,8 @@ class CaptainOrderPrintService {
         
         // Kitchen-specific flags
         is_captain_order: true,
-        print_to_kitchen: true
+        print_to_kitchen: true,
+        is_recall: orderData.is_recall === true
       };
 
       // Call Python thermal printer service

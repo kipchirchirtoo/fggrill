@@ -9,6 +9,7 @@ import * as reportController from '../controllers/bar/reports.controller';
 import * as stockRequestController from '../controllers/bar/stock-requests.controller';
 import * as syncController from '../controllers/bar/sync.controller';
 import * as poolTokenController from '../controllers/bar/pool-tokens.controller';
+import * as stockLedgerController from '../controllers/bar/stock-ledger.controller';
 
 const router = express.Router();
 
@@ -41,8 +42,8 @@ router.post('/categories', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MAN
 
 router.get('/drinks', menuController.getDrinks);
 router.get('/drinks/:id', menuController.getDrink);
-router.post('/drinks', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.createDrink);
-router.put('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.updateDrink);
+router.post('/drinks', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_STOREKEEPER, UserRole.CENTRAL_STOREKEEPER]), menuController.createDrink);
+router.put('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_STOREKEEPER, UserRole.CENTRAL_STOREKEEPER]), menuController.updateDrink);
 router.delete('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.deleteDrink);
 router.put('/drinks/:id/toggle', menuController.toggleDrinkAvailability);
 router.post('/drinks/:id/image', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.uploadDrinkImage);
@@ -66,6 +67,22 @@ router.get('/stock/logs', inventoryController.getStockLogs);
 router.get('/stock/consumption-report', inventoryController.getConsumptionReport);
 router.post('/stock/take', inventoryController.submitStockTake);
 router.put('/stock/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER]), inventoryController.updateStock);
+
+// ====================
+// STOCK LEDGER (storekeeper-managed bar stock: the table actually
+// decremented when a bar sale completes — see decrement_bar_stock())
+// ====================
+const STOCK_LEDGER_ROLES = [
+  UserRole.SUPER_ADMIN,
+  UserRole.GENERAL_MANAGER,
+  UserRole.BRANCH_MANAGER,
+  UserRole.BRANCH_STOREKEEPER,
+  UserRole.CENTRAL_STOREKEEPER
+];
+router.get('/stock-ledger', authorize(STOCK_LEDGER_ROLES), stockLedgerController.getStockLedger);
+router.post('/stock-ledger/:drinkId/restock', authorize(STOCK_LEDGER_ROLES), stockLedgerController.addStock);
+router.post('/stock-ledger/stock-take', authorize(STOCK_LEDGER_ROLES), stockLedgerController.submitStockTake);
+router.get('/stock-ledger/movements', authorize(STOCK_LEDGER_ROLES), stockLedgerController.getMovements);
 
 // ====================
 // REPORTS

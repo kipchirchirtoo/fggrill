@@ -57,12 +57,15 @@ class PrintService {
     num? changeGiven,
     String? tillNumber,
   }) async {
+    final billCode = (publicCode ?? '').trim();
     // Try Python service first (NO DIALOG!)
     try {
       final receiptData = {
         'receipt_type': receiptType,
         'receipt_number': sale.receiptNumber,
         'short_code': publicCode,
+        'verification_code': billCode,
+        'public_code': billCode,
         'barcode_value': barcodeValue ?? publicCode ?? sale.receiptNumber,
         'lookup_code': publicCode,
         'customer_name': customerName,
@@ -149,7 +152,7 @@ class PrintService {
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 11)),
               pw.SizedBox(height: 4),
-              if (publicCode != null && publicCode.trim().isNotEmpty) ...[
+              if (billCode.isNotEmpty) ...[
                 pw.Container(
                   width: double.infinity,
                   padding:
@@ -159,11 +162,11 @@ class PrintService {
                   ),
                   child: pw.Column(
                     children: [
-                      pw.Text('PAYMENT LOOKUP CODE',
+                      pw.Text('BILL VERIFICATION CODE',
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold, fontSize: 7)),
                       pw.SizedBox(height: 2),
-                      pw.Text(publicCode.trim().toUpperCase(),
+                      pw.Text(billCode.toUpperCase(),
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold, fontSize: 18)),
                     ],
@@ -174,6 +177,7 @@ class PrintService {
               _dashedLine(context),
               pw.SizedBox(height: 4),
               _infoRow('Receipt #:', sale.receiptNumber ?? ''),
+              if (billCode.isNotEmpty) _infoRow('Bill code:', billCode.toUpperCase()),
               _infoRow('Date:', dateStr),
               if (tableNumber != null) _infoRow('Table:', tableNumber),
               if (roomNumber != null) _infoRow('Room:', roomNumber),

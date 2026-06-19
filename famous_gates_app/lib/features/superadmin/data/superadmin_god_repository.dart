@@ -231,6 +231,41 @@ class SuperadminGodRepository {
     await _guard(() async => _dio.delete('/superadmin/non-consumables/$id'));
   }
 
+  // POS outlet menu items are the exact catalogue rows fetched by outlet POS.
+  Future<List<Map<String, dynamic>>> getPosOutlets({int? branchId}) async {
+    return _guard(() async {
+      final r = await _dio.get('/pos/outlets', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
+      });
+      final data = r.data['data'] ?? r.data;
+      return List<Map<String, dynamic>>.from(data is List ? data : []);
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPosOutletItems(String outletId) async {
+    return _guard(() async {
+      final r = await _dio.get('/pos/outlets/$outletId/items');
+      final data = r.data['data'] ?? r.data;
+      return List<Map<String, dynamic>>.from(data is List ? data : []);
+    });
+  }
+
+  Future<void> syncPosOutletItems(String outletId) async {
+    await _guard(() async => _dio.post('/pos/outlets/$outletId/sync-items'));
+  }
+
+  Future<void> createPosOutletItem(
+      String outletId, Map<String, dynamic> body) async {
+    await _guard(
+        () async => _dio.post('/pos/outlets/$outletId/items', data: body));
+  }
+
+  Future<void> updatePosOutletItem(
+      String outletId, String itemId, Map<String, dynamic> body) async {
+    await _guard(() async =>
+        _dio.patch('/pos/outlets/$outletId/items/$itemId', data: body));
+  }
+
   // Branches (for the branch selector) — uses the mounted system route
   Future<List<Map<String, dynamic>>> getBranches() async {
     return _guard(() async {

@@ -121,12 +121,16 @@ class ThermalPrinter:
                     }
             
             p = self.printer
-            
+            is_recall = receipt_data.get('is_recall', False)
+
             # === HEADER ===
             p.set(align='center', font='a', bold=True, double_height=True)
-            p.text("CAPTAIN ORDER\n")
+            if is_recall:
+                p.text("RECALLED BILL\n")
+            else:
+                p.text("CAPTAIN ORDER\n")
             p.text("KITCHEN COPY\n")
-            
+
             p.set(align='center', font='a', bold=False, double_height=False)
             p.text(f"{self.company_name}\n")
             p.text("\n")
@@ -195,17 +199,24 @@ class ThermalPrinter:
                 qty = item.get('quantity', 1)
                 name = item.get('name', item.get('item_name', 'Item'))
                 notes = item.get('notes', item.get('special_instructions', ''))
-                
-                # Quantity and item name (BOLD)
-                p.set(align='left', font='a', bold=True, double_width=True)
-                p.text(f"{qty}x {name.upper()}\n")
-                
+                already_served = item.get('already_served', False)
+
+                # Already-made items (from before a recall) are underlined so
+                # kitchen staff know to skip them; new/recalled items print
+                # bold and double-width same as a normal new order line.
+                if already_served:
+                    p.set(align='left', font='a', bold=False, underline=True, double_width=False)
+                    p.text(f"{qty}x {name.upper()} (ALREADY MADE)\n")
+                else:
+                    p.set(align='left', font='a', bold=True, double_width=True)
+                    p.text(f"{qty}x {name.upper()}\n")
+
                 # Special instructions (if any)
                 if notes:
-                    p.set(align='left', font='a', bold=False, double_width=False)
+                    p.set(align='left', font='a', bold=False, underline=False, double_width=False)
                     p.text(f"   NOTE: {notes}\n")
-                
-                p.set(align='left', font='a', bold=False, double_width=False)
+
+                p.set(align='left', font='a', bold=False, underline=False, double_width=False)
                 p.text("\n")
             
             p.text("=" * 32 + "\n")
@@ -284,7 +295,9 @@ class ThermalPrinter:
             # === ORDER INFO ===
             receipt_no = receipt_data.get('receipt_number', f"ORD-{datetime.now().strftime('%H%M%S')}")
             public_code = (
-                receipt_data.get('short_code')
+                receipt_data.get('verification_code')
+                or receipt_data.get('verificationCode')
+                or receipt_data.get('short_code')
                 or receipt_data.get('shortCode')
                 or receipt_data.get('public_code')
                 or receipt_data.get('publicCode')
@@ -300,7 +313,7 @@ class ThermalPrinter:
                 p.set(align='center', font='a', bold=True, double_height=True)
                 p.text(f"{public_code}\n")
                 p.set(align='center', font='a', bold=True, double_height=False)
-                p.text("PAYMENT LOOKUP CODE\n\n")
+                p.text("BILL VERIFICATION CODE\n\n")
             
             p.set(align='left', font='a')
             p.text(f"ORDER # {receipt_no.split('-')[-1] if '-' in str(receipt_no) else receipt_no}\n")

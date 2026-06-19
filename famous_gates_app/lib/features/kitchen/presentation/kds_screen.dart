@@ -881,7 +881,7 @@ class _OrderTicket extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
-                              'RECALL',
+                              'RECALLED BILL',
                               style: TextStyle(
                                 color: Colors.deepOrange,
                                 fontWeight: FontWeight.w900,
@@ -1064,6 +1064,10 @@ class _OrderTicket extends StatelessWidget {
               itemBuilder: (context, index) {
                 final item = order.items[index];
                 final isRecalledItem = item.isRecalledItem;
+                // On a recalled ticket, items that aren't part of this recall
+                // were already prepared before the recall happened — cross
+                // them out so the kitchen knows to only cook the new lines.
+                final isAlreadyMade = hasRecalledTicket && !isRecalledItem;
                 return Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -1113,12 +1117,30 @@ class _OrderTicket extends StatelessWidget {
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 16,
-                                  decoration: isStopTicket
+                                  color: isAlreadyMade
+                                      ? AppColors.kTextSecondary
+                                      : null,
+                                  decoration: (isStopTicket || isAlreadyMade)
                                       ? TextDecoration.lineThrough
                                       : null,
-                                  decorationColor: AppColors.kError,
+                                  decorationColor: isStopTicket
+                                      ? AppColors.kError
+                                      : AppColors.kTextSecondary,
                                   decorationThickness: 2.5,
                                 )),
+                            if (isAlreadyMade)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 3),
+                                child: Text(
+                                  'ALREADY MADE',
+                                  style: TextStyle(
+                                    color: AppColors.kTextSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                              ),
                             if (isRecalledItem)
                               const Padding(
                                 padding: EdgeInsets.only(top: 3),
@@ -1218,6 +1240,13 @@ class _OrderTicket extends StatelessWidget {
       );
     }
     if (status == 'ready') {
+      return OutlinedButton.icon(
+        onPressed: onServed,
+        icon: const Icon(Icons.room_service_outlined, size: 18),
+        label: const Text('Served'),
+      );
+    }
+    if (status == 'recalled') {
       return OutlinedButton.icon(
         onPressed: onServed,
         icon: const Icon(Icons.room_service_outlined, size: 18),

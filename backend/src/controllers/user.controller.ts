@@ -126,6 +126,14 @@ export const createUser = async (
     const staffProfileIdVal = staffProfileId || staff_profile_id;
     let staffProfile: any = null;
 
+    if (!staffProfileIdVal) {
+      res.status(400).json({
+        success: false,
+        message: 'Select an existing staff profile to create a login account. New employees must be created in Staff Profiles first.'
+      });
+      return;
+    }
+
     if (staffProfileIdVal) {
       const { data: sp, error: spError } = await supabase
         .from('staff_profiles')
@@ -135,6 +143,14 @@ export const createUser = async (
 
       if (spError || !sp) {
         res.status(404).json({ success: false, message: 'Staff profile not found' });
+        return;
+      }
+
+      if (sp.user_id) {
+        res.status(409).json({
+          success: false,
+          message: 'This staff profile already has a user login account'
+        });
         return;
       }
 

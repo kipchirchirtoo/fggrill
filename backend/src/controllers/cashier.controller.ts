@@ -2613,56 +2613,37 @@ export const processCashierPayment = async (
                 throw new AppError('POS order is already cleared', 409);
             }
 
-            const totalAmount = Number(order.total_amount || 0);
-            const currentPaid = Number(order.amount_paid || 0);
-            const currentBalance = Math.max(0, Number(order.balance_amount || 0) || totalAmount - currentPaid);
             const paymentAmount = Number(amount);
             if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
                 throw new AppError('Payment amount must be greater than zero', 400);
             }
-            if (paymentAmount - currentBalance > 0.01) {
-                throw new AppError('Payment cannot exceed remaining POS bill balance', 400);
+
+            // record_pos_shift_payment locks the order row (SELECT ... FOR UPDATE)
+            // and updates amount_paid/balance_amount in the same transaction as the
+            // pos_shift_payments insert, so two concurrent payments on the same bill
+            // (double-tap, two cashiers) can't both read a stale balance and clobber
+            // each other's contribution.
+            const { data: rpcResult, error: rpcError } = await supabase
+                .rpc('record_pos_shift_payment', {
+                    p_order_id: order.id,
+                    p_shift_id: order.shift_id,
+                    p_outlet_id: order.outlet_id || shift.outlet_id,
+                    p_payment_method: paymentMethod,
+                    p_amount: paymentAmount,
+                    p_reference: reference || `${paymentMethod}-${Date.now()}`,
+                    p_received_by: req.user?.id
+                });
+
+            if (rpcError || !rpcResult) {
+                throw new AppError(`POS payment recording failed: ${rpcError?.message || 'Unknown error'}`, 500);
             }
 
-            const { data: payment, error: paymentError } = await supabase
-                .from('pos_shift_payments')
-                .insert({
-                    shift_id: order.shift_id,
-                    outlet_id: order.outlet_id || shift.outlet_id,
-                    order_id: order.id,
-                    payment_method: paymentMethod,
-                    amount: paymentAmount,
-                    reference: reference || `${paymentMethod}-${Date.now()}`,
-                    received_by: req.user?.id
-                })
-                .select('*')
-                .single();
-
-            if (paymentError || !payment) {
-                throw new AppError(`POS payment recording failed: ${paymentError?.message || 'Unknown error'}`, 500);
-            }
-
-            const nextPaid = currentPaid + paymentAmount;
-            const nextBalance = Math.max(0, totalAmount - nextPaid);
+            const payment = rpcResult.payment;
+            const updatedOrder = rpcResult.order;
+            const nextPaid = Number(updatedOrder.amount_paid || 0);
+            const nextBalance = Number(updatedOrder.balance_amount || 0);
             const isCleared = nextBalance <= 0.01;
-            const nextPaymentStatus = isCleared
-                ? paymentMethod === 'credit_bill' ? 'credit_bill' : 'paid'
-                : 'partial';
-
-            const { error: updateError } = await supabase
-                .from('pos_shift_orders')
-                .update({
-                    amount_paid: nextPaid,
-                    balance_amount: nextBalance,
-                    payment_status: nextPaymentStatus,
-                    status: isCleared ? nextPaymentStatus : order.status,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', order.id);
-
-            if (updateError) {
-                throw new AppError(`Failed to update POS order balance: ${updateError.message}`, 500);
-            }
+            const nextPaymentStatus = updatedOrder.payment_status;
 
             try {
                 const outlet = Array.isArray((shift as any).outlet) ? (shift as any).outlet[0] : (shift as any).outlet;
@@ -3046,7 +3027,7 @@ export const printCashierReceiptFallback = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { order_number, short_code, customer_name, items, amount_paid, payment_method, outlet_name } = req.body;
+        const { order_number, short_code, verification_code, customer_name, items, amount_paid, payment_method, outlet_name } = req.body;
         if (!order_number || !Array.isArray(items) || !items.length) {
             throw new AppError('order_number and items are required', 400);
         }
@@ -3055,6 +3036,7 @@ export const printCashierReceiptFallback = async (
         const result = await customerReceiptPrintService.printCustomerReceipt({
             order_number,
             short_code,
+            verification_code: verification_code || short_code,
             customer_name,
             items,
             amount_paid: Number(amount_paid) || 0,

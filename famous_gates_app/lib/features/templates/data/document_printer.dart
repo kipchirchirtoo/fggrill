@@ -288,6 +288,7 @@ TemplatePrintData _templateData({
       'till_number': _clean(tillNumber) ?? '',
       'receipt_number': receiptNumber,
       'public_code': code ?? '',
+      'verification_code': code ?? '',
       'date': date,
       'customer_name': resolvedCustomer ?? '',
       'table_number': resolvedTable ?? '',
@@ -316,6 +317,7 @@ TemplatePrintData _templateData({
     total: total,
     kvRows: [
       if (receiptNumber.isNotEmpty) MapEntry('Receipt #:', receiptNumber),
+      if (code != null) MapEntry('Bill code:', code),
       MapEntry('Date:', date),
       if (resolvedTable != null) MapEntry('Table:', resolvedTable),
       if (resolvedRoom != null) MapEntry('Room:', resolvedRoom),

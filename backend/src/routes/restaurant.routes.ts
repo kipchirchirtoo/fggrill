@@ -45,7 +45,7 @@ const normalizeKitchenStatus = (value: any): string => {
   return ['pending', 'confirmed'].includes(status) ? 'pending' : status;
 };
 
-const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'void_requested', 'cancelled', 'voided']);
+const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
 const KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS = 36;
 
 const isKitchenVisiblePosOrder = (order: any): boolean => {
@@ -56,7 +56,7 @@ const isKitchenVisiblePosOrder = (order: any): boolean => {
   const voidRequestStatus = String(order?.void_request_status || '').toLowerCase();
 
   // Kitchen must always see orders it hasn't finished yet, regardless of payment
-  if (['pending', 'preparing', 'ready'].includes(kitchenStatus)) return true;
+  if (['pending', 'preparing', 'ready', 'recalled'].includes(kitchenStatus)) return true;
   if (['served', 'completed'].includes(kitchenStatus)) return false;
   if (orderStatus === 'open' && ['unpaid', 'partial'].includes(paymentStatus)) return true;
   if (['pending', 'approved'].includes(voidRequestStatus)) return true;
@@ -360,7 +360,7 @@ router.get('/kitchen/orders',
             .from('pos_shift_orders')
             .select('*')
             .in('shift_id', restaurantShiftIds)
-            .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready)')
+            .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready,recalled)')
             .order('created_at', { ascending: true });
 
           if (posOrdersError) throw posOrdersError;

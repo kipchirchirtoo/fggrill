@@ -17,6 +17,7 @@ import {
   shouldRestrictCashierStationAccess,
   stationTypesForCashierRole
 } from '../utils/posStationAccess';
+import { createBillVerificationCode } from '../services/bill-verification-code.service';
 
 // Roles permitted to open/close a POS shift on behalf of a station.
 const SHIFT_MANAGER_ROLES = new Set([
@@ -54,6 +55,17 @@ const outletItemGroup = (outletType: unknown): 'restaurant' | 'bar' | 'other' =>
   const type = String(outletType || '');
   if (type === 'restaurant') return 'restaurant';
   if (isFoodOrBarOutlet(type)) return 'bar';
+  return 'other';
+};
+
+const billTypeForOutlet = (outletType: unknown): 'restaurant' | 'bar' | 'pool' | 'carwash' | 'spa' | 'pos_outlet' | 'other' => {
+  const type = String(outletType || '').toLowerCase();
+  if (type === 'restaurant') return 'restaurant';
+  if (type.includes('bar')) return 'bar';
+  if (type.includes('spa')) return 'spa';
+  if (type.includes('pool')) return 'pool';
+  if (type.includes('car_wash') || type.includes('carwash')) return 'carwash';
+  if (type.includes('non_consumable') || type.includes('cashier')) return 'pos_outlet';
   return 'other';
 };
 
@@ -375,17 +387,41 @@ const ensureEditableOrder = (order: Record<string, any>, action: string): void =
   }
 };
 
-const normalizeOrderItems = (items: Array<Record<string, any>>): Array<Record<string, any>> => {
+const normalizeOrderItems = async (
+  outletId: string,
+  items: Array<Record<string, any>>
+): Promise<Array<Record<string, any>>> => {
+  const requestedIds = Array.from(new Set(
+    items.map((item) => String(item.outlet_item_id ?? item.product_id ?? item.id ?? '')).filter(Boolean)
+  ));
+
+  const outletItemById = new Map<string, Record<string, any>>();
+  if (requestedIds.length) {
+    const { data: outletItems, error } = await supabase
+      .from('pos_outlet_items')
+      .select('id, name, selling_price, is_active')
+      .eq('outlet_id', outletId)
+      .in('id', requestedIds);
+    if (error) throw error;
+    for (const outletItem of outletItems || []) {
+      outletItemById.set(String(outletItem.id), outletItem);
+    }
+  }
+
   return items.map((item, index) => {
     const quantity = numberValue(item.qty ?? item.quantity);
-    const unitPrice = numberValue(item.unit_price ?? item.selling_price ?? item.price);
     const outletItemId = String(item.outlet_item_id ?? item.product_id ?? item.id ?? '');
     if (!outletItemId || quantity <= 0) {
       throw new AppError(`Invalid item at line ${index + 1}`, 400);
     }
+    const menuItem = outletItemById.get(outletItemId);
+    if (!menuItem || menuItem.is_active === false) {
+      throw new AppError(`Item at line ${index + 1} is not a valid menu item for this outlet`, 400);
+    }
+    const unitPrice = numberValue(menuItem.selling_price);
     return {
       outlet_item_id: outletItemId,
-      name: String(item.name ?? item.item_name ?? ''),
+      name: String(menuItem.name ?? ''),
       category: item.category ?? null,
       item_group: item.item_group ?? null,
       item_group_label: item.item_group_label ?? null,
@@ -761,7 +797,7 @@ const seedOutletItemsFromExistingMenus = async (
   if (outletType === 'restaurant') {
     let query = supabase
       .from('restaurant_menu_items')
-      .select('id, name, price, category_id, category:restaurant_menu_categories(id, name), is_available, branch_id')
+      .select('id, name, price, selling_price, cost_price, category_id, category:restaurant_menu_categories(id, name), is_available, is_active, branch_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
@@ -774,16 +810,19 @@ const seedOutletItemsFromExistingMenus = async (
         outlet_id: outlet.id,
         source_table: 'restaurant_menu_items',
         source_item_id: item.id,
+        menu_item_id: item.id,
         sku,
         name: item.name,
         category: categoryText(item.category) || 'Restaurant',
         unit: 'each',
-        cost_price: 0,
-        selling_price: item.price || 0,
+        cost_price: item.cost_price || 0,
+        selling_price: item.price ?? item.selling_price ?? 0,
         opening_stock: 0,
         current_stock: existing?.current_stock ?? 0,
         track_stock: existing?.track_stock ?? true,
-        is_active: true
+        is_active: item.is_active !== false,
+        is_available: item.is_available !== false,
+        branch_id: item.branch_id ?? outlet.branch_id ?? null
       };
     });
   }
@@ -792,7 +831,7 @@ const seedOutletItemsFromExistingMenus = async (
       outletType === 'kyogong_executive_bar' || outletType === 'kyogong_sports_bar') {
     let query = supabase
       .from('bar_drinks')
-      .select('id, name, price, cost_price, unit, is_available, branch_id, category_id')
+      .select('id, name, price, selling_price, cost_price, unit, is_available, is_active, branch_id, category_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
@@ -828,11 +867,13 @@ const seedOutletItemsFromExistingMenus = async (
           (outletType.includes('executive') ? 'Executive Bar' : 'Main Bar'),
         unit: item.unit || 'each',
         cost_price: item.cost_price || 0,
-        selling_price: item.price || 0,
+        selling_price: item.price ?? item.selling_price ?? 0,
         opening_stock: 0,
         current_stock: existing?.current_stock ?? 0,
         track_stock: existing?.track_stock ?? true,
-        is_active: true
+        is_active: item.is_active !== false,
+        is_available: item.is_available !== false,
+        branch_id: item.branch_id ?? outlet.branch_id ?? null
       };
     });
   }
@@ -1093,22 +1134,75 @@ const normalizeOutletItemPayload = (
   const name = payload.name !== undefined ? String(payload.name).trim() : existing?.name;
   if (!name) throw new AppError('Item name is required', 400);
   const sku = String(payload.sku ?? existing?.sku ?? `${Date.now()}`).trim();
+  const sellingPrice = numberValue(
+    payload.selling_price ??
+    payload.sellingPrice ??
+    payload.price ??
+    existing?.selling_price
+  );
+  const isActive = payload.is_active ?? payload.isActive ?? existing?.is_active ?? true;
+  const isAvailable = payload.is_available ?? payload.isAvailable ?? existing?.is_available ?? isActive;
   return {
     outlet_id: outletId,
     source_table: payload.source_table ?? existing?.source_table ?? 'manual',
     source_item_id: payload.source_item_id ?? existing?.source_item_id ?? null,
+    menu_item_id: payload.menu_item_id ?? payload.menuItemId ?? existing?.menu_item_id ?? null,
     sku,
     name,
     category: payload.category ?? existing?.category ?? 'Manual',
     unit: payload.unit ?? existing?.unit ?? 'each',
     cost_price: numberValue(payload.cost_price ?? payload.costPrice ?? existing?.cost_price),
-    selling_price: numberValue(payload.selling_price ?? payload.sellingPrice ?? payload.price ?? existing?.selling_price),
+    selling_price: sellingPrice,
     opening_stock: numberValue(payload.opening_stock ?? payload.openingStock ?? existing?.opening_stock),
     current_stock: numberValue(payload.current_stock ?? payload.currentStock ?? existing?.current_stock),
     track_stock: payload.track_stock ?? payload.trackStock ?? existing?.track_stock ?? true,
-    is_active: payload.is_active ?? payload.isActive ?? existing?.is_active ?? true,
+    is_active: isActive,
+    is_available: isAvailable,
+    status: payload.status ?? existing?.status ?? (isActive && isAvailable ? 'active' : 'inactive'),
+    branch_id: payload.branch_id ?? payload.branchId ?? existing?.branch_id ?? null,
     updated_at: new Date().toISOString()
   };
+};
+
+const syncSourceMenuFromOutletItem = async (
+  existing: Record<string, any>,
+  row: Record<string, any>
+): Promise<void> => {
+  const sourceTable = String(existing.source_table || row.source_table || '');
+  const sourceItemId = String(
+    existing.source_item_id ||
+    row.source_item_id ||
+    existing.menu_item_id ||
+    row.menu_item_id ||
+    ''
+  );
+  if (!sourceItemId) return;
+
+  const patch = {
+    name: row.name,
+    price: row.selling_price,
+    selling_price: row.selling_price,
+    cost_price: row.cost_price,
+    is_available: row.is_available !== false && row.is_active !== false,
+    is_active: row.is_active !== false,
+    updated_at: new Date().toISOString()
+  };
+
+  if (sourceTable === 'restaurant_menu_items') {
+    const { error } = await supabase
+      .from('restaurant_menu_items')
+      .update(patch)
+      .eq('id', sourceItemId);
+    if (error) throw error;
+  }
+
+  if (sourceTable === 'bar_drinks') {
+    const { error } = await supabase
+      .from('bar_drinks')
+      .update(patch)
+      .eq('id', sourceItemId);
+    if (error) throw error;
+  }
 };
 
 export const createOutletItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -1167,6 +1261,7 @@ export const updateOutletItem = async (req: Request, res: Response, next: NextFu
       .single();
 
     if (error || !data) throw error || new AppError('Failed to update outlet item', 500);
+    await syncSourceMenuFromOutletItem(existing, data as Record<string, any>);
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -1571,7 +1666,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
     const items = Array.isArray(req.body.items) ? req.body.items as Array<Record<string, any>> : [];
     if (!items.length) throw new AppError('At least one item is required', 400);
 
-    const normalizedItems = normalizeOrderItems(items);
+    const normalizedItems = await normalizeOrderItems(shift.outlet_id, items);
     await assertPosStockAvailable(Number(shift.branch_id), shift.outlet_id, normalizedItems);
 
     const totalAmount = numberValue(req.body.total_amount) ||
@@ -1584,6 +1679,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
       .insert({
         shift_id: shiftId,
         outlet_id: shift.outlet_id,
+        branch_id: shift.branch_id,
         source_type: req.body.source_type || 'manual',
         source_id: req.body.source_id || null,
         order_number: req.body.order_number || `POS-${Date.now()}`,
@@ -1604,6 +1700,32 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
       .select('*')
       .single();
     if (error || !order) throw error || new AppError('Failed to record POS order', 500);
+
+    const verification = await createBillVerificationCode({
+      code: order.short_code,
+      billRef: String(order.order_number || order.id),
+      billType: billTypeForOutlet(outlet?.outlet_type),
+      branchId: Number(shift.branch_id),
+      outletId: shift.outlet_id,
+      amount: totalAmount,
+      generatedBy: String(req.user.id),
+      notes: 'Generated from POS outlet bill creation',
+      metadata: {
+        source_table: 'pos_shift_orders',
+        source_id: order.id,
+        shift_id: shiftId,
+        outlet_type: outlet?.outlet_type || null,
+        customer_name: order.customer_name || null
+      }
+    });
+
+    if (verification?.code && verification.code !== order.short_code) {
+      order.short_code = verification.code;
+      await supabase
+        .from('pos_shift_orders')
+        .update({ short_code: verification.code, updated_at: new Date().toISOString() })
+        .eq('id', order.id);
+    }
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
     
@@ -1701,13 +1823,13 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     const existingItems = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
     const recalledAt = new Date().toISOString();
     const recallBatchId = `recall-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const normalizedItems = normalizeOrderItems(items).map((item: any) => ({
+    const normalizedItems = (await normalizeOrderItems(shift.outlet_id, items)).map((item: any) => ({
       ...item,
       is_recalled_item: true,
       recall_batch_id: recallBatchId,
       recalled_at: recalledAt,
       recall_note: 'RECALLED BILL',
-      kitchen_status: 'served'
+      kitchen_status: 'recalled'
     }));
     const nextItems = appendItems ? [...existingItems, ...normalizedItems] : normalizedItems;
     await assertPosStockAvailable(Number(shift.branch_id), shift.outlet_id, appendItems ? normalizedItems : nextItems);
@@ -1733,10 +1855,9 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         balance_amount: Math.max(0, totalAmount - amountPaid),
         payment_status: amountPaid > 0 ? 'partial' : 'unpaid',
         status: 'open',
-        kitchen_status: 'served',
+        kitchen_status: 'recalled',
         kitchen_started_at: recalledAt,
         kitchen_ready_at: recalledAt,
-        kitchen_served_at: recalledAt,
         void_request_status: null,
         items: nextItems,
         updated_at: recalledAt
@@ -1748,14 +1869,18 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     if (error || !data) throw error || new AppError('Failed to update recalled bill', 500);
 
     // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR RECALLED BILLS ============
-    // Recalled items get a captain order printed to the kitchen printer, but the
-    // order is marked 'served' so it does NOT appear on the KDS digital display.
+    // Recalled items get a captain order printed to the kitchen printer AND the
+    // order is marked 'recalled' (not 'served') so it still shows on the KDS
+    // digital display with a RECALL badge until kitchen staff dismiss it.
     const outletType = String(outlet?.outlet_type || '').toLowerCase();
     if (outletType === 'restaurant') {
       try {
         const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
-        const recalledItemsTotal = orderItemsTotal(normalizedItems);
 
+        // Print the FULL ticket (original + newly recalled items), not just the
+        // new lines, so kitchen sees the whole order as it stands. Items already
+        // prepared before this recall are flagged already_served so the printer
+        // (and the KDS screen) mark them as done instead of re-cooking them.
         captainOrderPrintService.printCaptainOrder({
           order_number: data.order_number,
           short_code: data.short_code,
@@ -1763,18 +1888,20 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
           table_number: data.table_number,
           room_number: data.room_number,
           order_type: data.order_type || 'dine_in',
-          items: normalizedItems.map((item: any) => ({
-            name: `RECALLED - ${item.name}`,
+          items: nextItems.map((item: any) => ({
+            name: item.name,
             quantity: item.quantity,
             unit_price: item.unit_price,
             line_total: item.line_total,
-            notes: item.notes || item.special_instructions || item.recall_note || 'RECALLED BILL'
+            notes: item.notes || item.special_instructions || (item.is_recalled_item ? item.recall_note : undefined),
+            already_served: !item.is_recalled_item
           })),
-          total_amount: recalledItemsTotal,
+          total_amount: totalAmount,
           waiter_name: data.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
           outlet_name: outlet?.name || 'Restaurant',
           outlet_type: outlet?.outlet_type,
-          created_at: data.updated_at
+          created_at: data.updated_at,
+          is_recall: true
         }).then((result) => {
           if (result.success) {
             logger.info(`✅ Recalled bill ${data.order_number} printed to kitchen`);
@@ -1804,6 +1931,7 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
       customerReceiptPrintService.printCustomerReceipt({
         order_number: data.order_number,
         short_code: data.short_code,
+        verification_code: data.short_code,
         customer_name: data.customer_name || 'Walk-in',
         items: nextItems.map((item: any) => ({
           name: item.name,
@@ -1852,7 +1980,7 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
     if (splits.length < 2) throw new AppError('At least two split bills are required', 400);
 
     const usedIndexes = new Set<number>();
-    const childOrders: Array<Record<string, any>> = [];
+    const childRows: Array<Record<string, any>> = [];
     const splitServedAt = new Date().toISOString();
     const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
 
@@ -1869,59 +1997,83 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
       });
       const totalAmount = splitItems.reduce((sum, item) => sum + numberValue(item.line_total), 0);
       const splitItemsWithStatus = splitItems.map((item: any) => ({ ...item, kitchen_status: 'served' }));
-      const { data: child, error } = await supabase
-        .from('pos_shift_orders')
-        .insert({
-          shift_id: shiftId,
-          outlet_id: shift.outlet_id,
-          source_type: 'manual',
-          source_id: order.id,
-          order_number: `${order.order_number || 'POS'}-${childOrders.length + 1}`,
-          customer_name: split.customer_name || order.customer_name || 'Walk-in',
-          order_type: order.order_type || null,
-          table_number: order.table_number || null,
-          room_number: order.room_number || null,
-          waiter_id: order.waiter_id || req.user.id,
-          waiter_name: order.waiter_name ||
-          `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
-          status: 'open',
-          kitchen_status: 'served',
-          kitchen_started_at: splitServedAt,
-          kitchen_ready_at: splitServedAt,
-          kitchen_served_at: splitServedAt,
-          payment_status: 'unpaid',
-          total_amount: totalAmount,
-          amount_paid: 0,
-          balance_amount: totalAmount,
-          items: splitItemsWithStatus,
-          split_parent_order_id: order.id,
-          split_type: 'by_items',
-          created_by: req.user.id
-        })
-        .select('*')
-        .single();
-      if (error || !child) throw error || new AppError('Failed to create split bill', 500);
-      childOrders.push(child);
+      childRows.push({
+        shift_id: shiftId,
+        outlet_id: shift.outlet_id,
+        branch_id: shift.branch_id,
+        source_type: 'manual',
+        source_id: order.id,
+        order_number: `${order.order_number || 'POS'}-${childRows.length + 1}`,
+        customer_name: split.customer_name || order.customer_name || 'Walk-in',
+        order_type: order.order_type || null,
+        table_number: order.table_number || null,
+        room_number: order.room_number || null,
+        waiter_id: order.waiter_id || req.user.id,
+        waiter_name: order.waiter_name ||
+        `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null,
+        status: 'open',
+        kitchen_status: 'served',
+        kitchen_started_at: splitServedAt,
+        kitchen_ready_at: splitServedAt,
+        kitchen_served_at: splitServedAt,
+        payment_status: 'unpaid',
+        total_amount: totalAmount,
+        amount_paid: 0,
+        balance_amount: totalAmount,
+        items: splitItemsWithStatus,
+        split_parent_order_id: order.id,
+        split_type: 'by_items',
+        created_by: req.user.id
+      });
     }
 
     if (usedIndexes.size !== items.length) throw new AppError('Every item must be assigned to a split bill', 400);
 
-    const { error: updateError } = await supabase
-      .from('pos_shift_orders')
-      .update({
-        is_split: true,
-        status: 'cancelled',
-        // NOT 'cancelled' — isKitchenVisiblePosOrder() treats kitchen_status
-        // 'cancelled'/'voided' as a void notice worth showing on KDS. A split
-        // isn't a kitchen-relevant void (the food was already made under the
-        // original ticket), so use the same hidden state as the child orders.
-        kitchen_status: 'served',
-        payment_status: 'voided',
-        balance_amount: 0,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', orderId);
-    if (updateError) throw updateError;
+    // NOT 'cancelled' for kitchen_status — isKitchenVisiblePosOrder() treats
+    // kitchen_status 'cancelled'/'voided' as a void notice worth showing on
+    // KDS. A split isn't a kitchen-relevant void (the food was already made
+    // under the original ticket), so the parent uses the same hidden state
+    // as the child orders ('served'). All child inserts + the parent update
+    // happen in one DB transaction via the RPC so a failure partway through
+    // cannot leave orphaned child bills alongside a still-open parent.
+    const { data: childOrders, error: splitError } = await supabase
+      .rpc('split_pos_shift_order', {
+        p_order_id: orderId,
+        p_shift_id: shiftId,
+        p_children: childRows
+      });
+    if (splitError) throw splitError;
+    if (!Array.isArray(childOrders) || childOrders.length !== childRows.length) {
+      throw new AppError('Failed to create split bills', 500);
+    }
+
+    for (const child of childOrders) {
+      const verification = await createBillVerificationCode({
+        code: child.short_code,
+        billRef: String(child.order_number || child.id),
+        billType: billTypeForOutlet(outlet?.outlet_type),
+        branchId: Number(shift.branch_id),
+        outletId: shift.outlet_id,
+        amount: numberValue(child.total_amount),
+        generatedBy: String(req.user.id),
+        notes: 'Generated from POS split bill creation',
+        metadata: {
+          source_table: 'pos_shift_orders',
+          source_id: child.id,
+          split_parent_order_id: order.id,
+          shift_id: shiftId,
+          outlet_type: outlet?.outlet_type || null
+        }
+      });
+
+      if (verification?.code && verification.code !== child.short_code) {
+        child.short_code = verification.code;
+        await supabase
+          .from('pos_shift_orders')
+          .update({ short_code: verification.code, updated_at: new Date().toISOString() })
+          .eq('id', child.id);
+      }
+    }
 
     // ============ AUTOMATIC CUSTOMER RECEIPT PRINTING FOR SPLIT BILLS ============
     try {
@@ -1932,6 +2084,7 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
         customerReceiptPrintService.printCustomerReceipt({
           order_number: child.order_number,
           short_code: child.short_code,
+          verification_code: child.short_code,
           customer_name: child.customer_name || 'Walk-in',
           items: childItems.map((item: any) => ({
             name: item.name,
@@ -1997,6 +2150,7 @@ export const mergeShiftOrders = async (req: Request, res: Response, next: NextFu
       .insert({
         shift_id: shiftId,
         outlet_id: shift.outlet_id,
+        branch_id: shift.branch_id,
         source_type: 'manual',
         order_number: req.body.order_number || `MERGE-${Date.now()}`,
         customer_name: customerName,
@@ -2015,6 +2169,32 @@ export const mergeShiftOrders = async (req: Request, res: Response, next: NextFu
       .select('*')
       .single();
     if (targetError || !target) throw targetError || new AppError('Failed to create merged bill', 500);
+
+    const verification = await createBillVerificationCode({
+      code: target.short_code,
+      billRef: String(target.order_number || target.id),
+      billType: billTypeForOutlet(outlet?.outlet_type),
+      branchId: Number(shift.branch_id),
+      outletId: shift.outlet_id,
+      amount: totalAmount,
+      generatedBy: String(req.user.id),
+      notes: 'Generated from POS merged bill creation',
+      metadata: {
+        source_table: 'pos_shift_orders',
+        source_id: target.id,
+        merged_source_order_ids: orderIds,
+        shift_id: shiftId,
+        outlet_type: outlet?.outlet_type || null
+      }
+    });
+
+    if (verification?.code && verification.code !== target.short_code) {
+      target.short_code = verification.code;
+      await supabase
+        .from('pos_shift_orders')
+        .update({ short_code: verification.code, updated_at: new Date().toISOString() })
+        .eq('id', target.id);
+    }
 
     const { error: sourceUpdateError } = await supabase
       .from('pos_shift_orders')

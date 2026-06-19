@@ -31,6 +31,7 @@ enum BranchStorekeeperSection {
   receiptVerification,
   suppliers,
   stockTakes,
+  barStock,
   purchaseOrders,
   requests,
   departmentRequestLogging,
@@ -1061,6 +1062,12 @@ class _BranchStorekeeperDashboardState
           group: 'Inventory',
         ),
         MasterNavItem(
+          section: BranchStorekeeperSection.barStock,
+          label: 'Bar Stock',
+          icon: PhosphorIcons.wine(),
+          group: 'Inventory',
+        ),
+        MasterNavItem(
           section: BranchStorekeeperSection.purchaseOrders,
           label: 'Purchase Orders',
           icon: PhosphorIcons.shoppingCart(),
@@ -1143,6 +1150,8 @@ class _BranchStorekeeperDashboardState
         return _selectedStockTakeId == null
             ? _stockTakesPage()
             : _stockTakeDetailPage();
+      case BranchStorekeeperSection.barStock:
+        return const _BarStockSection();
       case BranchStorekeeperSection.purchaseOrders:
         return _purchaseOrdersPage();
       case BranchStorekeeperSection.requests:
@@ -3997,35 +4006,42 @@ class _BranchStorekeeperDashboardState
     final outlets = _posOutletOptions;
     final selected = _selectedOutlet();
     final selectedId = selected == null ? null : _outletId(selected);
-    final rawOutletRows = _stockForOutlet(selectedId);
     final query = _search.trim().toLowerCase();
-    final outletRows = rawOutletRows.where((item) {
+    final branchRows = _stockOptions.where((item) {
       if (query.isEmpty) return true;
       final haystack = [
-        _outletItemName(item),
-        _outletItemSku(item),
-        _outletName(item),
-        _outletType(item),
+        _itemName(item),
+        _optionSku(item),
         item['category'],
+        item['unit_of_measure'],
+        item['unit'],
       ].join(' ').toLowerCase();
       return haystack.contains(query);
     }).toList();
-    final outletValue = outletRows.fold<num>(
+    final destinationRows = _stockForOutlet(selectedId);
+    final branchValue = branchRows.fold<num>(
       0,
-      (sum, item) =>
-          sum +
-          (_num(item['current_stock'] ?? item['quantity']) *
-              _num(item['cost_price'] ?? item['unit_cost'])),
+      (sum, item) => sum +
+          (_num(item['quantity']) *
+              _num(item['cost_price'] ?? item['unit_price'])),
     );
-    final available = outletRows
-        .where((item) => _num(item['current_stock'] ?? item['quantity']) > 0)
-        .length;
-    final lowStock = outletRows.where((item) {
-      final status = _outletStockStatus(item);
-      return status == 'low_stock' ||
-          status == 'out_of_stock' ||
-          status == 'production_required';
+    final available =
+        branchRows.where((item) => _num(item['quantity']) > 0).length;
+    final lowStock = branchRows.where((item) {
+      final reorder = _num(item['reorder_level'] ?? item['minimum_stock']);
+      return reorder > 0 && _num(item['quantity']) <= reorder;
     }).length;
+    final outletIssueMovements = _inventoryTruthMovements.where((movement) {
+      final type =
+          '${movement['movement_type'] ?? movement['movementType'] ?? movement['type']}'
+              .toLowerCase();
+      final meta = _dynamicMap(movement['metadata']);
+      final destinationOutlet =
+          '${movement['destination_outlet_id'] ?? meta['destination_outlet_id'] ?? ''}';
+      return type.contains('production') &&
+          (destinationOutlet == (selectedId ?? '') ||
+              '${meta['source'] ?? ''}'.contains('pos_outlet_issue'));
+    }).toList();
     final isBarSelected = selected != null &&
         (_outletType(selected).contains('bar') ||
             _barOutlets.containsKey(_outletType(selected)) ||
@@ -4127,69 +4143,59 @@ class _BranchStorekeeperDashboardState
                 ),
         ),
         _SectionCard(
-          title: 'Search Outlet Stock',
+          title: 'Search Branch Stock',
           child: TextField(
             controller: TextEditingController(text: _search)
               ..selection = TextSelection.collapsed(offset: _search.length),
             decoration: InputDecoration(
               labelText: selected == null
-                  ? 'Search POS outlet stock'
-                  : 'Search ${_outletDisplayName(selected)} stock',
+                  ? 'Search branch stock by item, SKU or category'
+                  : 'Search branch stock to issue to ${_outletDisplayName(selected)}',
               prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (value) => setState(() => _search = value),
           ),
         ),
         _StatGrid(cards: [
-          _StatCardData('Outlet Items', '${outletRows.length}',
-              Icons.storefront_outlined, AppColors.kPrimary),
+          _StatCardData('Branch Stock SKUs', '${branchRows.length}',
+              PhosphorIcons.package(), AppColors.kPrimary),
           _StatCardData('Available', '$available', PhosphorIcons.checkCircle(),
               AppColors.kSuccess),
           _StatCardData('Low / Zero', '$lowStock', PhosphorIcons.warning(),
               AppColors.kWarning),
-          _StatCardData('Outlet Stock Value', _money(outletValue),
+          _StatCardData('Source Stock Value', _money(branchValue),
               PhosphorIcons.coins(), Colors.teal),
         ]),
         _SectionCard(
           title: selected == null
-              ? 'POS Outlet Stock'
-              : '${_outletDisplayName(selected)} Stock',
+              ? 'Branch Stock Available for Outlet Issue'
+              : 'Branch Stock Available for ${_outletDisplayName(selected)}',
+          subtitle:
+              'This is the source stock. Posting an issue deducts branch stock and writes movement audit logs.',
           child: _RecordList(
             emptyText: selected == null
                 ? 'No outlet selected'
-                : 'No stock found for ${_outletDisplayName(selected)}',
-            children: outletRows.take(150).map((item) {
-              final qty = _num(item['current_stock'] ?? item['quantity']);
-              final opening = _num(item['opening_stock']);
-              final produced = _num(item['shift_produced_quantity']);
-              final sold = _num(item['shift_sales_quantity']);
-              final wasted = _num(item['shift_wastage_quantity']);
+                : 'No branch stock available for outlet issue',
+            children: branchRows.take(150).map((item) {
+              final qty = _num(item['quantity']);
+              final matchedOutletItem =
+                  selectedId == null ? null : _matchingOutletItemForSource(selectedId, item);
               return _RecordTile(
-                icon: Icons.storefront_outlined,
-                title: _outletItemName(item),
+                icon: PhosphorIcons.package(),
+                title: _itemName(item),
                 subtitle:
-                    '${_outletItemSku(item)} | ${_movementLabel(_outletType(item))}\n'
-                    '${_menuLinkLabel(item)} | ${_recipeInfoLine(item)}\n'
-                    'Opening ${_qtyText(opening)} | Produced ${_qtyText(produced)} | Sold ${_qtyText(sold)} | Wastage ${_qtyText(wasted)}',
+                    '${_optionSku(item)} | Available ${_qtyText(qty)} ${item['unit_of_measure'] ?? item['unit'] ?? 'units'} | ${item['category'] ?? '-'}\n'
+                    'Destination match: ${matchedOutletItem == null ? 'not configured in outlet stock' : _outletItemName(matchedOutletItem)}',
                 trailing: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    _StatusChip(
-                      _outletStockStatusLabel(item),
-                      success:
-                          _outletStockStatusColor(item) == AppColors.kSuccess,
-                      warning:
-                          _outletStockStatusColor(item) != AppColors.kSuccess,
-                    ),
-                    const SizedBox(height: 4),
                     Text(
-                      '${_qtyText(qty)} ${item['unit'] ?? 'units'}',
+                      '${_qtyText(qty)} ${item['unit_of_measure'] ?? item['unit'] ?? 'units'}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     Text(
-                      _money(
-                          qty * _num(item['cost_price'] ?? item['unit_cost'])),
+                      _money(qty * _num(item['cost_price'] ?? item['unit_price'])),
                       style: const TextStyle(
                         color: AppColors.kTextSecondary,
                         fontSize: 12,
@@ -4203,7 +4209,7 @@ class _BranchStorekeeperDashboardState
                         ? null
                         : () => _showPosOutletIssueForm(
                               selected,
-                              presetOutput: item,
+                              presetSource: item,
                             ),
                     child: const Text('Issue'),
                   ),
@@ -4213,19 +4219,57 @@ class _BranchStorekeeperDashboardState
           ),
         ),
         _SectionCard(
-          title: 'Branch Stock Available for POS Outlet Issue',
+          title: selected == null
+              ? 'Current Outlet Stock'
+              : 'Current ${_outletDisplayName(selected)} Stock',
           subtitle:
-              'This is the source stock. Issuing is blocked by backend availability rules and records a movement ledger.',
+              'Destination stock after previous issues and outlet sales. This is shown for audit context only.',
           child: _RecordList(
-            emptyText: 'No branch stock available for outlet issue',
-            children: _stockOptions.take(100).map((item) {
+            emptyText: selected == null
+                ? 'Select an outlet to view destination stock'
+                : 'No destination outlet stock rows found',
+            children: destinationRows.take(100).map((item) {
+              final qty = _num(item['current_stock'] ?? item['quantity']);
               return _RecordTile(
-                icon: PhosphorIcons.package(),
-                title: _itemName(item),
+                icon: Icons.storefront_outlined,
+                title: _outletItemName(item),
                 subtitle:
-                    '${_optionSku(item)} | Available ${_qty(item)} | ${item['category'] ?? '-'}',
+                    '${_outletItemSku(item)} | ${_movementLabel(_outletType(item))} | ${item['category'] ?? '-'}',
                 trailing: Text(
-                    _money(_num(item['unit_price'] ?? item['cost_price']))),
+                  '${_qtyText(qty)} ${item['unit'] ?? 'units'}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        _SectionCard(
+          title: 'Recent Outlet Issue Audit',
+          subtitle:
+              'Posted movement records created by branch-stock-to-outlet issues.',
+          child: _RecordList(
+            emptyText: 'No recent outlet issue movements',
+            children: outletIssueMovements.take(20).map((movement) {
+              final qty = _num(movement['quantity'] ??
+                  movement['quantity_in'] ??
+                  movement['quantity_out']);
+              return _RecordTile(
+                icon: PhosphorIcons.clipboardText(),
+                title:
+                    '${movement['item_name'] ?? movement['itemName'] ?? movement['item_sku'] ?? movement['sku'] ?? 'Stock movement'}',
+                subtitle:
+                    '${movement['movement_type'] ?? movement['movementType'] ?? 'movement'} | ${movement['document_number'] ?? movement['reference_number'] ?? movement['created_at'] ?? ''}',
+                trailing: Text(
+                  _qtyText(qty),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () =>
+                        _showJsonDetail('Outlet Issue Movement', movement),
+                    child: const Text('View'),
+                  ),
+                ],
               );
             }).toList(),
           ),
@@ -6928,6 +6972,22 @@ class _BranchStorekeeperDashboardState
     'outside_catering': (label: 'Event Name', pax: true),
     'accommodation_breakfast': (label: 'Guest / Room', pax: false),
   };
+
+  Map<String, dynamic>? _matchingOutletItemForSource(
+    String outletId,
+    Map<String, dynamic> source,
+  ) {
+    final sourceSku = _optionSku(source).toLowerCase();
+    final sourceName = _itemName(source).toLowerCase();
+    final outletItems = _stockForOutlet(outletId);
+    for (final item in outletItems) {
+      if (_outletItemSku(item).toLowerCase() == sourceSku) return item;
+    }
+    for (final item in outletItems) {
+      if (_outletItemName(item).toLowerCase() == sourceName) return item;
+    }
+    return null;
+  }
 
   // Issues branch stock for every item in a bar outlet in one go, so the
   // whole bar menu becomes sellable on POS without issuing item-by-item.
@@ -15359,6 +15419,689 @@ class _SummaryRow extends StatelessWidget {
               )),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────── BAR STOCK SECTION ──────────────────────────────────
+// Manages bar_drinks (menu/pricing) + bar_stock (the ledger actually
+// decremented when a bar sale completes). Opening stock is never typed in —
+// it's whatever bar_stock.quantity already is; the only ways stock changes
+// here are a Restock (addition) or submitting a full Stock Take worksheet
+// (which becomes the new system quantity, i.e. next period's opening).
+
+class _BarStockSection extends ConsumerStatefulWidget {
+  const _BarStockSection();
+
+  @override
+  ConsumerState<_BarStockSection> createState() => _BarStockSectionState();
+}
+
+class _BarStockSectionState extends ConsumerState<_BarStockSection> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String _search = '';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final data = await repo.barStockLedger(search: _search);
+      if (mounted) setState(() => _items = data);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  double _num(dynamic v) => v == null ? 0 : (double.tryParse('$v') ?? 0);
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_search.isEmpty) return _items;
+    final q = _search.toLowerCase();
+    return _items.where((item) {
+      return '${item['name']}'.toLowerCase().contains(q) ||
+          '${item['category'] ?? ''}'.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  void _showSnack(String message, {bool error = false}) {
+    if (!mounted) return;
+    AppNotifier.showSnackBar(
+      context,
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? AppColors.kError : AppColors.kPrimary,
+      ),
+    );
+  }
+
+  Future<void> _openRequestStockDialog(Map<String, dynamic> item) async {
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (_) => _RequestBarStockDialog(drink: item),
+    );
+    if (submitted == true && mounted) {
+      _showSnack('Restock request sent to central store');
+    }
+  }
+
+  Future<void> _openPricingDialog(Map<String, dynamic> item) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditBarDrinkPricingDialog(drink: item),
+    );
+    if (updated == true) _load();
+  }
+
+  Future<void> _openAddItemDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _AddBarDrinkDialog(),
+    );
+    if (created == true) _load();
+  }
+
+  Future<void> _openStockTakeDialog() async {
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (_) => _BarStockTakeDialog(items: _items),
+    );
+    if (submitted == true) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const _LoadingPage();
+
+    final lowStock = _filtered.where((item) {
+      final qty = item['quantity'];
+      final min = _num(item['min_stock']);
+      return qty != null && _num(qty) <= min;
+    }).length;
+
+    return _Page(
+      title: 'Bar Stock',
+      subtitle:
+          'Bar menu, pricing, cost of goods, and stock reconciled against actual bar sales.',
+      actions: [
+        OutlinedButton.icon(
+          onPressed: _openAddItemDialog,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Add Bar Item'),
+        ),
+        FilledButton.icon(
+          onPressed: _items.isEmpty ? null : _openStockTakeDialog,
+          icon: const Icon(Icons.fact_check_outlined, size: 18),
+          label: const Text('Bar Stock Take'),
+        ),
+        _RefreshButton(onPressed: _load),
+      ],
+      children: [
+        TextField(
+          decoration: const InputDecoration(
+            hintText: 'Search by drink name or category',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (v) => setState(() => _search = v),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(_error!, style: const TextStyle(color: AppColors.kError)),
+          ),
+        if (lowStock > 0)
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.kWarning.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.kWarning.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.warning_amber_outlined,
+                  color: AppColors.kWarning, size: 18),
+              const SizedBox(width: 8),
+              Text('$lowStock drink(s) at or below minimum stock',
+                  style: const TextStyle(
+                      color: AppColors.kWarning, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        const SizedBox(height: 16),
+        if (_filtered.isEmpty)
+          const _EmptyState('No bar drinks found.')
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Drink')),
+                DataColumn(label: Text('Category')),
+                DataColumn(label: Text('Unit')),
+                DataColumn(label: Text('Price'), numeric: true),
+                DataColumn(label: Text('Cost (COGS)'), numeric: true),
+                DataColumn(label: Text('Stock'), numeric: true),
+                DataColumn(label: Text('Min Stock'), numeric: true),
+                DataColumn(label: Text('Last Restocked')),
+                DataColumn(label: Text('')),
+              ],
+              rows: _filtered.map((item) {
+                final qty = item['quantity'];
+                final minStock = _num(item['min_stock']);
+                final isLow = qty != null && _num(qty) <= minStock;
+                final lastRestocked = item['last_restocked'];
+                return DataRow(cells: [
+                  DataCell(Text('${item['name'] ?? ''}')),
+                  DataCell(Text('${item['category'] ?? '—'}')),
+                  DataCell(Text('${item['unit'] ?? '—'}')),
+                  DataCell(
+                    Text(_num(item['price']).toStringAsFixed(2)),
+                    onTap: () => _openPricingDialog(item),
+                  ),
+                  DataCell(
+                    Text(_num(item['cost_price']).toStringAsFixed(2)),
+                    onTap: () => _openPricingDialog(item),
+                  ),
+                  DataCell(Text(
+                    qty == null ? 'Not set' : _num(qty).toStringAsFixed(1),
+                    style: TextStyle(
+                      color: isLow ? AppColors.kError : null,
+                      fontWeight: isLow ? FontWeight.w700 : null,
+                    ),
+                  )),
+                  DataCell(Text(qty == null ? '—' : minStock.toStringAsFixed(1))),
+                  DataCell(Text(lastRestocked == null
+                      ? 'Never'
+                      : '${lastRestocked}'.split('T').first)),
+                  DataCell(TextButton(
+                    onPressed: () => _openRequestStockDialog(item),
+                    child: const Text('Request Stock'),
+                  )),
+                ]);
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _RequestBarStockDialog extends ConsumerStatefulWidget {
+  const _RequestBarStockDialog({required this.drink});
+  final Map<String, dynamic> drink;
+
+  @override
+  ConsumerState<_RequestBarStockDialog> createState() =>
+      _RequestBarStockDialogState();
+}
+
+class _RequestBarStockDialogState extends ConsumerState<_RequestBarStockDialog> {
+  final _quantityCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _quantityCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final quantity = double.tryParse(_quantityCtrl.text.trim()) ?? 0;
+    if (quantity <= 0) {
+      setState(() => _error = 'Quantity must be greater than zero');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final name = widget.drink['name'] ?? 'Bar drink';
+      final unit = widget.drink['unit'] ?? 'units';
+      final drinkId = '${widget.drink['id']}';
+      final notes = _notesCtrl.text.trim();
+      await repo.createStockRequest({
+        'request_type': 'ROUTINE',
+        'priority': 'NORMAL',
+        'reason': 'BAR RESTOCK REQUEST — $name',
+        'items': [
+          {
+            'item_sku': drinkId,
+            'requested_quantity': quantity,
+            'reason':
+                'Bar drink: $name ($unit)${notes.isNotEmpty ? ' — $notes' : ''}',
+          },
+        ],
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = widget.drink['name'] ?? 'Bar drink';
+    final unit = widget.drink['unit'] ?? 'units';
+    final qty = widget.drink['quantity'];
+    final currentStock = qty == null
+        ? 'Not set'
+        : '${qty is num ? qty.toStringAsFixed(1) : '$qty'} $unit';
+
+    return AlertDialog(
+      title: Text('Request Stock — $name'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Current branch stock: $currentStock',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _quantityCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Quantity to request',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notesCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes for central store',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!,
+                    style: const TextStyle(color: AppColors.kError)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Submit Request'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditBarDrinkPricingDialog extends ConsumerStatefulWidget {
+  const _EditBarDrinkPricingDialog({required this.drink});
+  final Map<String, dynamic> drink;
+
+  @override
+  ConsumerState<_EditBarDrinkPricingDialog> createState() =>
+      _EditBarDrinkPricingDialogState();
+}
+
+class _EditBarDrinkPricingDialogState
+    extends ConsumerState<_EditBarDrinkPricingDialog> {
+  late final _priceCtrl = TextEditingController(
+      text: '${widget.drink['price'] ?? 0}');
+  late final _costCtrl = TextEditingController(
+      text: '${widget.drink['cost_price'] ?? 0}');
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _priceCtrl.dispose();
+    _costCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.updateBarDrinkPricing(
+        '${widget.drink['id']}',
+        price: double.tryParse(_priceCtrl.text.trim()),
+        costPrice: double.tryParse(_costCtrl.text.trim()),
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Pricing — ${widget.drink['name'] ?? ''}'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _priceCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                  labelText: 'Selling price', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _costCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                  labelText: 'Cost price (COGS)', border: OutlineInputBorder()),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: AppColors.kError)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddBarDrinkDialog extends ConsumerStatefulWidget {
+  const _AddBarDrinkDialog();
+
+  @override
+  ConsumerState<_AddBarDrinkDialog> createState() => _AddBarDrinkDialogState();
+}
+
+class _AddBarDrinkDialogState extends ConsumerState<_AddBarDrinkDialog> {
+  final _nameCtrl = TextEditingController();
+  final _unitCtrl = TextEditingController(text: 'bottle');
+  final _priceCtrl = TextEditingController();
+  final _costCtrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _unitCtrl.dispose();
+    _priceCtrl.dispose();
+    _costCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Name is required');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.createBarDrink({
+        'name': name,
+        'unit': _unitCtrl.text.trim().isEmpty ? 'bottle' : _unitCtrl.text.trim(),
+        'price': double.tryParse(_priceCtrl.text.trim()) ?? 0,
+        'cost_price': double.tryParse(_costCtrl.text.trim()) ?? 0,
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Bar Item'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Drink name', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _unitCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Unit (e.g. bottle, shot)',
+                  border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _priceCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                  labelText: 'Selling price', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _costCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                  labelText: 'Cost price (COGS)', border: OutlineInputBorder()),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: AppColors.kError)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BarStockTakeDialog extends ConsumerStatefulWidget {
+  const _BarStockTakeDialog({required this.items});
+  final List<Map<String, dynamic>> items;
+
+  @override
+  ConsumerState<_BarStockTakeDialog> createState() =>
+      _BarStockTakeDialogState();
+}
+
+class _BarStockTakeDialogState extends ConsumerState<_BarStockTakeDialog> {
+  late final Map<String, TextEditingController> _controllers = {
+    for (final item in widget.items)
+      '${item['id']}': TextEditingController(
+        text: item['quantity'] == null ? '0' : '${item['quantity']}',
+      ),
+  };
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final ctrl in _controllers.values) {
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  double _num(dynamic v) => v == null ? 0 : (double.tryParse('$v') ?? 0);
+
+  Future<void> _submit() async {
+    final counts = widget.items.map((item) {
+      final id = '${item['id']}';
+      final physical = double.tryParse(_controllers[id]!.text.trim()) ?? 0;
+      return {'drink_id': id, 'physical_quantity': physical};
+    }).toList();
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.submitBarStockTake(counts);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Bar Stock Take'),
+      content: SizedBox(
+        width: 560,
+        height: 480,
+        child: Column(
+          children: [
+            const Text(
+              'Enter the physical count for each drink. This becomes the new system stock and is logged with any variance.',
+              style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.separated(
+                itemCount: widget.items.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = widget.items[index];
+                  final id = '${item['id']}';
+                  final systemQty = item['quantity'];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text('${item['name'] ?? ''}',
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        Expanded(
+                          child: Text(
+                            systemQty == null
+                                ? 'System: 0'
+                                : 'System: ${_num(systemQty).toStringAsFixed(1)}',
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.kTextSecondary),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 110,
+                          child: TextField(
+                            controller: _controllers[id],
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Physical count',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: AppColors.kError)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Submit Stock Take'),
+        ),
+      ],
     );
   }
 }

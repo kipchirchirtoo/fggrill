@@ -174,6 +174,7 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
 
   Future<void> _showUserDialog({Map<String, dynamic>? user}) async {
     final branches = await _loadBranchesForDialog();
+    final staffRows = user == null ? await _loadStaffForUserDialog() : <Map<String, dynamic>>[];
     if (!mounted) return;
 
     final firstNameCtrl =
@@ -195,6 +196,7 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
         int.tryParse('${user?['branch_id'] ?? user?['branchId'] ?? ''}');
     String selectedStatus = user?['status'] as String? ?? 'active';
     String selectedRole = user?['role'] as String? ?? 'receptionist';
+    String? selectedStaffProfileId;
     final roles = [
       'super_admin',
       'general_manager',
@@ -294,6 +296,50 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (user == null) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedStaffProfileId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Staff profile *',
+                        helperText:
+                            'Users are login accounts created from existing staff profiles.',
+                      ),
+                      items: staffRows.map((staff) {
+                        return DropdownMenuItem<String>(
+                          value: '${staff['id']}',
+                          child: Text(
+                            _staffLabel(staff),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        final staff = staffRows.firstWhere(
+                          (row) => '${row['id']}' == '$value',
+                          orElse: () => const {},
+                        );
+                        setS(() {
+                          selectedStaffProfileId = value;
+                          firstNameCtrl.text = '${staff['first_name'] ?? ''}';
+                          lastNameCtrl.text = '${staff['last_name'] ?? ''}';
+                          emailCtrl.text = '${staff['email'] ?? ''}';
+                          phoneCtrl.text =
+                              '${staff['phone'] ?? staff['phone_number'] ?? ''}';
+                          employeeCtrl.text =
+                              '${staff['employee_number'] ?? staff['employee_id'] ?? ''}';
+                          departmentCtrl.text = '${staff['department'] ?? ''}';
+                          final staffRole = '${staff['role'] ?? ''}';
+                          if (roles.contains(staffRole)) {
+                            selectedRole = staffRole;
+                          }
+                          selectedBranch =
+                              int.tryParse('${staff['branch_id'] ?? ''}');
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Row(children: [
                     Expanded(
                         child: TextField(
@@ -423,6 +469,14 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                           backgroundColor: AppColors.kError));
                   return;
                 }
+                if (user == null && selectedStaffProfileId == null) {
+                  AppNotifier.showSnackBar(
+                      context,
+                      const SnackBar(
+                          content: Text('Select the staff profile first'),
+                          backgroundColor: AppColors.kError));
+                  return;
+                }
                 if (firstNameCtrl.text.trim().length < 2 ||
                     lastNameCtrl.text.trim().length < 2) {
                   AppNotifier.showSnackBar(
@@ -478,6 +532,8 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                         ? null
                         : pinCtrl.text.trim().toUpperCase(),
                     if (user == null) 'password': passwordCtrl.text,
+                    if (user == null)
+                      'staff_profile_id': selectedStaffProfileId,
                   };
                   if (user == null) {
                     await svc.createUser(payload);
@@ -874,6 +930,65 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       }
       return const [];
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadStaffForUserDialog() async {
+    try {
+      final response = await ref
+          .read(staffServiceProvider)
+          .getStaff(status: 'active', limit: 500);
+      final rows = _extractStaffRows(response)
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .where((staff) {
+        final userId = '${staff['user_id'] ?? ''}'.trim();
+        return userId.isEmpty || userId == 'null';
+      }).toList();
+      rows.sort((a, b) => _staffLabel(a).compareTo(_staffLabel(b)));
+      return rows;
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+            content: Text('Could not load staff profiles: $e'),
+            backgroundColor: AppColors.kError,
+          ),
+        );
+      }
+      return const [];
+    }
+  }
+
+  List<dynamic> _extractStaffRows(Map<String, dynamic> response) {
+    final data = response['data'];
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in const ['staff', 'employees', 'items', 'rows', 'data']) {
+        final value = data[key];
+        if (value is List) return value;
+      }
+    }
+    return const [];
+  }
+
+  String _staffLabel(Map<String, dynamic> staff) {
+    final first = '${staff['first_name'] ?? ''}'.trim();
+    final last = '${staff['last_name'] ?? ''}'.trim();
+    final name = '$first $last'.trim();
+    final employeeNo =
+        '${staff['employee_number'] ?? staff['employee_id'] ?? ''}'.trim();
+    final role = '${staff['role'] ?? staff['position'] ?? ''}'.trim();
+    final branchData = staff['branch'];
+    final branchName =
+        branchData is Map ? '${branchData['name'] ?? ''}'.trim() : '';
+    final branch = '${staff['branch_name'] ?? branchName}'.trim();
+    final parts = [
+      if (employeeNo.isNotEmpty) employeeNo,
+      if (role.isNotEmpty) role.replaceAll('_', ' '),
+      if (branch.isNotEmpty) branch,
+    ];
+    return '${name.isEmpty ? 'Unnamed staff' : name}${parts.isEmpty ? '' : ' - ${parts.join(' / ')}'}';
   }
 
   List<dynamic> _extractBranchRows(Map<String, dynamic> response) {

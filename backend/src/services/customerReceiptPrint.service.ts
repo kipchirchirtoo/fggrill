@@ -5,6 +5,7 @@ import { PYTHON_SERVICE_URL } from '../config/pythonService';
 interface CustomerReceiptPrintData {
   order_number: string;
   short_code?: string;
+  verification_code?: string;
   customer_name?: string;
   items: Array<{
     name?: string;
@@ -38,13 +39,17 @@ class CustomerReceiptPrintService {
     try {
       logger.info(`🧾 Printing customer receipt ${receiptData.order_number} to till printer...`);
 
+      const verificationCode = (receiptData.verification_code || receiptData.short_code || '').trim().toUpperCase();
+
       const payload = {
         receipt_type: 'sale',
-        receipt_number: receiptData.short_code || receiptData.order_number,
+        receipt_number: verificationCode || receiptData.order_number,
         order_number: receiptData.order_number,
         short_code: receiptData.short_code,
-        barcode_value: receiptData.short_code || receiptData.order_number,
-        lookup_code: receiptData.short_code || receiptData.order_number,
+        verification_code: verificationCode,
+        public_code: verificationCode,
+        barcode_value: verificationCode || receiptData.order_number,
+        lookup_code: verificationCode || receiptData.order_number,
 
         cashier_name: receiptData.cashier_name || 'STAFF',
         items: receiptData.items.map((item) => ({
