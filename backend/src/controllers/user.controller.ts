@@ -108,8 +108,7 @@ export const createUser = async (
       phoneNumber, phone_number,
       pos_pin,
       employeeId, employee_id,
-      department, shift, startDate, start_date,
-      emergencyContact, emergency_contact,
+      department,
       address,
       staffProfileId, staff_profile_id
     } = req.body;
@@ -121,9 +120,6 @@ export const createUser = async (
     let pNumber = phoneNumber || phone_number;
     let empId = employeeId || employee_id;
     let dept = department;
-    let shiftVal = shift;
-    let sDate = startDate || start_date;
-    let eContact = emergencyContact || emergency_contact;
     let userEmail = email;
 
     // If creating from a staff profile, fetch staff data first
@@ -151,8 +147,6 @@ export const createUser = async (
       pNumber = pNumber || sp.phone;
       empId = empId || sp.employee_number;
       dept = dept || sp.department;
-      shiftVal = shiftVal || sp.shift;
-      sDate = sDate || sp.start_date;
       userEmail = userEmail || sp.email;
     }
 
@@ -205,9 +199,6 @@ export const createUser = async (
       phone_number: pNumber || null,
       employee_id: empId || null,
       department: dept || null,
-      shift: shiftVal || null,
-      start_date: sDate || null,
-      emergency_contact: eContact ? JSON.stringify(eContact) : null,
       address: address || null,
       status: status || 'active',
       pos_pin: pos_pin || null,
@@ -285,10 +276,6 @@ export const updateUser = async (
       phone_number: fields.phone_number || fields.phoneNumber,
       employee_id: fields.employee_id || fields.employeeId,
       department: fields.department,
-      position: fields.position,
-      shift: fields.shift,
-      start_date: fields.start_date || fields.startDate,
-      emergency_contact: fields.emergency_contact || fields.emergencyContact,
       address: fields.address,
       pos_pin: fields.pos_pin,
       updated_at: new Date().toISOString()
