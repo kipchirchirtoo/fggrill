@@ -1783,6 +1783,44 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     }
     // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
 
+    // ============ AUTOMATIC CONSOLIDATED CUSTOMER BILL PRINTING ============
+    // The recall just merged the previous items with the newly added ones into
+    // one order row (nextItems / data.items). Print that single consolidated
+    // bill at the POS till printer — entirely backend-driven, so the customer
+    // always gets one accurate bill instead of a separate slip per recall.
+    try {
+      const { customerReceiptPrintService } = await import('../services/customerReceiptPrint.service');
+
+      customerReceiptPrintService.printCustomerReceipt({
+        order_number: data.order_number,
+        short_code: data.short_code,
+        customer_name: data.customer_name || 'Walk-in',
+        items: nextItems.map((item: any) => ({
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          line_total: item.line_total
+        })),
+        amount_paid: amountPaid,
+        payment_method: amountPaid > 0 ? 'partial' : 'pending',
+        cashier_name: data.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
+        outlet_name: outlet?.name || 'Restaurant',
+        created_at: data.updated_at
+      }).then((result) => {
+        if (result.success) {
+          logger.info(`✅ Consolidated bill for recalled order ${data.order_number} printed at POS`);
+        } else {
+          logger.warn(`⚠️ Consolidated bill print failed for ${data.order_number}: ${result.error}`);
+        }
+      }).catch((printError) => {
+        logger.error(`❌ Consolidated bill print error for ${data.order_number}:`, printError);
+      });
+    } catch (printError) {
+      // Don't block the recall response if printing fails
+      logger.error('Consolidated bill printing service error:', printError);
+    }
+    // ============ END AUTOMATIC CONSOLIDATED CUSTOMER BILL PRINTING ============
+
     res.json({ success: true, data });
   } catch (error) {
     next(error);

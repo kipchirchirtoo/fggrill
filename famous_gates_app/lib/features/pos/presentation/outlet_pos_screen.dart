@@ -761,7 +761,15 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               roomNumber: _roomController.text.trim(),
               appendItems: true,
             );
-      await _printCaptainOrderReceipt(order);
+      if (recalled == null) {
+        // New order: the cart IS the full order, safe to print client-side.
+        await _printCaptainOrderReceipt(order);
+      }
+      // Recalled order: the backend already printed one consolidated bill
+      // (previous items + new items merged) and the kitchen ticket for the
+      // newly added items, right when updateOrder succeeded above — printing
+      // again here from the local cart would only show the new items, not
+      // the full bill, so it's intentionally skipped.
       _cart = [];
       _recalledOrder = null;
       _orders = await repo.getOrders(_shift!.id);
