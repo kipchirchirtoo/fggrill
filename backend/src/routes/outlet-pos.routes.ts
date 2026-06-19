@@ -10,6 +10,7 @@ import {
   getOutletItems,
   getOutletStaff,
   getOutlets,
+  getPrinterStatus,
   getShiftOrder,
   getShiftOrders,
   getShiftSummary,
@@ -74,6 +75,7 @@ router.use((req, res, next) => {
   return res.status(403).json({ success: false, message: 'Forbidden: POS outlet access required' });
 });
 
+router.get('/printer/status', getPrinterStatus);
 router.get('/outlets', getOutlets);
 router.post('/outlets', createOutlet);
 router.get('/staff', getOutletStaff);

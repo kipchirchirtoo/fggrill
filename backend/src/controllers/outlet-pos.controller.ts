@@ -1192,6 +1192,26 @@ export const syncOutletItems = async (req: Request, res: Response, next: NextFun
   }
 };
 
+// @desc    Check whether the till/kitchen thermal printer service is reachable
+//          and configured — lets staff verify auto-print before relying on it.
+// @route   GET /pos/printer/status
+export const getPrinterStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
+    const configured = await captainOrderPrintService.checkPrinterStatus();
+    res.json({
+      success: true,
+      data: {
+        printer_service_reachable: configured,
+        python_service_url: process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getOutlets = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
