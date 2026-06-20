@@ -203,6 +203,26 @@ class OutletPosRepository {
     });
   }
 
+  /// Checks-and-consumes this order's one allowed duplicate bill print.
+  /// Throws a [StateError] with the exact backend message (e.g. "Reprint
+  /// limit reached. Only one duplicate bill is allowed.") if the duplicate
+  /// has already been used — callers should show that message verbatim
+  /// and must NOT print when this throws.
+  Future<void> reprintBill({
+    required String shiftId,
+    required String orderId,
+  }) async {
+    try {
+      await _dio.post('/pos/shifts/$shiftId/orders/$orderId/reprint-bill');
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      final message = data is Map && data['message'] is String
+          ? data['message'] as String
+          : 'Reprint limit reached. Only one duplicate bill is allowed.';
+      throw StateError(message);
+    }
+  }
+
   Future<void> payOrder({
     required String shiftId,
     required String orderId,
@@ -506,6 +526,7 @@ class OutletShiftOrder {
     this.voidRequestStatus,
     this.createdAt,
     this.items = const [],
+    this.billReprintCount = 0,
   });
 
   final String id;
@@ -526,6 +547,13 @@ class OutletShiftOrder {
   final String? voidRequestStatus;
   final DateTime? createdAt;
   final List<dynamic> items;
+  // How many times the explicit "Reprint bill" action has been used for
+  // this order's current state. Only one duplicate is allowed, so the
+  // reprint action is exhausted once this reaches 1 (server-enforced; this
+  // is only used to proactively disable the menu item in the UI).
+  final int billReprintCount;
+
+  bool get canReprintBill => billReprintCount < 1;
 
   factory OutletShiftOrder.fromJson(Map<String, dynamic> json) {
     final items = json['items'];
@@ -549,6 +577,9 @@ class OutletShiftOrder {
       voidRequestStatus: json['void_request_status'] as String?,
       createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
       items: items is List ? items : const [],
+      billReprintCount: json['bill_reprint_count'] is num
+          ? (json['bill_reprint_count'] as num).toInt()
+          : int.tryParse('${json['bill_reprint_count'] ?? 0}') ?? 0,
     );
   }
 }

@@ -3558,8 +3558,7 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             total_amount,
             payment_terms,
             due_date,
-            remarks,
-            items
+            remarks
         } = req.body;
 
         const effectiveBranchId = resolveCashierBranchId(req, branch_id);
@@ -3575,8 +3574,14 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             .rpc('generate_bill_number');
 
         const bill_number = billNumberData || `BILL${Date.now()}`;
-        const normalizedBillNumber = String(bill_number).toUpperCase().replace(/[^A-Z0-9]/g, '');
-        const scan_reference = `CCB-${normalizedBillNumber}`;
+
+        const extraContext = [
+            reference_type ? `ref_type=${reference_type}` : null,
+            room_number ? `room=${room_number}` : null,
+            payment_terms ? `terms=${payment_terms}` : null,
+            customer_type ? `customer_type=${customer_type}` : null
+        ].filter(Boolean).join(', ');
+        const combinedRemarks = [remarks, extraContext ? `(${extraContext})` : null].filter(Boolean).join(' ');
 
         const { data, error } = await supabase
             .from('unpaid_bills')
@@ -3584,20 +3589,15 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
                 bill_number,
                 branch_id: effectiveBranchId,
                 bill_type,
-                reference_type,
-                reference_id: normalizedReferenceId,
-                customer_type,
+                source_id: normalizedReferenceId,
                 customer_id: normalizedCustomerId,
                 customer_name: customer_name || waiterProfile?.name,
-                room_number,
                 waiter_id: waiterProfile?.id || waiter_id,
                 total_amount,
                 balance_amount: total_amount,
-                payment_terms,
+                balance_due: total_amount,
                 due_date,
-                remarks,
-                items: items || [],
-                scan_reference,
+                remarks: combinedRemarks || null,
                 status: 'unpaid',
                 created_by: normalizedCreatedBy
             })

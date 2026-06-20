@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
@@ -36,8 +35,17 @@ class PrintService {
   final String companyPhone = '+254 706 782 828';
   final String companyEmail = 'info@famousgatehotels.com';
   
-  // Python service URL for direct printing (no dialogs!)
-  final String pythonServiceUrl = Platform.environment['PYTHON_SERVICE_URL'] ?? 'http://localhost:5001';
+  // Python service URL for direct printing (no dialogs!). Deliberately
+  // defaults to localhost: this call is meant to hit a local print agent
+  // running on the same machine as a USB/LAN-connected thermal printer,
+  // which the cloud backend/python service can never reach directly.
+  // Platform.environment only sees real OS environment variables, not
+  // --dart-define build flags, so String.fromEnvironment is the only way
+  // to make this overridable per build.
+  final String pythonServiceUrl = const String.fromEnvironment(
+    'PYTHON_SERVICE_LOCAL_URL',
+    defaultValue: 'http://localhost:5001',
+  );
 
   /// Print directly via Python thermal printer service (NO DIALOG!)
   Future<bool> _printViaPythonService(Map<String, dynamic> receiptData) async {
@@ -50,11 +58,16 @@ class PrintService {
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body);
-        return result['success'] == true;
+        if (result['success'] == true) return true;
+        debugPrint(
+            'Python print service ($pythonServiceUrl) reported failure: ${result['error']}');
+        return false;
       }
+      debugPrint(
+          'Python print service ($pythonServiceUrl) returned HTTP ${response.statusCode}: ${response.body}');
       return false;
     } catch (e) {
-      debugPrint('Python print service error: $e');
+      debugPrint('Python print service ($pythonServiceUrl) unreachable: $e');
       return false;
     }
   }

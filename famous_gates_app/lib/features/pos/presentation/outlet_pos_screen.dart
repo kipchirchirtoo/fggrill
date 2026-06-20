@@ -622,11 +622,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                           ),
                           PopupMenuItem(
                             value: 'reprint',
-                            enabled: order.paymentStatus == 'unpaid',
-                            child: const ListTile(
+                            enabled: order.paymentStatus == 'unpaid' &&
+                                order.canReprintBill,
+                            child: ListTile(
                               dense: true,
-                              leading: Icon(Icons.print_outlined),
-                              title: Text('Reprint bill'),
+                              leading: const Icon(Icons.print_outlined),
+                              title: Text(order.canReprintBill
+                                  ? 'Reprint bill'
+                                  : 'Reprint bill (limit reached)'),
                             ),
                           ),
                           PopupMenuItem(
@@ -762,8 +765,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               appendItems: true,
             );
       if (recalled == null) {
-        // New order: the cart IS the full order, safe to print client-side.
-        await _printCaptainOrderReceipt(order);
+        // Bar captain orders are printed by the cashier station feed.
+        if (_isRestaurant) {
+          // New order: the cart IS the full order, safe to print client-side.
+          await _printCaptainOrderReceipt(order);
+        }
       } else {
         // Recalled order: backend still attempts the kitchen/cloud print flow,
         // but the customer bill should always print locally from the desktop
@@ -912,6 +918,33 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
 
   Future<void> _reprintBill(OutletShiftOrder order) async {
     try {
+      // Server-side check-and-consume of the one allowed duplicate. This
+      // must happen BEFORE printing — the limit is enforced here, not just
+      // in the UI, so it can't be bypassed by retrying or by another
+      // device/session for the same order.
+      await ref.read(outletPosRepositoryProvider).reprintBill(
+            shiftId: _shift!.id,
+            orderId: order.id,
+          );
+    } on StateError catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(content: Text(error.message)),
+        );
+      }
+      return;
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(content: Text('Could not check reprint limit: $error')),
+        );
+      }
+      return;
+    }
+
+    try {
       await _printCustomerBillFromSavedOrder(
         order,
         fallbackTitle: 'CUSTOMER BILL (REPRINT)',
@@ -924,6 +957,16 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       }
     } catch (error) {
       if (!mounted) return;
+    } finally {
+      // Refresh so the menu item reflects the now-consumed reprint
+      // allowance (it disables itself once canReprintBill is false).
+      final repo = ref.read(outletPosRepositoryProvider);
+      try {
+        final refreshed = await repo.getOrders(_shift!.id);
+        if (mounted) setState(() => _orders = refreshed);
+      } catch (_) {
+        // Best-effort refresh — the reprint itself already succeeded.
+      }
     }
   }
 

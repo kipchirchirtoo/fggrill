@@ -92,13 +92,25 @@ class ThermalPrinter:
         self.company_address = "Bomet, Kenya"
         self.company_phone = "+254 706 782 828"
         
+    def _connection_target(self) -> str:
+        """Human-readable description of what connect() is about to try,
+        so a failure log line is self-diagnosing instead of generic."""
+        if self.connection_type == 'network':
+            return f"network {self.settings['network_ip']}:{self.settings['network_port']}"
+        if self.connection_type == 'usb':
+            return f"usb vendor=0x{self.settings['usb_vendor']:04x} product=0x{self.settings['usb_product']:04x}"
+        if self.connection_type == 'serial':
+            return f"serial {self.settings['serial_port']}@{self.settings['serial_baudrate']}"
+        return f"unrecognised connection_type={self.connection_type!r}"
+
     def connect(self) -> bool:
         """Establish connection to the printer"""
         if not ESCPOS_AVAILABLE:
             logger.warning("ESC/POS library not available, using dummy printer")
             self.printer = Dummy()
             return True
-            
+
+        target = self._connection_target()
         try:
             if self.connection_type == 'network':
                 self.printer = Network(
@@ -117,12 +129,19 @@ class ThermalPrinter:
                 )
             else:
                 self.printer = Dummy()
-                
-            logger.info(f"Connected to thermal printer via {self.connection_type}")
+
+            logger.info(f"Connected to thermal printer via {target}")
             return True
         except Exception as e:
-            logger.error(f"Failed to connect to printer: {e}")
-            self.printer = Dummy()
+            # Deliberately NOT falling back to Dummy() here. A Dummy printer
+            # is truthy, so a later call's `if not self.printer` check would
+            # see it as "already connected" and skip reconnecting forever —
+            # every print after the first failure would then silently run
+            # against a fake printer instead of retrying the real one.
+            # Leaving self.printer as None forces every subsequent call to
+            # attempt a fresh real connection.
+            logger.error(f"Failed to connect to printer ({target}): {e}", exc_info=True)
+            self.printer = None
             return False
     
     def disconnect(self):
@@ -134,7 +153,7 @@ class ThermalPrinter:
                 pass
             self.printer = None
     
-    def print_captain_order(self, receipt_data: Dict[str, Any]) -> Dict[str, Any]:
+    def print_captain_order(self, receipt_data: Dict[str, Any], _retry: bool = True) -> Dict[str, Any]:
         """
         Print captain order for kitchen display (restaurant orders only)
         Simplified format focused on order fulfillment, not payment
@@ -147,7 +166,7 @@ class ThermalPrinter:
                         'success': False,
                         'error': 'Thermal printer not configured or unavailable. Please configure printer in system settings.'
                     }
-            
+
             p = self.printer
             is_recall = receipt_data.get('is_recall', False)
             outlet_type = str(receipt_data.get('outlet_type') or '').strip().lower()
@@ -294,14 +313,25 @@ class ThermalPrinter:
             }
             
         except Exception as e:
-            logger.error(f"Error printing captain order: {e}", exc_info=True)
-            error_msg = str(e) if str(e) else 'Unknown printer error occurred'
+            target = self._connection_target()
+            logger.error(f"Error printing captain order via {target}: {e}", exc_info=True)
+            # The printer connection is a long-lived singleton reused across
+            # requests (see get_thermal_printer() in routes.py). If the
+            # physical printer dropped (power cycle, cable unplugged, network
+            # blip), this same stale connection object would otherwise fail
+            # every single print forever until the whole service restarts.
+            # Drop it and retry once with a fresh connection before giving up.
+            self.disconnect()
+            if _retry:
+                return self.print_captain_order(receipt_data, _retry=False)
+            error_detail = str(e) if str(e) else f'{type(e).__name__} with no message (commonly a dropped/never-established connection)'
+            error_msg = f"Printer error via {target}: {error_detail}"
             return {
                 'success': False,
                 'error': error_msg
             }
-    
-    def print_receipt(self, receipt_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def print_receipt(self, receipt_data: Dict[str, Any], _retry: bool = True) -> Dict[str, Any]:
         """
         Print a receipt matching the Fish & Chips style from the images
         VAT is already included in prices - just show breakdown
@@ -309,10 +339,10 @@ class ThermalPrinter:
         # Check if this is a captain order
         is_captain_order = receipt_data.get('is_captain_order', False)
         receipt_type = receipt_data.get('receipt_type', '').upper()
-        
+
         if is_captain_order or 'CAPTAIN' in receipt_type:
             return self.print_captain_order(receipt_data)
-        
+
         try:
             if not self.printer:
                 connected = self.connect()
@@ -487,8 +517,17 @@ class ThermalPrinter:
             }
             
         except Exception as e:
-            logger.error(f"Error printing receipt: {e}", exc_info=True)
-            error_msg = str(e) if str(e) else 'Unknown printer error occurred'
+            target = self._connection_target()
+            logger.error(f"Error printing receipt via {target}: {e}", exc_info=True)
+            # See print_captain_order for why this resets and retries once:
+            # self.printer is a long-lived singleton, so a stale/dropped
+            # connection would otherwise fail every print until the service
+            # process restarts.
+            self.disconnect()
+            if _retry:
+                return self.print_receipt(receipt_data, _retry=False)
+            error_detail = str(e) if str(e) else f'{type(e).__name__} with no message (commonly a dropped/never-established connection)'
+            error_msg = f"Printer error via {target}: {error_detail}"
             return {
                 'success': False,
                 'error': error_msg

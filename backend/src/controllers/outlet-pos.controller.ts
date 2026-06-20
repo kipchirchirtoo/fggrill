@@ -51,18 +51,24 @@ const FOOD_AND_BAR_OUTLET_TYPES = new Set<OutletType>([
 const isFoodOrBarOutlet = (outletType: unknown): boolean =>
   FOOD_AND_BAR_OUTLET_TYPES.has(String(outletType || '') as OutletType);
 
-// Outlets whose bartender/waiter-placed orders auto-print a captain order.
-// Restaurant orders print to the kitchen printer. Main Bar and Executive Bar
-// orders print at that outlet's own cashier station instead — the bar
-// cashier owns stock control there and needs the ticket the moment a
-// bartender rings an order, not just at payment time. Every outlet type in
-// this codebase runs its captain-order print on its own physically
-// configured local printer (see python-services/receipts), so adding an
-// outlet type here only affects that outlet's printer, not other outlets'.
+// Outlets whose bartender/waiter-placed orders trigger this backend's OWN
+// cloud-side captain-order print attempt (via captainOrderPrint.service ->
+// python-services). Restaurant-only: the kitchen printer flow is unchanged
+// and out of scope here.
+//
+// Main Bar / Executive Bar are deliberately NOT in this set. This backend
+// and python-services both run on Render's cloud infrastructure, with zero
+// network path to a printer plugged into a USB port (or sitting on a
+// private LAN) at a branch — that connection is not reachable, full stop,
+// regardless of which language attempts to open it. The only thing in this
+// codebase that can ever physically reach that printer is code running ON
+// the branch's own machine: the bar cashier's Flutter screen, which already
+// polls getBarCaptainOrders below and prints locally via PrintService ->
+// a local print agent at localhost (see print_service.dart). So for these
+// two outlet types, printing is the cashier screen's job entirely; this
+// backend only supplies the order data, never attempts the print itself.
 const CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES = new Set<OutletType>([
-  'restaurant',
-  'main_bar',
-  'executive_bar'
+  'restaurant'
 ]);
 
 const isCaptainOrderAutoPrintOutlet = (outletType: unknown): boolean =>
@@ -76,6 +82,9 @@ const BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES = new Set<OutletType>([
   'main_bar',
   'executive_bar'
 ]);
+
+const isBarCashierLocalPrintOutlet = (outletType: unknown): boolean =>
+  BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES.has(String(outletType || '') as OutletType);
 
 const outletItemGroup = (outletType: unknown): 'restaurant' | 'bar' | 'other' => {
   const type = String(outletType || '');
@@ -1848,6 +1857,7 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
           `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() ||
           null,
         status: 'open',
+        kitchen_status: 'pending',
         payment_status: 'unpaid',
         total_amount: totalAmount,
         amount_paid: 0,
@@ -1946,11 +1956,14 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
         // Don't block order creation if printing fails
         logger.error('Captain order printing service error:', printError);
       }
-    } else {
-      logger.info(`ℹ️ Skipping captain order printing for ${outletType} outlet (only restaurant/main_bar/executive_bar outlets auto-print captain orders)`);
+    } else if (!isBarCashierLocalPrintOutlet(outletType)) {
+      logger.info(`ℹ️ Skipping captain order printing for ${outletType} outlet (not a captain-order outlet)`);
     }
+    // Main Bar / Executive Bar: no cloud print attempt — the cashier
+    // screen's own getBarCaptainOrders poll prints this order locally
+    // and calls markCaptainOrderPrinted itself once it does.
     // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
-    
+
     res.status(201).json({ success: true, data: order });
   } catch (error) {
     next(error);
@@ -1988,6 +2001,42 @@ export const markCaptainOrderPrinted = async (req: Request, res: Response, next:
       .eq('id', orderId);
     if (error) throw error;
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// A waiter/cashier may print the customer bill normally once (that happens
+// automatically on order creation/recall, not through this endpoint), and
+// then exactly one duplicate via the explicit "Reprint bill" action. This
+// checks-and-increments bill_reprint_count atomically server-side so the
+// limit survives logout/login and can't be bypassed by retrying client-side.
+export const reprintShiftOrderBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
+
+    const currentCount = Number(order.bill_reprint_count || 0);
+    if (currentCount >= 1) {
+      throw new AppError('Reprint limit reached. Only one duplicate bill is allowed.', 409);
+    }
+
+    const { data, error } = await supabase
+      .from('pos_shift_orders')
+      .update({ bill_reprint_count: currentCount + 1 })
+      .eq('id', orderId)
+      .eq('shift_id', shiftId)
+      .eq('bill_reprint_count', currentCount) // optimistic lock against a concurrent reprint racing this one
+      .select('bill_reprint_count')
+      .single();
+    if (error || !data) {
+      throw new AppError('Reprint limit reached. Only one duplicate bill is allowed.', 409);
+    }
+
+    res.json({ success: true, data: { bill_reprint_count: data.bill_reprint_count } });
   } catch (error) {
     next(error);
   }
@@ -2047,6 +2096,10 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         kitchen_ready_at: recalledAt,
         void_request_status: null,
         items: nextItems,
+        // The bill genuinely changed — give it a fresh reprint allowance
+        // rather than carrying over a duplicate already used against the
+        // pre-recall version of this order.
+        bill_reprint_count: 0,
         updated_at: recalledAt
       })
       .eq('id', orderId)
@@ -2116,9 +2169,12 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         // Don't block the recall response if printing fails
         logger.error('Recalled bill printing service error:', printError);
       }
-    } else {
-      logger.info(`ℹ️ Skipping captain order printing for recalled ${outletType} bill (only restaurant/main_bar/executive_bar outlets auto-print captain orders)`);
+    } else if (!isBarCashierLocalPrintOutlet(outletType)) {
+      logger.info(`ℹ️ Skipping captain order printing for recalled ${outletType} bill (not a captain-order outlet)`);
     }
+    // Main Bar / Executive Bar: no cloud print attempt here either — the
+    // recalled order is picked up by the same getBarCaptainOrders poll and
+    // printed locally, exactly like a newly created order.
     // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
 
     // ============ AUTOMATIC CONSOLIDATED CUSTOMER BILL PRINTING ============
@@ -2402,7 +2458,7 @@ export const mergeShiftOrders = async (req: Request, res: Response, next: NextFu
       .update({
         is_merged: true,
         merged_into: target.id,
-        status: 'cancelled',
+        status: 'voided',
         kitchen_status: 'cancelled',
         payment_status: 'voided',
         balance_amount: 0,

@@ -127,23 +127,26 @@ export const migratePendingBills = async (branchId?: number) => {
                         const amount = parseFloat(item[target.amountField] || '0');
                         const number = item[target.numberField] || item[target.idField];
 
+                        const { data: migratedBillNumberData } = await supabase.rpc('generate_bill_number');
+                        const migratedBillNumber = migratedBillNumberData
+                            ? String(migratedBillNumberData).toUpperCase().replace(/[^A-Z0-9]/g, '')
+                            : `MIG${Date.now()}`;
+
                         const { error: unpaidBillError } = await supabase
                             .from('unpaid_bills')
                             .insert({
+                                bill_number: migratedBillNumber,
                                 bill_type: target.table,
-                                reference_type: target.table,
-                                reference_id: item[target.idField],
-                                customer_type: 'staff',
+                                source_id: item[target.idField],
                                 customer_name: `${staffProfile.first_name || itemWaiter?.first_name || ''} ${staffProfile.last_name || itemWaiter?.last_name || ''}`.trim() || 'Waiter',
                                 waiter_id: staffProfile.id,
                                 branch_id: item.branch_id,
                                 total_amount: amount,
-                                paid_amount: 0,
+                                amount_paid: 0,
                                 balance_amount: amount,
+                                balance_due: amount,
                                 bill_date: new Date().toISOString(),
-                                payment_terms: 'Payroll deduction',
-                                remarks: `Auto-migrated uncleared ${target.typeLabel} ${number} (${location})`,
-                                items: [],
+                                remarks: `Auto-migrated uncleared ${target.typeLabel} ${number} (${location}) - Payroll deduction`,
                                 status: 'unpaid'
                             });
 
