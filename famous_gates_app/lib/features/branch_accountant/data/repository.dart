@@ -724,6 +724,33 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getStaffPosAccountingSummary({
+    String? from,
+    String? to,
+    String? role,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/finance/staff-pos-accounting/summary', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (from != null && from.isNotEmpty) 'from': from,
+      if (to != null && to.isNotEmpty) 'to': to,
+      if (role != null && role.isNotEmpty && role != 'all') 'role': role,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getStaffPosAccountingOrders(
+    String waiterId, {
+    String? from,
+    String? to,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/finance/staff-pos-accounting/$waiterId/orders', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (from != null && from.isNotEmpty) 'from': from,
+      if (to != null && to.isNotEmpty) 'to': to,
+    });
+  }
+
   Future<void> recordCreditBillPayment(
     String id,
     Map<String, dynamic> data,

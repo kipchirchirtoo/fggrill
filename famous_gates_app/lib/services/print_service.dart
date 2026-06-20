@@ -412,17 +412,25 @@ class PrintService {
       debugPrint('⚠️ Python service unavailable for captain order: $e, using Flutter PDF fallback');
     }
 
-    // FALLBACK: Use Flutter PDF printing (may show dialog on some systems)
+    // FALLBACK: Use Flutter PDF printing (may show dialog on some systems).
+    // Kept deliberately bare — no logo, no boxes/borders, no barcode — this
+    // is a kitchen ticket meant to be glanced at and torn off, not a bill.
     final doc = pw.Document();
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt));
     final code = (shortCode ?? orderNumber).trim();
 
-    pw.MemoryImage? logoImage;
-    try {
-      final logoBytes =
-          await rootBundle.load('assets/frontend_public/fglogo.png');
-      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
-    } catch (_) {}
+    // Table/room (when set) ride along on the Type line instead of getting
+    // their own row, so the order-info block stays exactly five lines.
+    final typeValue = [
+      if (orderType != null && orderType.trim().isNotEmpty)
+        orderType.trim().toUpperCase()
+      else
+        'DINE IN',
+      if (tableNumber != null && tableNumber.trim().isNotEmpty)
+        'TABLE ${tableNumber.trim()}',
+      if (roomNumber != null && roomNumber.trim().isNotEmpty)
+        'ROOM ${roomNumber.trim()}',
+    ].join(' - ');
 
     const receiptFormat = PdfPageFormat(
       _paperWidthMm * PdfPageFormat.mm,
@@ -440,170 +448,55 @@ class PrintService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-              if (logoImage != null)
-                pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 4),
-                  child: pw.Image(logoImage,
-                      width: 24 * PdfPageFormat.mm,
-                      height: 24 * PdfPageFormat.mm),
-                ),
-              pw.Text(companyName,
-                  style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold, fontSize: 14)),
-              pw.SizedBox(height: 2),
-              pw.Text(branchName.isEmpty ? companyAddress : branchName,
-                  style: const pw.TextStyle(fontSize: 8)),
-              pw.SizedBox(height: 4),
-              pw.Text('🍳 $label 🍳',
+              pw.Text(isRecall ? 'RECALLED $label' : label,
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 13)),
-              pw.SizedBox(height: 4),
-              pw.Container(
-                width: double.infinity,
-                padding:
-                    const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(width: 1.2),
-                ),
-                child: pw.Column(children: [
-                  pw.Text('ORDER CODE',
-                      style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                  pw.SizedBox(height: 2),
-                  pw.Text(code.toUpperCase(),
-                      style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 20)),
-                ]),
-              ),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 3),
+              pw.Text('ORDER CODE',
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 7)),
+              pw.Text(code.toUpperCase(),
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 18)),
+              pw.SizedBox(height: 3),
               _dashedLine(context),
-              pw.SizedBox(height: 4),
               _infoRow('Order #:', orderNumber),
               _infoRow('Time:', dateStr),
-              if (tableNumber != null && tableNumber.trim().isNotEmpty)
-                _infoRow('Table:', tableNumber.trim()),
-              if (roomNumber != null && roomNumber.trim().isNotEmpty)
-                _infoRow('Room:', roomNumber.trim()),
-              if (orderType != null && orderType.trim().isNotEmpty)
-                _infoRow('Type:', orderType.trim().toUpperCase()),
+              _infoRow('Type:', typeValue),
               if (customerName != null && customerName.trim().isNotEmpty)
                 _infoRow('Customer:', customerName.trim()),
               if (waiterName != null && waiterName.trim().isNotEmpty)
                 _infoRow('Waiter:', waiterName.trim()),
-              pw.SizedBox(height: 4),
               _dashedLine(context),
-              pw.SizedBox(height: 6),
-              // Large, readable items for kitchen staff
-              pw.Container(
-                width: double.infinity,
-                padding:
-                    const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(width: 0.8),
-                ),
-                child: pw.Text(
-                    isRecall ? 'RECALLED ITEMS TO PREPARE' : 'ITEMS TO PREPARE',
-                    textAlign: pw.TextAlign.center,
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              ),
-              pw.SizedBox(height: 6),
+              pw.Text(
+                  isRecall ? 'RECALLED ITEMS TO PREPARE' : 'ITEMS TO PREPARE',
+                  style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              pw.SizedBox(height: 3),
               ...items.map((item) {
                 // Extract notes if embedded in name with [notes] format
                 final namePattern = RegExp(r'^(.*?)\s*\[(.*?)\]$');
                 final match = namePattern.firstMatch(item.name);
                 final itemName = match?.group(1)?.trim() ?? item.name;
                 final itemNotes = match?.group(2)?.trim();
-                
-                return pw.Container(
-                  width: double.infinity,
-                  margin: const pw.EdgeInsets.only(bottom: 3),
-                  padding:
-                      const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(width: 0.6),
-                    borderRadius: pw.BorderRadius.circular(3),
-                  ),
+
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 2),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Row(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Container(
-                            padding: const pw.EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 2),
-                            decoration: pw.BoxDecoration(
-                              color: PdfColors.black,
-                              borderRadius: pw.BorderRadius.circular(3),
-                            ),
-                            child: pw.Text('${item.qty}x',
-                                style: pw.TextStyle(
-                                  color: PdfColors.white,
-                                  fontWeight: pw.FontWeight.bold,
-                                  fontSize: 10,
-                                )),
-                          ),
-                          pw.SizedBox(width: 5),
-                          pw.Expanded(
-                            child: pw.Text(itemName,
-                                style: pw.TextStyle(
-                                  fontWeight: pw.FontWeight.bold,
-                                  fontSize: 10,
-                                )),
-                          ),
-                        ],
-                      ),
+                      pw.Text('${item.qty}x $itemName',
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 10,
+                          )),
                       if (itemNotes != null && itemNotes.isNotEmpty)
-                        pw.Container(
-                          margin: const pw.EdgeInsets.only(top: 2),
-                          padding: const pw.EdgeInsets.all(3),
-                          decoration: pw.BoxDecoration(
-                            color: PdfColors.grey200,
-                            borderRadius: pw.BorderRadius.circular(2),
-                          ),
-                          child: pw.Text('⚠ NOTE: $itemNotes',
-                              style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold,
-                                fontSize: 8,
-                              )),
-                        ),
+                        pw.Text('   NOTE: $itemNotes',
+                            style: const pw.TextStyle(fontSize: 8)),
                     ],
                   ),
                 );
               }),
-              pw.SizedBox(height: 4),
-              _dashedLine(context),
-              pw.SizedBox(height: 6),
-              pw.Container(
-                width: double.infinity,
-                padding:
-                    const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-                decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.8)),
-                child: pw.Column(children: [
-                  pw.Text('NOT A CUSTOMER BILL',
-                      style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.SizedBox(height: 2),
-                  pw.Text('For kitchen preparation only',
-                      style: const pw.TextStyle(fontSize: 7)),
-                  pw.Text('Payment handled at cashier',
-                      style: const pw.TextStyle(fontSize: 7)),
-                ]),
-              ),
-              pw.SizedBox(height: 8),
-              pw.BarcodeWidget(
-                data: code.toUpperCase(),
-                barcode: pw.Barcode.code128(),
-                width: _barcodeWidthMm * PdfPageFormat.mm,
-                height: 28,
-                drawText: false,
-              ),
-              pw.Text(code.toUpperCase(),
-                  style: const pw.TextStyle(fontSize: 7)),
-              pw.SizedBox(height: 6),
-              pw.Text('Printed: ${DateFormat('HH:mm:ss').format(_toKenyaTime(DateTime.now()))}',
-                  style: const pw.TextStyle(fontSize: 6)),
             ],
           );
         },

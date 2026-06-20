@@ -51,40 +51,32 @@ const FOOD_AND_BAR_OUTLET_TYPES = new Set<OutletType>([
 const isFoodOrBarOutlet = (outletType: unknown): boolean =>
   FOOD_AND_BAR_OUTLET_TYPES.has(String(outletType || '') as OutletType);
 
-// Outlets whose bartender/waiter-placed orders trigger this backend's OWN
-// cloud-side captain-order print attempt (via captainOrderPrint.service ->
-// python-services). Restaurant-only: the kitchen printer flow is unchanged
-// and out of scope here.
-//
-// Main Bar / Executive Bar are deliberately NOT in this set. This backend
-// and python-services both run on Render's cloud infrastructure, with zero
+// This backend never attempts its own cloud-side captain-order print (via
+// captainOrderPrint.service -> python-services). This backend and
+// python-services both run on Render's cloud infrastructure, with zero
 // network path to a printer plugged into a USB port (or sitting on a
 // private LAN) at a branch — that connection is not reachable, full stop,
 // regardless of which language attempts to open it. The only thing in this
 // codebase that can ever physically reach that printer is code running ON
-// the branch's own machine: the bar cashier's Flutter screen, which already
-// polls getBarCaptainOrders below and prints locally via PrintService ->
-// a local print agent at localhost (see print_service.dart). So for these
-// two outlet types, printing is the cashier screen's job entirely; this
-// backend only supplies the order data, never attempts the print itself.
-const CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES = new Set<OutletType>([
-  'restaurant'
-]);
-
-const isCaptainOrderAutoPrintOutlet = (outletType: unknown): boolean =>
-  CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES.has(String(outletType || '') as OutletType);
-
+// the branch's own machine:
+//  - Main Bar / Executive Bar: the bar cashier's Flutter screen polls
+//    getBarCaptainOrders below and prints locally via PrintService -> a
+//    local print agent at localhost (see print_service.dart).
+//  - Restaurant: orders placed through the generic Outlet POS screen land
+//    in pos_shift_orders (a different table from the dedicated waiter/
+//    table-ordering flow that feeds KDS's restaurant_orders feed, so KDS
+//    never sees these) — outlet_pos_screen.dart prints the kitchen ticket
+//    locally itself, for both new and recalled orders.
+// This backend only ever supplies the order data; it never attempts the
+// print itself.
+//
 // Strictly the two bar outlets — used only for the Main Bar / Executive Bar
 // cashier station's own polling feed (getBarCaptainOrders below). Restaurant
-// orders must never appear here: they belong to KDS only, which is the sole
-// place restaurant captain orders are allowed to print from.
+// orders must never appear here: they belong to this local-print path only.
 const BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES = new Set<OutletType>([
   'main_bar',
   'executive_bar'
 ]);
-
-const isBarCashierLocalPrintOutlet = (outletType: unknown): boolean =>
-  BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES.has(String(outletType || '') as OutletType);
 
 const outletItemGroup = (outletType: unknown): 'restaurant' | 'bar' | 'other' => {
   const type = String(outletType || '');
@@ -1897,72 +1889,13 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
     
-    // ============ AUTOMATIC CAPTAIN ORDER PRINTING ============
-    // Print captain order IMMEDIATELY (no waiting for KDS poll). Restaurant
-    // orders print to the kitchen printer; Main Bar / Executive Bar orders
-    // print at that outlet's own cashier printer so the bartender's order is
-    // on the cashier's desk the moment it is placed, since the bar cashier
-    // owns stock control for that outlet.
-    const outletType = String(outlet?.outlet_type || '').toLowerCase();
-
-    if (isCaptainOrderAutoPrintOutlet(outletType)) {
-      try {
-        const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
-
-        // Mark printed the moment the attempt is dispatched, not only once
-        // the printer confirms delivery. If the print queue/printer is down
-        // or unreachable, gating this on success would make every KDS/
-        // cashier poll retry the SAME order forever (every 5s, and again on
-        // every login) — a printer outage must not turn into a print-spam
-        // outage too. Staff keep a manual reprint button for genuine misses.
-        supabase
-          .from('pos_shift_orders')
-          .update({ captain_printed_at: new Date().toISOString() })
-          .eq('id', order.id)
-          .then(() => {});
-
-        // Print captain order asynchronously (don't block response)
-        captainOrderPrintService.printCaptainOrder({
-          order_number: order.order_number,
-          short_code: order.short_code,
-          customer_name: order.customer_name || 'Walk-in',
-          table_number: order.table_number,
-          room_number: order.room_number,
-          order_type: order.order_type || 'dine_in',
-          items: normalizedItems.map((item: any) => ({
-            name: item.name,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            line_total: item.line_total,
-            notes: item.notes || item.special_instructions || ''
-          })),
-          total_amount: totalAmount,
-          waiter_name: order.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
-          outlet_name: outlet?.name || 'Restaurant',
-          outlet_type: outlet?.outlet_type,
-          created_at: order.created_at
-        }).then((result) => {
-          if (result.success) {
-            logger.info(`✅ Captain order ${order.order_number} printed IMMEDIATELY (${outletType} outlet)`);
-          } else {
-            logger.warn(`⚠️ Captain order ${order.order_number} print failed: ${result.error}`);
-          }
-        }).catch((printError) => {
-          logger.error(`❌ Captain order print error for ${order.order_number}:`, printError);
-        });
-
-        logger.info(`📄 Captain order ${order.order_number} sent to print IMMEDIATELY (${outletType} outlet)`);
-      } catch (printError) {
-        // Don't block order creation if printing fails
-        logger.error('Captain order printing service error:', printError);
-      }
-    } else if (!isBarCashierLocalPrintOutlet(outletType)) {
-      logger.info(`ℹ️ Skipping captain order printing for ${outletType} outlet (not a captain-order outlet)`);
-    }
-    // Main Bar / Executive Bar: no cloud print attempt — the cashier
-    // screen's own getBarCaptainOrders poll prints this order locally
-    // and calls markCaptainOrderPrinted itself once it does.
-    // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
+    // Captain order printing is entirely the cashier app's job now (this
+    // backend never attempts its own cloud-side print, see the comment
+    // above BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES near the top of this
+    // file). Main Bar / Executive Bar: the cashier screen's own
+    // getBarCaptainOrders poll prints this order locally and calls
+    // markCaptainOrderPrinted itself. Restaurant: outlet_pos_screen.dart
+    // prints the kitchen ticket locally right after creating the order.
 
     res.status(201).json({ success: true, data: order });
   } catch (error) {
@@ -2108,74 +2041,15 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
       .single();
     if (error || !data) throw error || new AppError('Failed to update recalled bill', 500);
 
-    // ============ AUTOMATIC CAPTAIN ORDER PRINTING FOR RECALLED BILLS ============
-    // Recalled items get a captain order printed (kitchen printer for
-    // restaurant, that outlet's own cashier printer for Main Bar / Executive
-    // Bar — same outlets that auto-print on initial order placement) AND the
-    // order is marked 'recalled' (not 'served') so it still shows on the KDS
-    // digital display with a RECALL badge until kitchen/bar staff dismiss it.
-    const outletType = String(outlet?.outlet_type || '').toLowerCase();
-    if (isCaptainOrderAutoPrintOutlet(outletType)) {
-      try {
-        const { captainOrderPrintService } = await import('../services/captainOrderPrint.service');
-
-        // Mark printed the moment the attempt is dispatched, not only once
-        // the printer confirms delivery — see the matching comment in
-        // recordShiftOrder. A printer outage must not turn into every poll
-        // (and every login) retrying this same recall forever.
-        supabase
-          .from('pos_shift_orders')
-          .update({ captain_printed_at: new Date().toISOString() })
-          .eq('id', data.id)
-          .then(() => {});
-
-        // Print ONLY the newly recalled items as a "RECALLED CAPTAIN ORDER"
-        // ticket — kitchen/bar staff already have the original ticket for
-        // items already prepared, so reprinting those would just be noise
-        // (and risk re-cooking something already made).
-        const recallTotal = normalizedItems.reduce((sum, item: any) => sum + numberValue(item.line_total), 0);
-        captainOrderPrintService.printCaptainOrder({
-          order_number: data.order_number,
-          short_code: data.short_code,
-          customer_name: data.customer_name || 'Walk-in',
-          table_number: data.table_number,
-          room_number: data.room_number,
-          order_type: data.order_type || 'dine_in',
-          items: normalizedItems.map((item: any) => ({
-            name: item.name,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            line_total: item.line_total,
-            notes: item.notes || item.special_instructions || item.recall_note
-          })),
-          total_amount: recallTotal,
-          waiter_name: data.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
-          outlet_name: outlet?.name || 'Restaurant',
-          outlet_type: outlet?.outlet_type,
-          created_at: data.updated_at,
-          is_recall: true
-        }).then((result) => {
-          if (result.success) {
-            logger.info(`✅ Recalled bill ${data.order_number} printed (${outletType} outlet)`);
-          } else {
-            logger.warn(`⚠️ Recalled bill ${data.order_number} print failed: ${result.error}`);
-          }
-        }).catch((printError) => {
-          logger.error(`❌ Recalled bill print error for ${data.order_number}:`, printError);
-        });
-
-        logger.info(`📄 Recalled bill ${data.order_number} sent to print (${outletType} outlet)`);
-      } catch (printError) {
-        // Don't block the recall response if printing fails
-        logger.error('Recalled bill printing service error:', printError);
-      }
-    } else if (!isBarCashierLocalPrintOutlet(outletType)) {
-      logger.info(`ℹ️ Skipping captain order printing for recalled ${outletType} bill (not a captain-order outlet)`);
-    }
-    // Main Bar / Executive Bar: no cloud print attempt here either — the
-    // recalled order is picked up by the same getBarCaptainOrders poll and
-    // printed locally, exactly like a newly created order.
-    // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
+    // Recalled items still get a captain ticket, but this backend doesn't
+    // print it (this backend never attempts its own cloud-side print, see
+    // the comment above BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES near the top
+    // of this file). The order is marked 'recalled' (not 'served') so it
+    // still shows on the KDS digital display with a RECALL badge until
+    // kitchen/bar staff dismiss it. Main Bar / Executive Bar:
+    // getBarCaptainOrders poll prints it locally. Restaurant:
+    // outlet_pos_screen.dart prints it locally right after this call
+    // returns (see _printKitchenCaptainOrder, isRecall: true).
 
     // The consolidated bill for this recall (nextItems / data.items) is
     // printed locally by the cashier app from this response's `data` (see

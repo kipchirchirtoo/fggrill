@@ -26,6 +26,7 @@ import 'daily_close_screen.dart';
 import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
+import 'staff_pos_accounting_screen.dart';
 
 enum BranchAccountantSection {
   overview,
@@ -50,6 +51,7 @@ enum BranchAccountantSection {
   payments,
   outboundPayments,
   creditBills,
+  staffPosAccounting,
   foodVariance,
   shiftPnl,
   bookingsInvoices,
@@ -184,6 +186,8 @@ class _BranchAccountantDashboardState
         );
       case BranchAccountantSection.creditBills:
         return const _CreditBillsSection();
+      case BranchAccountantSection.staffPosAccounting:
+        return const StaffPosAccountingScreen();
       case BranchAccountantSection.foodVariance:
         return const _FoodVarianceSection();
       case BranchAccountantSection.shiftPnl:
@@ -242,6 +246,8 @@ const _navItems = [
       BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
   _NavItem(
       BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
+  _NavItem(BranchAccountantSection.staffPosAccounting, 'Staff POS Accounting',
+      Icons.receipt_long),
   _NavItem(BranchAccountantSection.payments, 'Payments & Invoices',
       Icons.receipt_long),
   _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings & Invoices',

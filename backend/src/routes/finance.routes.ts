@@ -55,6 +55,10 @@ import {
   getDirectorPayrollSummary,
   downloadPayrollBatchPdf,
 } from "../controllers/branch-payroll.controller";
+import {
+  getStaffPosAccountingSummary,
+  getStaffPosAccountingOrders,
+} from "../controllers/branch-pos-staff-accounting.controller";
 import { DirectorController } from "../controllers/director.controller";
 import { DirectorEnhancedController } from "../controllers/director-enhanced.controller";
 import { DirectorTasksController } from "../controllers/director-tasks.controller";
@@ -1044,5 +1048,25 @@ router.post("/payroll/batches/:id/submit", authorize(PAYROLL_GENERATE_ROLES), su
 router.patch("/payroll/batches/:id/review", authorize(PAYROLL_AUDITOR_ROLES), reviewPayrollBatch);
 router.patch("/payroll/batches/:id/approve", authorize(PAYROLL_DIRECTOR_ROLES), approvePayrollBatch);
 router.get("/payroll/director-summary", authorize(PAYROLL_DIRECTOR_ROLES), getDirectorPayrollSummary);
+
+// ════════════════════════════════════════════════════════════════
+// STAFF POS ACCOUNTING (per-waiter/bartender, cleared vs outstanding)
+// ════════════════════════════════════════════════════════════════
+
+const STAFF_POS_ACCOUNTING_ROLES = [
+  UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.DIRECTOR,
+  UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT,
+];
+
+router.get(
+  "/staff-pos-accounting/summary",
+  authorize(STAFF_POS_ACCOUNTING_ROLES),
+  getStaffPosAccountingSummary,
+);
+router.get(
+  "/staff-pos-accounting/:waiterId/orders",
+  authorize(STAFF_POS_ACCOUNTING_ROLES),
+  getStaffPosAccountingOrders,
+);
 
 export default router;
