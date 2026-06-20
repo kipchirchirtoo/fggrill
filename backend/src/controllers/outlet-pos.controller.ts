@@ -2177,44 +2177,14 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
     // printed locally, exactly like a newly created order.
     // ============ END AUTOMATIC CAPTAIN ORDER PRINTING ============
 
-    // ============ AUTOMATIC CONSOLIDATED CUSTOMER BILL PRINTING ============
-    // The recall just merged the previous items with the newly added ones into
-    // one order row (nextItems / data.items). Print that single consolidated
-    // bill at the POS till printer — entirely backend-driven, so the customer
-    // always gets one accurate bill instead of a separate slip per recall.
-    try {
-      const { customerReceiptPrintService } = await import('../services/customerReceiptPrint.service');
-
-      customerReceiptPrintService.printCustomerReceipt({
-        order_number: data.order_number,
-        short_code: data.short_code,
-        verification_code: data.short_code,
-        customer_name: data.customer_name || 'Walk-in',
-        items: nextItems.map((item: any) => ({
-          name: item.name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          line_total: item.line_total
-        })),
-        amount_paid: amountPaid,
-        payment_method: amountPaid > 0 ? 'partial' : 'pending',
-        cashier_name: data.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
-        outlet_name: outlet?.name || 'Restaurant',
-        created_at: data.updated_at
-      }).then((result) => {
-        if (result.success) {
-          logger.info(`✅ Consolidated bill for recalled order ${data.order_number} printed at POS`);
-        } else {
-          logger.warn(`⚠️ Consolidated bill print failed for ${data.order_number}: ${result.error}`);
-        }
-      }).catch((printError) => {
-        logger.error(`❌ Consolidated bill print error for ${data.order_number}:`, printError);
-      });
-    } catch (printError) {
-      // Don't block the recall response if printing fails
-      logger.error('Consolidated bill printing service error:', printError);
-    }
-    // ============ END AUTOMATIC CONSOLIDATED CUSTOMER BILL PRINTING ============
+    // The consolidated bill for this recall (nextItems / data.items) is
+    // printed locally by the cashier app from this response's `data` (see
+    // outlet_pos_screen.dart's _printCustomerBillFromSavedOrder), not by
+    // this backend. This backend and python-services both run on Render's
+    // cloud infrastructure with no network path to a branch's USB/LAN till
+    // printer, so a cloud print attempt here can never succeed — it would
+    // only produce log noise (see the identical fix applied to
+    // captain-order printing above).
 
     res.json({ success: true, data });
   } catch (error) {
@@ -2332,43 +2302,13 @@ export const splitShiftOrder = async (req: Request, res: Response, next: NextFun
       }
     }
 
-    // ============ AUTOMATIC CUSTOMER RECEIPT PRINTING FOR SPLIT BILLS ============
-    try {
-      const { customerReceiptPrintService } = await import('../services/customerReceiptPrint.service');
-
-      for (const child of childOrders) {
-        const childItems = Array.isArray(child.items) ? child.items : [];
-        customerReceiptPrintService.printCustomerReceipt({
-          order_number: child.order_number,
-          short_code: child.short_code,
-          verification_code: child.short_code,
-          customer_name: child.customer_name || 'Walk-in',
-          items: childItems.map((item: any) => ({
-            name: item.name,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            line_total: item.line_total
-          })),
-          amount_paid: 0,
-          payment_method: 'pending',
-          cashier_name: child.waiter_name || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim(),
-          outlet_name: outlet?.name || 'Restaurant',
-          created_at: child.created_at
-        }).then((result) => {
-          if (result.success) {
-            logger.info(`✅ Split bill ${child.order_number} printed at POS`);
-          } else {
-            logger.warn(`⚠️ Split bill ${child.order_number} print failed: ${result.error}`);
-          }
-        }).catch((printError) => {
-          logger.error(`❌ Split bill print error for ${child.order_number}:`, printError);
-        });
-      }
-    } catch (printError) {
-      logger.error('Split bill printing service error:', printError);
-    }
-    // ============ END AUTOMATIC CUSTOMER RECEIPT PRINTING ============
-
+    // Split-bill receipts are printed locally by the cashier app from this
+    // response's childOrders (see outlet_pos_screen.dart's
+    // _showSplitOrderDialog), not by this backend. This backend and
+    // python-services both run on Render's cloud infrastructure with no
+    // network path to a branch's USB/LAN till printer, so a cloud print
+    // attempt here can never succeed — it would only produce log noise
+    // (see the identical fix applied to captain-order printing above).
     res.status(201).json({ success: true, data: childOrders });
   } catch (error) {
     next(error);

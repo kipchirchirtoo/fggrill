@@ -1059,7 +1059,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     ];
     await _run(() async {
       final repo = ref.read(outletPosRepositoryProvider);
-      await repo.splitOrder(
+      final childOrders = await repo.splitOrder(
         shiftId: _shift!.id,
         orderId: order.id,
         splits: [
@@ -1073,6 +1073,15 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
           },
         ],
       );
+      // Each split bill is printed locally from the till here — the backend
+      // can't reach this printer (cloud-hosted, no path to branch hardware),
+      // so it just returns the child orders for us to print client-side.
+      for (final child in childOrders) {
+        await _printCustomerBillFromSavedOrder(
+          child,
+          fallbackTitle: 'CUSTOMER BILL (SPLIT)',
+        );
+      }
       _orders = await repo.getOrders(_shift!.id);
       if (mounted) {
         AppNotifier.showSnackBar(
