@@ -203,6 +203,88 @@ class OutletPosRepository {
     });
   }
 
+  Future<OutletShiftOrder> getOrder({
+    required String shiftId,
+    required String orderId,
+  }) async {
+    final response = await _dio.get('/pos/shifts/$shiftId/orders/$orderId');
+    return OutletShiftOrder.fromJson(
+        Map<String, dynamic>.from(_data(response.data) as Map));
+  }
+
+  /// Item-level void request -- voids a quantity within a single line item
+  /// on an open bill, leaving the rest of the bill untouched. Requires
+  /// manager/accountant approval (see [approveItemVoid]/[rejectItemVoid])
+  /// before the bill total is actually reduced.
+  Future<ItemVoidRequest> requestItemVoid({
+    required String shiftId,
+    required String orderId,
+    required int itemIndex,
+    required double qtyToVoid,
+    required String reasonCategory,
+    String? note,
+  }) async {
+    final response = await _dio.post('/pos/voids/request', data: {
+      'shift_id': shiftId,
+      'order_id': orderId,
+      'item_index': itemIndex,
+      'qty_to_void': qtyToVoid,
+      'reason_category': reasonCategory,
+      'reason': (note != null && note.trim().isNotEmpty)
+          ? note.trim()
+          : itemVoidReasonLabel(reasonCategory),
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    });
+    return ItemVoidRequest.fromJson(
+        Map<String, dynamic>.from(_data(response.data) as Map));
+  }
+
+  Future<List<ItemVoidRequest>> getItemVoidRequestsForShift(
+      String shiftId) async {
+    final response = await _dio.get('/pos/voids/shift/$shiftId');
+    return _list(response.data)
+        .map((item) =>
+            ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  /// Approves the pending request and atomically reduces the bill. Throws a
+  /// [StateError] with the server's message (e.g. "Already actioned by
+  /// Jane") if another reviewer already actioned it first.
+  Future<OutletShiftOrder> approveItemVoid(String requestId) async {
+    try {
+      final response = await _dio.patch('/pos/voids/$requestId/approve');
+      return OutletShiftOrder.fromJson(
+          Map<String, dynamic>.from(_data(response.data) as Map));
+    } on DioException catch (error) {
+      throw StateError(_errorMessage(error, 'This void request could not be approved.'));
+    }
+  }
+
+  Future<ItemVoidRequest> rejectItemVoid(
+    String requestId, {
+    String? rejectionReason,
+  }) async {
+    try {
+      final response =
+          await _dio.patch('/pos/voids/$requestId/reject', data: {
+        if (rejectionReason != null && rejectionReason.trim().isNotEmpty)
+          'rejection_reason': rejectionReason.trim(),
+      });
+      return ItemVoidRequest.fromJson(
+          Map<String, dynamic>.from(_data(response.data) as Map));
+    } on DioException catch (error) {
+      throw StateError(_errorMessage(error, 'This void request could not be rejected.'));
+    }
+  }
+
+  String _errorMessage(DioException error, String fallback) {
+    final data = error.response?.data;
+    return data is Map && data['message'] is String
+        ? data['message'] as String
+        : fallback;
+  }
+
   /// Checks-and-consumes this order's one allowed duplicate bill print.
   /// Throws a [StateError] with the exact backend message (e.g. "Reprint
   /// limit reached. Only one duplicate bill is allowed.") if the duplicate
@@ -580,6 +662,87 @@ class OutletShiftOrder {
       billReprintCount: json['bill_reprint_count'] is num
           ? (json['bill_reprint_count'] as num).toInt()
           : int.tryParse('${json['bill_reprint_count'] ?? 0}') ?? 0,
+    );
+  }
+}
+
+const Map<String, String> itemVoidReasonCategories = {
+  'wrong_order': 'Wrong order',
+  'duplicate_entry': 'Duplicate entry',
+  'customer_changed_mind': 'Customer changed mind',
+  'pricing_error': 'Pricing error',
+  'other': 'Other',
+};
+
+String itemVoidReasonLabel(String category) =>
+    itemVoidReasonCategories[category] ?? 'Other';
+
+class ItemVoidRequest {
+  const ItemVoidRequest({
+    required this.id,
+    required this.shiftId,
+    required this.orderId,
+    required this.itemIndex,
+    required this.itemName,
+    required this.unitPrice,
+    required this.qtyToVoid,
+    required this.qtyBeforeVoid,
+    required this.reasonCategory,
+    required this.reason,
+    required this.status,
+    this.note,
+    this.requestedBy,
+    this.requestedByName,
+    this.actionedBy,
+    this.actionedByName,
+    this.rejectionReason,
+    this.createdAt,
+  });
+
+  final String id;
+  final String shiftId;
+  final String orderId;
+  final int itemIndex;
+  final String itemName;
+  final double unitPrice;
+  final double qtyToVoid;
+  final double qtyBeforeVoid;
+  final String reasonCategory;
+  final String reason;
+  final String status;
+  final String? note;
+  final String? requestedBy;
+  final String? requestedByName;
+  final String? actionedBy;
+  final String? actionedByName;
+  final String? rejectionReason;
+  final DateTime? createdAt;
+
+  double get amount => qtyToVoid * unitPrice;
+  bool get isPending => status == 'pending';
+
+  factory ItemVoidRequest.fromJson(Map<String, dynamic> json) {
+    return ItemVoidRequest(
+      id: '${json['id']}',
+      shiftId: '${json['shift_id'] ?? ''}',
+      orderId: '${json['order_id'] ?? ''}',
+      itemIndex: json['item_index'] is num
+          ? (json['item_index'] as num).toInt()
+          : int.tryParse('${json['item_index']}') ?? -1,
+      itemName: '${json['item_name'] ?? ''}',
+      unitPrice: _num(json['unit_price']),
+      qtyToVoid: _num(json['qty_to_void']),
+      qtyBeforeVoid: _num(json['qty_before_void']),
+      reasonCategory: '${json['reason_category'] ?? 'other'}',
+      reason: '${json['reason'] ?? ''}',
+      status: '${json['status'] ?? 'pending'}',
+      note: json['note'] as String?,
+      requestedBy: json['requested_by'] as String?,
+      requestedByName: json['requested_by_name'] as String?,
+      actionedBy: json['actioned_by'] as String?,
+      actionedByName: json['actioned_by_name'] as String?,
+      rejectionReason: json['rejection_reason'] as String?,
+      createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
     );
   }
 }

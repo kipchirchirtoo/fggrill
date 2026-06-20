@@ -525,7 +525,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             Text('Recent orders',
                 style: Theme.of(context).textTheme.titleLarge),
             Text(
-              'Recall, split, merge, and request void approval for waiter bills.',
+              'Tap a bill to view it and print a duplicate. Recall, split, merge, '
+              'and request void approval from the bill actions menu.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -543,6 +544,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             for (final order in _orders)
               Card(
                 child: ListTile(
+                  onTap: () => _showBillDetail(order),
                   title: Text(order.orderNumber),
                   subtitle: Text(
                     [
@@ -600,9 +602,6 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                             case 'recall':
                               _recallOrder(order);
                               break;
-                            case 'reprint':
-                              _reprintBill(order);
-                              break;
                             case 'split':
                               _showSplitOrderDialog(order);
                               break;
@@ -619,18 +618,6 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                               dense: true,
                               leading: Icon(Icons.restore),
                               title: Text('Recall bill'),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'reprint',
-                            enabled: order.paymentStatus == 'unpaid' &&
-                                order.canReprintBill,
-                            child: ListTile(
-                              dense: true,
-                              leading: const Icon(Icons.print_outlined),
-                              title: Text(order.canReprintBill
-                                  ? 'Reprint bill'
-                                  : 'Reprint bill (limit reached)'),
                             ),
                           ),
                           PopupMenuItem(
@@ -973,6 +960,24 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       );
       rethrow;
     }
+  }
+
+  // The only way a waiter can reach the duplicate-print action — printing
+  // is deliberately not exposed on the bill-actions popup menu, so a waiter
+  // must open and look at the bill before a duplicate can be printed.
+  Future<void> _showBillDetail(OutletShiftOrder order) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _BillDetailSheet(
+        order: order,
+        shiftId: _shift!.id,
+        onPrintDuplicate: () {
+          Navigator.of(context).pop();
+          _reprintBill(order);
+        },
+      ),
+    );
   }
 
   Future<void> _reprintBill(OutletShiftOrder order) async {
@@ -1779,6 +1784,505 @@ class _CartPanel extends StatelessWidget {
             TextButton(
                 onPressed: cart.isEmpty ? null : onClear,
                 child: const Text('Clear')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Manager/accountant tier allowed to approve or reject an item void --
+// mirrors REVIEW_ROLES in outlet-pos.controller.ts exactly. The server
+// re-checks this independently; this only controls which buttons render.
+const Set<String> _itemVoidReviewRoles = {
+  'super_admin',
+  'general_manager',
+  'director',
+  'auditor',
+  'finance_manager',
+  'accountant',
+  'branch_accountant',
+  'branch_manager',
+};
+
+class _BillDetailSheet extends ConsumerStatefulWidget {
+  const _BillDetailSheet({
+    required this.order,
+    required this.shiftId,
+    required this.onPrintDuplicate,
+  });
+
+  final OutletShiftOrder order;
+  final String shiftId;
+  final VoidCallback onPrintDuplicate;
+
+  @override
+  ConsumerState<_BillDetailSheet> createState() => _BillDetailSheetState();
+}
+
+class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
+  static const _pollInterval = Duration(seconds: 6);
+
+  late OutletShiftOrder _order;
+  List<ItemVoidRequest> _voidRequests = const [];
+  bool _actioning = false;
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _order = widget.order;
+    _poll();
+    _pollTimer = Timer.periodic(_pollInterval, (_) => _poll());
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _poll() async {
+    try {
+      final repo = ref.read(outletPosRepositoryProvider);
+      final results = await Future.wait([
+        repo.getOrder(shiftId: widget.shiftId, orderId: _order.id),
+        repo.getItemVoidRequestsForShift(widget.shiftId),
+      ]);
+      if (!mounted) return;
+      final freshOrder = results[0] as OutletShiftOrder;
+      final allRequests = results[1] as List<ItemVoidRequest>;
+      setState(() {
+        _order = freshOrder;
+        _voidRequests = allRequests.where((r) => r.orderId == _order.id).toList();
+      });
+    } catch (_) {
+      // Transient polling failures should not disrupt an open bill sheet.
+    }
+  }
+
+  double _balance(OutletShiftOrder order) {
+    if (order.balanceAmount > 0) return order.balanceAmount;
+    if (['paid', 'credit_bill', 'voided'].contains(order.paymentStatus)) {
+      return 0;
+    }
+    return (order.totalAmount - order.amountPaid)
+        .clamp(0, order.totalAmount)
+        .toDouble();
+  }
+
+  ItemVoidRequest? _pendingFor(int itemIndex) {
+    for (final request in _voidRequests) {
+      if (request.itemIndex == itemIndex && request.isPending) return request;
+    }
+    return null;
+  }
+
+  String get _role =>
+      (ref.read(authNotifierProvider).valueOrNull?.role ?? '').toLowerCase();
+
+  bool get _isReviewer => _itemVoidReviewRoles.contains(_role);
+  bool get _isCashier => _role.contains('cashier');
+
+  bool get _billEditable =>
+      ['unpaid', 'partial'].contains(_order.paymentStatus) &&
+      !_order.isSplit &&
+      !_order.isMerged &&
+      _order.status != 'cancelled' &&
+      _order.status != 'voided';
+
+  Future<void> _openVoidItemSheet(int index, Map<String, dynamic> item, double activeQty) async {
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _VoidItemSheet(
+        itemName: '${item['name'] ?? ''}',
+        maxQty: activeQty,
+      ),
+    );
+    if (result == null) return;
+    setState(() => _actioning = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).requestItemVoid(
+            shiftId: widget.shiftId,
+            orderId: _order.id,
+            itemIndex: index,
+            qtyToVoid: result['qty'] as double,
+            reasonCategory: result['reasonCategory'] as String,
+            note: result['note'] as String?,
+          );
+      await _poll();
+      if (mounted) {
+        AppNotifier.showSnackBar(context,
+            const SnackBar(content: Text('Void request sent for approval')));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Could not request void: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _actioning = false);
+    }
+  }
+
+  Future<void> _approve(ItemVoidRequest request) async {
+    setState(() => _actioning = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).approveItemVoid(request.id);
+      await _poll();
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Void approved')));
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+      }
+      await _poll();
+    } finally {
+      if (mounted) setState(() => _actioning = false);
+    }
+  }
+
+  Future<void> _reject(ItemVoidRequest request) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('Reject void request'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Reason (optional)',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 2,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(controller.text),
+              child: const Text('Reject'),
+            ),
+          ],
+        );
+      },
+    );
+    if (reason == null) return;
+    setState(() => _actioning = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).rejectItemVoid(
+            request.id,
+            rejectionReason: reason,
+          );
+      await _poll();
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Void rejected')));
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+      }
+      await _poll();
+    } finally {
+      if (mounted) setState(() => _actioning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = _order;
+    final canPrint = order.paymentStatus == 'unpaid' && order.canReprintBill;
+    final pendingTotal = _voidRequests
+        .where((r) => r.isPending)
+        .fold<double>(0, (sum, r) => sum + r.amount);
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order.orderNumber,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            if ((order.shortCode ?? '').isNotEmpty)
+              Text('Code: ${order.shortCode}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 4),
+            Text(
+              [
+                order.customerName,
+                if ((order.waiterName ?? '').isNotEmpty)
+                  'Waiter: ${order.waiterName}',
+                if ((order.tableNumber ?? '').isNotEmpty)
+                  'Table ${order.tableNumber}',
+                if ((order.roomNumber ?? '').isNotEmpty)
+                  'Room ${order.roomNumber}',
+              ].join(' • '),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (pendingTotal > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _isCashier
+                      ? '⚠️ Void pending. You may still process payment. May reduce total by ${formatKes(pendingTotal)}.'
+                      : '⏳ Pending void may reduce total by ${formatKes(pendingTotal)}.',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            const Divider(),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: order.items.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final raw =
+                      Map<String, dynamic>.from(order.items[index] as Map);
+                  final qty = (raw['quantity'] is num)
+                      ? (raw['quantity'] as num).toDouble()
+                      : double.tryParse('${raw['quantity']}') ?? 0;
+                  final unitPrice = (raw['unit_price'] is num)
+                      ? (raw['unit_price'] as num).toDouble()
+                      : double.tryParse('${raw['unit_price']}') ?? 0;
+                  final voidedQty = (raw['voided_qty'] is num)
+                      ? (raw['voided_qty'] as num).toDouble()
+                      : double.tryParse('${raw['voided_qty']}') ?? 0;
+                  final activeQty = qty - voidedQty;
+                  final name = '${raw['name'] ?? ''}';
+                  final pending = _pendingFor(index);
+                  final isFullyVoided = activeQty <= 0;
+
+                  return ListTile(
+                    dense: true,
+                    leading: (_billEditable && pending == null && activeQty > 0 && !_actioning)
+                        ? IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, size: 20),
+                            tooltip: 'Void item',
+                            onPressed: () => _openVoidItemSheet(index, raw, activeQty),
+                          )
+                        : const SizedBox(width: 40),
+                    title: Text(
+                      voidedQty > 0
+                          ? '${qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1)}x $name (${voidedQty.toStringAsFixed(voidedQty.truncateToDouble() == voidedQty ? 0 : 1)} voided)'
+                          : '${qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1)}x $name',
+                      style: isFullyVoided
+                          ? const TextStyle(decoration: TextDecoration.lineThrough)
+                          : null,
+                    ),
+                    subtitle: pending == null
+                        ? null
+                        : Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Wrap(
+                              spacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                const Chip(
+                                  label: Text('⏳ PENDING', style: TextStyle(fontSize: 11)),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                ),
+                                Text(
+                                  '${pending.reason} • ${pending.requestedByName ?? 'Unknown'}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (_isReviewer) ...[
+                                  TextButton(
+                                    onPressed: _actioning ? null : () => _approve(pending),
+                                    child: const Text('✓ APPROVE'),
+                                  ),
+                                  TextButton(
+                                    onPressed: _actioning ? null : () => _reject(pending),
+                                    child: const Text('✗ REJECT'),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                    trailing: Text(formatKes(activeQty * unitPrice)),
+                  );
+                },
+              ),
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                Text(formatKes(order.totalAmount),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Paid'),
+                Text(formatKes(order.amountPaid)),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Balance'),
+                Text(formatKes(_balance(order))),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: canPrint ? widget.onPrintDuplicate : null,
+                icon: const Icon(Icons.print_outlined),
+                label: Text(canPrint
+                    ? 'Print duplicate bill'
+                    : order.canReprintBill
+                        ? 'Bill must be unpaid to print'
+                        : 'Duplicate already printed'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VoidItemSheet extends StatefulWidget {
+  const _VoidItemSheet({required this.itemName, required this.maxQty});
+
+  final String itemName;
+  final double maxQty;
+
+  @override
+  State<_VoidItemSheet> createState() => _VoidItemSheetState();
+}
+
+class _VoidItemSheetState extends State<_VoidItemSheet> {
+  late double _qty;
+  String _reasonCategory = 'wrong_order';
+  final _noteController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _qty = widget.maxQty > 0 ? 1 : 0;
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Void item', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(widget.itemName, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Quantity to void'),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove),
+                      onPressed: _qty > 1 ? () => setState(() => _qty -= 1) : null,
+                    ),
+                    Text(_qty.toStringAsFixed(0)),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: _qty < widget.maxQty ? () => setState(() => _qty += 1) : null,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _reasonCategory,
+              decoration: const InputDecoration(
+                labelText: 'Reason',
+                border: OutlineInputBorder(),
+              ),
+              items: itemVoidReasonCategories.entries
+                  .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _reasonCategory = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                labelText: 'Note (optional)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _qty <= 0
+                    ? null
+                    : () => Navigator.of(context).pop({
+                          'qty': _qty,
+                          'reasonCategory': _reasonCategory,
+                          'note': _noteController.text,
+                        }),
+                child: const Text('SEND FOR APPROVAL'),
+              ),
+            ),
           ],
         ),
       ),

@@ -5182,6 +5182,57 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
             throw new AppError('Shift not found', 404);
         }
 
+        // Block close while any item-level void request anywhere in this
+        // branch is still pending. cashier_shifts has no FK to the
+        // pos_outlet_shifts the void requests are raised against (a single
+        // cashier shift spans every outlet station in the branch), so this
+        // is scoped by branch_id rather than shift_id.
+        const { data: pendingItemVoids, error: pendingItemVoidsError } = await supabase
+            .from('pos_item_void_requests')
+            .select('id, order_number, item_name, qty_to_void, requested_by')
+            .eq('branch_id', shift.branch_id)
+            .eq('status', 'pending');
+        if (pendingItemVoidsError) throw pendingItemVoidsError;
+
+        if (pendingItemVoids && pendingItemVoids.length > 0) {
+            const requesterIds = Array.from(new Set(
+                pendingItemVoids.map((row: any) => row.requested_by).filter(Boolean)
+            ));
+            let nameById = new Map<string, string>();
+            if (requesterIds.length) {
+                const { data: requesters } = await supabase
+                    .from('users')
+                    .select('id, email, first_name, last_name')
+                    .in('id', requesterIds);
+                nameById = new Map((requesters || []).map((user: any) => [
+                    String(user.id),
+                    `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown'
+                ]));
+            }
+
+            const unresolvedDescriptions = pendingItemVoids.map((row: any) =>
+                `${row.order_number || 'Bill'}: ${row.item_name} x${row.qty_to_void} (requested by ${nameById.get(String(row.requested_by)) || 'Unknown'})`
+            );
+
+            notificationService.notifyRole(
+                'branch_accountant',
+                'Shift close blocked by pending void requests',
+                `Shift ${id} cannot close — ${pendingItemVoids.length} void request(s) pending. Resolve to allow close.`,
+                {
+                    type: 'warning',
+                    category: 'pos_item_void_request',
+                    priority: 'high',
+                    branchId: shift.branch_id,
+                    metadata: { shift_id: id, pending_request_ids: pendingItemVoids.map((row: any) => row.id) }
+                }
+            ).catch((e: any) => logger.error('Failed to notify branch accountant of pending item voids blocking shift close', e));
+
+            throw new AppError(
+                `Cannot close shift: ${pendingItemVoids.length} pending item void request(s) must be resolved first. ${unresolvedDescriptions.join('; ')}`,
+                400
+            );
+        }
+
         // Get all transactions for this shift. Older cashier payments were not
         // always linked by shift_id, so fall back to cashier/branch/time window.
         const transactions = await loadCashierTransactionsForShift(shift);

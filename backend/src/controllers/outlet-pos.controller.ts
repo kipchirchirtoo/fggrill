@@ -2654,6 +2654,299 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
   }
 };
 
+// Item-level void system. Sits alongside the whole-bill void flow above
+// (pos_void_requests / requestVoidShiftOrder / reviewPosVoidRequest) without
+// replacing it — a waiter can still void an entire bill via that flow, or
+// void a single line item via this one. Items live as a JSONB array on
+// pos_shift_orders.items (no relational order_items table), so a line item
+// is addressed by its position in that array (item_index) — the same
+// convention splitShiftOrder already uses via item_indexes.
+const ITEM_VOID_REASON_CATEGORIES = new Set([
+  'wrong_order',
+  'duplicate_entry',
+  'customer_changed_mind',
+  'pricing_error',
+  'other'
+]);
+
+const userDisplayNamesById = async (userIds: string[]): Promise<Map<string, string>> => {
+  if (!userIds.length) return new Map();
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email, first_name, last_name')
+    .in('id', userIds);
+  if (error) throw error;
+  const map = new Map<string, string>();
+  for (const user of data || []) {
+    const name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    map.set(String(user.id), name || user.email || 'Unknown');
+  }
+  return map;
+};
+
+const activeQtyForItem = (item: Record<string, any>): { quantity: number; voidedQty: number; activeQty: number } => {
+  const quantity = numberValue(item.quantity ?? item.qty);
+  const voidedQty = numberValue(item.voided_qty);
+  return { quantity, voidedQty, activeQty: quantity - voidedQty };
+};
+
+export const requestItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const shiftId = String(req.body.shift_id || '');
+    const orderId = String(req.body.order_id || '');
+    const itemIndex = Number(req.body.item_index);
+    const qtyToVoid = numberValue(req.body.qty_to_void ?? req.body.qty);
+    const reason = String(req.body.reason || '').trim();
+    const reasonCategory = String(req.body.reason_category || 'other').trim().toLowerCase();
+    const note = nullableText(req.body.note);
+
+    if (!shiftId || !orderId) throw new AppError('shift_id and order_id are required', 400);
+    if (!Number.isInteger(itemIndex) || itemIndex < 0) throw new AppError('A valid item_index is required', 400);
+    if (!(qtyToVoid > 0)) throw new AppError('qty_to_void must be greater than zero', 400);
+    if (!reason) throw new AppError('Void reason is required', 400);
+    if (!ITEM_VOID_REASON_CATEGORIES.has(reasonCategory)) throw new AppError('Invalid reason_category', 400);
+
+    const shift = await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
+    ensureEditableOrder(order, 'void an item on');
+
+    const items = Array.isArray(order.items) ? order.items : [];
+    const item = items[itemIndex];
+    if (!item) throw new AppError('Item not found on this bill', 404);
+
+    const { quantity, activeQty } = activeQtyForItem(item);
+    if (activeQty <= 0) throw new AppError('This item is already fully voided', 400);
+    if (qtyToVoid > activeQty) throw new AppError('Void quantity exceeds the remaining active quantity for this item', 400);
+
+    const { data: existing, error: existingError } = await supabase
+      .from('pos_item_void_requests')
+      .select('id')
+      .eq('order_id', orderId)
+      .eq('item_index', itemIndex)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) throw new AppError('A pending void request already exists for this item', 409);
+
+    const unitPrice = numberValue(item.unit_price ?? item.price);
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .insert({
+        shift_id: shiftId,
+        outlet_id: shift.outlet_id,
+        order_id: orderId,
+        order_number: order.order_number,
+        branch_id: shift.branch_id,
+        item_index: itemIndex,
+        item_name: String(item.name || ''),
+        unit_price: unitPrice,
+        qty_before_void: activeQty,
+        qty_to_void: qtyToVoid,
+        reason,
+        reason_category: reasonCategory,
+        note,
+        requested_by: req.user.id,
+        status: 'pending'
+      })
+      .select('*')
+      .single();
+    if (error || !requestRow) throw error || new AppError('Failed to create item void request', 500);
+
+    res.status(201).json({ success: true, data: requestRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getItemVoidRequestsForShift = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId } = req.params;
+    await ensureShiftAccess(req, shiftId);
+
+    const { data, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('shift_id', shiftId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(
+      rows.flatMap((row: any) => [row.requested_by, row.actioned_by]).filter(Boolean)
+    ));
+    const namesById = await userDisplayNamesById(userIds);
+    const enriched = rows.map((row: any) => ({
+      ...row,
+      requested_by_name: namesById.get(String(row.requested_by)) || null,
+      actioned_by_name: row.actioned_by ? namesById.get(String(row.actioned_by)) || null : null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getItemVoidHistoryForWaiter = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant or manager access required', 403);
+    const { waiterId } = req.params;
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+
+    let query = supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('requested_by', waiterId)
+      .order('created_at', { ascending: false });
+
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    if (!isGlobalUser(req)) {
+      if (branchId === null) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+      query = query.eq('branch_id', branchId);
+    } else if (req.query.branch_id) {
+      query = query.eq('branch_id', Number(req.query.branch_id));
+    }
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.json({ success: true, data: data || [] });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPendingItemVoidsForShift = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId } = req.params;
+    await ensureShiftAccess(req, shiftId);
+
+    const { data, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('shift_id', shiftId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    res.json({ success: true, data: data || [], count: (data || []).length });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const approveItemVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant or manager approval required', 403);
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+
+    if (requestRow.status !== 'pending') {
+      const namesById = await userDisplayNamesById(requestRow.actioned_by ? [requestRow.actioned_by] : []);
+      const actorName = requestRow.actioned_by ? namesById.get(String(requestRow.actioned_by)) : null;
+      throw new AppError(
+        actorName ? `Already actioned by ${actorName}` : 'Void request already processed',
+        409
+      );
+    }
+
+    const { data: updatedOrder, error: rpcError } = await supabase.rpc('void_order_item', {
+      p_request_id: id,
+      p_actioned_by: req.user.id
+    });
+    if (rpcError) {
+      if (String(rpcError.message || '').includes('already processed')) {
+        throw new AppError('Void request already processed', 409);
+      }
+      throw rpcError;
+    }
+
+    res.json({ success: true, data: updatedOrder });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rejectItemVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant or manager approval required', 403);
+    const { id } = req.params;
+    const rejectionReason = String(req.body.rejection_reason || req.body.reason || '').trim();
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+
+    if (requestRow.status !== 'pending') {
+      const namesById = await userDisplayNamesById(requestRow.actioned_by ? [requestRow.actioned_by] : []);
+      const actorName = requestRow.actioned_by ? namesById.get(String(requestRow.actioned_by)) : null;
+      throw new AppError(
+        actorName ? `Already actioned by ${actorName}` : 'Void request already processed',
+        409
+      );
+    }
+
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'rejected',
+        actioned_by: req.user.id,
+        actioned_at: new Date().toISOString(),
+        rejection_reason: rejectionReason || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select('*')
+      .single();
+    if (updateError || !updatedRow) {
+      throw updateError || new AppError('Void request already processed', 409);
+    }
+
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item void rejected',
+        `Your void request for "${requestRow.item_name}" on ${requestRow.order_number || 'a bill'} was rejected.`,
+        {
+          type: 'warning',
+          category: 'pos_item_void_request',
+          priority: 'medium',
+          metadata: { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
+        }
+      );
+    }
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const payShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
@@ -2859,6 +3152,38 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
     const { shiftId } = req.params;
     const shift = await ensureShiftAccess(req, shiftId);
     if (shift.status !== 'open') throw new AppError('Only an open shift can be closed', 400);
+
+    // DORMANT: this endpoint (POST /pos/shifts/:shiftId/close) has no Flutter
+    // call site today -- shifts are actually closed via cashier.controller.ts's
+    // closeShift (PUT /cashier/shifts/:id/close), which carries the real
+    // pending-item-void guard scoped by branch_id. Left in place rather than
+    // deleted in case this route becomes reachable later.
+    //
+    // Block close while any item-level void request on this shift is still
+    // pending -- approving/rejecting after close would mutate a bill that's
+    // already been swept into the shift summary. Escalate to the branch
+    // accountant so the backlog gets cleared rather than silently stalling.
+    const { data: pendingItemVoids, error: pendingItemVoidsError } = await supabase
+      .from('pos_item_void_requests')
+      .select('id')
+      .eq('shift_id', shiftId)
+      .eq('status', 'pending');
+    if (pendingItemVoidsError) throw pendingItemVoidsError;
+    if (pendingItemVoids && pendingItemVoids.length > 0) {
+      await notificationService.notifyRole(
+        'branch_accountant',
+        'Shift close blocked by pending item voids',
+        `${pendingItemVoids.length} item void request(s) on this shift still need approval or rejection before it can close.`,
+        {
+          type: 'warning',
+          category: 'pos_item_void_request',
+          priority: 'high',
+          branchId: shift.branch_id,
+          metadata: { shift_id: shiftId, pending_request_ids: pendingItemVoids.map((row: Record<string, any>) => row.id) }
+        }
+      );
+      throw new AppError(`Cannot close shift: ${pendingItemVoids.length} pending item void request(s) must be approved or rejected first.`, 400);
+    }
 
     // Block close until every order on this station is settled (paid or
     // recorded as a credit bill).

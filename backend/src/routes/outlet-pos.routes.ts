@@ -2,11 +2,15 @@ import { Router } from 'express';
 import { protect } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import {
+  approveItemVoidRequest,
   closeShift,
   createOutlet,
   createOutletItem,
   getActiveShift,
   getBarCaptainOrders,
+  getItemVoidHistoryForWaiter,
+  getItemVoidRequestsForShift,
+  getPendingItemVoidsForShift,
   getPendingPosVoidRequests,
   getOutletItems,
   getOutletStaff,
@@ -21,7 +25,9 @@ import {
   openShift,
   payShiftOrder,
   recordShiftOrder,
+  rejectItemVoidRequest,
   reprintShiftOrderBill,
+  requestItemVoid,
   requestVoidShiftOrder,
   reviewPosVoidRequest,
   reviewShift,
@@ -93,6 +99,13 @@ router.post('/outlets/:outletId/shifts/open', openShift);
 
 router.get('/void-requests/pending', getPendingPosVoidRequests);
 router.post('/void-requests/:requestId/review', reviewPosVoidRequest);
+
+router.post('/voids/request', requestItemVoid);
+router.patch('/voids/:id/approve', approveItemVoidRequest);
+router.patch('/voids/:id/reject', rejectItemVoidRequest);
+router.get('/voids/shift/:shiftId', getItemVoidRequestsForShift);
+router.get('/voids/waiter/:waiterId', getItemVoidHistoryForWaiter);
+router.get('/shifts/:shiftId/pending-voids', getPendingItemVoidsForShift);
 
 router.get('/shifts/:shiftId/orders', getShiftOrders);
 router.post('/shifts/:shiftId/orders', recordShiftOrder);
