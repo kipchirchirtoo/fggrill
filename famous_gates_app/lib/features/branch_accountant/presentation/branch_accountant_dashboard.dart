@@ -2929,7 +2929,7 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                   String _fmtTime(dynamic v) {
                     if (v == null) return '—';
                     try {
-                      final dt = DateTime.parse('$v').toLocal();
+                      final dt = _toKenyaTime(DateTime.parse('$v'));
                       return '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
                     } catch (_) { return '$v'; }
                   }
@@ -17773,12 +17773,18 @@ String _shortDate(String value) {
   return DateFormat('MMM d').format(parsed);
 }
 
+// Kenya has a fixed UTC+3 offset with no DST, so bill/credit timestamps are
+// converted with a plain offset rather than DateTime.toLocal() — the
+// device's own timezone can't be trusted to be Kenya time.
+DateTime _toKenyaTime(DateTime value) =>
+    value.toUtc().add(const Duration(hours: 3));
+
 String _formatCompactDateTime(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty || trimmed == 'null') return '-';
   final parsed = DateTime.tryParse(trimmed);
   if (parsed == null) return trimmed;
-  return DateFormat('MMM d HH:mm').format(parsed.toLocal());
+  return DateFormat('MMM d HH:mm').format(_toKenyaTime(parsed));
 }
 
 String _title(String value) => value

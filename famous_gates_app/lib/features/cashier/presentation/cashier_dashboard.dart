@@ -5599,11 +5599,19 @@ List<Map<String, dynamic>> _creditBillDetails(Map<String, dynamic> row) {
 
 // Open-shift count from cashier stats: backend returns the cashier's own open
 // shift as `activeShift` (object or null); fall back to numeric count keys.
+//
+// Kenya has a fixed UTC+3 offset with no DST, so timestamps are converted
+// with a plain offset rather than DateTime.toLocal() — the device's own
+// timezone can't be trusted to be Kenya time (e.g. a tablet left on UTC or
+// misconfigured), which previously made bill dates/times shown here wrong.
+DateTime _toKenyaTime(DateTime value) =>
+    value.toUtc().add(const Duration(hours: 3));
+
 String _date(dynamic value) {
   if (value == null || value.toString().isEmpty) return '-';
   final parsed = DateTime.tryParse(value.toString());
   if (parsed == null) return value.toString();
-  return DateFormat('MMM d, yyyy HH:mm').format(parsed.toLocal());
+  return DateFormat('MMM d, yyyy HH:mm').format(_toKenyaTime(parsed));
 }
 
 String _dateOnly(DateTime date) =>

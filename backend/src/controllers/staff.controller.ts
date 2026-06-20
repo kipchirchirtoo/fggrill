@@ -190,6 +190,14 @@ export const getStaff = async (
     const limit = Math.min(parseInt(req.query.limit as string) || 1000, 5000);
     const startIndex = (page - 1) * limit;
 
+    // Deliberately NOT using embedded `branch:branches(...)` / `user:users!user_id(...)`
+    // joins here. A PostgREST embed throws the whole query out (and with it every
+    // branch's staff list, not just the affected rows) whenever its FK relationship
+    // isn't in the schema cache yet — e.g. right after a migration, or under PgBouncer
+    // transaction pooling where a stale per-connection cache can resurface. Fetching
+    // staff_profiles plain and enriching with branches/users as separate best-effort
+    // lookups means a relationship-cache hiccup can degrade the extra fields, but can
+    // never make the staff list itself disappear.
     let query = supabase
       .from('staff_profiles')
       .select(`
@@ -215,18 +223,7 @@ export const getStaff = async (
         bank_name,
         bank_branch,
         account_number,
-        profile_photo,
-        branch:branches(id, name, code),
-        user:users!user_id(
-          id,
-          email,
-          first_name,
-          last_name,
-          phone_number,
-          role,
-          avatar,
-          pos_pin
-        )
+        profile_photo
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(startIndex, startIndex + limit - 1);
@@ -236,7 +233,7 @@ export const getStaff = async (
 
     // Note: branch_id filtering is handled by applyBranchFilter above
     // Adding explicit branch_id filter here causes conflicts for branch-scoped users
-    
+
     // Add extra optional filters
     if (req.query.department) {
       query = query.eq('department', req.query.department);
@@ -264,24 +261,51 @@ export const getStaff = async (
     const { data: staff, error, count } = await query;
 
     if (error) {
+      console.error('[GET STAFF CONTROLLER] staff_profiles query failed:', error);
       throw error;
     }
 
+    const branchIds = Array.from(
+      new Set((staff || []).map((s: any) => s.branch_id).filter((id: any) => id !== null && id !== undefined))
+    );
+    const userIds = Array.from(
+      new Set((staff || []).map((s: any) => s.user_id).filter(Boolean))
+    );
+
+    const [branchesResult, usersResult] = await Promise.all([
+      branchIds.length
+        ? supabase.from('branches').select('id, name, code').in('id', branchIds)
+        : Promise.resolve({ data: [], error: null }),
+      userIds.length
+        ? supabase.from('users').select('id, email, first_name, last_name, phone_number, role, avatar, pos_pin').in('id', userIds)
+        : Promise.resolve({ data: [], error: null })
+    ]).catch((lookupError) => {
+      // Enrichment is best-effort — never let a branches/users lookup failure
+      // take down the staff list itself.
+      console.error('[GET STAFF CONTROLLER] branch/user enrichment failed:', lookupError);
+      return [{ data: [], error: lookupError }, { data: [], error: lookupError }];
+    });
+
+    const branchById = new Map((branchesResult.data || []).map((b: any) => [b.id, b]));
+    const userById = new Map((usersResult.data || []).map((u: any) => [u.id, u]));
+
     const formattedData = (staff || []).map((s: any) => {
-      const profilePhoto = s.profile_photo || s.user?.avatar || '';
+      const user = s.user_id ? userById.get(s.user_id) : null;
+      const branch = s.branch_id ? branchById.get(s.branch_id) : null;
+      const profilePhoto = s.profile_photo || user?.avatar || '';
       const profilePhotoUrl = resolveProfilePhotoUrl(profilePhoto);
-      const branch = Array.isArray(s.branch) ? s.branch[0] : s.branch;
       return {
         ...s,
         first_name: s.first_name || '',
         last_name: s.last_name || '',
-        email: s.email || s.user?.email || '',
-        phone_number: s.phone || s.user?.phone_number || '',
+        email: s.email || user?.email || '',
+        phone_number: s.phone || user?.phone_number || '',
         avatar: profilePhotoUrl,
         profile_photo: profilePhoto,
         profile_photo_url: profilePhotoUrl,
         branch_name: branch?.name || s.branch_name || '',
-        branch,
+        branch: branch || null,
+        user: user || null,
         role: s.role || s.position || '',
         employee_id: s.id_number || s.employee_id || s.id.substring(0, 8).toUpperCase(),
         employee_number: s.id_number || s.employee_id || '',
