@@ -68,6 +68,15 @@ const CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES = new Set<OutletType>([
 const isCaptainOrderAutoPrintOutlet = (outletType: unknown): boolean =>
   CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES.has(String(outletType || '') as OutletType);
 
+// Strictly the two bar outlets — used only for the Main Bar / Executive Bar
+// cashier station's own polling feed (getBarCaptainOrders below). Restaurant
+// orders must never appear here: they belong to KDS only, which is the sole
+// place restaurant captain orders are allowed to print from.
+const BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES = new Set<OutletType>([
+  'main_bar',
+  'executive_bar'
+]);
+
 const outletItemGroup = (outletType: unknown): 'restaurant' | 'bar' | 'other' => {
   const type = String(outletType || '');
   if (type === 'restaurant') return 'restaurant';
@@ -1381,7 +1390,7 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
     const barShiftIds = (outletShifts || [])
       .filter((shift: any) => {
         const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-        return CAPTAIN_ORDER_AUTOPRINT_OUTLET_TYPES.has(String(outlet?.outlet_type || '') as OutletType);
+        return BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES.has(String(outlet?.outlet_type || '') as OutletType);
       })
       .map((shift: any) => shift.id);
     const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));

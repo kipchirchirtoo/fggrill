@@ -952,6 +952,14 @@ class _StationTabState extends ConsumerState<_StationTab> {
                                         _MiniMeta(
                                             icon: Icons.person_outline,
                                             text: customer),
+                                      if (row['is_waiter_order'] == true &&
+                                          _text(row, ['waiter_name'])
+                                              .isNotEmpty)
+                                        _MiniMeta(
+                                          icon: Icons.badge_outlined,
+                                          text:
+                                              'Waiter: ${_text(row, ['waiter_name'])}',
+                                        ),
                                       if (_text(row, [
                                         'station_name',
                                         'outlet_name'
@@ -1132,8 +1140,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
             TextField(
               controller: _referenceController,
               decoration: InputDecoration(
-                labelText:
-                    _method == 'cash' ? 'Reference (optional)' : 'Reference',
+                labelText: _method == 'cash'
+                    ? 'Reference (optional)'
+                    : _method == 'mpesa_manual'
+                        ? 'M-Pesa Reference (required)'
+                        : 'Reference',
               ),
             ),
             if (_method == 'mpesa_manual') ...[
@@ -1255,6 +1266,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
     if (bill == null) return;
     final amount = num.tryParse(_amountController.text.trim()) ?? 0;
     if (amount <= 0) return _snack('Enter a valid amount');
+
+    if (_method == 'mpesa_manual' && _referenceController.text.trim().isEmpty) {
+      return _snack('Enter the M-Pesa reference code to clear this bill');
+    }
 
     Map<String, dynamic>? creditBill;
     if (_method == 'credit_bill') {
@@ -1760,8 +1775,12 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _phoneController,
-                      decoration:
-                          const InputDecoration(labelText: 'Phone/reference'),
+                      decoration: InputDecoration(
+                        labelText: _method == 'MPESA_MANUAL'
+                            ? 'M-Pesa Reference (required)'
+                            : 'Phone/reference',
+                      ),
+                      onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 16),
                     Wrap(
@@ -1927,6 +1946,9 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
   Future<void> _checkout() async {
     final total =
         _items.fold<num>(0, (sum, item) => sum + _num(item['line_total']));
+    if (_method == 'MPESA_MANUAL' && _phoneController.text.trim().isEmpty) {
+      return _snack('Enter the M-Pesa reference code to clear this sale');
+    }
     setState(() => _saving = true);
     try {
       Map<String, dynamic>? credit;
@@ -2615,9 +2637,13 @@ class _PaidBillsTabState extends ConsumerState<_PaidBillsTab> {
       _snack('Enter a valid amount');
       return;
     }
+    final reference = _referenceController.text.trim();
+    if (_method == 'mpesa' && reference.isEmpty) {
+      _snack('Enter the M-Pesa reference code to record this payment');
+      return;
+    }
     setState(() => _submitting = true);
     try {
-      final reference = _referenceController.text.trim();
       await ref.read(cashierRepositoryProvider).recordPaidBill({
         'staff_id': staff.id,
         'staff_name': staff.name,
@@ -4534,6 +4560,7 @@ class _BillSummary extends StatelessWidget {
         _KeyValueGrid(values: {
           'Type': _text(bill, ['type', 'source']),
           'Customer': _customerName(bill),
+          if (_waiterName(bill).isNotEmpty) 'Waiter': _waiterName(bill),
           'Total': _money(financials['total_amount'] ?? bill['total_amount']),
           'Paid': _money(financials['amount_paid'] ?? bill['amount_paid']),
           'Balance': _money(financials['balance'] ?? bill['balance']),
@@ -4831,6 +4858,18 @@ Future<Map<String, dynamic>?> _paymentPayload(
               );
               return null;
             }
+            // M-Pesa lines must be cleared against a reference code — never
+            // accepted blind.
+            if (line.method == 'mpesa' &&
+                line.amount > 0 &&
+                line.referenceController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text(
+                        'Enter the M-Pesa reference code for the M-Pesa payment line')),
+              );
+              return null;
+            }
           }
           final payments = lines
               .map((line) => line.toPayload())
@@ -5111,8 +5150,11 @@ class _PaymentLineEditor extends StatelessWidget {
             controller: line.referenceController,
             onChanged: (_) => onChanged(),
             decoration: InputDecoration(
-              labelText:
-                  line.method == 'cash' ? 'Reference (optional)' : 'Reference',
+              labelText: line.method == 'cash'
+                  ? 'Reference (optional)'
+                  : line.method == 'mpesa'
+                      ? 'M-Pesa Reference (required)'
+                      : 'Reference',
               isDense: true,
             ),
           ),
@@ -5794,6 +5836,20 @@ String _customerName(Map<String, dynamic> bill) {
     if (value.isNotEmpty) return value;
   }
   return 'Walk-in';
+}
+
+// Captain orders placed for a walk-in customer (no named guest) still carry
+// the waiter who rang them in — pull it out wherever the lookup response
+// nests it (top-level for credit bills, `order`/`booking` for POS/hotel).
+String _waiterName(Map<String, dynamic> bill) {
+  final direct = _text(bill, ['waiter_name']);
+  if (direct.isNotEmpty) return direct;
+  for (final nestedKey in ['order', 'booking', 'invoice', 'bill']) {
+    final nested = _asMap(bill[nestedKey]);
+    final value = _text(nested, ['waiter_name']);
+    if (value.isNotEmpty) return value;
+  }
+  return '';
 }
 
 double _balanceFromBill(Map<String, dynamic>? bill) {

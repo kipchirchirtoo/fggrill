@@ -3400,6 +3400,34 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             const { data: unpaidBills, error: billsError } = await query;
             if (billsError) throw billsError;
 
+            // `unpaid_bills` only stores `waiter_id` (FK to staff_profiles), not
+            // a denormalized name, so cashiers in every outlet need it resolved
+            // here to identify who is holding a credit/waiter bill.
+            const waiterIds = Array.from(
+                new Set((unpaidBills || []).map(b => b.waiter_id).filter(Boolean))
+            );
+            const staffByWaiterId = new Map<string, { first_name: string | null; last_name: string | null }>();
+            if (waiterIds.length) {
+                const { data: waiterProfiles } = await supabase
+                    .from('staff_profiles')
+                    .select('id, first_name, last_name')
+                    .in('id', waiterIds);
+                for (const profile of waiterProfiles || []) {
+                    staffByWaiterId.set(profile.id, profile);
+                }
+            }
+            const mappedUnpaidBills = (unpaidBills || []).map(bill => {
+                const staff = bill.waiter_id ? staffByWaiterId.get(bill.waiter_id) : null;
+                const waiterName = staff
+                    ? `${staff.first_name || ''} ${staff.last_name || ''}`.trim()
+                    : null;
+                return {
+                    ...bill,
+                    waiter_name: waiterName || null,
+                    is_waiter_order: !!bill.waiter_id,
+                };
+            });
+
             // Fetch Unpaid Hotel Reservations
             // Hotel reservations might have `branch_id = null`, but the attached room has the real branch.
             // We must query the rooms table to filter correctly.
@@ -3491,7 +3519,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             // Combine all full access data
             combinedData = [
                 ...combinedData,
-                ...(unpaidBills || []),
+                ...mappedUnpaidBills,
                 ...mappedHotel,
                 ...mappedFinance,
                 ...mappedAR
