@@ -753,14 +753,18 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               appendItems: true,
             );
       if (recalled == null) {
-        // Bar captain orders are printed by the cashier station feed.
         if (_isRestaurant) {
-          // New order: the cart IS the full order, safe to print client-side.
+          // Restaurant new order: print the customer bill + send to kitchen.
           await _printCaptainOrderReceipt(order);
           await _printKitchenCaptainOrder(order);
+        } else {
+          // Bar / non-restaurant new order: print customer bill immediately.
+          // Captain orders for these outlets are delivered to the cashier
+          // station feed separately — but the customer still needs a bill.
+          await _printCustomerBillFromSavedOrder(order);
         }
       } else {
-        // The customer bill always prints locally from the desktop app
+        // Recall: the customer bill always prints locally from the desktop app
         // using the fully merged order returned by updateOrder.
         await _printCustomerBillFromSavedOrder(order);
         if (_isRestaurant) {
