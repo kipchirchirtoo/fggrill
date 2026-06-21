@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../pos/data/outlet_pos_repository.dart';
 import '../data/cashier_repository.dart';
 
 class CashierBillFilters {
@@ -114,6 +115,14 @@ final cashierCurrentShiftProvider =
   final shifts =
       await ref.watch(cashierRepositoryProvider).getShifts(status: 'open');
   return shifts.isNotEmpty ? shifts.first : <String, dynamic>{};
+});
+
+/// Item-level void requests awaiting this cashier's acknowledgement
+/// (stage 1 of the two-stage void flow). Whole-bill voids are not included --
+/// those go straight to the branch accountant and never hit this queue.
+final cashierPendingItemVoidsProvider =
+    FutureProvider.autoDispose<List<ItemVoidRequest>>((ref) {
+  return ref.watch(outletPosRepositoryProvider).getPendingVoidsCashier();
 });
 
 final cashierInsightsProvider =

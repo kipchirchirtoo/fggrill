@@ -7457,9 +7457,57 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             }
         }
 
+        // Item-level voids (pos_item_void_requests) never flip the order's own
+        // status/payment_status/void_request_status -- void_order_item() only
+        // mutates the JSONB item and reduces total/balance -- so the whole-bill
+        // OR-filter above can never find them. Pull approved item-void records
+        // for these shifts separately and merge in any orders not already
+        // present so the cashier's voided-orders view also surfaces item-level
+        // voids, not just whole-bill voids.
+        const itemVoidsByOrder = new Map<string, any[]>();
+        if (wantsVoidedOrders && posShiftIds.length) {
+            try {
+                const { data: itemVoidRows, error: itemVoidErr } = await supabase
+                    .from('pos_item_void_requests')
+                    .select('*')
+                    .in('shift_id', posShiftIds)
+                    .eq('status', 'approved')
+                    .order('actioned_at', { ascending: false });
+                if (itemVoidErr) throw itemVoidErr;
+
+                for (const row of itemVoidRows || []) {
+                    const orderId = String((row as any).order_id);
+                    const list = itemVoidsByOrder.get(orderId) || [];
+                    list.push(row);
+                    itemVoidsByOrder.set(orderId, list);
+                }
+
+                const knownOrderIds = new Set(posOrders.map((o: any) => String(o.id)));
+                const missingOrderIds = Array.from(itemVoidsByOrder.keys())
+                    .filter((id) => !knownOrderIds.has(id));
+                if (missingOrderIds.length) {
+                    const { data: extraOrders, error: extraErr } = await supabase
+                        .from('pos_shift_orders')
+                        .select('*')
+                        .in('id', missingOrderIds);
+                    if (extraErr) throw extraErr;
+                    posOrders = [...posOrders, ...(extraOrders || [])];
+                }
+            } catch (itemVoidError: any) {
+                if (!['42P01', '42703', 'PGRST205', 'PGRST204'].includes(itemVoidError?.code)) {
+                    throw itemVoidError;
+                }
+            }
+        }
+
+        const itemVoidActionerIds = Array.from(itemVoidsByOrder.values())
+            .flat()
+            .flatMap((row: any) => [row.actioned_by, row.requested_by]);
+
         const waiterMap = await fetchCashierUsersById([
             ...(restaurantOrders || []).map((order: any) => order.created_by),
             ...(barOrders || []).map((order: any) => order.created_by),
+            ...itemVoidActionerIds,
         ]);
 
         // Normalise into a common shape
@@ -7533,6 +7581,16 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
                 const location = posOrderLocation(o, stationName);
                 const isVoided = o.status === 'voided' || o.payment_status === 'voided' || ['approved','pending'].includes(o.void_request_status);
+                const itemVoids = itemVoidsByOrder.get(String(o.id)) || [];
+                // A bill can have item-level voids without the bill itself ever
+                // being voided (the waiter voided one line, the rest was paid
+                // normally) -- only fall back to the item-void view when the
+                // bill isn't already a whole-bill void.
+                const isItemLevelVoid = !isVoided && itemVoids.length > 0;
+                const latestItemVoid = itemVoids[0]; // already sorted desc by actioned_at
+                const voidedAmount = itemVoids.reduce(
+                    (sum: number, v: any) => sum + Number(v.qty_to_void || 0) * Number(v.unit_price || 0), 0
+                );
                 return {
                     id: o.id,
                     source: 'pos',
@@ -7545,11 +7603,11 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     location,
                     guest_name: o.customer_name || 'Walk-in',
                     customer_name: o.customer_name || 'Walk-in',
-                    total_amount: Number(o.total_amount || 0),
+                    total_amount: isItemLevelVoid ? voidedAmount : Number(o.total_amount || 0),
                     paid_amount: Number(o.amount_paid || 0),
-                    balance_amount: isVoided ? 0 : Number(o.balance_amount || o.total_amount || 0),
-                    payment_status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
-                    status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
+                    balance_amount: (isVoided || isItemLevelVoid) ? 0 : Number(o.balance_amount || o.total_amount || 0),
+                    payment_status: isVoided ? 'voided' : (isItemLevelVoid ? 'item_voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status)),
+                    status: isVoided ? 'voided' : (isItemLevelVoid ? 'item_voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status)),
                     created_at: o.created_at,
                     bill_date: o.created_at,
                     branch_id: shift?.branch_id || effectiveBranchId,
@@ -7557,23 +7615,39 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     outlet_type: outlet?.outlet_type || null,
                     outlet_name: outlet?.name || null,
                     station_name: stationName,
+                    void_type: isVoided ? 'whole_bill' : (isItemLevelVoid ? 'item_level' : null),
                     void_request_status: o.void_request_status || null,
-                    void_reason: o.void_reason || null,
-                    voided_at: o.voided_at || null,
-                    voided_by: o.voided_by || null,
+                    void_reason: isItemLevelVoid
+                        ? Array.from(new Set(itemVoids.map((v: any) => v.reason).filter(Boolean))).join('; ')
+                        : (o.void_reason || null),
+                    voided_at: isItemLevelVoid ? (latestItemVoid?.actioned_at || null) : (o.voided_at || null),
+                    voided_by: isItemLevelVoid
+                        ? (() => {
+                            const actioner = waiterMap.get(String(latestItemVoid?.actioned_by || ''));
+                            return actioner ? `${actioner.first_name || ''} ${actioner.last_name || ''}`.trim() : null;
+                        })()
+                        : (o.voided_by || null),
                     waiter: null,
                     waiter_id: o.waiter_id || o.created_by,
                     waiter_name: o.waiter_name || '',
-                    items: items.map((item: any, index: number) => ({
-                        id: item.outlet_item_id || `${o.id}-${index}`,
-                        item_name: item.name || item.item_name || 'POS item',
-                        quantity: Number(item.quantity || item.qty || 1),
-                        unit_price: Number(item.unit_price || item.price || 0),
-                        total_price: Number(item.line_total || 0)
-                    })),
+                    items: isItemLevelVoid
+                        ? itemVoids.map((v: any) => ({
+                            id: v.id,
+                            item_name: v.item_name || 'POS item',
+                            quantity: Number(v.qty_to_void || 0),
+                            unit_price: Number(v.unit_price || 0),
+                            total_price: Number(v.qty_to_void || 0) * Number(v.unit_price || 0)
+                        }))
+                        : items.map((item: any, index: number) => ({
+                            id: item.outlet_item_id || `${o.id}-${index}`,
+                            item_name: item.name || item.item_name || 'POS item',
+                            quantity: Number(item.quantity || item.qty || 1),
+                            unit_price: Number(item.unit_price || item.price || 0),
+                            total_price: Number(item.line_total || 0)
+                        })),
                     is_waiter_order: true,
                     is_captain_order: true,
-                    is_voided: isVoided
+                    is_voided: isVoided || isItemLevelVoid
                 };
             })
         ].filter((row) => {

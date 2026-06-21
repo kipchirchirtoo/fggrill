@@ -16,6 +16,7 @@ import '../../auth/data/auth_repository.dart';
 import '../../kitchen/domain/models.dart' show KitchenOrder;
 import '../../pos/domain/models.dart';
 import '../../templates/data/document_printer.dart';
+import '../../pos/data/outlet_pos_repository.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
 
@@ -31,6 +32,7 @@ enum CashierTab {
   station,
   pos,
   bills,
+  voidRequests,
   voided,
   credit,
   shifts,
@@ -64,6 +66,7 @@ class CashierDashboard extends ConsumerStatefulWidget {
 class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   static const _visibleTabs = [
     CashierTab.station,
+    CashierTab.voidRequests,
     CashierTab.voided,
     CashierTab.credit,
     CashierTab.shifts,
@@ -75,8 +78,31 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     return index >= 0 ? index : 0;
   }();
 
+  // Keeps the "Void Requests" tab badge fresh without requiring the cashier
+  // to switch tabs or pull-to-refresh -- mirrors the bar captain-order poll
+  // timer in _StationTabState.
+  Timer? _voidBadgeTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _voidBadgeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) ref.invalidate(cashierPendingItemVoidsProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _voidBadgeTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pendingVoidsCount = ref.watch(cashierPendingItemVoidsProvider).maybeWhen(
+          data: (rows) => rows.length,
+          orElse: () => 0,
+        );
     final tabs = [
       DashboardTab(
         label: 'Station',
@@ -87,6 +113,12 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           initialAmount: widget.initialAmount,
           initialMethod: widget.initialMethod,
         )),
+      ),
+      DashboardTab(
+        label: 'Void Requests',
+        icon: Icons.report_problem_outlined,
+        badgeCount: pendingVoidsCount,
+        content: const _VoidRequestsTab(),
       ),
       const DashboardTab(
         label: 'Voided Orders',
@@ -2289,6 +2321,184 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
                   : 'Payment recorded');
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    AppNotifier.show(context, message);
+  }
+}
+
+/// Cashier stage 1 of the two-stage item void flow: a waiter has flagged an
+/// item to void on a live bill and this cashier (the open shift's assigned
+/// cashier_id) must acknowledge or decline before it can reach the
+/// manager/accountant for final approval.
+class _VoidRequestsTab extends ConsumerStatefulWidget {
+  const _VoidRequestsTab();
+
+  @override
+  ConsumerState<_VoidRequestsTab> createState() => _VoidRequestsTabState();
+}
+
+class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
+  final Set<String> _busyIds = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final requestsAsync = ref.watch(cashierPendingItemVoidsProvider);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Void Requests',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => ref.invalidate(cashierPendingItemVoidsProvider),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Waiters submit these when they void an item from a live bill. '
+            'Acknowledge to send the request on to the manager for final '
+            'approval, or decline to stop it here and keep the item on the bill.',
+            style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          requestsAsync.when(
+            data: (rows) => rows.isEmpty
+                ? const EmptyState(
+                    icon: Icons.check_circle_outline,
+                    message: 'No void requests waiting on you.',
+                  )
+                : Column(children: [for (final r in rows) _requestCard(r)]),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(
+              message: apiErrorMessage(error),
+              onRetry: () => ref.invalidate(cashierPendingItemVoidsProvider),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _requestCard(ItemVoidRequest r) {
+    final busy = _busyIds.contains(r.id);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${r.itemName}  ×${r.qtyToVoid.toStringAsFixed(r.qtyToVoid % 1 == 0 ? 0 : 1)}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                Text(_money(r.amount),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              [
+                if (r.orderNumber != null && r.orderNumber!.isNotEmpty)
+                  'Order ${r.orderNumber}',
+                if (r.requestedByName != null && r.requestedByName!.isNotEmpty)
+                  'by ${r.requestedByName}',
+              ].join('  ·  '),
+              style:
+                  const TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+            ),
+            if (r.reason.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Reason: ${r.reason}',
+                  style: const TextStyle(fontSize: 13)),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: busy ? null : () => _decline(r),
+                  icon: const Icon(Icons.close, size: 16, color: AppColors.kError),
+                  label: const Text('Decline',
+                      style: TextStyle(color: AppColors.kError)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: busy ? null : () => _acknowledge(r),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.check, size: 16),
+                  label: const Text('Acknowledge'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _acknowledge(ItemVoidRequest r) async {
+    setState(() => _busyIds.add(r.id));
+    try {
+      await ref.read(outletPosRepositoryProvider).cashierAcknowledgeVoid(r.id);
+      ref.invalidate(cashierPendingItemVoidsProvider);
+      _snack('Acknowledged — sent to manager for approval.');
+    } catch (error) {
+      _snack(apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(r.id));
+    }
+  }
+
+  Future<void> _decline(ItemVoidRequest r) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Decline void request?'),
+        content: Text(
+            'The item "${r.itemName}" will stay on the bill as-is. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Decline')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busyIds.add(r.id));
+    try {
+      await ref.read(outletPosRepositoryProvider).cashierDeclineVoid(r.id);
+      ref.invalidate(cashierPendingItemVoidsProvider);
+      _snack('Void request declined.');
+    } catch (error) {
+      _snack(apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(r.id));
     }
   }
 
