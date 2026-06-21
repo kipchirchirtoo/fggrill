@@ -2772,6 +2772,38 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       .single();
     if (error || !requestRow) throw error || new AppError('Failed to create item void request', 500);
 
+    // Notify the same roles as a whole-bill void so the branch accountant
+    // can action it. Without this, the pending row sits in the database
+    // invisibly — no one knows to approve or reject it.
+    const voidNotifMeta = {
+      request_id: requestRow.id,
+      order_id: orderId,
+      order_number: order.order_number,
+      shift_id: shiftId,
+      item_name: String(item.name || ''),
+      qty_to_void: qtyToVoid
+    };
+    await Promise.allSettled([
+      notificationService.notifyRole(
+        'branch_accountant',
+        'Item void approval required',
+        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} needs item void approval (qty: ${qtyToVoid}).`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: shift.branch_id, metadata: voidNotifMeta }
+      ),
+      notificationService.notifyRole(
+        'branch_manager',
+        'Item void request raised',
+        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} has been stopped and needs review (qty: ${qtyToVoid}).`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: shift.branch_id, metadata: voidNotifMeta }
+      ),
+      notificationService.notifyRole(
+        'auditor',
+        'Item void request raised',
+        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} is awaiting branch accountant item void approval.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: shift.branch_id, metadata: voidNotifMeta }
+      ),
+    ]);
+
     res.status(201).json({ success: true, data: requestRow });
   } catch (error) {
     next(error);
@@ -2896,6 +2928,21 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
         throw new AppError('Void request already processed', 409);
       }
       throw rpcError;
+    }
+
+    // Notify the waiter who submitted the request so they know it was approved.
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item void approved',
+        `Your void request for "${requestRow.item_name}" on bill ${requestRow.order_number || requestRow.order_id} was approved.`,
+        {
+          type: 'success',
+          category: 'pos_item_void_request',
+          priority: 'medium',
+          metadata: { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id }
+        }
+      );
     }
 
     res.json({ success: true, data: updatedOrder });
