@@ -21,6 +21,7 @@ import 'sections/configuration_sections.dart';
 import 'sections/impersonation_section.dart';
 import 'sections/feature_flags_section.dart';
 import 'sections/non_consumables_catalog_section.dart';
+import 'sections/pos_outlet_menu_section.dart';
 import 'sections/announcements_section.dart';
 import 'sections/emergency_controls_section.dart';
 import 'sections/data_override_section.dart';
@@ -122,6 +123,7 @@ class SuperAdminScreen extends ConsumerWidget {
           const CashierStationConfigSection(),
       SuperAdminSection.nonConsumablesCatalog:
           const NonConsumablesCatalogSection(),
+      SuperAdminSection.posOutletMenu: const PosOutletMenuSection(),
 
       // Finance & Inventory
       SuperAdminSection.finance: const FinanceSection(),
