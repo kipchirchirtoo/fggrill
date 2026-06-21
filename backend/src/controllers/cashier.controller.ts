@@ -1924,6 +1924,24 @@ async function linkPaymentToActiveShift(
                 paymentId,
                 error: error.message
             });
+            return; // don't increment totals if the transaction row didn't land
+        }
+
+        // Atomically increment the shift's running totals. A single UPDATE
+        // inside a PL/pgSQL function is the only way to do this without a
+        // read-then-write race: two payments arriving at the same millisecond
+        // would both read the same stale total and overwrite each other.
+        const { error: incrError } = await supabase.rpc('increment_cashier_shift_totals', {
+            p_shift_id: shift.id,
+            p_amount: amount,
+            p_method: (paymentMethod || '').toUpperCase()
+        });
+        if (incrError) {
+            logger.warn('linkPaymentToActiveShift: failed to increment cashier_shift_logs totals', {
+                cashierId,
+                shiftId: shift.id,
+                error: incrError.message
+            });
         }
     } catch (err) {
         logger.warn('linkPaymentToActiveShift threw', { cashierId, paymentId, error: (err as Error)?.message });
@@ -1982,6 +2000,21 @@ async function recordActiveShiftSale(params: {
     });
     if (error) {
         logger.warn('Unable to add payment to active cashier shift sales', { error: error.message, shiftId });
+        return;
+    }
+    // Atomically increment the shift's running totals. Same reasoning as in
+    // linkPaymentToActiveShift — a single PL/pgSQL UPDATE avoids the
+    // read-modify-write race that supabase-js's plain .update() would create.
+    const { error: incrError } = await supabase.rpc('increment_cashier_shift_totals', {
+        p_shift_id: shiftId,
+        p_amount: params.amount,
+        p_method: method
+    });
+    if (incrError) {
+        logger.warn('recordActiveShiftSale: failed to increment cashier_shift_logs totals', {
+            shiftId,
+            error: incrError.message
+        });
     }
 }
 
