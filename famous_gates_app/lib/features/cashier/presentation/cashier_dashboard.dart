@@ -313,6 +313,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   final _mpesaPhoneController = TextEditingController();
   final _tenderedController = TextEditingController();
   String _unpaidSearch = '';
+  Timer? _unpaidSearchDebounce;
   String? _selectedUnpaidRef;
   String _method = 'cash';
 
@@ -494,6 +495,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   @override
   void dispose() {
     _captainOrderTimer?.cancel();
+    _unpaidSearchDebounce?.cancel();
     _lookupController.dispose();
     _amountController.dispose();
     _referenceController.dispose();
@@ -860,9 +862,15 @@ class _StationTabState extends ConsumerState<_StationTab> {
             ),
             const SizedBox(height: 10),
             TextField(
-              onChanged: (value) => setState(() => _unpaidSearch = value),
+              onChanged: (value) {
+                _unpaidSearchDebounce?.cancel();
+                _unpaidSearchDebounce = Timer(
+                  const Duration(milliseconds: 300),
+                  () => setState(() => _unpaidSearch = value),
+                );
+              },
               decoration: const InputDecoration(
-                labelText: 'Search unpaid bills',
+                labelText: 'Search by short code, waiter, order no. or table…',
                 prefixIcon: Icon(Icons.search),
               ),
             ),
@@ -885,7 +893,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     final balance = _num(row['balance_amount'] ??
                         row['balance'] ??
                         row['total_amount']);
-                    final status = _text(row, ['status', 'payment_status']);
                     final customer = _customerName(row);
                     return InkWell(
                       borderRadius: BorderRadius.circular(12),
@@ -944,35 +951,57 @@ class _StationTabState extends ConsumerState<_StationTab> {
                                     spacing: 8,
                                     runSpacing: 4,
                                     children: [
-                                      if (refText.isNotEmpty)
+                                      // Short code
+                                      if (_text(row, ['short_code']).isNotEmpty)
                                         _MiniMeta(
                                             icon: Icons.qr_code_2,
-                                            text: refText),
-                                      if (customer.isNotEmpty)
+                                            text: _text(row, ['short_code'])),
+                                      // Order number (only when different from short_code)
+                                      if (() {
+                                        final sc = _text(row, ['short_code']);
+                                        final on = _text(row, ['order_number', 'bill_number']);
+                                        return on.isNotEmpty && on != sc;
+                                      }())
+                                        _MiniMeta(
+                                            icon: Icons.receipt_outlined,
+                                            text: _text(row, ['order_number', 'bill_number'])),
+                                      // Table / location
+                                      if (_text(row, ['location']).isNotEmpty &&
+                                          _text(row, ['location']) != '—')
+                                        _MiniMeta(
+                                            icon: Icons.table_restaurant,
+                                            text: _text(row, ['location'])),
+                                      // Waiter
+                                      if (_text(row, ['waiter_name']).isNotEmpty)
+                                        _MiniMeta(
+                                          icon: Icons.badge_outlined,
+                                          text: 'Waiter: ${_text(row, ['waiter_name'])}',
+                                        ),
+                                      // Outlet / station
+                                      if (_text(row, ['station_name', 'outlet_name']).isNotEmpty)
+                                        _MiniMeta(
+                                          icon: Icons.storefront,
+                                          text: _text(row, ['station_name', 'outlet_name']),
+                                        ),
+                                      // Customer (only when not redundant with waiter)
+                                      if (customer.isNotEmpty &&
+                                          customer.toLowerCase() != 'walk-in' &&
+                                          customer != _text(row, ['waiter_name']))
                                         _MiniMeta(
                                             icon: Icons.person_outline,
                                             text: customer),
-                                      if (row['is_waiter_order'] == true &&
-                                          _text(row, ['waiter_name'])
-                                              .isNotEmpty)
+                                      // Time
+                                      if (_text(row, ['created_at', 'bill_date']).isNotEmpty)
                                         _MiniMeta(
-                                          icon: Icons.badge_outlined,
-                                          text:
-                                              'Waiter: ${_text(row, ['waiter_name'])}',
+                                          icon: Icons.access_time,
+                                          text: () {
+                                            final dt = DateTime.tryParse(
+                                                _text(row, ['created_at', 'bill_date']));
+                                            if (dt == null) return '';
+                                            final local = dt.toLocal();
+                                            return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+                                          }(),
                                         ),
-                                      if (_text(row, [
-                                        'station_name',
-                                        'outlet_name'
-                                      ]).isNotEmpty)
-                                        _MiniMeta(
-                                          icon: Icons.storefront,
-                                          text: _text(row,
-                                              ['station_name', 'outlet_name']),
-                                        ),
-                                      if (status.isNotEmpty)
-                                        _MiniMeta(
-                                            icon: Icons.info_outline,
-                                            text: status),
                                     ],
                                   ),
                                   const SizedBox(height: 6),
