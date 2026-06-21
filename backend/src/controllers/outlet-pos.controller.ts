@@ -62,11 +62,10 @@ const isFoodOrBarOutlet = (outletType: unknown): boolean =>
 //  - Main Bar / Executive Bar: the bar cashier's Flutter screen polls
 //    getBarCaptainOrders below and prints locally via PrintService -> a
 //    local print agent at localhost (see print_service.dart).
-//  - Restaurant: orders placed through the generic Outlet POS screen land
-//    in pos_shift_orders (a different table from the dedicated waiter/
-//    table-ordering flow that feeds KDS's restaurant_orders feed, so KDS
-//    never sees these) — outlet_pos_screen.dart prints the kitchen ticket
-//    locally itself, for both new and recalled orders.
+//  - Restaurant: orders land in pos_shift_orders; GET /restaurant/kitchen/orders
+//    merges these into the KDS feed (alongside restaurant_orders), so the KDS
+//    auto-prints the captain order on the kitchen printer within its 5 s poll.
+//    The waiter screen prints the customer bill only.
 // This backend only ever supplies the order data; it never attempts the
 // print itself.
 //
