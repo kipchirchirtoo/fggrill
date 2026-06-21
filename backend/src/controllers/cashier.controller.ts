@@ -1885,14 +1885,29 @@ async function linkPaymentToActiveShift(
     amount: number
 ): Promise<void> {
     try {
-        const { data: shift } = await supabase
+        // .single() throws if the cashier has 0 or 2+ rows with status='open'
+        // (e.g. a prior shift left open while a new one is pending approval),
+        // which silently dropped this shift's cashier_shift_transactions row
+        // and undercounted Shift Collections even though the payment itself
+        // succeeded. order+limit+maybeSingle tolerates duplicates and picks
+        // the most recent, matching activeCashierShiftLogId below.
+        const { data: shift, error: shiftLookupError } = await supabase
             .from('cashier_shift_logs')
             .select('id')
             .eq('cashier_id', cashierId)
             .eq('status', 'open')
-            .single();
+            .order('shift_start', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (!shift) return;
+        if (shiftLookupError || !shift) {
+            logger.warn('linkPaymentToActiveShift: no active shift resolved', {
+                cashierId,
+                paymentId,
+                error: shiftLookupError?.message
+            });
+            return;
+        }
 
         const { error } = await supabase.from('cashier_shift_transactions').insert({
             shift_id: shift.id,
@@ -1903,19 +1918,15 @@ async function linkPaymentToActiveShift(
             transaction_time: new Date().toISOString()
         });
 
-
         if (error) {
-
-
-          console.error('Database error:', error);
-
-
-          throw error;
-
-
+            logger.warn('linkPaymentToActiveShift: failed to insert cashier_shift_transactions', {
+                cashierId,
+                paymentId,
+                error: error.message
+            });
         }
-    } catch {
-        // Non-critical — don't fail the payment if shift linking fails
+    } catch (err) {
+        logger.warn('linkPaymentToActiveShift threw', { cashierId, paymentId, error: (err as Error)?.message });
     }
 }
 
