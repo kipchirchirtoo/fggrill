@@ -1817,9 +1817,13 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
         .toDouble();
   }
 
-  ItemVoidRequest? _pendingFor(int itemIndex) {
+  // Returns the active void request for an item if it's in any in-flight stage.
+  ItemVoidRequest? _activeVoidFor(int itemIndex) {
     for (final request in _voidRequests) {
-      if (request.itemIndex == itemIndex && request.isPending) return request;
+      if (request.itemIndex == itemIndex &&
+          (request.isPending || request.isAcknowledged)) {
+        return request;
+      }
     }
     return null;
   }
@@ -1867,6 +1871,44 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
         AppNotifier.showSnackBar(
             context, SnackBar(content: Text('Could not request void: $error')));
       }
+    } finally {
+      if (mounted) setState(() => _actioning = false);
+    }
+  }
+
+  Future<void> _acknowledge(ItemVoidRequest request) async {
+    setState(() => _actioning = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).cashierAcknowledgeVoid(request.id);
+      await _poll();
+      if (mounted) {
+        AppNotifier.showSnackBar(context,
+            const SnackBar(content: Text('Acknowledged — sent to manager for approval')));
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+      }
+      await _poll();
+    } finally {
+      if (mounted) setState(() => _actioning = false);
+    }
+  }
+
+  Future<void> _decline(ItemVoidRequest request) async {
+    setState(() => _actioning = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).cashierDeclineVoid(request.id);
+      await _poll();
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Void request declined — item stays on bill')));
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+      }
+      await _poll();
     } finally {
       if (mounted) setState(() => _actioning = false);
     }
@@ -1946,7 +1988,7 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
     final order = _order;
     final canPrint = order.paymentStatus == 'unpaid' && order.canReprintBill;
     final pendingTotal = _voidRequests
-        .where((r) => r.isPending)
+        .where((r) => r.isPending || r.isAcknowledged)
         .fold<double>(0, (sum, r) => sum + r.amount);
 
     return SafeArea(
@@ -2000,9 +2042,17 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  _isCashier
-                      ? '⚠️ Void pending. You may still process payment. May reduce total by ${formatKes(pendingTotal)}.'
-                      : '⏳ Pending void may reduce total by ${formatKes(pendingTotal)}.',
+                  () {
+                    final hasCashierPending = _voidRequests.any((r) => r.isPending);
+                    final hasManagerPending = _voidRequests.any((r) => r.isAcknowledged);
+                    if (_isCashier && hasCashierPending) {
+                      return '⚠️ Item void awaiting your acknowledgment. May reduce total by ${formatKes(pendingTotal)}.';
+                    }
+                    if (_isReviewer && hasManagerPending) {
+                      return '⚠️ Item void acknowledged by cashier — awaiting your approval. May reduce total by ${formatKes(pendingTotal)}.';
+                    }
+                    return '⏳ Void in progress — may reduce total by ${formatKes(pendingTotal)}.';
+                  }(),
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
@@ -2029,12 +2079,16 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                       : double.tryParse('${raw['voided_qty']}') ?? 0;
                   final activeQty = qty - voidedQty;
                   final name = '${raw['name'] ?? ''}';
-                  final pending = _pendingFor(index);
+                  final activeVoid = _activeVoidFor(index);
                   final isFullyVoided = activeQty <= 0;
+                  final isHiddenFromCustomer = raw['void_pending_approval'] == true;
 
                   return ListTile(
                     dense: true,
-                    leading: (_billEditable && pending == null && activeQty > 0 && !_actioning)
+                    tileColor: isHiddenFromCustomer
+                        ? Colors.orange.withValues(alpha: 0.06)
+                        : null,
+                    leading: (_billEditable && activeVoid == null && activeQty > 0 && !_actioning)
                         ? IconButton(
                             icon: const Icon(Icons.remove_circle_outline, size: 20),
                             tooltip: 'Void item',
@@ -2047,34 +2101,69 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                           : '${qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1)}x $name',
                       style: isFullyVoided
                           ? const TextStyle(decoration: TextDecoration.lineThrough)
-                          : null,
+                          : isHiddenFromCustomer
+                              ? TextStyle(color: Colors.orange.shade800)
+                              : null,
                     ),
-                    subtitle: pending == null
-                        ? null
+                    subtitle: activeVoid == null
+                        ? (isHiddenFromCustomer
+                            ? const Text('Hidden from customer bill — awaiting manager',
+                                style: TextStyle(fontSize: 11))
+                            : null)
                         : Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Wrap(
                               spacing: 8,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                const Chip(
-                                  label: Text('⏳ PENDING', style: TextStyle(fontSize: 11)),
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                ),
-                                Text(
-                                  '${pending.reason} • ${pending.requestedByName ?? 'Unknown'}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                                if (_isReviewer) ...[
-                                  TextButton(
-                                    onPressed: _actioning ? null : () => _approve(pending),
-                                    child: const Text('✓ APPROVE'),
+                                if (activeVoid.isPending) ...[
+                                  Chip(
+                                    label: const Text('⏳ AWAITING CASHIER',
+                                        style: TextStyle(fontSize: 11)),
+                                    backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
                                   ),
-                                  TextButton(
-                                    onPressed: _actioning ? null : () => _reject(pending),
-                                    child: const Text('✗ REJECT'),
+                                  Text(
+                                    '${activeVoid.reason} • ${activeVoid.requestedByName ?? 'Unknown'}',
+                                    style: Theme.of(context).textTheme.bodySmall,
                                   ),
+                                  if (_isCashier) ...[
+                                    TextButton(
+                                      onPressed: _actioning ? null : () => _acknowledge(activeVoid),
+                                      child: const Text('✓ ACKNOWLEDGE'),
+                                    ),
+                                    TextButton(
+                                      onPressed: _actioning ? null : () => _decline(activeVoid),
+                                      style: TextButton.styleFrom(
+                                          foregroundColor: Colors.red),
+                                      child: const Text('✗ DECLINE'),
+                                    ),
+                                  ],
+                                ] else if (activeVoid.isAcknowledged) ...[
+                                  Chip(
+                                    label: const Text('⏳ AWAITING MANAGER',
+                                        style: TextStyle(fontSize: 11)),
+                                    backgroundColor: Colors.blue.withValues(alpha: 0.12),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  Text(
+                                    '${activeVoid.reason} • cashier: ${activeVoid.cashierName ?? 'Unknown'}',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                  if (_isReviewer) ...[
+                                    TextButton(
+                                      onPressed: _actioning ? null : () => _approve(activeVoid),
+                                      child: const Text('✓ APPROVE'),
+                                    ),
+                                    TextButton(
+                                      onPressed: _actioning ? null : () => _reject(activeVoid),
+                                      style: TextButton.styleFrom(
+                                          foregroundColor: Colors.red),
+                                      child: const Text('✗ REJECT'),
+                                    ),
+                                  ],
                                 ],
                               ],
                             ),

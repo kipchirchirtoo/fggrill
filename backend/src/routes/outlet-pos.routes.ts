@@ -3,6 +3,8 @@ import { protect } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import {
   approveItemVoidRequest,
+  cashierAcknowledgeItemVoid,
+  cashierDeclineItemVoid,
   closeShift,
   createOutlet,
   createOutletItem,
@@ -12,6 +14,8 @@ import {
   getItemVoidRequestsForShift,
   getPendingItemVoidsForShift,
   getPendingPosVoidRequests,
+  getPendingVoidsCashier,
+  getPendingVoidsManager,
   getOutletItems,
   getOutletStaff,
   getOutlets,
@@ -20,6 +24,7 @@ import {
   getShiftOrders,
   getShiftSummary,
   getStockCount,
+  getVoidHistory,
   markCaptainOrderPrinted,
   mergeShiftOrders,
   openShift,
@@ -101,8 +106,13 @@ router.get('/void-requests/pending', getPendingPosVoidRequests);
 router.post('/void-requests/:requestId/review', reviewPosVoidRequest);
 
 router.post('/voids/request', requestItemVoid);
+router.patch('/voids/:id/cashier-acknowledge', cashierAcknowledgeItemVoid);
+router.patch('/voids/:id/cashier-decline', cashierDeclineItemVoid);
 router.patch('/voids/:id/approve', approveItemVoidRequest);
 router.patch('/voids/:id/reject', rejectItemVoidRequest);
+router.get('/voids/pending/cashier', getPendingVoidsCashier);
+router.get('/voids/pending/manager', getPendingVoidsManager);
+router.get('/voids/history', getVoidHistory);
 router.get('/voids/shift/:shiftId', getItemVoidRequestsForShift);
 router.get('/voids/waiter/:waiterId', getItemVoidHistoryForWaiter);
 router.get('/shifts/:shiftId/pending-voids', getPendingItemVoidsForShift);

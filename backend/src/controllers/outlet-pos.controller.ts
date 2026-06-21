@@ -2772,9 +2772,9 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       .single();
     if (error || !requestRow) throw error || new AppError('Failed to create item void request', 500);
 
-    // Notify the same roles as a whole-bill void so the branch accountant
-    // can action it. Without this, the pending row sits in the database
-    // invisibly — no one knows to approve or reject it.
+    // Stage 1: notify only the cashier who has the open shift for this
+    // specific outlet — not all cashiers at the branch.
+    // shift.cashier_id is the user who opened this pos_outlet_shift.
     const voidNotifMeta = {
       request_id: requestRow.id,
       order_id: orderId,
@@ -2783,26 +2783,15 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       item_name: String(item.name || ''),
       qty_to_void: qtyToVoid
     };
-    await Promise.allSettled([
-      notificationService.notifyRole(
-        'branch_accountant',
-        'Item void approval required',
-        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} needs item void approval (qty: ${qtyToVoid}).`,
-        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: shift.branch_id, metadata: voidNotifMeta }
-      ),
-      notificationService.notifyRole(
-        'branch_manager',
-        'Item void request raised',
-        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} has been stopped and needs review (qty: ${qtyToVoid}).`,
-        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: shift.branch_id, metadata: voidNotifMeta }
-      ),
-      notificationService.notifyRole(
-        'auditor',
-        'Item void request raised',
-        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} is awaiting branch accountant item void approval.`,
-        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: shift.branch_id, metadata: voidNotifMeta }
-      ),
-    ]);
+    const shiftCashierId = (shift as any).cashier_id;
+    if (shiftCashierId) {
+      await notificationService.notifyUser(
+        shiftCashierId,
+        'Item void request',
+        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} — void requested (qty: ${qtyToVoid}). Acknowledge or decline.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', metadata: voidNotifMeta }
+      );
+    }
 
     res.status(201).json({ success: true, data: requestRow });
   } catch (error) {
@@ -2910,13 +2899,12 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
     if (error || !requestRow) throw new AppError('Void request not found', 404);
     ensureBranchAccess(req, requestRow.branch_id);
 
-    if (requestRow.status !== 'pending') {
-      const namesById = await userDisplayNamesById(requestRow.actioned_by ? [requestRow.actioned_by] : []);
-      const actorName = requestRow.actioned_by ? namesById.get(String(requestRow.actioned_by)) : null;
-      throw new AppError(
-        actorName ? `Already actioned by ${actorName}` : 'Void request already processed',
-        409
-      );
+    // Stage 2: request must have been cashier-acknowledged first.
+    if (requestRow.status !== 'void_acknowledged') {
+      const check = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by the cashier yet'
+        : 'Void request already processed';
+      throw new AppError(check, 409);
     }
 
     const { data: updatedOrder, error: rpcError } = await supabase.rpc('void_order_item', {
@@ -2930,20 +2918,22 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
       throw rpcError;
     }
 
-    // Notify the waiter who submitted the request so they know it was approved.
-    if (requestRow.requested_by) {
-      await notificationService.notifyUser(
+    const approverName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Manager';
+    const approveNotifMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
         requestRow.requested_by,
+        'Item void APPROVED ✓',
+        `Void APPROVED by ${approverName} — "${requestRow.item_name}" removed from bill ${requestRow.order_number || ''}.`,
+        { type: 'success', category: 'pos_item_void_request', priority: 'medium', metadata: approveNotifMeta }
+      ),
+      requestRow.cashier_id && notificationService.notifyUser(
+        requestRow.cashier_id,
         'Item void approved',
-        `Your void request for "${requestRow.item_name}" on bill ${requestRow.order_number || requestRow.order_id} was approved.`,
-        {
-          type: 'success',
-          category: 'pos_item_void_request',
-          priority: 'medium',
-          metadata: { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id }
-        }
-      );
-    }
+        `Void on bill ${requestRow.order_number || ''} was approved by ${approverName} — "${requestRow.item_name}" removed.`,
+        { type: 'success', category: 'pos_item_void_request', priority: 'low', metadata: approveNotifMeta }
+      ),
+    ]);
 
     res.json({ success: true, data: updatedOrder });
   } catch (error) {
@@ -2966,13 +2956,33 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
     if (error || !requestRow) throw new AppError('Void request not found', 404);
     ensureBranchAccess(req, requestRow.branch_id);
 
-    if (requestRow.status !== 'pending') {
-      const namesById = await userDisplayNamesById(requestRow.actioned_by ? [requestRow.actioned_by] : []);
-      const actorName = requestRow.actioned_by ? namesById.get(String(requestRow.actioned_by)) : null;
-      throw new AppError(
-        actorName ? `Already actioned by ${actorName}` : 'Void request already processed',
-        409
-      );
+    if (requestRow.status !== 'void_acknowledged') {
+      const check = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by the cashier yet'
+        : 'Void request already processed';
+      throw new AppError(check, 409);
+    }
+
+    const now = new Date().toISOString();
+
+    // Reinstate the item: clear the void_pending_approval flag set at Stage 1
+    // so the item reappears on the bill as fully active.
+    const { data: orderData } = await supabase
+      .from('pos_shift_orders')
+      .select('items, total_amount, balance_amount')
+      .eq('id', requestRow.order_id)
+      .single();
+
+    if (orderData && Array.isArray(orderData.items)) {
+      const items = orderData.items as Array<Record<string, any>>;
+      if (items[requestRow.item_index]) {
+        const reinstated = { ...items[requestRow.item_index], void_pending_approval: false };
+        items[requestRow.item_index] = reinstated;
+        await supabase
+          .from('pos_shift_orders')
+          .update({ items, updated_at: now })
+          .eq('id', requestRow.order_id);
+      }
     }
 
     const { data: updatedRow, error: updateError } = await supabase
@@ -2980,33 +2990,293 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
       .update({
         status: 'rejected',
         actioned_by: req.user.id,
-        actioned_at: new Date().toISOString(),
+        actioned_at: now,
+        manager_id: req.user.id,
+        manager_reviewed_at: now,
         rejection_reason: rejectionReason || null,
-        updated_at: new Date().toISOString()
+        updated_at: now
       })
       .eq('id', id)
-      .eq('status', 'pending')
+      .eq('status', 'void_acknowledged')
       .select('*')
       .single();
     if (updateError || !updatedRow) {
       throw updateError || new AppError('Void request already processed', 409);
     }
 
+    const rejectorName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Manager';
+    const rejectMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item void REJECTED',
+        `Void REJECTED by ${rejectorName} — "${requestRow.item_name}" reinstated on bill ${requestRow.order_number || ''}. Item is back on the bill.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'medium', metadata: rejectMeta }
+      ),
+      requestRow.cashier_id && notificationService.notifyUser(
+        requestRow.cashier_id,
+        'Item void rejected — bill reinstated',
+        `Void on bill ${requestRow.order_number || ''} was REJECTED by ${rejectorName} — "${requestRow.item_name}" is back. Bill returned to unpaid queue.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', metadata: rejectMeta }
+      ),
+    ]);
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Stage 1: Cashier acknowledge/decline ───────────────────────────────────
+
+export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: cashier acknowledgment required', 403);
+    }
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+
+    const now = new Date().toISOString();
+
+    // Mark item as void_pending_approval in the JSONB array — this hides
+    // it from the bill display without changing financial totals yet.
+    const { data: orderData, error: orderErr } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .eq('id', requestRow.order_id)
+      .single();
+    if (orderErr || !orderData) throw new AppError('Order not found', 404);
+
+    const items = Array.isArray(orderData.items) ? [...orderData.items] as Array<Record<string, any>> : [];
+    if (!items[requestRow.item_index]) throw new AppError('Item no longer exists on bill', 404);
+    items[requestRow.item_index] = { ...items[requestRow.item_index], void_pending_approval: true };
+
+    const { data: updatedOrder, error: orderUpdateErr } = await supabase
+      .from('pos_shift_orders')
+      .update({ items, updated_at: now })
+      .eq('id', requestRow.order_id)
+      .select('*')
+      .single();
+    if (orderUpdateErr) throw orderUpdateErr;
+
+    const { data: updatedReq, error: reqUpdateErr } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'void_acknowledged',
+        cashier_id: req.user.id,
+        cashier_acknowledged_at: now,
+        cashier_action: 'acknowledged',
+        updated_at: now
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (reqUpdateErr) throw reqUpdateErr;
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    const ackMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void acknowledged — awaiting manager',
+        `Cashier ${cashierName} acknowledged the void for "${requestRow.item_name}" on bill ${requestRow.order_number || ''}. Awaiting manager approval.`,
+        { type: 'info', category: 'pos_item_void_request', priority: 'medium', metadata: ackMeta }
+      ),
+      notificationService.notifyRole(
+        'branch_accountant',
+        'Item void requires manager approval',
+        `"${requestRow.item_name}" on bill ${requestRow.order_number || ''} — void acknowledged by cashier. Please approve or reject.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: requestRow.branch_id, metadata: ackMeta }
+      ),
+      notificationService.notifyRole(
+        'branch_manager',
+        'Item void requires approval',
+        `"${requestRow.item_name}" on bill ${requestRow.order_number || ''} — cashier acknowledged void. Awaiting your decision.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: requestRow.branch_id, metadata: ackMeta }
+      ),
+    ]);
+
+    // Return both the updated request and the updated order so Flutter can
+    // immediately print the void receipt and the revised customer bill.
+    res.json({ success: true, data: { request: updatedReq, order: updatedOrder } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cashierDeclineItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: cashier action required', 403);
+    }
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'void_cashier_declined',
+        cashier_id: req.user.id,
+        cashier_acknowledged_at: now,
+        cashier_action: 'declined',
+        updated_at: now
+      })
+      .eq('id', id);
+    if (updateErr) throw updateErr;
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
     if (requestRow.requested_by) {
       await notificationService.notifyUser(
         requestRow.requested_by,
-        'Item void rejected',
-        `Your void request for "${requestRow.item_name}" on ${requestRow.order_number || 'a bill'} was rejected.`,
-        {
-          type: 'warning',
-          category: 'pos_item_void_request',
-          priority: 'medium',
-          metadata: { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
-        }
+        'Void request declined by cashier',
+        `Cashier ${cashierName} declined the void for "${requestRow.item_name}" on bill ${requestRow.order_number || ''} — item stays on the bill.`,
+        { type: 'error', category: 'pos_item_void_request', priority: 'medium',
+          metadata: { request_id: id, order_id: requestRow.order_id } }
       );
     }
 
-    res.json({ success: true, data: updatedRow });
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Cashier Stage 1 queue ──────────────────────────────────────────────────
+
+export const getPendingVoidsCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = branchIdFor(req);
+
+    // Find shifts the caller has open (they are the cashier_id on those shifts).
+    const { data: myShifts } = await supabase
+      .from('pos_outlet_shifts')
+      .select('id')
+      .eq('cashier_id', req.user.id)
+      .eq('status', 'open');
+
+    const myShiftIds = (myShifts || []).map((s: any) => s.id);
+    if (!myShiftIds.length) { res.json({ success: true, data: [] }); return; }
+
+    const { data, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .in('shift_id', myShiftIds)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(rows.map((r: any) => r.requested_by).filter(Boolean)));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Manager Stage 2 queue and void history ─────────────────────────────────
+
+export const getPendingVoidsManager = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden', 403);
+    const branchId = branchIdFor(req);
+
+    let query = supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('status', 'void_acknowledged')
+      .order('cashier_acknowledged_at', { ascending: true });
+
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(
+      rows.flatMap((r: any) => [r.requested_by, r.cashier_id]).filter(Boolean)
+    ));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null,
+      cashier_name: r.cashier_id ? namesById.get(String(r.cashier_id)) || null : null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getVoidHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden', 403);
+
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const status = nullableText(String(req.query.status || ''));
+    const from = nullableText(String(req.query.from || ''));
+    const to = nullableText(String(req.query.to || ''));
+    const requestedBy = nullableText(String(req.query.requested_by || ''));
+    const cashierId = nullableText(String(req.query.cashier_id || ''));
+
+    let query = supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (!isGlobalUser(req) && branchId) query = query.eq('branch_id', branchId);
+    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+    if (status) query = query.eq('status', status);
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
+    if (requestedBy) query = query.eq('requested_by', requestedBy);
+    if (cashierId) query = query.eq('cashier_id', cashierId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(
+      rows.flatMap((r: any) => [r.requested_by, r.cashier_id, r.manager_id, r.actioned_by]).filter(Boolean)
+    ));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null,
+      cashier_name: r.cashier_id ? namesById.get(String(r.cashier_id)) || null : null,
+      manager_name: r.manager_id ? namesById.get(String(r.manager_id)) || null : null
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }
