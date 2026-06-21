@@ -2565,6 +2565,25 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
         })
         .eq('id', requestRow.order_id);
       if (voidOrderError) throw voidOrderError;
+
+      // Defensive reverse-increment guard. ensureEditableOrder currently blocks
+      // voiding a paid bill, so amount_paid is almost always 0 here. This guard
+      // future-proofs the system: if that restriction is ever relaxed or bypassed,
+      // the shift totals will still reflect reality rather than counting
+      // voided revenue forever.
+      if (numberValue(order.amount_paid) > 0) {
+        const { error: reverseError } = await supabase.rpc('reverse_cashier_shift_for_order', {
+          p_order_id: requestRow.order_id
+        });
+        if (reverseError) {
+          logger.warn('reviewPosVoidRequest: failed to reverse shift totals for voided order', {
+            orderId: requestRow.order_id,
+            amountPaid: order.amount_paid,
+            error: reverseError.message
+          });
+        }
+      }
+
       await notificationService.notifyRole(
         'auditor',
         'POS void approved',
