@@ -568,5 +568,17 @@ export const downloadPayrollBatchPdf = asyncWrap(async (req, res) => {
     if (branchData?.name) branchName = branchData.name;
   }
 
-  await generatePayrollBatchPDF(res, batch, rows, branchName, staffRoleMap);
+  // Fetch staff credit bills for the payroll period
+  let staffCreditBills: any[] = [];
+  if (staffIds.length > 0) {
+    const { data: creditBillsData } = await supabase
+      .from('staff_credit_bills')
+      .select('*')
+      .in('staff_id', staffIds)
+      .order('staff_id')
+      .order('bill_date', { ascending: false });
+    staffCreditBills = creditBillsData || [];
+  }
+
+  await generatePayrollBatchPDF(res, batch, rows, branchName, staffRoleMap, staffCreditBills);
 });

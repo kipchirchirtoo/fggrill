@@ -263,7 +263,7 @@ export const getStaffAuditSummary = async (
             .eq('user_id', id)
             .gte('created_at', startDate)
             .lte('created_at', endDate)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false});
 
         if (error) throw error;
 
@@ -293,6 +293,205 @@ export const getStaffAuditSummary = async (
         });
     } catch (error) {
         logger.error('Error fetching staff audit summary:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Get all waiters/bartenders for a branch
+ * @route   GET /api/staff/audit/waiters
+ * @access  Private (Branch Accountant)
+ */
+export const getBranchWaiters = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { branch_id } = req.query;
+
+        if (!branch_id) {
+            res.status(400).json({
+                success: false,
+                message: 'branch_id is required'
+            });
+            return;
+        }
+
+        console.log('🔍 [Waiter Audit] Fetching waiters for branch:', branch_id);
+
+        // Get all active users for this branch
+        const { data: allUsers, error: usersError } = await supabase
+            .from('users')
+            .select('id, first_name, last_name, email, role, employee_id')
+            .eq('branch_id', branch_id)
+            .eq('status', 'active')
+            .order('first_name', { ascending: true });
+
+        if (usersError) throw usersError;
+
+        // Filter for waiter/bartender roles (case-insensitive pattern matching)
+        const waiterKeywords = ['waiter', 'waitress', 'bartender', 'barman', 'barmaid', 'server', 'bar_'];
+        const users = (allUsers || []).filter(user => {
+            const role = String(user.role || '').toLowerCase();
+            return waiterKeywords.some(keyword => role.includes(keyword));
+        });
+
+        // Get staff profiles for additional info
+        const userIds = (users || []).map(u => u.id).filter(Boolean);
+        const { data: staffProfiles } = userIds.length > 0
+            ? await supabase
+                .from('staff_profiles')
+                .select('user_id, department, employee_number, national_id')
+                .in('user_id', userIds)
+            : { data: [] };
+
+        const staffMap = new Map((staffProfiles || []).map((s: any) => [s.user_id, s]));
+
+        // Enrich users with staff profile data
+        const enrichedWaiters = (users || []).map(user => {
+            const staff = staffMap.get(user.id);
+            return {
+                ...user,
+                staff_name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+                employee_number: staff?.employee_number || user.employee_id,
+                department: staff?.department || null,
+                national_id: staff?.national_id || null
+            };
+        });
+
+        console.log(`✅ [Waiter Audit] Found ${enrichedWaiters.length} waiters`);
+
+        res.status(200).json({
+            success: true,
+            data: enrichedWaiters
+        });
+    } catch (error) {
+        console.error('❌ [Waiter Audit] Error:', error);
+        logger.error('Error fetching branch waiters:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Get all orders for a specific waiter with full metadata
+ * @route   GET /api/staff/audit/waiters/:waiterId/orders
+ * @access  Private (Branch Accountant)
+ */
+export const getWaiterOrders = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { waiterId } = req.params;
+        const { date, branch_id } = req.query;
+
+        if (!date) {
+            res.status(400).json({
+                success: false,
+                message: 'date parameter is required (YYYY-MM-DD format)'
+            });
+            return;
+        }
+
+        console.log('🔍 [Waiter Audit] Fetching orders for waiter:', waiterId, 'on date:', date);
+
+        // Calculate date range for the specified day
+        const startDate = new Date(date as string);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(date as string);
+        endDate.setHours(23, 59, 59, 999);
+
+        // Fetch all POS orders for this waiter on this date
+        let ordersQuery = supabase
+            .from('pos_shift_orders')
+            .select('*')
+            .eq('waiter_id', waiterId)
+            .gte('created_at', startDate.toISOString())
+            .lte('created_at', endDate.toISOString())
+            .order('created_at', { ascending: false });
+
+        if (branch_id) {
+            // Get outlet IDs for this branch
+            const { data: outlets } = await supabase
+                .from('pos_outlets')
+                .select('id')
+                .eq('branch_id', branch_id);
+
+            const outletIds = (outlets || []).map(o => o.id);
+            if (outletIds.length > 0) {
+                ordersQuery = ordersQuery.in('outlet_id', outletIds);
+            }
+        }
+
+        const { data: orders, error: ordersError } = await ordersQuery;
+
+        if (ordersError) throw ordersError;
+
+        console.log(`✅ [Waiter Audit] Found ${orders?.length || 0} orders`);
+
+        // Check for existing credit bills to prevent duplicates
+        const orderIds = (orders || []).map(o => o.id).filter(Boolean);
+        const { data: existingCreditBills } = orderIds.length > 0
+            ? await supabase
+                .from('credit_bills')
+                .select('source_pos_order_id, id, bill_number, status')
+                .in('source_pos_order_id', orderIds)
+            : { data: [] };
+
+        const creditBillMap = new Map(
+            (existingCreditBills || []).map((cb: any) => [cb.source_pos_order_id, cb])
+        );
+
+        // Enrich orders with metadata
+        const enrichedOrders = (orders || []).map(order => {
+            const items = Array.isArray(order.items) ? order.items : [];
+            const voidCount = order.void_request_count || 0;
+            const reprintCount = order.reprint_count || 0;
+            const existingCreditBill = creditBillMap.get(order.id);
+
+            return {
+                ...order,
+                item_count: items.length,
+                item_names: items.map((item: any) => item.name || item.item_name).join(', '),
+                total_quantity: items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0),
+                is_voided: order.status === 'voided' || order.payment_status === 'voided',
+                void_count: voidCount,
+                reprint_count: reprintCount,
+                has_credit_bill: !!existingCreditBill,
+                credit_bill_id: existingCreditBill?.id || null,
+                credit_bill_number: existingCreditBill?.bill_number || null,
+                credit_bill_status: existingCreditBill?.status || null,
+                can_create_credit_bill: !existingCreditBill && order.payment_status === 'unpaid' && order.status !== 'cancelled'
+            };
+        });
+
+        // Calculate summary statistics
+        const summary = {
+            total_orders: enrichedOrders.length,
+            total_sales: enrichedOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0),
+            total_items: enrichedOrders.reduce((sum, o) => sum + o.item_count, 0),
+            paid_orders: enrichedOrders.filter(o => o.payment_status === 'paid').length,
+            unpaid_orders: enrichedOrders.filter(o => o.payment_status === 'unpaid').length,
+            voided_orders: enrichedOrders.filter(o => o.is_voided).length,
+            credit_bills: enrichedOrders.filter(o => o.has_credit_bill).length,
+            total_reprints: enrichedOrders.reduce((sum, o) => sum + o.reprint_count, 0),
+            average_order_value: enrichedOrders.length > 0
+                ? enrichedOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0) / enrichedOrders.length
+                : 0
+        };
+
+        res.status(200).json({
+            success: true,
+            data: {
+                orders: enrichedOrders,
+                summary
+            }
+        });
+    } catch (error) {
+        console.error('❌ [Waiter Audit] Error:', error);
+        logger.error('Error fetching waiter orders:', error);
         next(error);
     }
 };

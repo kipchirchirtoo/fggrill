@@ -27,6 +27,7 @@ import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
+import 'waiter_audit_screen.dart';
 
 enum BranchAccountantSection {
   overview,
@@ -43,6 +44,7 @@ enum BranchAccountantSection {
   revenueOversight,
   soldItems,
   staffAudit,
+  waiterAudit,
   shiftOpenings,
   shiftReview,
   cashierLogbooks,
@@ -167,6 +169,8 @@ class _BranchAccountantDashboardState
         return const _SoldItemsSection();
       case BranchAccountantSection.staffAudit:
         return const _StaffAuditSection();
+      case BranchAccountantSection.waiterAudit:
+        return const WaiterAuditScreen();
       case BranchAccountantSection.shiftOpenings:
         return const _ShiftOpeningApprovalsSection();
       case BranchAccountantSection.shiftReview:
@@ -257,6 +261,7 @@ const _navItems = [
   _NavItem(BranchAccountantSection.salesPayments, 'Sales & Payments',
       Icons.point_of_sale),
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
+  _NavItem(BranchAccountantSection.waiterAudit, 'Waiter Audit', Icons.restaurant),
   _NavItem(
       BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
   _NavItem(

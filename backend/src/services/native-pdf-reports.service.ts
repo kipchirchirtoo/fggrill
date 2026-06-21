@@ -2285,7 +2285,8 @@ export async function generatePayrollBatchPDF(
   batch: any,
   lines: any[],
   branchName: string,
-  staffRoleMap?: Map<string, string>
+  staffRoleMap?: Map<string, string>,
+  staffCreditBills?: any[]
 ) {
   const MARGIN = 34;
   const doc = new PDFDocument({ margin: MARGIN, size: 'A3', layout: 'landscape', autoFirstPage: true, bufferPages: true });
@@ -2470,6 +2471,169 @@ export async function generatePayrollBatchPDF(
     { label: 'Total Deductions', value: money(sumTotalDed) },
     { label: 'Net Pay Total', value: money(sumNet) },
   ]);
+
+  // ===== CREDIT BILLS SECTION =====
+  y += 110;
+  if (staffCreditBills && staffCreditBills.length > 0) {
+    if (y + 80 > FOOTER_TOP) {
+      doc.addPage();
+      y = drawHeader(doc, title + ' (credit bills)', subtitle);
+    }
+
+    // Group credit bills by staff
+    const creditBillsByStaff = new Map<string, any[]>();
+    staffCreditBills.forEach(bill => {
+      const staffId = String(bill.staff_id || '');
+      if (!creditBillsByStaff.has(staffId)) {
+        creditBillsByStaff.set(staffId, []);
+      }
+      creditBillsByStaff.get(staffId)!.push(bill);
+    });
+
+    // Draw section header
+    doc.fillColor(PRIMARY).fontSize(12).font('Helvetica-Bold');
+    doc.text('STAFF CREDIT BILLS', MARGIN, y);
+    y += 24;
+
+    // Credit bills table columns
+    const cbCols = [
+      { label: 'Staff Name', width: 160 },
+      { label: 'Bill Date', width: 90 },
+      { label: 'Bill Number', width: 100 },
+      { label: 'Description', width: 180 },
+      { label: 'Amount', width: 90, align: 'right' },
+      { label: 'Paid', width: 90, align: 'right' },
+      { label: 'Balance', width: 90, align: 'right' },
+      { label: 'Status', width: 80 },
+    ];
+
+    const cbSpecWidth = cbCols.reduce((sum, col) => sum + col.width, 0);
+    const cbScale = TABLE_W / cbSpecWidth;
+    let cbCursorX = MARGIN;
+    const CB = cbCols.map(col => {
+      const width = col.width * cbScale;
+      const next = { ...col, x: cbCursorX, width };
+      cbCursorX += width;
+      return next;
+    });
+
+    // Draw credit bills table header
+    doc.rect(MARGIN, y, TABLE_W, HEADER_H).fill(HEADER_BG);
+    doc.fillColor('white').fontSize(HEADER_FONT).font('Helvetica-Bold');
+    CB.forEach(col => {
+      doc.text(col.label, col.x + PADDING_X, y + 7, {
+        width: col.width - (PADDING_X * 2),
+        align: (col.align as any) || 'left',
+        lineBreak: false,
+        ellipsis: true
+      });
+    });
+    y += HEADER_H;
+
+    // Build staff name map from lines
+    const staffNameMap = new Map<string, string>();
+    sorted.forEach(line => {
+      staffNameMap.set(String(line.staff_id), String(line.staff_name || ''));
+    });
+
+    let creditBillIndex = 0;
+    let totalCreditAmount = 0;
+    let totalCreditPaid = 0;
+    let totalCreditBalance = 0;
+
+    // Draw each staff's credit bills
+    creditBillsByStaff.forEach((bills, staffId) => {
+      bills.forEach(bill => {
+        if (y + ROW_H > FOOTER_TOP - 4) {
+          doc.addPage();
+          y = drawHeader(doc, title + ' (credit bills cont.)', subtitle);
+          // Redraw header
+          doc.rect(MARGIN, y, TABLE_W, HEADER_H).fill(HEADER_BG);
+          doc.fillColor('white').fontSize(HEADER_FONT).font('Helvetica-Bold');
+          CB.forEach(col => {
+            doc.text(col.label, col.x + PADDING_X, y + 7, {
+              width: col.width - (PADDING_X * 2),
+              align: (col.align as any) || 'left',
+              lineBreak: false,
+              ellipsis: true
+            });
+          });
+          y += HEADER_H;
+        }
+
+        const shade = creditBillIndex % 2 === 0;
+        if (shade) doc.rect(MARGIN, y, TABLE_W, ROW_H).fill(ROW_BG);
+        doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica');
+
+        const staffName = staffNameMap.get(staffId) || 'Unknown';
+        const billDate = bill.bill_date ? new Date(bill.bill_date).toLocaleDateString('en-KE') : '—';
+        const billNumber = oneLine(bill.bill_number || bill.id);
+        const description = oneLine(bill.description || bill.notes || 'Credit Bill');
+        const amount = Number(bill.amount || 0);
+        const paid = Number(bill.paid_amount || 0);
+        const balance = Number(bill.balance || (amount - paid));
+        const status = String(bill.status || 'open').toUpperCase();
+
+        totalCreditAmount += amount;
+        totalCreditPaid += paid;
+        totalCreditBalance += balance;
+
+        const cbValues = [
+          { v: staffName, x: CB[0].x, w: CB[0].width },
+          { v: billDate, x: CB[1].x, w: CB[1].width },
+          { v: billNumber, x: CB[2].x, w: CB[2].width },
+          { v: description, x: CB[3].x, w: CB[3].width },
+          { v: money(amount), x: CB[4].x, w: CB[4].width, a: 'right' },
+          { v: money(paid), x: CB[5].x, w: CB[5].width, a: 'right' },
+          { v: money(balance), x: CB[6].x, w: CB[6].width, a: 'right' },
+          { v: status, x: CB[7].x, w: CB[7].width },
+        ];
+
+        cbValues.forEach(val => {
+          doc.text(val.v, val.x + PADDING_X, y + 5, {
+            width: val.w - (PADDING_X * 2),
+            align: (val.a as any) || 'left',
+            lineBreak: false,
+            ellipsis: true
+          });
+        });
+
+        doc.strokeColor(BORDER).lineWidth(0.2).moveTo(MARGIN, y + ROW_H).lineTo(PAGE_W - MARGIN, y + ROW_H).stroke();
+        y += ROW_H;
+        creditBillIndex++;
+      });
+    });
+
+    // Draw totals row for credit bills
+    if (y + 22 > FOOTER_TOP) {
+      doc.addPage();
+      y = drawHeader(doc, title + ' (credit bills totals)', subtitle);
+    }
+
+    doc.rect(MARGIN, y, TABLE_W, 22).fill('#eef2f7');
+    doc.fillColor(PRIMARY).fontSize(ROW_FONT).font('Helvetica-Bold');
+    doc.text('TOTALS', CB[0].x + PADDING_X, y + 7, {
+      width: (CB[0].width + CB[1].width + CB[2].width + CB[3].width) - (PADDING_X * 2),
+      lineBreak: false
+    });
+
+    const cbSumCols = [
+      { v: money(totalCreditAmount), x: CB[4].x, w: CB[4].width },
+      { v: money(totalCreditPaid), x: CB[5].x, w: CB[5].width },
+      { v: money(totalCreditBalance), x: CB[6].x, w: CB[6].width },
+    ];
+
+    cbSumCols.forEach(sc => {
+      doc.text(sc.v, sc.x + PADDING_X, y + 7, {
+        width: sc.w - (PADDING_X * 2),
+        align: 'right',
+        lineBreak: false,
+        ellipsis: true
+      });
+    });
+
+    y += 34;
+  }
 
   const totalPages = doc.bufferedPageRange().count;
   for (let p = 0; p < totalPages; p++) {

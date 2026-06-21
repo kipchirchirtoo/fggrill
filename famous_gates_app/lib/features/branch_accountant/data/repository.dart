@@ -1503,6 +1503,40 @@ class BranchAccountantRepository {
         data: data);
   }
 
+  // ── Waiter Audit ──────────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getBranchWaiters() async {
+    final branchId = await getBranchId();
+    return _getList('/staff/audit/waiters', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<Map<String, dynamic>> getWaiterOrders({
+    required String waiterId,
+    required String date,
+  }) async {
+    final branchId = await getBranchId();
+    return _getMap('/staff/audit/waiters/$waiterId/orders', query: {
+      'date': date,
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<void> createCreditBillFromOrder({
+    required String orderId,
+    required String orderNumber,
+    required String customerName,
+    required num amount,
+  }) async {
+    await _dio.post('/cashier/credit-bill', data: {
+      'bill_id': orderId,
+      'bill_number': orderNumber,
+      'customer_name': customerName,
+      'amount': amount,
+      'source': 'pos',
+    });
+  }
+
   Future<Map<String, dynamic>> _getMap(
     String path, {
     Map<String, dynamic>? query,

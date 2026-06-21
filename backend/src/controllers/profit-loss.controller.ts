@@ -397,7 +397,7 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
             return outlets.get(id)!;
         };
 
-        // ── 1. POS outlets: revenue + COGS from cashier shift stock counts ──────
+        // ── 1. POS outlets: revenue + COGS from POS shift orders + outlet items ──
         const { data: posOutlets } = await supabase
             .from('pos_outlets')
             .select('id, name, outlet_type')
@@ -407,36 +407,54 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
         (posOutlets || []).forEach((o: any) => posOutletById.set(String(o.id), o));
 
         if (posOutletIds.length) {
+            // Get all POS orders for this period (paid orders only)
             const { data: posOrders } = await supabase
                 .from('pos_shift_orders')
-                .select('id, outlet_id, shift_id, total_amount, created_at, status')
+                .select('id, outlet_id, total_amount, items, payment_status, status')
                 .in('outlet_id', posOutletIds)
                 .gte('created_at', startTs)
-                .lte('created_at', endTs);
-            const shiftToOutlet = new Map<string, string>();
-            const shiftIds = new Set<string>();
-            (posOrders || []).forEach((o: any) => {
-                if (o.shift_id) {
-                    shiftToOutlet.set(String(o.shift_id), String(o.outlet_id));
-                    shiftIds.add(String(o.shift_id));
-                }
-            });
-            if (shiftIds.size) {
-                const { data: counts } = await supabase
-                    .from('pos_shift_stock_counts')
-                    .select('shift_id, sold_quantity, cost_price, selling_price')
-                    .in('shift_id', Array.from(shiftIds));
-                (counts || []).forEach((c: any) => {
-                    const oid = shiftToOutlet.get(String(c.shift_id));
-                    if (!oid) return;
-                    const meta = posOutletById.get(oid);
-                    const acc = outletFor(oid, meta?.name || 'POS Outlet', meta?.outlet_type || 'pos');
-                    const qty = n(c.sold_quantity);
-                    acc.revenue += qty * n(c.selling_price);
-                    acc.cogs += qty * n(c.cost_price);
-                    acc.units += qty;
+                .lte('created_at', endTs)
+                .eq('payment_status', 'paid')
+                .neq('status', 'cancelled')
+                .neq('status', 'voided');
+
+            // Build cost price map from all outlet items
+            const { data: outletItems } = await supabase
+                .from('pos_outlet_items')
+                .select('id, cost_price, selling_price')
+                .in('outlet_id', posOutletIds);
+
+            const costPriceMap = new Map<string, { cost: number; selling: number }>();
+            (outletItems || []).forEach((item: any) => {
+                costPriceMap.set(String(item.id), {
+                    cost: n(item.cost_price),
+                    selling: n(item.selling_price)
                 });
-            }
+            });
+
+            // Process each order's items
+            (posOrders || []).forEach((order: any) => {
+                const oid = String(order.outlet_id);
+                const meta = posOutletById.get(oid);
+                const acc = outletFor(oid, meta?.name || 'POS Outlet', meta?.outlet_type || 'pos');
+
+                // Add revenue from order total
+                acc.revenue += n(order.total_amount);
+
+                // Calculate COGS from items
+                const items = Array.isArray(order.items) ? order.items : [];
+                items.forEach((item: any) => {
+                    const outletItemId = item.outlet_item_id || item.item_id;
+                    if (!outletItemId) return;
+
+                    const prices = costPriceMap.get(String(outletItemId));
+                    if (prices) {
+                        const qty = n(item.quantity);
+                        acc.cogs += qty * prices.cost;
+                        acc.units += qty;
+                    }
+                });
+            });
         }
 
         // ── 2. Branch cost map for restaurant/bar items (base + branch override) ─

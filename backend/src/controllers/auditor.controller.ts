@@ -2611,16 +2611,16 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
 
     const outletIds = [...new Set(outletOrders.map((order: any) => order.outlet_id).filter(Boolean))];
     const shiftIds = [...new Set(outletOrders.map((order: any) => order.shift_id).filter(Boolean))];
-    const [outletsRes, outletStockRes] = await Promise.all([
+    const [outletsRes, outletItemsRes] = await Promise.all([
       outletIds.length
         ? supabase.from('pos_outlets').select('id, branch_id, name, outlet_type').in('id', outletIds)
         : Promise.resolve({ data: [], error: null } as any),
-      shiftIds.length
-        ? supabase.from('pos_shift_stock_counts').select('shift_id, outlet_item_id, item_name, sku, cost_price, selling_price, sold_quantity').in('shift_id', shiftIds)
+      outletIds.length
+        ? supabase.from('pos_outlet_items').select('id, name, sku, cost_price, selling_price').in('outlet_id', outletIds)
         : Promise.resolve({ data: [], error: null } as any)
     ]);
     if (outletsRes.error) throw outletsRes.error;
-    if (outletStockRes.error) throw outletStockRes.error;
+    if (outletItemsRes.error) throw outletItemsRes.error;
 
     const outletMap = (outletsRes.data || []).reduce((acc: Record<string, any>, outlet: any) => {
       acc[String(outlet.id)] = outlet;
@@ -2629,8 +2629,15 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     if (effectiveBranchId) {
       outletOrders = outletOrders.filter((order: any) => Number(outletMap[String(order.outlet_id)]?.branch_id) === Number(effectiveBranchId));
     }
-    const stockCountByShiftItem = (outletStockRes.data || []).reduce((acc: Record<string, any>, row: any) => {
-      acc[`${row.shift_id}_${row.outlet_item_id}`] = row;
+
+    // Build cost price map from outlet items (same pattern as P&L fix)
+    const outletItemCostMap = (outletItemsRes.data || []).reduce((acc: Record<string, any>, item: any) => {
+      acc[String(item.id)] = {
+        name: item.name,
+        sku: item.sku,
+        cost: Number(item.cost_price || 0),
+        selling: Number(item.selling_price || 0)
+      };
       return acc;
     }, {});
 
@@ -2868,8 +2875,12 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         const unitPrice = Number(item.unit_price ?? item.selling_price ?? item.price ?? 0) || 0;
         const revenue = Number(item.line_total ?? item.total_price ?? item.total ?? quantity * unitPrice) || 0;
         const itemId = item.outlet_item_id ? String(item.outlet_item_id) : String(item.product_id || item.id || item.name || '');
-        const stockRow = stockCountByShiftItem[`${order.shift_id}_${itemId}`] || {};
-        const costPrice = Number(item.cost_price ?? stockRow.cost_price ?? 0) || 0;
+
+        // Lookup cost price from outlet items (same pattern as P&L fix)
+        const outletItemId = item.outlet_item_id || itemId;
+        const itemData = outletItemCostMap[String(outletItemId)] || {};
+        const costPrice = itemData.cost || Number(item.cost_price || 0) || 0;
+
         const readyAt = order.kitchen_ready_at ? new Date(order.kitchen_ready_at).getTime() : NaN;
         const createdAt = order.created_at ? new Date(order.created_at).getTime() : NaN;
         const kdsMinutes = Number.isFinite(readyAt) && Number.isFinite(createdAt)
@@ -2879,8 +2890,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         addSoldItem({
           branchId: branchKey,
           itemId,
-          sku: item.sku || stockRow.sku || itemId,
-          name: item.name || item.item_name || stockRow.item_name || 'POS Item',
+          sku: item.sku || itemData.sku || itemId,
+          name: item.name || item.item_name || itemData.name || 'POS Item',
           quantity,
           revenue,
           cost: quantity * costPrice,

@@ -4853,7 +4853,7 @@ export const recordStaffPaidBill = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { staff_id, staff_name, amount, payment_method, reference } = req.body;
+        const { staff_id, staff_name, amount, payment_method, reference, cash_rendered } = req.body;
         const paidAmount = Number(amount || 0);
 
         if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
@@ -4864,6 +4864,38 @@ export const recordStaffPaidBill = async (
         }
 
         const method = normalizePaymentMethod(payment_method);
+
+        // REFERENCE VALIDATION BASED ON PAYMENT METHOD
+        let finalReference: string;
+        let cashRenderedAmount: number | null = null;
+        let cashVariance: number | null = null;
+
+        if (method === 'cash') {
+            // For CASH: System auto-generates reference + requires cash rendered tracking
+            finalReference = `CASH-PB-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+            cashRenderedAmount = Number(cash_rendered || 0);
+            if (!Number.isFinite(cashRenderedAmount) || cashRenderedAmount <= 0) {
+                throw new AppError('For cash payments, you must enter the cash amount physically rendered to staff', 400);
+            }
+
+            // Calculate variance (should be 0, but tracks if cashier gave wrong amount)
+            cashVariance = cashRenderedAmount - paidAmount;
+
+        } else if (method === 'mpesa' || method === 'card') {
+            // For M-PESA/CARD: User MUST provide reference
+            if (!reference || String(reference).trim() === '') {
+                throw new AppError(`${method.toUpperCase()} reference is required (e.g., M-Pesa code or Card approval code)`, 400);
+            }
+            finalReference = String(reference).trim();
+
+        } else {
+            // Other payment methods require reference
+            if (!reference || String(reference).trim() === '') {
+                throw new AppError('Payment reference is required', 400);
+            }
+            finalReference = String(reference).trim();
+        }
 
         // Find the cashier's open shift to attach the paid bill to.
         const { data: shift, error: shiftError } = await supabase
@@ -4880,6 +4912,20 @@ export const recordStaffPaidBill = async (
             throw new AppError('No open shift. Open a shift before recording paid bills.', 400);
         }
 
+        // Find the staff member's outstanding credit bills
+        let matchedCreditBills: any[] = [];
+        if (staff_id) {
+            const { data: creditBills } = await supabase
+                .from('staff_credit_bills')
+                .select('id, bill_number, amount, paid_amount, balance, status')
+                .eq('staff_id', staff_id)
+                .in('status', ['open', 'approved', 'pending'])
+                .gt('balance', 0)
+                .order('bill_date', { ascending: true }); // Oldest first (FIFO)
+
+            matchedCreditBills = creditBills || [];
+        }
+
         const existing = Array.isArray(shift.paid_bills_details)
             ? shift.paid_bills_details
             : [];
@@ -4890,10 +4936,18 @@ export const recordStaffPaidBill = async (
             name: staff_name || 'Staff',
             amount: paidAmount,
             payment_method: method,
-            reference: reference || null,
+            reference: finalReference,
+            cash_rendered: cashRenderedAmount, // For cash: tracks physical cash given to staff
+            cash_variance: cashVariance, // For cash: variance (should be 0, but tracks errors)
             recorded_at: new Date().toISOString(),
             recorded_by: req.user?.id || null,
-            review_status: 'pending_branch_accountant_review',
+            review_status: 'pending_branch_accountant_approval',
+            matched_credit_bills: matchedCreditBills.map(cb => ({
+                credit_bill_id: cb.id,
+                bill_number: cb.bill_number,
+                outstanding_balance: cb.balance,
+            })),
+            branch_id: shift.branch_id,
         };
 
         const updated = [...existing, entry];
@@ -4913,14 +4967,29 @@ export const recordStaffPaidBill = async (
 
         if (updateError) throw updateError;
 
+        // Build success message with cash variance alert if applicable
+        let successMessage = matchedCreditBills.length > 0
+            ? `Payment recorded. Found ${matchedCreditBills.length} outstanding credit bill(s) for this staff. Awaiting accountant approval.`
+            : 'Payment recorded. No outstanding credit bills found for this staff. Awaiting accountant approval.';
+
+        if (method === 'cash' && cashVariance !== null && cashVariance !== 0) {
+            successMessage += ` WARNING: Cash variance detected (Rendered: KES ${cashRenderedAmount?.toFixed(2)}, Payment: KES ${paidAmount.toFixed(2)}, Variance: KES ${cashVariance.toFixed(2)})`;
+        }
+
         res.status(201).json({
             success: true,
-            message: 'Paid bill recorded',
+            message: successMessage,
             data: {
                 entry,
                 paid_bills_details: updated,
                 paid_bills_value: totalValue,
                 paid_bills_count: updated.length,
+                matched_credit_bills: matchedCreditBills,
+                cash_variance_alert: method === 'cash' && cashVariance !== 0 ? {
+                    rendered: cashRenderedAmount,
+                    payment: paidAmount,
+                    variance: cashVariance,
+                } : null,
             },
         });
     } catch (error) {
@@ -4967,6 +5036,328 @@ export const getStaffPaidBills = async (
             data: details,
             totals: { ...totals, count: details.length },
             has_open_shift: !!shift,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Branch Accountant approves a staff paid bill and applies payment to credit bills.
+ * This action:
+ * 1. Validates the payment reference and details
+ * 2. Applies the payment to outstanding credit bills (FIFO order)
+ * 3. Updates staff_credit_bills balances
+ * 4. Creates payment history in staff_credit_bill_payments
+ * 5. Marks the paid bill entry as approved
+ */
+export const approvePaidBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { shift_id, paid_bill_id } = req.params;
+        const { notes } = req.body;
+
+        // Verify user is branch accountant or admin
+        const userRole = String((req as any).user?.role || '').toLowerCase();
+        if (!userRole.includes('accountant') && !userRole.includes('admin')) {
+            throw new AppError('Only branch accountants can approve paid bills', 403);
+        }
+
+        // Fetch shift with paid bills
+        const { data: shift, error: shiftError } = await supabase
+            .from('cashier_shift_logs')
+            .select('*')
+            .eq('id', shift_id)
+            .single();
+
+        if (shiftError) throw shiftError;
+        if (!shift) {
+            throw new AppError('Shift not found', 404);
+        }
+
+        const paidBills = Array.isArray(shift.paid_bills_details) ? shift.paid_bills_details : [];
+        const paidBill = paidBills.find((pb: any) => pb.id === paid_bill_id);
+
+        if (!paidBill) {
+            throw new AppError('Paid bill entry not found', 404);
+        }
+
+        if (paidBill.review_status === 'approved') {
+            throw new AppError('This payment has already been approved', 400);
+        }
+
+        if (paidBill.review_status === 'rejected') {
+            throw new AppError('This payment has been rejected and cannot be approved', 400);
+        }
+
+        const paymentAmount = Number(paidBill.amount || 0);
+        const staffId = paidBill.staff_id;
+        const paymentMethod = normalizePaymentMethod(paidBill.payment_method);
+        const paymentReference = paidBill.reference;
+
+        if (!staffId) {
+            throw new AppError('No staff ID linked to this payment', 400);
+        }
+
+        // Fetch staff's outstanding credit bills (FIFO order)
+        const { data: creditBills, error: creditError } = await supabase
+            .from('staff_credit_bills')
+            .select('*')
+            .eq('staff_id', staffId)
+            .in('status', ['open', 'approved', 'pending'])
+            .gt('balance', 0)
+            .order('bill_date', { ascending: true });
+
+        if (creditError) throw creditError;
+
+        if (!creditBills || creditBills.length === 0) {
+            throw new AppError('No outstanding credit bills found for this staff member', 404);
+        }
+
+        // Apply payment to credit bills (FIFO)
+        let remainingPayment = paymentAmount;
+        const paymentsApplied: any[] = [];
+
+        for (const creditBill of creditBills) {
+            if (remainingPayment <= 0) break;
+
+            const currentBalance = Number(creditBill.balance || 0);
+            const currentPaid = Number(creditBill.paid_amount || 0);
+            const totalAmount = Number(creditBill.amount || 0);
+
+            const amountToApply = Math.min(remainingPayment, currentBalance);
+            const newPaid = currentPaid + amountToApply;
+            const newBalance = Math.max(0, totalAmount - newPaid);
+
+            // Update staff credit bill
+            const { error: updateError } = await supabase
+                .from('staff_credit_bills')
+                .update({
+                    paid_amount: newPaid,
+                    balance: newBalance,
+                    status: newBalance <= 0 ? 'paid_cash' : creditBill.status,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', creditBill.id);
+
+            if (updateError) {
+                throw new AppError(`Failed to update credit bill ${creditBill.bill_number}: ${updateError.message}`, 500);
+            }
+
+            // Create payment history record with cash audit trail
+            const paymentHistoryData: any = {
+                credit_bill_id: creditBill.id,
+                amount: amountToApply,
+                payment_method: paymentMethod,
+                reference: paymentReference,
+                notes: notes || `Cashier payment approved by ${(req as any).user?.first_name || 'accountant'}`,
+                recorded_by: req.user?.id || null,
+                approved_by: req.user?.id || null,
+                approved_at: new Date().toISOString(),
+            };
+
+            // Add cash audit fields for cash payments
+            if (paymentMethod === 'cash' && paidBill.cash_rendered) {
+                paymentHistoryData.cash_rendered = Number(paidBill.cash_rendered);
+                paymentHistoryData.cash_variance = paidBill.cash_variance ? Number(paidBill.cash_variance) : 0;
+            }
+
+            const { error: paymentHistoryError } = await supabase
+                .from('staff_credit_bill_payments')
+                .insert(paymentHistoryData);
+
+            if (paymentHistoryError) {
+                throw new AppError(`Failed to create payment history: ${paymentHistoryError.message}`, 500);
+            }
+
+            // Also update linked cashier credit bill if exists
+            if (creditBill.source_cashier_credit_bill_id) {
+                await supabase
+                    .from('credit_bills')
+                    .update({
+                        paid_amount: newPaid,
+                        balance_amount: newBalance,
+                        status: newBalance <= 0 ? 'paid' : 'open',
+                    })
+                    .eq('id', creditBill.source_cashier_credit_bill_id);
+            }
+
+            paymentsApplied.push({
+                credit_bill_id: creditBill.id,
+                bill_number: creditBill.bill_number,
+                amount_applied: amountToApply,
+                new_balance: newBalance,
+                status: newBalance <= 0 ? 'paid_cash' : creditBill.status,
+            });
+
+            remainingPayment -= amountToApply;
+        }
+
+        // Generate transaction number
+        const { data: transactionNumberData } = await supabase.rpc('generate_cashier_transaction_number');
+        const transaction_number = transactionNumberData || `CT${Date.now()}`;
+
+        // Prepare transaction description with cash variance info if applicable
+        let transactionDescription = `Staff credit payment approved: ${paidBill.name}`;
+        const cashRendered = paidBill.cash_rendered ? Number(paidBill.cash_rendered) : null;
+        const cashVariance = paidBill.cash_variance ? Number(paidBill.cash_variance) : null;
+
+        if (paymentMethod === 'cash' && cashRendered !== null) {
+            transactionDescription += ` | Cash Rendered: KES ${cashRendered.toFixed(2)}`;
+            if (cashVariance !== null && cashVariance !== 0) {
+                transactionDescription += ` | Variance: KES ${cashVariance.toFixed(2)}`;
+            }
+        }
+
+        // Record cashier transaction with cash audit fields
+        const transactionInsertData: any = {
+            transaction_number,
+            branch_id: shift.branch_id,
+            cashier_id: shift.cashier_id,
+            transaction_type: 'payment',
+            revenue_type: 'staff_credit',
+            reference_type: 'staff_credit_bill',
+            reference_id: staffId,
+            amount: paymentAmount - remainingPayment, // Actual amount applied
+            payment_method: paymentMethod,
+            payment_reference: paymentReference,
+            description: transactionDescription,
+            shift_id: shift.id,
+            recorded_by: req.user?.id,
+        };
+
+        // Add cash audit fields for cash payments
+        if (paymentMethod === 'cash' && cashRendered !== null) {
+            transactionInsertData.metadata = {
+                cash_rendered: cashRendered,
+                cash_variance: cashVariance,
+                payment_amount: paymentAmount,
+            };
+        }
+
+        const { error: cashierTransactionError } = await supabase
+            .from('cashier_transactions')
+            .insert(transactionInsertData);
+
+        if (cashierTransactionError) {
+            throw new AppError(`Failed to create cashier transaction: ${cashierTransactionError.message}`, 500);
+        }
+
+        // Update the paid bill entry status in shift log
+        const updatedPaidBills = paidBills.map((pb: any) => {
+            if (pb.id === paid_bill_id) {
+                return {
+                    ...pb,
+                    review_status: 'approved',
+                    approved_by: req.user?.id,
+                    approved_at: new Date().toISOString(),
+                    payments_applied: paymentsApplied,
+                    transaction_number,
+                    remaining_unapplied: remainingPayment,
+                };
+            }
+            return pb;
+        });
+
+        const { error: shiftUpdateError } = await supabase
+            .from('cashier_shift_logs')
+            .update({
+                paid_bills_details: updatedPaidBills,
+            })
+            .eq('id', shift_id);
+
+        if (shiftUpdateError) throw shiftUpdateError;
+
+        res.json({
+            success: true,
+            message: remainingPayment > 0
+                ? `Payment approved and applied. KES ${(paymentAmount - remainingPayment).toLocaleString()} applied to ${paymentsApplied.length} bill(s). KES ${remainingPayment.toLocaleString()} could not be applied (no more outstanding bills).`
+                : `Payment approved and fully applied to ${paymentsApplied.length} credit bill(s).`,
+            data: {
+                paid_bill_id,
+                amount_paid: paymentAmount,
+                amount_applied: paymentAmount - remainingPayment,
+                remaining_unapplied: remainingPayment,
+                payments_applied: paymentsApplied,
+                transaction_number,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Branch Accountant rejects a staff paid bill.
+ * Marks the payment as rejected with reason.
+ */
+export const rejectPaidBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { shift_id, paid_bill_id } = req.params;
+        const { reason } = req.body;
+
+        // Verify user is branch accountant or admin
+        const userRole = String((req as any).user?.role || '').toLowerCase();
+        if (!userRole.includes('accountant') && !userRole.includes('admin')) {
+            throw new AppError('Only branch accountants can reject paid bills', 403);
+        }
+
+        if (!reason || String(reason).trim() === '') {
+            throw new AppError('Rejection reason is required', 400);
+        }
+
+        // Fetch shift with paid bills
+        const { data: shift, error: shiftError } = await supabase
+            .from('cashier_shift_logs')
+            .select('*')
+            .eq('id', shift_id)
+            .single();
+
+        if (shiftError) throw shiftError;
+        if (!shift) {
+            throw new AppError('Shift not found', 404);
+        }
+
+        const paidBills = Array.isArray(shift.paid_bills_details) ? shift.paid_bills_details : [];
+        const paidBill = paidBills.find((pb: any) => pb.id === paid_bill_id);
+
+        if (!paidBill) {
+            throw new AppError('Paid bill entry not found', 404);
+        }
+
+        if (paidBill.review_status === 'approved') {
+            throw new AppError('Cannot reject an already approved payment', 400);
+        }
+
+        // Update the paid bill entry status
+        const updatedPaidBills = paidBills.map((pb: any) => {
+            if (pb.id === paid_bill_id) {
+                return {
+                    ...pb,
+                    review_status: 'rejected',
+                    rejected_by: req.user?.id,
+                    rejected_at: new Date().toISOString(),
+                    rejection_reason: String(reason).trim(),
+                };
+            }
+            return pb;
+        });
+
+        const { error: shiftUpdateError } = await supabase
+            .from('cashier_shift_logs')
+            .update({
+                paid_bills_details: updatedPaidBills,
+            })
+            .eq('id', shift_id);
+
+        if (shiftUpdateError) throw shiftUpdateError;
+
+        res.json({
+            success: true,
+            message: 'Paid bill rejected',
+            data: {
+                paid_bill_id,
+                reason,
+            },
         });
     } catch (error) {
         next(error);

@@ -16,6 +16,8 @@ import {
     recordCreditPayment,
     recordStaffPaidBill,
     getStaffPaidBills,
+    approvePaidBill,
+    rejectPaidBill,
     deductCreditBillFromPayroll,
     downloadCustomerCreditInvoice,
     downloadCustomerCreditOutstandingReport,
@@ -190,6 +192,19 @@ router.route('/credit-bills/:id/payment')
 router.route('/paid-bills')
     .get(getStaffPaidBills)
     .post(recordStaffPaidBill);
+
+// Approve/Reject paid bills (Branch Accountant only)
+router.route('/shifts/:shift_id/paid-bills/:paid_bill_id/approve')
+    .post(
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'branch_accountant'] as any),
+        approvePaidBill
+    );
+
+router.route('/shifts/:shift_id/paid-bills/:paid_bill_id/reject')
+    .post(
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'branch_accountant'] as any),
+        rejectPaidBill
+    );
 
 router.route('/credit-bills/:id/payroll-deduct')
     .post(
