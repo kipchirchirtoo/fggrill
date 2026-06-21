@@ -83,29 +83,82 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
     try {
         const { staff_id, status } = req.query;
 
-        let query = supabase
+        // ===== QUERY STAFF_CREDIT_BILLS (payroll system credits) =====
+        let staffQuery = supabase
             .from('staff_credit_bills')
             .select('*')
             .order('bill_date', { ascending: false });
 
-        query = applyBranchFilter(query, req);
+        staffQuery = applyBranchFilter(staffQuery, req);
 
-        if (staff_id) query = query.eq('staff_id', staff_id);
+        if (staff_id) staffQuery = staffQuery.eq('staff_id', staff_id);
         if (status && status !== 'all') {
             if (status === 'outstanding') {
-                query = query.in('status', ['accountant_confirmed', 'auditor_confirmed']);
+                staffQuery = staffQuery.in('status', ['open', 'pending', 'accountant_confirmed', 'auditor_confirmed']);
             } else {
-                query = query.eq('status', status);
+                staffQuery = staffQuery.eq('status', status);
             }
         }
 
+        // ===== QUERY CREDIT_BILLS (cashier station credits) =====
+        let cashierQuery = supabase
+            .from('credit_bills')
+            .select('*')
+            .order('bill_date', { ascending: false });
 
+        cashierQuery = applyBranchFilter(cashierQuery, req);
 
-        const { data, error } = await query;
-        if (error) throw error;
+        if (staff_id) cashierQuery = cashierQuery.eq('staff_id', staff_id);
+        if (status && status !== 'all') {
+            if (status === 'outstanding') {
+                cashierQuery = cashierQuery.in('status', ['open', 'pending']);
+            } else {
+                cashierQuery = cashierQuery.eq('status', status);
+            }
+        }
 
-        // Fetch staff names separately to avoid schema cache FK issues
-        const staffIds = [...new Set((data || []).map((b: any) => b.staff_id).filter(Boolean))];
+        const [
+            { data: staffCreditBills, error: staffError },
+            { data: cashierCreditBills, error: cashierError }
+        ] = await Promise.all([staffQuery, cashierQuery]);
+
+        if (staffError) throw staffError;
+        if (cashierError) throw cashierError;
+
+        // ===== NORMALIZE BOTH SOURCES TO COMMON SHAPE =====
+        const normalizedStaffBills = (staffCreditBills || []).map((bill: any) => ({
+            ...bill,
+            // Ensure consistent field names
+            amount: bill.amount,
+            paid_amount: bill.paid_amount || bill.amount_paid || 0,
+            balance: bill.balance !== null && bill.balance !== undefined
+                ? bill.balance
+                : (bill.amount - (bill.paid_amount || bill.amount_paid || 0)),
+            source_table: 'staff_credit_bills'
+        }));
+
+        const normalizedCashierBills = (cashierCreditBills || []).map((bill: any) => ({
+            ...bill,
+            // Map cashier fields to staff_credit_bills field names for consistency
+            amount: bill.total_amount || bill.amount || 0,
+            paid_amount: bill.amount_paid || bill.paid_amount || 0,
+            balance: bill.balance_due !== null && bill.balance_due !== undefined
+                ? bill.balance_due
+                : (bill.balance || (bill.total_amount || bill.amount || 0) - (bill.amount_paid || 0)),
+            description: bill.description || `Credit bill for ${bill.customer_name || 'customer'}`,
+            source_table: 'credit_bills'
+        }));
+
+        // ===== MERGE AND SORT BY BILL_DATE =====
+        const allBills = [...normalizedStaffBills, ...normalizedCashierBills]
+            .sort((a, b) => {
+                const dateA = new Date(a.bill_date || a.created_at).getTime();
+                const dateB = new Date(b.bill_date || b.created_at).getTime();
+                return dateB - dateA; // descending
+            });
+
+        // ===== ENRICH WITH STAFF PROFILE DATA =====
+        const staffIds = [...new Set(allBills.map((b: any) => b.staff_id).filter(Boolean))];
         const { data: staffProfiles } = staffIds.length > 0
             ? await supabase.from('staff_profiles').select('id, role, position, department, employee_number, national_id, first_name, last_name, user_id').in('id', staffIds)
             : { data: [] };
@@ -117,19 +170,26 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         const staffMap = new Map((staffProfiles || []).map((s: any) => [s.id, s]));
         const userMap = new Map((users || []).map((u: any) => [u.id, u]));
 
-        const transformed = (data || []).map((bill: any) => {
+        const transformed = allBills.map((bill: any) => {
             const sp = staffMap.get(bill.staff_id);
             const user = sp ? userMap.get(sp.user_id) : null;
+
+            // Use existing staff_name if present (from credit_bills), otherwise build from profile
+            let staffName = bill.staff_name || bill.customer_name || '';
+            if (sp || user) {
+                staffName = `${user?.first_name || sp?.first_name || ''} ${user?.last_name || sp?.last_name || ''}`.trim();
+            }
+
             return {
                 ...bill,
-                staff_name: `${user?.first_name || sp?.first_name || ''} ${user?.last_name || sp?.last_name || ''}`.trim(),
-                employee_id: user?.employee_id || sp?.id_number || sp?.national_id || null,
-                department: sp?.department || null,
+                staff_name: staffName,
+                employee_id: user?.employee_id || sp?.employee_number || sp?.national_id || bill.employee_id || null,
+                department: sp?.department || bill.department || null,
                 staff: sp ? {
                     id: sp.id,
                     role: sp.role || sp.position,
                     department: sp.department,
-                    employee_id: user?.employee_id || sp.id_number || sp.national_id,
+                    employee_id: user?.employee_id || sp.employee_number || sp.national_id,
                     first_name: user?.first_name || sp.first_name || '',
                     last_name: user?.last_name || sp.last_name || ''
                 } : null
