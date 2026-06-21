@@ -6,7 +6,6 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/widgets/master_dashboard_shell.dart';
-import '../../../services/print_service.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../templates/data/document_printer.dart';
 import '../data/outlet_pos_repository.dart';
@@ -754,9 +753,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             );
       if (recalled == null) {
         if (_isRestaurant) {
-          // Restaurant new order: print the customer bill + send to kitchen.
+          // Restaurant new order: print the customer bill only.
+          // The captain order goes to the KDS which polls every 5 s and
+          // prints it on the kitchen printer — printing it here too would
+          // send a duplicate to the waiter's own station printer.
           await _printCaptainOrderReceipt(order);
-          await _printKitchenCaptainOrder(order);
         } else {
           // Bar / non-restaurant new order: print customer bill immediately.
           // Captain orders for these outlets are delivered to the cashier
@@ -766,13 +767,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       } else {
         // Recall: the customer bill always prints locally from the desktop app
         // using the fully merged order returned by updateOrder.
+        // The recalled captain order is picked up by the KDS poll automatically.
         await _printCustomerBillFromSavedOrder(order);
-        if (_isRestaurant) {
-          // Kitchen only needs the items just added by this recall — the
-          // cart at this point IS exactly those (previous items are locked,
-          // see _recallOrder below), matching a "RECALLED CAPTAIN ORDER".
-          await _printKitchenCaptainOrder(order, isRecall: true);
-        }
       }
       _cart = [];
       _recalledOrder = null;
@@ -839,60 +835,6 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         context,
         SnackBar(
             content: Text('Order saved, but receipt print failed: $error')),
-      );
-    }
-  }
-
-  // Prints the kitchen ticket for this outlet's printer locally (via the
-  // local print agent in PrintService — this backend can't reach a branch
-  // printer from the cloud, see outlet-pos.controller.ts). Orders placed
-  // through this screen land in pos_shift_orders, a different table from
-  // the dedicated waiter/table-ordering flow that feeds KDS's
-  // restaurant_orders feed, so KDS never sees these — this is the only
-  // place that prints a kitchen ticket for them.
-  Future<void> _printKitchenCaptainOrder(
-    OutletShiftOrder order, {
-    bool isRecall = false,
-  }) async {
-    final cartItems = _cart
-        .map((item) => CartItem(
-              productId: item.item.id,
-              name: item.item.name,
-              unitPrice: item.item.sellingPrice,
-              qty: item.quantity,
-            ))
-        .toList();
-    final total = cartItems.fold<double>(0, (sum, item) => sum + item.lineTotal);
-
-    final sale = SaleResult(
-      transactionId: order.id,
-      createdAt: order.createdAt ?? DateTime.now(),
-      receiptNumber: order.orderNumber,
-      cashierName: order.waiterName,
-      total: total > 0 ? total : order.totalAmount,
-      paymentMethod: 'pending',
-    );
-
-    try {
-      await PrintService().printCaptainOrder(
-        sale: sale,
-        items: cartItems,
-        branchName: _outlet?.name ?? widget.title,
-        orderNumber: order.orderNumber,
-        shortCode: order.shortCode,
-        tableNumber: order.tableNumber,
-        roomNumber: order.roomNumber,
-        customerName: order.customerName,
-        waiterName: order.waiterName,
-        orderType: order.orderType,
-        isRecall: isRecall,
-        outletType: _outlet?.outletType,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      AppNotifier.showSnackBar(
-        context,
-        SnackBar(content: Text('Order saved, but kitchen ticket print failed: $error')),
       );
     }
   }
