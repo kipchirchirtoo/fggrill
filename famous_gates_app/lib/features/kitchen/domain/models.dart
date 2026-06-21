@@ -115,8 +115,30 @@ class KitchenOrder {
 
   Duration get elapsed => DateTime.now().difference(createdAt);
   bool get isUrgent => elapsed.inMinutes > 15;
-  List<KitchenOrderItem> get recalledItems =>
-      items.where((item) => item.isRecalledItem).toList();
+  // Only the most recent recall batch — not every item ever recalled over
+  // the order's lifetime. Without this, a second/third recall on the same
+  // bill reprints already-served items from earlier rounds alongside the
+  // new ones, wasting thermal paper (and on long-running tabs, can make the
+  // ticket look like the full bill again).
+  List<KitchenOrderItem> get recalledItems {
+    final flagged = items.where((item) => item.isRecalledItem).toList();
+    if (flagged.isEmpty) return flagged;
+    DateTime? latestRecalledAt;
+    for (final item in flagged) {
+      final recalledAt = item.recalledAt;
+      if (recalledAt == null) continue;
+      if (latestRecalledAt == null || recalledAt.isAfter(latestRecalledAt)) {
+        latestRecalledAt = recalledAt;
+      }
+    }
+    if (latestRecalledAt == null) return flagged;
+    return flagged
+        .where((item) =>
+            item.recalledAt != null &&
+            item.recalledAt!.isAtSameMomentAs(latestRecalledAt!))
+        .toList();
+  }
+
   bool get hasRecalledItems => recalledItems.isNotEmpty;
 
   String get kdsPrintKey {
