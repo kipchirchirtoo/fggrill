@@ -544,7 +544,6 @@ class _MasterTopBar extends ConsumerWidget {
           const Spacer(),
           if (!isCompact) _SearchBox(hint: searchHint),
           if (!isCompact) const SizedBox(width: 16),
-          AppUpdateButton(iconColor: Colors.grey.shade700),
           AppNotificationButton(iconColor: Colors.grey.shade700),
           const SizedBox(width: 12),
           PopupMenuButton<String>(

@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../data/repository.dart';
+import 'pos_deep_drill_screen.dart';
 
 final _fmt = NumberFormat('#,##0.00', 'en_KE');
 
@@ -169,6 +170,16 @@ class _StaffPosAccountingScreenState
                       ),
                     ),
                   ),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const PosDeepDrillScreen(),
+                      ),
+                    ),
+                    icon: Icon(PhosphorIcons.magnifyingGlass(), size: 18),
+                    label: const Text('Deep Drill'),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     onPressed: _load,
                     icon: Icon(PhosphorIcons.arrowsClockwise()),

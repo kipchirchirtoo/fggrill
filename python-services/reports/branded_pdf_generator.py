@@ -31,6 +31,7 @@ from reportlab.platypus import (
     Image, PageBreak, HRFlowable
 )
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 from PIL import Image as PILImage
 
 # Kyogong Brand Colors
@@ -2738,146 +2739,453 @@ class BrandedPDFGenerator:
         # For now, just use the generic report generator or a placeholder
         return self._generate_generic_report(data, filters)
 
+    def _fmt_bill_date(self, value) -> str:
+        """Best-effort ISO-string -> dd/mm/yyyy for thermal bill date fields."""
+        if not value:
+            return ''
+        try:
+            return datetime.fromisoformat(str(value).replace('Z', '+00:00')).strftime('%d/%m/%Y')
+        except (ValueError, TypeError):
+            return str(value)
+
     def generate_checkout_bill(self, data: Dict) -> str:
-        """Generate Guest Checkout Bill"""
-        elements = []
-        
-        # Custom Header for Bill
-        logo = self._get_logo(width=1.5*inch)
-        
-        # Company info
-        company_info = [
-            Paragraph("<b>FamousGate Hotels</b>", self.styles['Normal']),
-            Paragraph("Bomet, Kenya", self.styles['SmallText']),
-            Paragraph("Tel: +254706782828", self.styles['SmallText']),
-            Paragraph("Email: famousgatebmt@gmail.com", self.styles['SmallText']),
-        ]
-        
-        header_data = []
-        if logo:
-            header_data.append([logo, company_info])
-        else:
-            header_data.append([company_info, ''])
-            
-        header_table = Table(header_data, colWidths=[2*inch, 4*inch])
-        header_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-            ('ALIGN', (1, 0), (1, 0), 'LEFT'),
-        ]))
-        elements.append(header_table)
-        elements.append(Spacer(1, 0.3*inch))
-        
-        # Bill Title
-        elements.append(Paragraph("<b>GUEST BILL / INVOICE</b>", 
-            ParagraphStyle('BillTitle', parent=self.styles['Heading1'], alignment=TA_CENTER, fontSize=16, spaceAfter=20)))
-        
-        # Guest Details Section
-        elements.append(Paragraph("<b>Check-Out Guest</b>", self.styles['Heading2']))
-        
-        guest_name = data.get('guest_name', '').upper()
+        """Generate Guest Checkout Bill as an 80mm thermal receipt, matching
+        the cashier module's customer receipt format (ReceiptGenerator)."""
+        guest_name = (data.get('guest_name') or '').upper().strip()
         guest_phone = data.get('guest_phone', '')
         room_number = data.get('room_number', '')
-        nights = data.get('nights', 1)
-        
-        booking_id = data.get('booking_id', 'N/A')
-        
-        details_data = [
-            [Paragraph(f"<b>{guest_name}</b>", self.styles['Normal'])],
-            [Paragraph(f"{guest_phone}", self.styles['Normal'])],
-            [Spacer(1, 10)],
-            [Paragraph(f"<b>Booking ID:</b> {booking_id}", self.styles['Normal'])],
-            [Paragraph(f"Room {room_number}", self.styles['Normal'])],
-            [Spacer(1, 10)],
-            [Paragraph(f"{nights} nights stay", self.styles['Normal'])],
-        ]
-        
-        details_table = Table(details_data, colWidths=[6*inch])
-        details_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ]))
-        elements.append(details_table)
-        elements.append(Spacer(1, 0.3*inch))
-        
-        # Financial Details
-        room_charges = data.get('room_charges', 0)
-        additional_charges = data.get('additional_charges', 0)
-        amount_paid = data.get('amount_paid', 0)
-        balance = data.get('balance', 0)
-        
-        fin_data = [
-            ['Room Charges', self._format_currency(room_charges)],
-            ['Additional Charges', self._format_currency(additional_charges)],
-            ['Amount Paid', f"-{self._format_currency(amount_paid)}"],
-            ['Balance', self._format_currency(balance)],
-        ]
-        
-        fin_table = Table(fin_data, colWidths=[4*inch, 2*inch])
-        fin_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-            ('TEXTCOLOR', (0, 0), (-1, -1), FG_BLACK),
-            ('LINEBELOW', (0, 2), (-1, 2), 1, FG_BLACK), # Line before Balance
-            ('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'), # Bold Balance row
-            ('FONTSIZE', (0, 3), (-1, 3), 12),
-        ]))
-        elements.append(fin_table)
-        elements.append(Spacer(1, 0.3*inch))
-        
-        # Outstanding Balance Warning
-        if balance > 0:
-            elements.append(Paragraph("<b>Outstanding balance must be settled</b>", 
-                ParagraphStyle('Warning', parent=self.styles['Normal'], textColor=FG_RED, alignment=TA_CENTER)))
-        
-        # Bank Payment Details
-        elements.append(Spacer(1, 0.3*inch))
-        elements.append(Paragraph("<b>PAYMENT DETAILS</b>", self.styles['Heading4']))
-        bank_data = [
-            ['AC Name:', 'FAMOUS GATES LIMITED'],
-            ['AC No:', '2041305757'],
-            ['Bank:', 'ABSA BANK'],
-            ['Branch:', 'BOMET'],
-        ]
-        bank_table = Table(bank_data, colWidths=[1.5*inch, 4.5*inch])
-        bank_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('BACKGROUND', (0, 0), (-1, -1), ROW_ALT),
-            ('GRID', (0, 0), (-1, -1), 0.3, FG_GRAY),
-        ]))
-        elements.append(bank_table)
-        
-        # Issuer info
-        elements.append(Spacer(1, 0.15*inch))
-        elements.append(Paragraph("<i>Issued by: FamousGate Hote</i>", self.styles['SmallText']))
-        
-        # Barcode for Cashier Scanning
-        elements.append(Spacer(1, 0.5*inch))
+        nights = data.get('nights', 1) or 1
+        booking_id = data.get('booking_id') or 'N/A'
+        check_in = self._fmt_bill_date(data.get('check_in'))
+        check_out = self._fmt_bill_date(data.get('check_out'))
+
+        room_charges = float(data.get('room_charges', 0) or 0)
+        additional_charges = float(data.get('additional_charges', 0) or 0)
+        amount_paid = float(data.get('amount_paid', 0) or 0)
+        balance = float(data.get('balance', 0) or 0)
+        total_amount = float(data.get('total_amount') or (room_charges + additional_charges))
+        has_outstanding = balance > 0
+
+        # Pre-generate the barcode so its real height (if any) is counted
+        # into the canvas size up front instead of guessed.
+        barcode_reader = None
+        scan_code = booking_id if booking_id != 'N/A' else f"HTL-{room_number}"
         try:
-            # Import here to avoid circular imports if any
             from barcode_generator.routes import barcode_service
-            
-            # Generate barcode for booking ID (or room number if booking ID not available, but booking ID is best)
-            # Assuming data has booking_id, if not use room_number as fallback
-            scan_code = data.get('booking_id', f"HTL-{room_number}")
-            
             barcode_bytes = barcode_service.generate_barcode(scan_code, include_text=True)
-            barcode_img = Image(io.BytesIO(barcode_bytes), width=2.5*inch, height=0.8*inch)
-            elements.append(barcode_img)
-            elements.append(Paragraph("Scan at Cashier", self.styles['SmallText']))
+            barcode_reader = ImageReader(io.BytesIO(barcode_bytes))
         except Exception as e:
-            print(f"Error adding barcode: {e}")
-            # Continue without barcode
-        
-        # Footer
-        elements.append(Spacer(1, 1*inch))
-        elements.append(Paragraph("Thank you for staying with us!", 
-            ParagraphStyle('FooterThanks', parent=self.styles['Normal'], alignment=TA_CENTER, fontName='Helvetica-Oblique')))
-            
-        return self._create_pdf(elements, filename=f"/tmp/Bill_{guest_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf")
+            print(f"Error generating barcode for checkout bill: {e}")
+
+        width = 80 * mm
+        margin = 5 * mm
+        right_x = width - margin
+
+        # === Compute exact canvas height from the same blocks drawn below ===
+        height_mm = 12  # top margin
+        height_mm += 22 + 5 + 3.5 + 3.5 + 3.5  # logo + name + address + tel + email
+        height_mm += 6 + 6  # title + dashed gap
+        height_mm += 4.5  # guest name
+        if guest_phone:
+            height_mm += 4.5
+        height_mm += 4 + 4  # booking id + room
+        if check_in:
+            height_mm += 4
+        if check_out:
+            height_mm += 4
+        height_mm += 4 + 3  # nights + gap
+        height_mm += 6  # dashed gap
+        height_mm += 5  # description/amount header
+        height_mm += 4  # room charges
+        if additional_charges:
+            height_mm += 4
+        height_mm += 2 + 6  # dashed gap
+        height_mm += 4.5 + 5 + 7  # total + paid + balance/gap
+        if has_outstanding:
+            height_mm += 12  # warning box
+        height_mm += 6  # dashed gap
+        height_mm += 4.5 + (4 * 3.8) + 2  # payment details header + 4 rows + gap
+        height_mm += 7  # issued-by + gap
+        if barcode_reader:
+            height_mm += 16 + 3 + 6  # barcode + code label + gap
+        height_mm += 7  # thank you + gap
+        height_mm += 3.5 + 6  # hirall branding lines
+        height_mm += 6  # bottom margin
+
+        height = height_mm * mm
+        filename = f"/tmp/Bill_{(guest_name or 'Guest').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        c = canvas.Canvas(filename, pagesize=(width, height))
+
+        y = height - 12 * mm
+        center_x = width / 2
+
+        # === HEADER ===
+        if os.path.exists(self.logo_path):
+            try:
+                c.drawImage(self.logo_path, center_x - 11*mm, y - 22*mm, width=22*mm, height=22*mm,
+                            preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        y -= 22 * mm
+
+        c.setFont("Helvetica-Bold", 13)
+        c.drawCentredString(center_x, y, "FamousGate Hotels")
+        y -= 5 * mm
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(center_x, y, "Bomet, Kenya")
+        y -= 3.5 * mm
+        c.drawCentredString(center_x, y, "Tel: +254706782828")
+        y -= 3.5 * mm
+        c.drawCentredString(center_x, y, "famousgatebmt@gmail.com")
+        y -= 6 * mm
+
+        c.setFont("Helvetica-Bold", 11)
+        c.drawCentredString(center_x, y, "GUEST BILL / INVOICE")
+        y -= 6 * mm
+
+        c.setDash(2, 2)
+        c.line(margin, y, right_x, y)
+        c.setDash()
+        y -= 6 * mm
+
+        # === GUEST INFO ===
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(margin, y, guest_name or 'GUEST')
+        y -= 4.5 * mm
+        if guest_phone:
+            c.setFont("Helvetica", 8)
+            c.drawString(margin, y, str(guest_phone))
+            y -= 4.5 * mm
+
+        c.setFont("Helvetica", 8)
+        c.drawString(margin, y, f"Booking ID: {booking_id}")
+        y -= 4 * mm
+        c.drawString(margin, y, f"Room: {room_number}")
+        y -= 4 * mm
+        if check_in:
+            c.drawString(margin, y, f"Check-in: {check_in}")
+            y -= 4 * mm
+        if check_out:
+            c.drawString(margin, y, f"Check-out: {check_out}")
+            y -= 4 * mm
+        c.drawString(margin, y, f"{nights} night{'s' if nights != 1 else ''} stay")
+        y -= 3 * mm
+
+        c.setDash(2, 2)
+        c.line(margin, y, right_x, y)
+        c.setDash()
+        y -= 6 * mm
+
+        # === CHARGES ===
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(margin, y, "Description")
+        c.drawRightString(right_x, y, "Amount")
+        y -= 5 * mm
+
+        c.setFont("Helvetica", 8)
+        c.drawString(margin, y, "Room Charges")
+        c.drawRightString(right_x, y, f"{room_charges:,.2f}")
+        y -= 4 * mm
+
+        if additional_charges:
+            c.drawString(margin, y, "Additional Charges")
+            c.drawRightString(right_x, y, f"{additional_charges:,.2f}")
+            y -= 4 * mm
+
+        y -= 2 * mm
+        c.setDash(2, 2)
+        c.line(margin, y, right_x, y)
+        c.setDash()
+        y -= 6 * mm
+
+        # === TOTALS ===
+        c.setFont("Helvetica", 9)
+        c.drawString(margin, y, "TOTAL")
+        c.drawRightString(right_x, y, self._format_currency(total_amount))
+        y -= 4.5 * mm
+
+        c.drawString(margin, y, "Amount Paid")
+        c.drawRightString(right_x, y, f"-{self._format_currency(amount_paid)}")
+        y -= 5 * mm
+
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(margin, y, "BALANCE")
+        c.drawRightString(right_x, y, self._format_currency(balance))
+        y -= 7 * mm
+
+        # === OUTSTANDING BALANCE WARNING ===
+        if has_outstanding:
+            c.setStrokeColor(colors.red)
+            c.setLineWidth(0.8)
+            c.rect(margin, y - 7*mm, width - 2*margin, 6*mm, stroke=1, fill=0)
+            c.setFont("Helvetica-Bold", 7)
+            c.setFillColor(colors.red)
+            c.drawCentredString(center_x, y - 4.5*mm, "OUTSTANDING BALANCE MUST BE SETTLED")
+            c.setFillColor(colors.black)
+            y -= 12 * mm
+
+        c.setDash(2, 2)
+        c.line(margin, y, right_x, y)
+        c.setDash()
+        y -= 6 * mm
+
+        # === PAYMENT / BANK DETAILS ===
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(center_x, y, "PAYMENT DETAILS")
+        y -= 4.5 * mm
+        c.setFont("Helvetica", 7.5)
+        for label, value in [
+            ("AC Name:", "FAMOUS GATES LIMITED"),
+            ("AC No:", "2041305757"),
+            ("Bank:", "ABSA BANK"),
+            ("Branch:", "BOMET"),
+        ]:
+            c.drawString(margin, y, label)
+            c.drawRightString(right_x, y, value)
+            y -= 3.8 * mm
+
+        y -= 2 * mm
+        c.setFont("Helvetica-Oblique", 6.5)
+        c.drawCentredString(center_x, y, "Issued by: FamousGate Hotel")
+        y -= 7 * mm
+
+        # === BARCODE ===
+        if barcode_reader:
+            bw, bh = 50 * mm, 16 * mm
+            try:
+                c.drawImage(barcode_reader, center_x - bw/2, y - bh, width=bw, height=bh,
+                            preserveAspectRatio=True, mask='auto')
+                y -= (bh + 3*mm)
+                c.setFont("Helvetica", 6.5)
+                c.drawCentredString(center_x, y, "Scan at Cashier")
+                y -= 6 * mm
+            except Exception:
+                pass
+
+        # === FOOTER ===
+        c.setFont("Helvetica-Oblique", 8)
+        c.drawCentredString(center_x, y, "Thank you for staying with us!")
+        y -= 7 * mm
+
+        c.setFont("Helvetica-Bold", 7)
+        c.drawCentredString(center_x, y, "System managed and made by Hirall")
+        y -= 3.5 * mm
+        c.setFont("Helvetica", 6)
+        c.drawCentredString(center_x, y, "+254 710 944 249 | admin@hirall.com")
+
+        c.save()
+        return filename
+
+    def generate_booking_confirmation_invoice(self, data: Dict) -> str:
+        """Generate a Booking Confirmation invoice as an 80mm thermal receipt
+        (same branded style as generate_checkout_bill), attached to the
+        booking-confirmation email sent right after a reservation is made -
+        for online (landing page) and reception bookings alike."""
+        guest_name = (data.get('guest_name') or '').upper().strip()
+        guest_phone = data.get('guest_phone', '')
+        guest_email = data.get('guest_email', '')
+        room_number = data.get('room_number', '')
+        room_type = data.get('room_type', '')
+        branch_name = data.get('branch_name') or 'FamousGate Hotels'
+        confirmation_number = data.get('confirmation_number') or 'N/A'
+        guests_label = data.get('guests', '')
+
+        check_in = self._fmt_bill_date(data.get('check_in'))
+        check_out = self._fmt_bill_date(data.get('check_out'))
+        nights = data.get('nights', 1) or 1
+
+        total_amount = float(data.get('total_amount', 0) or 0)
+        deposit_amount = float(data.get('deposit_amount', 0) or 0)
+        balance_due = float(data.get('balance_due', total_amount - deposit_amount))
+        payment_method = (data.get('payment_method') or '').upper()
+
+        barcode_reader = None
+        try:
+            from barcode_generator.routes import barcode_service
+            barcode_bytes = barcode_service.generate_barcode(confirmation_number, include_text=True)
+            barcode_reader = ImageReader(io.BytesIO(barcode_bytes))
+        except Exception as e:
+            print(f"Error generating barcode for booking confirmation invoice: {e}")
+
+        width = 80 * mm
+        margin = 5 * mm
+        right_x = width - margin
+
+        height_mm = 12
+        height_mm += 22 + 5 + 3.5 + 3.5 + 3.5  # logo + name + address + tel + email
+        height_mm += 6 + 6  # title + dashed gap
+        height_mm += 4.5  # guest name
+        if guest_phone:
+            height_mm += 4.5
+        if guest_email:
+            height_mm += 4.5
+        height_mm += 4  # confirmation number
+        if room_number:
+            height_mm += 4
+        if room_type:
+            height_mm += 4
+        if check_in:
+            height_mm += 4
+        if check_out:
+            height_mm += 4
+        height_mm += 4  # nights
+        if guests_label:
+            height_mm += 4
+        height_mm += 3 + 6  # gap + dashed gap
+        height_mm += 4.5  # total
+        if deposit_amount:
+            height_mm += 4.5 + 5  # deposit paid + gap
+        height_mm += 7  # balance due + gap
+        height_mm += 6  # dashed gap
+        height_mm += 4.5 + (4 * 3.8) + 2  # payment details header + 4 rows + gap
+        height_mm += 7  # issued-by + gap
+        if barcode_reader:
+            height_mm += 16 + 3 + 6
+        height_mm += 7  # thank you + gap
+        height_mm += 3.5 + 6  # hirall branding
+        height_mm += 6  # bottom margin
+
+        height = height_mm * mm
+        filename = f"/tmp/Booking_{(guest_name or 'Guest').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        c = canvas.Canvas(filename, pagesize=(width, height))
+
+        y = height - 12 * mm
+        center_x = width / 2
+
+        # === HEADER ===
+        if os.path.exists(self.logo_path):
+            try:
+                c.drawImage(self.logo_path, center_x - 11*mm, y - 22*mm, width=22*mm, height=22*mm,
+                            preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        y -= 22 * mm
+
+        c.setFont("Helvetica-Bold", 13)
+        c.drawCentredString(center_x, y, branch_name)
+        y -= 5 * mm
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(center_x, y, "Bomet, Kenya")
+        y -= 3.5 * mm
+        c.drawCentredString(center_x, y, "Tel: +254706782828")
+        y -= 3.5 * mm
+        c.drawCentredString(center_x, y, "famousgatebmt@gmail.com")
+        y -= 6 * mm
+
+        c.setFont("Helvetica-Bold", 11)
+        c.drawCentredString(center_x, y, "BOOKING CONFIRMATION")
+        y -= 6 * mm
+
+        c.setDash(2, 2)
+        c.line(margin, y, right_x, y)
+        c.setDash()
+        y -= 6 * mm
+
+        # === GUEST / BOOKING INFO ===
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(margin, y, guest_name or 'GUEST')
+        y -= 4.5 * mm
+        c.setFont("Helvetica", 8)
+        if guest_phone:
+            c.drawString(margin, y, str(guest_phone))
+            y -= 4.5 * mm
+        if guest_email:
+            c.drawString(margin, y, str(guest_email))
+            y -= 4.5 * mm
+
+        c.drawString(margin, y, f"Confirmation: {confirmation_number}")
+        y -= 4 * mm
+        if room_number:
+            c.drawString(margin, y, f"Room: {room_number}")
+            y -= 4 * mm
+        if room_type:
+            c.drawString(margin, y, f"Room Type: {room_type}")
+            y -= 4 * mm
+        if check_in:
+            c.drawString(margin, y, f"Check-in: {check_in}")
+            y -= 4 * mm
+        if check_out:
+            c.drawString(margin, y, f"Check-out: {check_out}")
+            y -= 4 * mm
+        c.drawString(margin, y, f"{nights} night{'s' if nights != 1 else ''} stay")
+        y -= 4 * mm
+        if guests_label:
+            c.drawString(margin, y, str(guests_label))
+            y -= 4 * mm
+        y -= 3 * mm
+
+        c.setDash(2, 2)
+        c.line(margin, y, right_x, y)
+        c.setDash()
+        y -= 6 * mm
+
+        # === TOTALS ===
+        c.setFont("Helvetica", 9)
+        c.drawString(margin, y, "TOTAL AMOUNT")
+        c.drawRightString(right_x, y, self._format_currency(total_amount))
+        y -= 4.5 * mm
+
+        if deposit_amount:
+            c.drawString(margin, y, f"Deposit Paid ({payment_method})" if payment_method else "Deposit Paid")
+            c.drawRightString(right_x, y, f"-{self._format_currency(deposit_amount)}")
+            y -= 5 * mm
+
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(margin, y, "BALANCE DUE")
+        c.drawRightString(right_x, y, self._format_currency(balance_due))
+        y -= 7 * mm
+
+        c.setDash(2, 2)
+        c.line(margin, y, right_x, y)
+        c.setDash()
+        y -= 6 * mm
+
+        # === PAYMENT / BANK DETAILS ===
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(center_x, y, "PAYMENT DETAILS")
+        y -= 4.5 * mm
+        c.setFont("Helvetica", 7.5)
+        for label, value in [
+            ("AC Name:", "FAMOUS GATES LIMITED"),
+            ("AC No:", "2041305757"),
+            ("Bank:", "ABSA BANK"),
+            ("Branch:", "BOMET"),
+        ]:
+            c.drawString(margin, y, label)
+            c.drawRightString(right_x, y, value)
+            y -= 3.8 * mm
+
+        y -= 2 * mm
+        c.setFont("Helvetica-Oblique", 6.5)
+        c.drawCentredString(center_x, y, f"Issued by: {branch_name}")
+        y -= 7 * mm
+
+        # === BARCODE ===
+        if barcode_reader:
+            bw, bh = 50 * mm, 16 * mm
+            try:
+                c.drawImage(barcode_reader, center_x - bw/2, y - bh, width=bw, height=bh,
+                            preserveAspectRatio=True, mask='auto')
+                y -= (bh + 3*mm)
+                c.setFont("Helvetica", 6.5)
+                c.drawCentredString(center_x, y, "Scan at Cashier")
+                y -= 6 * mm
+            except Exception:
+                pass
+
+        # === FOOTER ===
+        c.setFont("Helvetica-Oblique", 8)
+        c.drawCentredString(center_x, y, "Thank you for booking with us!")
+        y -= 7 * mm
+
+        c.setFont("Helvetica-Bold", 7)
+        c.drawCentredString(center_x, y, "System managed and made by Hirall")
+        y -= 3.5 * mm
+        c.setFont("Helvetica", 6)
+        c.drawCentredString(center_x, y, "+254 710 944 249 | admin@hirall.com")
+
+        c.save()
+        return filename
 
     def _generate_conference_invoice(self, data: Dict, filters: Dict) -> str:
         """Generate Professional Conference Invoice"""

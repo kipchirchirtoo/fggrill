@@ -1,9 +1,7 @@
-import { Booking, BookingStatus } from '../models/Booking';
+import { Booking, BookingStatus, PaymentStatus } from '../models/Booking';
 import { Room, RoomStatus } from '../models/Room';
 import { Folio } from '../models/Folio';
 import { emailService } from './email.service';
-import { brevoEmailService } from './brevo-email.service';
-import { emailAutomationService } from './emailAutomation.service';
 import { barcodeGeneratorService } from './barcodeGenerator.service';
 import { supabase } from '../config/database';
 import db from '../db';
@@ -45,7 +43,7 @@ export interface BookingRequest {
 
   // Source
   bookingSource: string;
-  branchId?: string;
+  branchId?: number;
 }
 
 export interface PricingBreakdown {
@@ -67,7 +65,7 @@ class BookingService {
     checkInDate: string,
     checkOutDate: string,
     roomTypeId?: string,
-    branchId?: string
+    branchId?: number
   ): Promise<{ available: boolean; availableRooms: any[] }> {
     try {
       // Find rooms that are already booked for the requested dates
@@ -94,7 +92,7 @@ class BookingService {
 
       // If roomTypeId is provided, filter by room type
       if (roomTypeId) {
-        roomQuery = roomQuery.eq('type_id', roomTypeId);
+        roomQuery = roomQuery.eq('room_type_id', roomTypeId);
       }
 
       // Exclude booked rooms
@@ -117,7 +115,7 @@ class BookingService {
         roomTypeId,
         branchId,
         bookedRoomCount: bookedIds.length,
-        foundRooms: availableRooms?.map(r => ({ id: r.id, room_number: r.room_number, type_id: r.type_id }))
+        foundRooms: availableRooms?.map(r => ({ id: r.id, room_number: r.room_number, room_type_id: r.room_type_id }))
       });
 
       return {
@@ -148,21 +146,24 @@ class BookingService {
       const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
 
       // Get room type base rate
-      const { data: roomType, error: roomTypeError } = await supabase
-        .from('room_types')
-        .select('base_price, name')
-        .eq('id', roomTypeId)
-        .single();
+      let roomRate = 5000; // Default rate fallback
+      if (roomTypeId) {
+        const { data: roomType, error: roomTypeError } = await supabase
+          .from('room_types')
+          .select('base_rate, name')
+          .eq('id', roomTypeId)
+          .single();
 
-      if (roomTypeError) {
-        logger.error('Database error fetching room type:', roomTypeError);
-        logger.error('Room type ID:', roomTypeId);
-        throw roomTypeError;
+        if (roomTypeError) {
+          logger.error('Database error fetching room type:', roomTypeError);
+          logger.error('Room type ID:', roomTypeId);
+          // Use default rate instead of crashing
+        } else if (roomType?.base_rate) {
+          roomRate = roomType.base_rate;
+        }
+      } else {
+        logger.warn('calculatePricing called with no roomTypeId, using default rate');
       }
-
-      if (!roomType) throw new AppError('Room type not found', 404);
-
-      let roomRate = roomType.base_price || 5000; // Default rate
 
       // Apply rate plan if specified
       if (ratePlanId) {
@@ -262,6 +263,10 @@ class BookingService {
         }
 
         selectedRoom = room;
+        // Inherit branch_id from the room if not explicitly provided
+        if (!bookingRequest.branchId && room.branch_id) {
+          bookingRequest.branchId = room.branch_id;
+        }
         logger.info(`Direct room verification passed for room: ${room.room_number} (${room.id})`);
       } else {
         // 1b. No specific room: use general availability check
@@ -283,6 +288,29 @@ class BookingService {
       let guestId = bookingRequest.guestId;
       if (!guestId) {
         guestId = await this.createOrFindGuest(bookingRequest.guestInfo);
+      } else {
+        // Caller passed an existing guestId without inline guestInfo (e.g. the
+        // reception flow creates the guest first, then books with only guest_id).
+        // Backfill guestInfo from the guests table so the confirmation email
+        // still has real contact details instead of being skipped.
+        const { data: existingGuest } = await supabase
+          .from('guests')
+          .select('first_name, last_name, email, phone, id_type, id_number, nationality, address')
+          .eq('id', guestId)
+          .maybeSingle();
+
+        if (existingGuest) {
+          bookingRequest.guestInfo = {
+            firstName: bookingRequest.guestInfo?.firstName || existingGuest.first_name,
+            lastName: bookingRequest.guestInfo?.lastName || existingGuest.last_name,
+            email: bookingRequest.guestInfo?.email || existingGuest.email,
+            phone: bookingRequest.guestInfo?.phone || existingGuest.phone,
+            idType: bookingRequest.guestInfo?.idType || existingGuest.id_type,
+            idNumber: bookingRequest.guestInfo?.idNumber || existingGuest.id_number,
+            nationality: bookingRequest.guestInfo?.nationality || existingGuest.nationality,
+            address: bookingRequest.guestInfo?.address || existingGuest.address
+          };
+        }
       }
 
       // 3. Generate unique booking ID
@@ -298,9 +326,55 @@ class BookingService {
         bookingRequest.mealPlan
       );
 
-      // 6. Create booking
+      // 5. Create the parent booking record. Every reservation - whether made
+      // online via the landing page or by reception - must belong to a real
+      // booking; this is not best-effort, a failure here aborts the request.
+      const { data: bookingRow, error: bookingRowError } = await supabase
+        .from('bookings')
+        .insert([{
+          branch_id: bookingRequest.branchId,
+          booking_number: confirmationNumber,
+          confirmation_number: confirmationNumber,
+          guest_id: guestId,
+          room_id: selectedRoom.id,
+          booking_type: 'room',
+          status: BookingStatus.CONFIRMED,
+          check_in_at: bookingRequest.checkInDate,
+          check_out_at: bookingRequest.checkOutDate,
+          check_in_date: bookingRequest.checkInDate,
+          check_out_date: bookingRequest.checkOutDate,
+          pax: bookingRequest.adults + bookingRequest.children,
+          adults: bookingRequest.adults,
+          children: bookingRequest.children,
+          infants: bookingRequest.infants || 0,
+          room_rate: pricing.roomRate,
+          subtotal: pricing.subtotal,
+          tax_amount: pricing.taxAmount,
+          service_charge: pricing.serviceCharge,
+          discount_amount: pricing.discountAmount,
+          total_amount: pricing.totalAmount,
+          amount_paid: bookingRequest.depositAmount || 0,
+          deposit_amount: bookingRequest.depositAmount || 0,
+          deposit_paid: bookingRequest.depositPaid || false,
+          payment_status: PaymentStatus.PENDING,
+          payment_method: bookingRequest.paymentMethod,
+          meal_plan: bookingRequest.mealPlan,
+          special_requests: bookingRequest.specialRequests,
+          booking_source: bookingRequest.bookingSource,
+          metadata: { roomTypeId: bookingRequest.roomTypeId }
+        }])
+        .select('id')
+        .single();
+
+      if (bookingRowError || !bookingRow) {
+        logger.error('Failed to create parent booking record:', bookingRowError);
+        throw new AppError('Failed to create booking', 500);
+      }
+
+      // 6. Create reservation, linked to the booking record above
       const booking = new Booking({
         confirmationNumber,
+        bookingId: bookingRow.id,
         guestId,
         roomId: selectedRoom.id,
         roomTypeId: bookingRequest.roomTypeId,
@@ -345,6 +419,7 @@ class BookingService {
         const folio = new Folio({
           reservationId: savedBooking.id,
           guestId: savedBooking.guestId,
+          branchId: savedBooking.branchId,
           status: 'open',
           roomCharges: pricing.totalAmount // Initial room charges
         });
@@ -355,15 +430,16 @@ class BookingService {
         // We don't fail the booking if folio creation fails, but it's a serious issue
       }
 
-      // 9. Send confirmation email and schedule automated sequence (NON-BLOCKING)
-      // We don't await these to ensure the user gets a fast response and prevent
+      // 9. Send confirmation email (NON-BLOCKING)
+      // We don't await this to ensure the user gets a fast response and prevent
       // timeout issues if the email service is slow or fails.
+      // NOTE: the automated drip-sequence path (scheduleAutomatedEmails, via
+      // the Python /api/email/schedule-booking-emails endpoint) used to also
+      // fire here. That endpoint is currently broken and its fallback sent a
+      // second, duplicate confirmation email with fabricated pricing data on
+      // every booking. Removed until that endpoint is fixed separately.
       this.sendBookingConfirmationEmail(savedBooking, bookingRequest.guestInfo).catch(err =>
         logger.error('Error in background email sending:', err)
-      );
-
-      this.scheduleAutomatedEmails(savedBooking, bookingRequest.guestInfo).catch(err =>
-        logger.error('Error in background email scheduling:', err)
       );
 
       logger.info(`Booking created successfully: ${confirmationNumber}`);
@@ -452,7 +528,7 @@ class BookingService {
       if (previousStatus && previousStatus !== status) {
         try {
           await db.query(`
-            INSERT INTO room_status_history(room_id, previous_status, new_status, changed_by, notes)
+            INSERT INTO room_status_history(room_id, old_status, new_status, changed_by, reason)
             VALUES($1, $2, $3, $4, $5)
           `, [roomId, previousStatus, status, userId, notes]);
         } catch (historyError) {
@@ -484,7 +560,7 @@ class BookingService {
       // Get room and room type details
       const { data: room } = await supabase
         .from('rooms')
-        .select('room_number, room_type:room_types(name), branch:branches(name)')
+        .select('room_number, room_type:room_types!rooms_room_type_id_fkey(name), branch:branches(name)')
         .eq('id', booking.roomId)
         .single();
 
@@ -507,60 +583,24 @@ class BookingService {
         lastName: guestInfo.lastName,
         email: guestInfo.email,
         phone: guestInfo.phone || 'N/A',
+        roomNumber: room?.room_number || '',
         checkInDate: booking.checkInDate.toISOString().split('T')[0],
         checkOutDate: booking.checkOutDate.toISOString().split('T')[0],
         roomType: room?.room_type ? (room.room_type as any).name || 'Standard Room' : 'Standard Room',
         guests: `${booking.adults} Adult${booking.adults > 1 ? 's' : ''}${booking.children > 0 ? `, ${booking.children} Child${booking.children > 1 ? 'ren' : ''}` : ''}`,
         totalAmount: booking.totalAmount,
+        depositAmount: booking.depositAmount || 0,
+        paymentMethod: booking.paymentMethod || '',
         branchName: branchName
       };
 
-      // Use Brevo API for landing page bookings (more reliable than SMTP)
-      await brevoEmailService.sendLandingBookingConfirmation(guestInfo.email, bookingDetails);
-      logger.info(`✅ Booking confirmation email sent to ${guestInfo.email} via Brevo API`);
+      // Gmail SMTP is the configured/active provider (not Brevo)
+      await emailService.sendLandingBookingConfirmation(guestInfo.email, bookingDetails);
+      logger.info(`✅ Booking confirmation email sent to ${guestInfo.email} via SMTP`);
 
     } catch (error) {
       logger.error('❌ Error sending confirmation email:', error);
       // Don't throw error - booking should still succeed even if email fails
-    }
-  }
-
-  /**
-   * Schedule automated email sequence
-   */
-  private async scheduleAutomatedEmails(booking: Booking, guestInfo: BookingRequest['guestInfo']): Promise<void> {
-    try {
-      // Skip if no email provided
-      if (!guestInfo.email || guestInfo.email.trim() === '') {
-        logger.info('Skipping automated email scheduling - no email provided');
-        return;
-      }
-
-      const emailScheduleData = {
-        bookingId: booking.id,
-        guestEmail: guestInfo.email,
-        guestName: `${guestInfo.firstName} ${guestInfo.lastName}`,
-        confirmationNumber: booking.confirmationNumber,
-        checkInDate: booking.checkInDate.toISOString(),
-        checkOutDate: booking.checkOutDate.toISOString(),
-        roomType: 'Standard Room', // TODO: Get actual room type
-        adults: booking.adults,
-        children: booking.children,
-        totalAmount: booking.totalAmount,
-        specialRequests: booking.specialRequests
-      };
-
-      // Schedule complete email sequence using Python microservice
-      const success = await emailAutomationService.scheduleBookingEmails(emailScheduleData);
-
-      if (success) {
-        logger.info(`Automated email sequence scheduled for booking ${booking.confirmationNumber}`);
-      } else {
-        logger.warn(`Failed to schedule automated emails for booking ${booking.confirmationNumber}, fallback confirmation sent`);
-      }
-
-    } catch (error) {
-      logger.error('Error scheduling automated emails:', error);
     }
   }
 

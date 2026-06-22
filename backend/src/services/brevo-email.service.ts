@@ -1,6 +1,7 @@
 import { BrevoClient } from '@getbrevo/brevo';
 import { logger } from '../utils/logger';
 import axios from 'axios';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 interface EmailOptions {
   to: string;
@@ -102,23 +103,33 @@ class BrevoEmailService {
         hotelEmail: 'info@famousgatehotels.com'
       });
 
-      // Fetch PDF invoice from Python service
+      // Fetch the branded PDF invoice from the Python service (same branded,
+      // thermal-style generator used for the cashier receipt / checkout bill)
       let pdfAttachment;
       try {
-        logger.info(`📄 Fetching PDF invoice from Python service...`);
-        const pdfServiceUrl = process.env.NEXT_PUBLIC_PYTHON_SERVICE_URL || 'https://services.hirall.com';
+        logger.info(`📄 Fetching branded PDF invoice from Python service...`);
+        const nights = Math.max(1, Math.ceil(
+          (new Date(details.checkOutDate).getTime() - new Date(details.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
+        ));
+        const depositAmount = details.depositAmount || 0;
         const pdfResponse = await axios.post(
-          `${pdfServiceUrl}/api/reports/generate/branded-pdf`,
+          `${PYTHON_SERVICE_URL}/api/reports/generate/booking-confirmation-invoice`,
           {
-            confirmationNumber: details.confirmationNumber,
-            guestName: `${details.firstName} ${details.lastName}`,
-            email: email,
-            phone: details.phone || 'N/A',
-            checkInDate: details.checkInDate,
-            checkOutDate: details.checkOutDate,
-            roomType: details.roomType,
+            confirmation_number: details.confirmationNumber,
+            guest_name: `${details.firstName} ${details.lastName}`,
+            guest_email: email,
+            guest_phone: details.phone || '',
+            room_number: details.roomNumber || '',
+            room_type: details.roomType,
+            check_in: details.checkInDate,
+            check_out: details.checkOutDate,
+            nights,
             guests: details.guests,
-            totalAmount: details.totalAmount
+            total_amount: details.totalAmount,
+            deposit_amount: depositAmount,
+            balance_due: details.totalAmount - depositAmount,
+            payment_method: details.paymentMethod || '',
+            branch_name: details.branchName
           },
           {
             responseType: 'arraybuffer'
@@ -135,7 +146,13 @@ class BrevoEmailService {
       } catch (pdfError: any) {
         logger.error('⚠️ Failed to generate PDF invoice:', pdfError.message);
         if (pdfError.response) {
-          logger.error('Python service response:', pdfError.response.data);
+          // responseType is 'arraybuffer', so the error body (a JSON error
+          // from Flask) arrives as raw bytes - decode it for a readable log
+          // instead of dumping a {"0": 123, "1": 34, ...} byte-index object.
+          const rawBody = Buffer.isBuffer(pdfError.response.data)
+            ? pdfError.response.data.toString('utf-8')
+            : pdfError.response.data;
+          logger.error('Python service response:', rawBody);
           logger.error('Python service status:', pdfError.response.status);
         }
         logger.warn('Continuing to send email without PDF attachment');

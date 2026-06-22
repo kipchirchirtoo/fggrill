@@ -207,7 +207,8 @@ class BranchAccountantRepository {
 
   // ── Financial Close ──────────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> submitWorkspaceClose(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> submitWorkspaceClose(
+      Map<String, dynamic> data) async {
     final branchId = await getBranchId();
     final res = await _dio.post('/finance/workspace/close', data: {
       if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
@@ -216,12 +217,16 @@ class BranchAccountantRepository {
     return (res.data as Map<String, dynamic>? ?? {});
   }
 
-  Future<Map<String, dynamic>> submitVarianceExplanation(String submissionId, Map<String, dynamic> data) async {
-    final res = await _dio.post('/finance/workspace/submissions/$submissionId/explain', data: data);
+  Future<Map<String, dynamic>> submitVarianceExplanation(
+      String submissionId, Map<String, dynamic> data) async {
+    final res = await _dio.post(
+        '/finance/workspace/submissions/$submissionId/explain',
+        data: data);
     return (res.data as Map<String, dynamic>? ?? {});
   }
 
-  Future<List<Map<String, dynamic>>> getWorkspaceSubmissions({String? status, String? from, String? to}) async {
+  Future<List<Map<String, dynamic>>> getWorkspaceSubmissions(
+      {String? status, String? from, String? to}) async {
     final branchId = await getBranchId();
     return _getList('/finance/workspace/submissions', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
@@ -236,7 +241,8 @@ class BranchAccountantRepository {
     return _getMap('/finance/snapshot/$branchId/$date');
   }
 
-  Future<Map<String, dynamic>> getBranchProfitability({String? from, String? to}) async {
+  Future<Map<String, dynamic>> getBranchProfitability(
+      {String? from, String? to}) async {
     final branchId = await getBranchId();
     return _getMap('/finance/branch-profitability', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
@@ -259,7 +265,8 @@ class BranchAccountantRepository {
     return _getMap('/finance/payroll/batches/$id');
   }
 
-  Future<Map<String, dynamic>> generatePayrollBatch({required int month, required int year}) async {
+  Future<Map<String, dynamic>> generatePayrollBatch(
+      {required int month, required int year}) async {
     final branchId = await getBranchId();
     final res = await _dio.post('/finance/payroll/batches/generate', data: {
       if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
@@ -322,7 +329,10 @@ class BranchAccountantRepository {
       final inner = body['data'] ?? body['items'];
       if (inner is List) list = inner;
     }
-    return (list ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return (list ?? [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   Future<List<Map<String, dynamic>>> getPayrollAdjustments({
@@ -345,7 +355,10 @@ class BranchAccountantRepository {
       final inner = body['data'] ?? body['items'] ?? body['records'];
       if (inner is List) list = inner;
     }
-    return (list ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return (list ?? [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   Future<void> voidPayrollAdjustment(String id) async {
@@ -454,9 +467,8 @@ class BranchAccountantRepository {
         extra: {'disable_retry': true},
       ),
     );
-    final label = (paymentNumber ?? '').trim().isNotEmpty
-        ? paymentNumber!.trim()
-        : id;
+    final label =
+        (paymentNumber ?? '').trim().isNotEmpty ? paymentNumber!.trim() : id;
     return _saveBytes(
       res.data ?? const <int>[],
       'FG_Supplier_Receipt_$label.pdf',
@@ -751,6 +763,41 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<Map<String, dynamic>> getPosDeepDrillOrders({
+    String? from,
+    String? to,
+    String? outletId,
+    String? waiterId,
+    String? status,
+    String? paymentStatus,
+    String? search,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final branchId = await getBranchId();
+    final response = await _dio
+        .get('/finance/staff-pos-accounting/deep-drill', queryParameters: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (from != null && from.isNotEmpty) 'from': from,
+      if (to != null && to.isNotEmpty) 'to': to,
+      if (outletId != null && outletId.isNotEmpty) 'outlet_id': outletId,
+      if (waiterId != null && waiterId.isNotEmpty) 'waiter_id': waiterId,
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (paymentStatus != null && paymentStatus.isNotEmpty)
+        'payment_status': paymentStatus,
+      if (search != null && search.isNotEmpty) 'search': search,
+      'limit': limit,
+      'offset': offset,
+    });
+    final body = response.data as Map<String, dynamic>;
+    return {
+      'data': List<Map<String, dynamic>>.from(body['data'] as List? ?? []),
+      'total': body['total'] ?? 0,
+      'limit': body['limit'] ?? limit,
+      'offset': body['offset'] ?? offset,
+    };
+  }
+
   Future<void> recordCreditBillPayment(
     String id,
     Map<String, dynamic> data,
@@ -792,7 +839,8 @@ class BranchAccountantRepository {
     };
     if (nssfAmount != null) data['nssf_amount'] = nssfAmount;
     if (shifAmount != null) data['shif_amount'] = shifAmount;
-    if (housingFundAmount != null) data['housing_fund_amount'] = housingFundAmount;
+    if (housingFundAmount != null)
+      data['housing_fund_amount'] = housingFundAmount;
     final res = await _dio.put('/staff/$staffId', data: data);
     return _asMap(res.data);
   }
@@ -1103,15 +1151,15 @@ class BranchAccountantRepository {
     String? notes,
     String? writeOffReason,
   }) async {
-    final res = await _dio.post('/kitchen/shifts/$shiftId/accountant-review',
-        data: {
-          'approved': approved,
-          'liability_action': liabilityAction,
-          if (allocations.isNotEmpty) 'allocations': allocations,
-          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-          if (writeOffReason != null && writeOffReason.trim().isNotEmpty)
-            'write_off_reason': writeOffReason.trim(),
-        });
+    final res =
+        await _dio.post('/kitchen/shifts/$shiftId/accountant-review', data: {
+      'approved': approved,
+      'liability_action': liabilityAction,
+      if (allocations.isNotEmpty) 'allocations': allocations,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      if (writeOffReason != null && writeOffReason.trim().isNotEmpty)
+        'write_off_reason': writeOffReason.trim(),
+    });
     return _asMap(res.data);
   }
 

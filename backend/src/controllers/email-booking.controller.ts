@@ -21,7 +21,7 @@ export const sendBookingEmail = async (
       .select(`
         *,
         guest:guests(*),
-        room:rooms(room_number, room_type:room_types(name))
+        room:rooms(room_number, room_type:room_types!rooms_room_type_id_fkey(name))
       `)
       .eq('id', bookingId)
       .single();
@@ -58,7 +58,7 @@ export const sendBookingEmail = async (
       meal_plan: booking.meal_plan
     };
 
-    await emailService.sendBookingConfirmation(guest.email, bookingDetails);
+    const result = await emailService.sendBookingConfirmation(guest.email, bookingDetails);
     
     logger.info(`Booking confirmation email sent to ${guest.email} for booking ${bookingId}`);
 
@@ -68,7 +68,8 @@ export const sendBookingEmail = async (
       data: {
         bookingId,
         email: guest.email,
-        confirmationNumber: booking.confirmation_number
+        confirmationNumber: booking.confirmation_number,
+        previewUrl: (result as any)?.previewUrl
       }
     });
   } catch (error) {
@@ -92,7 +93,7 @@ export const sendAllConfirmedBookingEmails = async (
       .select(`
         *,
         guest:guests(*),
-        room:rooms(room_number, room_type:room_types(name))
+        room:rooms(room_number, room_type:room_types!rooms_room_type_id_fkey(name))
       `)
       .in('status', ['confirmed', 'checked_in']);
 
@@ -176,6 +177,222 @@ export const sendAllConfirmedBookingEmails = async (
 };
 
 /**
+ * Send booking cancellation email
+ */
+export const sendCancellationEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+    const { reason } = req.body;
+
+    const { data: booking, error } = await supabase
+      .from('reservations')
+      .select(`*, guest:guests(*), room:rooms(room_number, room_type:room_types!rooms_room_type_id_fkey(name))`)
+      .eq('id', bookingId)
+      .single();
+
+    if (error || !booking) throw new AppError('Booking not found', 404);
+
+    const guest = Array.isArray(booking.guest) ? booking.guest[0] : booking.guest;
+    if (!guest?.email) throw new AppError('Guest email not found', 400);
+
+    const room = Array.isArray(booking.room) ? booking.room[0] : booking.room;
+
+    const result = await emailService.sendBookingCancellation(guest.email, {
+      id: booking.id,
+      confirmation_number: booking.confirmation_number,
+      guest_name: `${guest.first_name} ${guest.last_name}`,
+      check_in: booking.check_in_date,
+      check_out: booking.check_out_date,
+      room_type: room?.room_type?.name || 'Standard Room',
+      cancellation_reason: reason || booking.cancellation_reason || 'Guest request',
+      cancelled_at: booking.cancelled_at || new Date().toISOString()
+    });
+
+    logger.info(`Cancellation email sent to ${guest.email} for booking ${bookingId}`);
+    res.status(200).json({ success: true, message: `Cancellation email sent to ${guest.email}`, previewUrl: (result as any)?.previewUrl });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Send payment receipt email
+ */
+export const sendPaymentReceiptEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+    const { amount, payment_method, transaction_reference, description } = req.body;
+
+    const { data: booking, error } = await supabase
+      .from('reservations')
+      .select(`*, guest:guests(*)`)
+      .eq('id', bookingId)
+      .single();
+
+    if (error || !booking) throw new AppError('Booking not found', 404);
+
+    const guest = Array.isArray(booking.guest) ? booking.guest[0] : booking.guest;
+    if (!guest?.email) throw new AppError('Guest email not found', 400);
+
+    const result = await emailService.sendPaymentReceipt(guest.email, {
+      guest_name: `${guest.first_name} ${guest.last_name}`,
+      confirmation_number: booking.confirmation_number,
+      booking_id: booking.id,
+      amount: amount || booking.deposit_amount || 0,
+      payment_method: payment_method || booking.payment_method || 'Card',
+      transaction_reference: transaction_reference || 'N/A',
+      description: description || 'Room booking payment',
+      payment_date: new Date().toISOString()
+    });
+
+    logger.info(`Payment receipt sent to ${guest.email} for booking ${bookingId}`);
+    res.status(200).json({ success: true, message: `Payment receipt sent to ${guest.email}`, previewUrl: (result as any)?.previewUrl });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Send invoice email
+ */
+export const sendInvoiceEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+
+    const { data: booking, error } = await supabase
+      .from('reservations')
+      .select(`*, guest:guests(*), room:rooms(room_number, room_type:room_types!rooms_room_type_id_fkey(name))`)
+      .eq('id', bookingId)
+      .single();
+
+    if (error || !booking) throw new AppError('Booking not found', 404);
+
+    const guest = Array.isArray(booking.guest) ? booking.guest[0] : booking.guest;
+    if (!guest?.email) throw new AppError('Guest email not found', 400);
+
+    const room = Array.isArray(booking.room) ? booking.room[0] : booking.room;
+    const nights = booking.check_in_date && booking.check_out_date
+      ? Math.ceil((new Date(booking.check_out_date).getTime() - new Date(booking.check_in_date).getTime()) / (1000 * 60 * 60 * 24))
+      : 1;
+
+    const result = await emailService.sendInvoice(guest.email, {
+      guest_name: `${guest.first_name} ${guest.last_name}`,
+      confirmation_number: booking.confirmation_number,
+      booking_id: booking.id,
+      room_number: room?.room_number || '-',
+      room_type: room?.room_type?.name || 'Standard',
+      nights,
+      invoice_number: `INV-${booking.confirmation_number || booking.id}`,
+      invoice_date: new Date().toISOString(),
+      room_charges: (booking.room_rate || 0) * nights,
+      subtotal: booking.subtotal || 0,
+      tax_amount: booking.tax_amount || 0,
+      service_charge: booking.service_charge || 0,
+      total_amount: booking.total_amount || 0,
+      amount_paid: booking.deposit_amount || 0,
+      status: (booking.total_amount || 0) <= (booking.deposit_amount || 0) ? 'paid' : 'unpaid'
+    });
+
+    logger.info(`Invoice email sent to ${guest.email} for booking ${bookingId}`);
+    res.status(200).json({ success: true, message: `Invoice email sent to ${guest.email}`, previewUrl: (result as any)?.previewUrl });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Send check-in reminder email
+ */
+export const sendCheckInReminderEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+
+    const { data: booking, error } = await supabase
+      .from('reservations')
+      .select(`*, guest:guests(*), room:rooms(room_number, room_type:room_types!rooms_room_type_id_fkey(name))`)
+      .eq('id', bookingId)
+      .single();
+
+    if (error || !booking) throw new AppError('Booking not found', 404);
+
+    const guest = Array.isArray(booking.guest) ? booking.guest[0] : booking.guest;
+    if (!guest?.email) throw new AppError('Guest email not found', 400);
+
+    const room = Array.isArray(booking.room) ? booking.room[0] : booking.room;
+
+    const result = await emailService.sendCheckInReminder(guest.email, {
+      guest_name: `${guest.first_name} ${guest.last_name}`,
+      confirmation_number: booking.confirmation_number,
+      check_in: booking.check_in_date,
+      check_out: booking.check_out_date,
+      room_number: room?.room_number || 'Will be assigned upon arrival',
+      room_type: room?.room_type?.name || 'Standard Room'
+    });
+
+    logger.info(`Check-in reminder sent to ${guest.email} for booking ${bookingId}`);
+    res.status(200).json({ success: true, message: `Check-in reminder sent to ${guest.email}`, previewUrl: (result as any)?.previewUrl });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Send check-out reminder email
+ */
+export const sendCheckOutReminderEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+
+    const { data: booking, error } = await supabase
+      .from('reservations')
+      .select(`*, guest:guests(*), room:rooms(room_number, room_type:room_types!rooms_room_type_id_fkey(name))`)
+      .eq('id', bookingId)
+      .single();
+
+    if (error || !booking) throw new AppError('Booking not found', 404);
+
+    const guest = Array.isArray(booking.guest) ? booking.guest[0] : booking.guest;
+    if (!guest?.email) throw new AppError('Guest email not found', 400);
+
+    const room = Array.isArray(booking.room) ? booking.room[0] : booking.room;
+    const balance = (booking.total_amount || 0) - (booking.deposit_amount || 0);
+
+    const result = await emailService.sendCheckOutReminder(guest.email, {
+      guest_name: `${guest.first_name} ${guest.last_name}`,
+      confirmation_number: booking.confirmation_number,
+      check_out: booking.check_out_date,
+      room_number: room?.room_number || '-',
+      balance
+    });
+
+    logger.info(`Check-out reminder sent to ${guest.email} for booking ${bookingId}`);
+    res.status(200).json({ success: true, message: `Check-out reminder sent to ${guest.email}`, previewUrl: (result as any)?.previewUrl });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Test email service connection
  */
 export const testEmailService = async (
@@ -195,6 +412,8 @@ export const testEmailService = async (
         from_email: process.env.SMTP_FROM_EMAIL,
         from_name: process.env.SMTP_FROM_NAME,
         connection_status: isConnected ? 'Connected' : 'Disconnected',
+        using_ethereal: (emailService as any).usingEthereal || false,
+        ethereal_account: (emailService as any).etherealAccount || null,
         last_checked: new Date().toISOString()
       }
     });

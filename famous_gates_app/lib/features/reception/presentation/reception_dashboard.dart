@@ -28,6 +28,7 @@ enum ReceptionSection {
   cashier,
   logbook,
   history,
+  emailAutomation,
 }
 
 class ReceptionDashboard extends ConsumerStatefulWidget {
@@ -268,6 +269,11 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
             label: 'History',
             icon: Icons.history_outlined,
             group: 'Audit'),
+        MasterNavItem(
+            section: ReceptionSection.emailAutomation,
+            label: 'Email Automation',
+            icon: Icons.auto_fix_high_outlined,
+            group: 'Automation'),
       ],
       onSectionSelected: _selectSection,
       child: FutureBuilder<_ReceptionSnapshot>(
@@ -357,6 +363,8 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
         return _LogbookSection(data: data, onRefresh: _refresh);
       case ReceptionSection.history:
         return _HistorySection(data: data, onRefresh: _refresh);
+      case ReceptionSection.emailAutomation:
+        return _EmailAutomationSection(data: data, onRefresh: _refresh);
     }
   }
 
@@ -697,6 +705,11 @@ class _ReservationsSection extends ConsumerWidget {
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('Refresh')),
+        IconButton(
+          tooltip: 'Test SMTP',
+          onPressed: () => _testSmtpConnection(context, ref),
+          icon: const Icon(Icons.outgoing_mail, size: 20),
+        ),
         ElevatedButton.icon(
           onPressed: () => _showNewReservationDialog(context, ref, onRefresh),
           icon: const Icon(Icons.add, size: 16),
@@ -808,6 +821,16 @@ class _ReservationsSection extends ConsumerWidget {
                                       Icons.logout,
                                       () => _showCheckoutDialog(
                                           context, ref, b, onRefresh)),
+                                _SmallAction(
+                                    'Email',
+                                    Icons.email_outlined,
+                                    () => _sendBookingEmail(
+                                        context, ref, b, onRefresh)),
+                                _SmallAction(
+                                    'Invoice',
+                                    Icons.receipt_outlined,
+                                    () => _sendBookingInvoice(
+                                        context, ref, b, onRefresh)),
                                 _SmallAction(
                                     'Folio',
                                     Icons.receipt_long_outlined,
@@ -951,6 +974,28 @@ class _CheckInOutSectionState extends ConsumerState<_CheckInOutSection> {
                           if (_tab == 'checkout')
                             _SmallAction('Print bill', Icons.print_outlined,
                                 () => _downloadCheckoutBill(context, ref, b)),
+                          _SmallAction(
+                              'Email',
+                              Icons.email_outlined,
+                              () => _sendBookingEmail(
+                                  context, ref, b, widget.onRefresh)),
+                          _SmallAction(
+                              'Invoice',
+                              Icons.receipt_outlined,
+                              () => _sendBookingInvoice(
+                                  context, ref, b, widget.onRefresh)),
+                          if (_tab == 'checkin')
+                            _SmallAction(
+                                'Reminder',
+                                Icons.access_alarm_outlined,
+                                () => _sendCheckInReminder(
+                                    context, ref, b, widget.onRefresh)),
+                          if (_tab == 'checkout')
+                            _SmallAction(
+                                'Reminder',
+                                Icons.access_alarm_outlined,
+                                () => _sendCheckOutReminder(
+                                    context, ref, b, widget.onRefresh)),
                         ],
                       );
                     }).toList(),
@@ -1946,6 +1991,200 @@ class _HistorySection extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EmailAutomationSection extends ConsumerWidget {
+  const _EmailAutomationSection({required this.data, required this.onRefresh});
+  final _ReceptionSnapshot data;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _PageScaffold(
+      title: 'Email Automation',
+      subtitle: 'Manage automated emails, send reminders, and monitor SMTP.',
+      actions: [
+        OutlinedButton.icon(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Refresh')),
+        IconButton(
+          tooltip: 'Test SMTP',
+          onPressed: () => _testSmtpConnection(context, ref),
+          icon: const Icon(Icons.outgoing_mail, size: 20),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardPanel(
+            title: 'SMTP Status',
+            child: ListTile(
+              leading: const Icon(Icons.cloud_done, color: AppColors.kSuccess),
+              title: const Text('Gmail SMTP Server'),
+              subtitle: const Text('booking.famousgatehotels@gmail.com'),
+              trailing: ElevatedButton.icon(
+                onPressed: () => _testSmtpConnection(context, ref),
+                icon: const Icon(Icons.play_arrow, size: 16),
+                label: const Text('Test'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _CardPanel(
+            title: 'Auto-Send Settings',
+            child: Column(
+              children: [
+                _AutoSendTile(
+                  icon: Icons.mark_email_read,
+                  label: 'Auto-send booking confirmation',
+                  subtitle: 'When a new reservation is created',
+                  value: true,
+                  onChanged: (_) {},
+                ),
+                _AutoSendTile(
+                  icon: Icons.login,
+                  label: 'Auto-send check-in welcome',
+                  subtitle: 'When guest checks in',
+                  value: true,
+                  onChanged: (_) {},
+                ),
+                _AutoSendTile(
+                  icon: Icons.logout,
+                  label: 'Auto-send checkout invoice',
+                  subtitle: 'When guest checks out',
+                  value: true,
+                  onChanged: (_) {},
+                ),
+                _AutoSendTile(
+                  icon: Icons.cancel_outlined,
+                  label: 'Auto-send cancellation notice',
+                  subtitle: 'When a booking is cancelled',
+                  value: true,
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _CardPanel(
+            title: 'Quick Actions',
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final booking in data.bookings.where((b) =>
+                    b.status == 'confirmed' &&
+                    (b.guestEmail ?? '').isNotEmpty))
+                  ActionChip(
+                    avatar: const Icon(Icons.email_outlined, size: 16),
+                    label: Text('Confirm: ${booking.guestName ?? 'Guest'}'),
+                    onPressed: () => _sendBookingEmail(
+                        context, ref, booking, onRefresh),
+                  ),
+                for (final booking in data.bookings.where((b) =>
+                    b.status == 'checked_in' &&
+                    (b.guestEmail ?? '').isNotEmpty))
+                  ActionChip(
+                    avatar: const Icon(Icons.receipt_outlined, size: 16),
+                    label: Text('Invoice: ${booking.guestName ?? 'Guest'}'),
+                    onPressed: () => _sendBookingInvoice(
+                        context, ref, booking, onRefresh),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _CardPanel(
+            title: 'Recent Email Activity',
+            child: data.bookingRows.isEmpty
+                ? const EmptyState(message: 'No recent activity')
+                : _SimpleRows(
+                    rows: data.bookingRows
+                        .where((b) =>
+                            (_text(b, ['guest_email', 'email']) ?? '')
+                                .isNotEmpty)
+                        .take(20)
+                        .toList(),
+                    fields: const [
+                      'confirmation_number',
+                      'guest_name',
+                      'status',
+                      'guest_email'
+                    ],
+                    actionsBuilder: (row) {
+                      final id = _text(row, ['id']) ?? '';
+                      final email = _text(row, ['guest_email', 'email']) ?? '';
+                      if (id.isEmpty || email.isEmpty) return const SizedBox();
+                      return Wrap(spacing: 6, children: [
+                        _SmallAction(
+                            'Confirm', Icons.email_outlined,
+                            () async {
+                              try {
+                                await ref.read(receptionRepositoryProvider)
+                                    .sendBookingConfirmationEmail(id);
+                                _snack(context, 'Confirmation sent to $email');
+                              } catch (e) {
+                                _snack(context, 'Failed: ${apiErrorMessage(e)}', error: true);
+                              }
+                            }),
+                        _SmallAction(
+                            'Invoice', Icons.receipt_outlined,
+                            () async {
+                              try {
+                                await ref.read(receptionRepositoryProvider)
+                                    .sendInvoiceEmail(id);
+                                _snack(context, 'Invoice sent to $email');
+                              } catch (e) {
+                                _snack(context, 'Failed: ${apiErrorMessage(e)}', error: true);
+                              }
+                            }),
+                        _SmallAction(
+                            'Cancel', Icons.cancel_outlined,
+                            () async {
+                              try {
+                                await ref.read(receptionRepositoryProvider)
+                                    .sendCancellationEmail(id);
+                                _snack(context, 'Cancellation sent to $email');
+                              } catch (e) {
+                                _snack(context, 'Failed: ${apiErrorMessage(e)}', error: true);
+                              }
+                            }),
+                      ]);
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AutoSendTile extends StatelessWidget {
+  const _AutoSendTile({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      secondary: Icon(icon, color: AppColors.kPrimary),
+      title: Text(label),
+      subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      value: value,
+      onChanged: onChanged,
     );
   }
 }
@@ -3437,11 +3676,15 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                                       'number'
                                     ]) ?? '-'}'),
                             subtitle: Text('${_text(room, [
-                                      'room_type',
-                                      'type'
-                                    ]) ?? 'Room'} • ${_money(_num(room, [
+                                      'type.name',
+                                      'type.code',
+                                      'room_type.name',
+                                      'room_type.code',
+                                      'type_name',
+                                    ]) ?? 'Standard'} • ${_money(_num(room, [
                                   'price_per_night',
                                   'rate',
+                                  'base_rate',
                                   'base_price'
                                 ]))}/night'),
                             trailing: selected
@@ -4101,6 +4344,125 @@ Future<void> _cancelBooking(BuildContext context, WidgetRef ref,
   }
   onSuccess();
   if (context.mounted) _snack(context, 'Reservation cancelled');
+}
+
+Future<void> _sendBookingEmail(BuildContext context, WidgetRef ref,
+    Booking booking, VoidCallback onRefresh) async {
+  final guestEmail = booking.guestEmail ?? '';
+  if (guestEmail.isEmpty) {
+    _snack(context, 'Guest has no email address', error: true);
+    return;
+  }
+  final confirmed = await _confirm(context,
+      'Send booking confirmation email to\n$guestEmail?');
+  if (!confirmed) return;
+  try {
+    final result = await ref
+        .read(receptionRepositoryProvider)
+        .sendBookingConfirmationEmail(booking.id);
+    final email = result['data']?['email'] ?? guestEmail;
+    if (context.mounted) {
+      _snack(context, 'Email sent successfully to $email');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      _snack(context,
+          apiErrorMessage(e, fallback: 'Failed to send email'), error: true);
+    }
+  }
+}
+
+Future<void> _testSmtpConnection(BuildContext context, WidgetRef ref) async {
+  try {
+    final result = await ref
+        .read(receptionRepositoryProvider)
+        .testEmailConnection();
+    final status = result['connection_status'] ?? 'Unknown';
+    final from = result['from_email'] ?? '';
+    final usingEthereal = result['using_ethereal'] == true;
+    if (context.mounted) {
+      final statusText = usingEthereal ? 'Connected (Ethereal Dev)' : status;
+      _snack(context,
+          'SMTP $statusText${from.isNotEmpty ? ' ($from)' : ''}');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      _snack(context,
+          apiErrorMessage(e, fallback: 'SMTP test failed'), error: true);
+    }
+  }
+}
+
+Future<void> _sendBookingInvoice(BuildContext context, WidgetRef ref,
+    Booking booking, VoidCallback onRefresh) async {
+  final guestEmail = booking.guestEmail ?? '';
+  if (guestEmail.isEmpty) {
+    _snack(context, 'Guest has no email address', error: true);
+    return;
+  }
+  final confirmed = await _confirm(context,
+      'Send invoice email to\n$guestEmail?');
+  if (!confirmed) return;
+  try {
+    final result = await ref
+        .read(receptionRepositoryProvider)
+        .sendInvoiceEmail(booking.id);
+    final email = result['data']?['email'] ?? guestEmail;
+    if (context.mounted) {
+      _snack(context, 'Invoice sent successfully to $email');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      _snack(context,
+          apiErrorMessage(e, fallback: 'Failed to send invoice'), error: true);
+    }
+  }
+}
+
+Future<void> _sendCheckInReminder(BuildContext context, WidgetRef ref,
+    Booking booking, VoidCallback onRefresh) async {
+  final guestEmail = booking.guestEmail ?? '';
+  if (guestEmail.isEmpty) {
+    _snack(context, 'Guest has no email address', error: true);
+    return;
+  }
+  try {
+    final result = await ref
+        .read(receptionRepositoryProvider)
+        .sendCheckInReminder(booking.id);
+    final email = result['data']?['email'] ?? guestEmail;
+    if (context.mounted) {
+      _snack(context, 'Check-in reminder sent to $email');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      _snack(context,
+          apiErrorMessage(e, fallback: 'Failed to send reminder'), error: true);
+    }
+  }
+}
+
+Future<void> _sendCheckOutReminder(BuildContext context, WidgetRef ref,
+    Booking booking, VoidCallback onRefresh) async {
+  final guestEmail = booking.guestEmail ?? '';
+  if (guestEmail.isEmpty) {
+    _snack(context, 'Guest has no email address', error: true);
+    return;
+  }
+  try {
+    final result = await ref
+        .read(receptionRepositoryProvider)
+        .sendCheckOutReminder(booking.id);
+    final email = result['data']?['email'] ?? guestEmail;
+    if (context.mounted) {
+      _snack(context, 'Check-out reminder sent to $email');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      _snack(context,
+          apiErrorMessage(e, fallback: 'Failed to send reminder'), error: true);
+    }
+  }
 }
 
 Future<void> _deleteGuest(BuildContext context, WidgetRef ref, Guest guest,

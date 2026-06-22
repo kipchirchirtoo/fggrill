@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
+import { recordBarStockMovement } from '../services/unified-bar-stock.service';
 
 const asyncWrap = (fn: (req: Request, res: Response) => Promise<void>) =>
     (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
@@ -138,8 +139,35 @@ export const recordProduction = asyncWrap(async (req: Request, res: Response) =>
 // pool item (e.g. Half/Quarter Chicken sharing the Full Chicken pool), push
 // the pool-equivalent quantity into the pool instead of the item itself.
 async function addToPos(outletItemId: string, qty: number) {
-    const { data: oi } = await supabase.from('pos_outlet_items').select('current_stock,stock_pool_item_id,pool_fraction').eq('id', outletItemId).single();
+    const { data: oi } = await supabase.from('pos_outlet_items').select('current_stock,stock_pool_item_id,pool_fraction,outlet_id,source_table,source_item_id,sku').eq('id', outletItemId).single();
     if (!oi) return;
+
+    // ── Unified bar stock sync ────────────────────────────────────
+    // When kitchen production adds stock to a bar POS outlet, flow it
+    // through the unified ledger so inventory_balances stays in sync.
+    if (oi.source_table === 'bar_drinks' && oi.source_item_id && oi.outlet_id) {
+        try {
+            const { data: outlet } = await supabase
+                .from('pos_outlets')
+                .select('branch_id, outlet_type')
+                .eq('id', oi.outlet_id)
+                .maybeSingle();
+            if (outlet?.branch_id && ['main_bar','executive_bar','kyogong_executive_bar','kyogong_sports_bar'].includes(outlet.outlet_type)) {
+                await recordBarStockMovement({
+                    branchId: outlet.branch_id,
+                    outletId: oi.outlet_id,
+                    drinkId: oi.source_item_id,
+                    sku: oi.sku || undefined,
+                    quantityDelta: qty,
+                    movementType: 'production',
+                    notes: 'Kitchen production added to bar POS'
+                });
+            }
+        } catch (syncErr: any) {
+            logger.warn('Unified bar stock sync failed for kitchen production (non-critical):', syncErr.message);
+        }
+    }
+
     if (oi.stock_pool_item_id) {
         const { data: pool } = await supabase.from('pos_outlet_items').select('current_stock').eq('id', oi.stock_pool_item_id).single();
         if (pool) {

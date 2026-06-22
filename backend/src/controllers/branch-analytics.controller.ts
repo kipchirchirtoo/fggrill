@@ -19,6 +19,8 @@ import {
 } from '../types/analytics.types';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { aggregationService } from '../services/aggregation.service';
+import { fetchStaffAuditSummary } from './finance.controller';
 
 // Validation schemas using Zod
 const SalesFilterSchema = z.object({
@@ -445,7 +447,324 @@ const drawFallbackTable = (
   return currentY + 12;
 };
 
-const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promise<Buffer> => {
+// Mirrors the colour palette used by the on-screen Branch Analytics charts
+// (_PaymentMethodPieChart / _categoryColor in branch_accountant_dashboard.dart)
+// so the printed report visually matches the dashboard at a glance.
+const PDF_PAYMENT_COLORS: Record<string, string> = {
+  cash: '#10B981',
+  card: '#3B82F6',
+  mpesa: '#8B5CF6',
+  mixed: '#F59E0B',
+};
+const PDF_CATEGORY_COLORS: Record<string, string> = {
+  rooms: '#3B82F6',
+  restaurant: '#10B981',
+  bar: '#F59E0B',
+  spa: '#8B5CF6',
+  conference: '#EC4899',
+  dynamic_services: '#6B7280',
+  carwash: '#14B8A6',
+};
+const PDF_CHART_FALLBACK_COLOR = '#94A3B8';
+
+const pdfColorFor = (map: Record<string, string>, key: string): string =>
+  map[String(key || '').toLowerCase()] || PDF_CHART_FALLBACK_COLOR;
+
+/**
+ * Donut chart drawn as native PDF vector wedges (SVG path "A" arc commands,
+ * which pdfkit's `.path()` supports directly) with a colour-matched legend,
+ * so the PDF report carries the same Payment Methods visual as the dashboard
+ * instead of just a table of numbers.
+ */
+const drawFallbackDonutChart = (
+  doc: PDFKit.PDFDocument,
+  y: number,
+  slices: Array<{ label: string; value: number; color: string }>
+): number => {
+  const left = 40;
+  const radius = 62;
+  const innerRadius = 30;
+  const cx = left + radius;
+  const top = y + 6;
+  const cy = top + radius;
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+
+  if (total <= 0 || slices.length === 0) {
+    doc.fillColor(PDF_SECONDARY).fontSize(9).font('Helvetica').text('No data available', left, y + 20);
+    return y + 50;
+  }
+
+  let startAngle = -Math.PI / 2;
+  slices.forEach((slice) => {
+    if (slice.value <= 0) return;
+    const sliceAngle = (slice.value / total) * Math.PI * 2;
+    const endAngle = startAngle + sliceAngle;
+    const x0 = cx + radius * Math.cos(startAngle);
+    const y0 = cy + radius * Math.sin(startAngle);
+    const x1 = cx + radius * Math.cos(endAngle);
+    const y1 = cy + radius * Math.sin(endAngle);
+    const largeArc = sliceAngle > Math.PI ? 1 : 0;
+    doc.path(`M ${cx},${cy} L ${x0},${y0} A ${radius},${radius} 0 ${largeArc} 1 ${x1},${y1} Z`).fill(slice.color);
+    startAngle = endAngle;
+  });
+  doc.circle(cx, cy, innerRadius).fill('#ffffff');
+
+  let legendY = top;
+  const legendX = cx + radius + 26;
+  slices.forEach((slice) => {
+    const pct = total ? (slice.value / total) * 100 : 0;
+    doc.rect(legendX, legendY + 1, 8, 8).fill(slice.color);
+    doc.fillColor(PDF_PRIMARY).fontSize(8).font('Helvetica-Bold')
+      .text(String(slice.label || 'Unknown').toUpperCase(), legendX + 13, legendY - 1, { width: 150 });
+    doc.fillColor(PDF_SECONDARY).fontSize(7.5).font('Helvetica')
+      .text(`${formatKes(slice.value)} (${pct.toFixed(1)}%)`, legendX + 13, legendY + 9, { width: 170 });
+    legendY += 25;
+  });
+
+  return Math.max(top + radius * 2 + 18, legendY + 6);
+};
+
+/**
+ * Sales-trend line chart (filled area + axis gridlines) drawn with native
+ * PDF vector paths — no external chart-rendering dependency required.
+ */
+const drawFallbackLineChart = (
+  doc: PDFKit.PDFDocument,
+  y: number,
+  points: Array<{ label: string; value: number }>,
+  color: string = PDF_ACCENT
+): number => {
+  const left = 40;
+  const chartWidth = doc.page.width - 80 - 60;
+  const chartHeight = 130;
+  const top = y + 4;
+  const bottom = top + chartHeight;
+
+  if (points.length === 0) {
+    doc.fillColor(PDF_SECONDARY).fontSize(9).font('Helvetica').text('No data available', left, top + 20);
+    return top + 50;
+  }
+
+  const maxValue = Math.max(...points.map((p) => p.value), 1);
+  const stepX = points.length > 1 ? chartWidth / (points.length - 1) : 0;
+
+  for (let i = 0; i <= 4; i++) {
+    const gy = bottom - (chartHeight * i) / 4;
+    doc.strokeColor(PDF_BORDER).lineWidth(0.4).moveTo(left + 56, gy).lineTo(left + 56 + chartWidth, gy).stroke();
+    doc.fillColor(PDF_SECONDARY).fontSize(6.5).font('Helvetica')
+      .text(formatKes((maxValue * i) / 4), left, gy - 4, { width: 52, align: 'right' });
+  }
+
+  const coords = points.map((p, i) => ({
+    x: left + 56 + i * stepX,
+    y: bottom - (p.value / maxValue) * chartHeight,
+  }));
+
+  let areaPath = `M ${coords[0].x},${bottom} `;
+  coords.forEach((c) => { areaPath += `L ${c.x},${c.y} `; });
+  areaPath += `L ${coords[coords.length - 1].x},${bottom} Z`;
+  doc.save();
+  doc.fillOpacity(0.15);
+  doc.path(areaPath).fill(color);
+  doc.restore();
+
+  doc.strokeColor(color).lineWidth(1.4);
+  coords.forEach((c, i) => {
+    if (i === 0) doc.moveTo(c.x, c.y);
+    else doc.lineTo(c.x, c.y);
+  });
+  doc.stroke();
+  coords.forEach((c) => doc.circle(c.x, c.y, 1.8).fill(color));
+
+  const maxLabels = 8;
+  const labelStep = Math.max(1, Math.ceil(points.length / maxLabels));
+  doc.fillColor(PDF_SECONDARY).fontSize(6.5).font('Helvetica');
+  points.forEach((p, i) => {
+    if (i % labelStep !== 0 && i !== points.length - 1) return;
+    doc.text(p.label, coords[i].x - 20, bottom + 6, { width: 40, align: 'center' });
+  });
+
+  return bottom + 22;
+};
+
+/**
+ * Horizontal bar chart for category breakdown — proportional bar width
+ * relative to the largest category, colour-coded to match the dashboard.
+ */
+const drawFallbackBarChart = (
+  doc: PDFKit.PDFDocument,
+  y: number,
+  bars: Array<{ label: string; value: number; color: string }>
+): number => {
+  const left = 40;
+  const fullWidth = doc.page.width - 80;
+  const labelWidth = 110;
+  const valueWidth = 75;
+  const barAreaWidth = fullWidth - labelWidth - valueWidth - 10;
+  const rowHeight = 22;
+  const maxValue = Math.max(...bars.map((b) => b.value), 1);
+
+  if (bars.length === 0) {
+    doc.fillColor(PDF_SECONDARY).fontSize(9).font('Helvetica').text('No data available', left, y);
+    return y + 30;
+  }
+
+  let currentY = y;
+  bars.forEach((bar) => {
+    currentY = ensurePdfSpace(doc, currentY, rowHeight + 6);
+    const barWidth = Math.max(2, (bar.value / maxValue) * barAreaWidth);
+    doc.fillColor(PDF_PRIMARY).fontSize(8).font('Helvetica-Bold')
+      .text(String(bar.label || 'Unknown').toUpperCase(), left, currentY + 3, { width: labelWidth, ellipsis: true });
+    doc.roundedRect(left + labelWidth + 5, currentY, barAreaWidth, 14, 3).fill('#f1f1f1');
+    doc.roundedRect(left + labelWidth + 5, currentY, barWidth, 14, 3).fill(bar.color);
+    doc.fillColor(PDF_SECONDARY).fontSize(7.5).font('Helvetica')
+      .text(formatKes(bar.value), left + labelWidth + 10 + barAreaWidth, currentY + 2, { width: valueWidth });
+    currentY += rowHeight;
+  });
+
+  return currentY + 10;
+};
+
+interface PdfFinancialsExtra {
+  revenue: number;
+  expenses: number;
+  netProfit: number;
+  revenueBySource: Record<string, number>;
+  expensesByCategory: Record<string, number>;
+  receivables: number;
+  payables: number;
+  staffAudit: {
+    total_actions: number;
+    critical_actions: number;
+    unique_users: number;
+    recent_critical: Array<{ user_name: string; action: string; created_at: string }>;
+  };
+}
+
+/**
+ * Pulls the same revenue/expense aggregation and staff-audit summary used by
+ * the on-screen Branch Analytics financials cards, so the Branded PDF export
+ * carries the full picture (not just the POS sales tables) instead of being
+ * a narrower report than what the dashboard already shows.
+ */
+const fetchPdfFinancialsExtra = async (
+  branchId: number,
+  startDate: string,
+  endDate: string
+): Promise<PdfFinancialsExtra> => {
+  const [aggregated, arResult, apResult, staffAudit] = await Promise.all([
+    aggregationService.getAggregatedData({ startDate, endDate }, branchId),
+    supabase.from('accounting_ar_invoices').select('balance').eq('branch_id', branchId).neq('status', 'paid'),
+    supabase.from('accounting_ap_bills').select('balance').eq('branch_id', branchId).neq('status', 'paid'),
+    fetchStaffAuditSummary(branchId, startDate, endDate),
+  ]);
+
+  const receivables = (arResult.data || []).reduce((sum: number, inv: any) => sum + Number(inv.balance || 0), 0);
+  const payables = (apResult.data || []).reduce((sum: number, bill: any) => sum + Number(bill.balance || 0), 0);
+
+  return {
+    revenue: aggregated.revenue,
+    expenses: aggregated.expenses,
+    netProfit: aggregated.netProfit,
+    revenueBySource: aggregated.revenueBySource,
+    expensesByCategory: aggregated.expensesByCategory,
+    receivables,
+    payables,
+    staffAudit,
+  };
+};
+
+const drawFallbackCardsRow = (
+  doc: PDFKit.PDFDocument,
+  y: number,
+  cards: Array<{ label: string; value: string; color: string }>
+): number => {
+  const gap = 10;
+  const cardWidth = (doc.page.width - 80 - gap * (cards.length - 1)) / cards.length;
+  cards.forEach((card, index) => {
+    const x = 40 + index * (cardWidth + gap);
+    doc.roundedRect(x, y, cardWidth, 48, 4).fill(card.color);
+    doc.fillColor(PDF_GOLD).fontSize(7.5).font('Helvetica-Bold').text(card.label, x + 8, y + 11, {
+      width: cardWidth - 16,
+      align: 'center'
+    });
+    doc.fillColor('white').fontSize(12.5).font('Helvetica-Bold').text(card.value, x + 8, y + 27, {
+      width: cardWidth - 16,
+      align: 'center',
+      ellipsis: true
+    });
+  });
+  return y + 60;
+};
+
+const drawFallbackNarrative = (doc: PDFKit.PDFDocument, y: number, lines: string[]): number => {
+  let currentY = y;
+  lines.forEach((line) => {
+    currentY = ensurePdfSpace(doc, currentY, 30);
+    doc.circle(44, currentY + 4, 1.6).fill(PDF_GOLD);
+    doc.fillColor(PDF_PRIMARY).fontSize(8.5).font('Helvetica')
+      .text(line, 54, currentY, { width: doc.page.width - 94, lineGap: 2 });
+    currentY = doc.y + 8;
+  });
+  return currentY + 4;
+};
+
+/**
+ * Plain-English read of the period's numbers (best/worst day, dominant
+ * payment method, top category, margin, staff-audit flags) so the report
+ * isn't just raw tables — it answers "so what happened this period?"
+ * the way an accountant reading the dashboard would explain it.
+ */
+const buildDetailedAnalysisNarrative = (response: BranchSalesResponse, extra?: PdfFinancialsExtra): string[] => {
+  const lines: string[] = [];
+  const summary = response.data.summary;
+  const daily = response.data.daily_breakdown;
+
+  lines.push(
+    `The branch recorded ${formatKes(summary.total_sales)} in total sales across ${summary.transaction_count.toLocaleString('en-KE')} transactions during the report period, averaging ${formatKes(summary.avg_transaction_value)} per transaction.`
+  );
+
+  if (daily.length > 1) {
+    const best = daily.reduce((a, b) => (b.total_sales > a.total_sales ? b : a));
+    const worst = daily.reduce((a, b) => (b.total_sales < a.total_sales ? b : a));
+    lines.push(
+      `The strongest trading day was ${formatPdfDate(best.date)} with ${formatKes(best.total_sales)} across ${best.transaction_count} transactions, while ${formatPdfDate(worst.date)} was the slowest at ${formatKes(worst.total_sales)}.`
+    );
+  }
+
+  const topPayment = [...response.data.payment_method_breakdown].sort((a, b) => b.total_sales - a.total_sales)[0];
+  if (topPayment) {
+    lines.push(
+      `${String(topPayment.payment_method || 'Unknown').toUpperCase()} was the dominant payment method, accounting for ${Number(topPayment.percentage || 0).toFixed(1)}% of sales (${formatKes(topPayment.total_sales)}).`
+    );
+  }
+
+  const topCategory = [...response.data.category_breakdown].sort((a, b) => b.total_sales - a.total_sales)[0];
+  if (topCategory) {
+    lines.push(
+      `${String(topCategory.category || 'Unknown').toUpperCase()} was the top-performing category, contributing ${Number(topCategory.percentage || 0).toFixed(1)}% of total revenue (${formatKes(topCategory.total_sales)}).`
+    );
+  }
+
+  if (extra) {
+    const margin = extra.revenue > 0 ? (extra.netProfit / extra.revenue) * 100 : 0;
+    lines.push(
+      `Branch revenue of ${formatKes(extra.revenue)} against expenses of ${formatKes(extra.expenses)} produced a net profit of ${formatKes(extra.netProfit)} (${margin.toFixed(1)}% margin). Outstanding receivables stand at ${formatKes(extra.receivables)} against payables of ${formatKes(extra.payables)}, a net position of ${formatKes(extra.receivables - extra.payables)}.`
+    );
+    lines.push(
+      extra.staffAudit.critical_actions > 0
+        ? `${extra.staffAudit.critical_actions} critical staff action(s) (voids, discounts, refunds, role changes) were logged across ${extra.staffAudit.unique_users} staff member(s) during this period and should be reviewed in the Staff Audit Summary below.`
+        : `No critical staff actions (voids, discounts, refunds, role changes) were logged during this period.`
+    );
+  }
+
+  return lines;
+};
+
+const buildFallbackBranchSalesPdf = async (
+  response: BranchSalesResponse,
+  extra?: PdfFinancialsExtra
+): Promise<Buffer> => {
   return await new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     const chunks: Buffer[] = [];
@@ -464,28 +783,50 @@ const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promi
     y += 30;
 
     const summary = response.data.summary;
-    const cards = [
+    y = drawFallbackCardsRow(doc, y, [
       { label: 'TOTAL SALES', value: formatKes(summary.total_sales), color: PDF_PRIMARY },
       { label: 'TRANSACTIONS', value: summary.transaction_count.toLocaleString('en-KE'), color: PDF_ACCENT },
       { label: 'AVERAGE TICKET', value: formatKes(summary.avg_transaction_value), color: PDF_HEADER_BG }
-    ];
-    const cardWidth = (doc.page.width - 100) / 3;
-    cards.forEach((card, index) => {
-      const x = 40 + index * (cardWidth + 10);
-      doc.roundedRect(x, y, cardWidth, 48, 4).fill(card.color);
-      doc.fillColor(PDF_GOLD).fontSize(7.5).font('Helvetica-Bold').text(card.label, x + 10, y + 11, {
-        width: cardWidth - 20,
-        align: 'center'
-      });
-      doc.fillColor('white').fontSize(13).font('Helvetica-Bold').text(card.value, x + 10, y + 27, {
-        width: cardWidth - 20,
-        align: 'center',
-        ellipsis: true
-      });
-    });
-    y += 68;
+    ]);
 
+    if (extra) {
+      y = ensurePdfSpace(doc, y, 60);
+      y = drawFallbackCardsRow(doc, y, [
+        { label: 'BRANCH REVENUE', value: formatKes(extra.revenue), color: '#0f766e' },
+        { label: 'BRANCH EXPENSES', value: formatKes(extra.expenses), color: '#b91c1c' },
+        { label: 'NET PROFIT', value: formatKes(extra.netProfit), color: '#312e81' },
+        { label: 'NET POSITION', value: formatKes(extra.receivables - extra.payables), color: '#78350f' }
+      ]);
+    }
+    y += 8;
+
+    y = ensurePdfSpace(doc, y, 200);
+    y = drawFallbackSectionTitle(doc, 'SALES TREND', y);
+    y = drawFallbackLineChart(
+      doc,
+      y,
+      response.data.daily_breakdown.map((item) => ({
+        label: formatPdfDate(item.date),
+        value: item.total_sales
+      }))
+    );
+
+    y = ensurePdfSpace(doc, y, 100);
+    y = drawFallbackSectionTitle(doc, 'DETAILED ANALYSIS', y);
+    y = drawFallbackNarrative(doc, y, buildDetailedAnalysisNarrative(response, extra));
+
+    y = ensurePdfSpace(doc, y, 220);
     y = drawFallbackSectionTitle(doc, 'REVENUE BY PAYMENT METHOD', y);
+    y = drawFallbackDonutChart(
+      doc,
+      y,
+      response.data.payment_method_breakdown.map((item) => ({
+        label: String(item.payment_method || 'Unknown'),
+        value: item.total_sales,
+        color: pdfColorFor(PDF_PAYMENT_COLORS, String(item.payment_method))
+      }))
+    );
+    y += 8;
     y = drawFallbackTable(
       doc,
       y,
@@ -500,8 +841,18 @@ const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promi
       ['left', 'center', 'right', 'center']
     );
 
-    y = ensurePdfSpace(doc, y, 120);
+    y = ensurePdfSpace(doc, y, 180);
     y = drawFallbackSectionTitle(doc, 'REVENUE BY CATEGORY', y);
+    y = drawFallbackBarChart(
+      doc,
+      y,
+      response.data.category_breakdown.map((item) => ({
+        label: String(item.category || 'Unknown'),
+        value: item.total_sales,
+        color: pdfColorFor(PDF_CATEGORY_COLORS, String(item.category))
+      }))
+    );
+    y += 8;
     y = drawFallbackTable(
       doc,
       y,
@@ -515,6 +866,70 @@ const buildFallbackBranchSalesPdf = async (response: BranchSalesResponse): Promi
       [160, 95, 155, 95],
       ['left', 'center', 'right', 'center']
     );
+
+    if (extra) {
+      y = ensurePdfSpace(doc, y, 160);
+      y = drawFallbackSectionTitle(doc, 'FINANCIAL SUMMARY', y);
+      const revenueSourceRows = Object.entries(extra.revenueBySource).filter(([, v]) => v > 0);
+      const expenseCategoryRows = Object.entries(extra.expensesByCategory);
+      doc.fillColor(PDF_PRIMARY).fontSize(8.5).font('Helvetica-Bold').text('Revenue Sources', 40, y);
+      y += 14;
+      y = drawFallbackTable(
+        doc,
+        y,
+        ['Source', 'Amount'],
+        revenueSourceRows.length > 0
+          ? revenueSourceRows.map(([source, amount]) => [source.toUpperCase(), formatKes(amount)])
+          : [['No revenue recorded', formatKes(0)]],
+        [355, 160],
+        ['left', 'right']
+      );
+      y = ensurePdfSpace(doc, y, 80);
+      doc.fillColor(PDF_PRIMARY).fontSize(8.5).font('Helvetica-Bold').text('Expense Categories', 40, y);
+      y += 14;
+      y = drawFallbackTable(
+        doc,
+        y,
+        ['Category', 'Amount'],
+        expenseCategoryRows.length > 0
+          ? expenseCategoryRows.map(([category, amount]) => [category.toUpperCase(), formatKes(amount)])
+          : [['No expenses recorded', formatKes(0)]],
+        [355, 160],
+        ['left', 'right']
+      );
+      doc.fillColor(PDF_SECONDARY).fontSize(8).font('Helvetica')
+        .text(`Outstanding Receivables: ${formatKes(extra.receivables)}   |   Outstanding Payables: ${formatKes(extra.payables)}`, 40, y, {
+          width: doc.page.width - 80
+        });
+      y += 24;
+
+      y = ensurePdfSpace(doc, y, 160);
+      y = drawFallbackSectionTitle(doc, 'STAFF AUDIT SUMMARY', y);
+      y = drawFallbackCardsRow(doc, y, [
+        { label: 'STAFF ACTIONS', value: extra.staffAudit.total_actions.toLocaleString('en-KE'), color: '#334155' },
+        { label: 'CRITICAL ACTIONS', value: extra.staffAudit.critical_actions.toLocaleString('en-KE'), color: '#9a3412' },
+        { label: 'STAFF INVOLVED', value: extra.staffAudit.unique_users.toLocaleString('en-KE'), color: '#3730a3' }
+      ]);
+      y += 8;
+      y = ensurePdfSpace(doc, y, 80);
+      doc.fillColor(PDF_PRIMARY).fontSize(8.5).font('Helvetica-Bold')
+        .text('Recent Critical Actions (delete / void / discount / refund / role change)', 40, y);
+      y += 14;
+      y = drawFallbackTable(
+        doc,
+        y,
+        ['Staff', 'Action', 'Date'],
+        extra.staffAudit.recent_critical.length > 0
+          ? extra.staffAudit.recent_critical.map((log) => [
+              log.user_name,
+              String(log.action || '-').toUpperCase(),
+              formatPdfDate(log.created_at)
+            ])
+          : [['-', 'No critical actions in this period', '-']],
+        [180, 220, 115],
+        ['left', 'left', 'right']
+      );
+    }
 
     y = ensurePdfSpace(doc, y, 120);
     y = drawFallbackSectionTitle(doc, 'DAILY SALES BREAKDOWN', y);
@@ -884,7 +1299,19 @@ export const exportBranchSalesPDF = async (req: Request, res: Response): Promise
       if (!requestData) throw new Error('Fallback request data unavailable');
       const fallbackRequestData = requestData;
       const fallbackResponse = await getFallbackBranchSalesResponse(fallbackRequestData);
-      const pdfBuffer = await buildFallbackBranchSalesPdf(fallbackResponse);
+      let extra: PdfFinancialsExtra | undefined;
+      try {
+        extra = await fetchPdfFinancialsExtra(
+          fallbackRequestData.branch_id,
+          `${fallbackRequestData.start_date}T00:00:00.000Z`,
+          `${fallbackRequestData.end_date}T23:59:59.999Z`
+        );
+      } catch (extraError: any) {
+        logger.warn('PDF financials/staff-audit extras unavailable, continuing without them', {
+          error: extraError.message,
+        });
+      }
+      const pdfBuffer = await buildFallbackBranchSalesPdf(fallbackResponse, extra);
       const filename = `branch-sales-${fallbackRequestData.branch_id}-${fallbackRequestData.start_date}-${fallbackRequestData.end_date}.pdf`;
 
       res.setHeader('Content-Type', 'application/pdf');

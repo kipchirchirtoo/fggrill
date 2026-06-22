@@ -1,0 +1,582 @@
+/**
+ * Unified Bar Stock Service
+ * =========================
+ * Single source of truth for bar stock across:
+ *   - inventory_balances      (new foundation schema)
+ *   - bar_stock               (legacy bar inventory screen)
+ *   - pos_outlet_items        (legacy POS display)
+ *   - pos_shift_stock_counts  (per-shift tracking)
+ *
+ * Restaurant POS outlets are NEVER touched by this service.
+ */
+
+import { supabase } from '../config/database';
+import { logger } from '../utils/logger';
+
+const toNumber = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const BAR_OUTLET_TYPES = new Set([
+  'main_bar',
+  'executive_bar',
+  'kyogong_executive_bar',
+  'kyogong_sports_bar'
+]);
+
+interface RecordBarStockMovementInput {
+  branchId: number;
+  outletId?: string | null;
+  drinkId?: string | null;
+  sku?: string | null;
+  quantityDelta: number;   // + for receipt/restock, - for sale/waste
+  movementType:
+    | 'sale'
+    | 'sale_reversal'
+    | 'restock'
+    | 'dispatch_receive'
+    | 'stock_take_adjustment'
+    | 'waste'
+    | 'production';
+  referenceId?: string | null;
+  referenceNumber?: string | null;
+  performedBy?: string | null;
+  notes?: string | null;
+  costPerUnit?: number | null;
+  shiftId?: string | null;
+}
+
+interface BarStockResult {
+  drinkId: string | null;
+  sku: string | null;
+  name: string;
+  category: string;
+  unit: string;
+  costPrice: number;
+  sellingPrice: number;
+  currentStock: number;
+  minStock: number;
+  source: 'inventory_balances' | 'bar_stock' | 'none';
+}
+
+/**
+ * Resolve the item SKU and drink_id from either drinkId or sku.
+ */
+async function resolveBarItem(
+  branchId: number,
+  drinkId?: string | null,
+  sku?: string | null
+): Promise<{ drinkId: string | null; sku: string | null; itemId: string | null }> {
+  if (!drinkId && !sku) {
+    throw new Error('Either drinkId or sku is required');
+  }
+
+  // Resolve SKU from drink_id
+  if (drinkId && !sku) {
+    const { data: drink } = await supabase
+      .from('bar_drinks')
+      .select('id, name, sku')
+      .eq('id', drinkId)
+      .maybeSingle();
+    if (drink) {
+      return {
+        drinkId: drink.id,
+        sku: drink.sku || `BAR-${drink.id}`,
+        itemId: null
+      };
+    }
+  }
+
+  // Resolve drink_id from SKU
+  if (sku && !drinkId) {
+    const { data: drink } = await supabase
+      .from('bar_drinks')
+      .select('id, sku')
+      .eq('sku', sku)
+      .maybeSingle();
+    if (drink) {
+      return {
+        drinkId: drink.id,
+        sku: drink.sku || `BAR-${drink.id}`,
+        itemId: null
+      };
+    }
+
+    // Fallback: try to find inventory_items
+    const { data: invItem } = await supabase
+      .from('inventory_items')
+      .select('id, sku')
+      .eq('sku', sku)
+      .maybeSingle();
+    if (invItem) {
+      return { drinkId: null, sku: invItem.sku, itemId: invItem.id };
+    }
+  }
+
+  return { drinkId: drinkId || null, sku: sku || null, itemId: null };
+}
+
+/**
+ * Resolve inventory_location_id for a bar outlet.
+ */
+async function resolveBarOutletLocation(
+  branchId: number,
+  outletId?: string | null
+): Promise<{ locationId: string | null; outletId: string | null }> {
+  let query = supabase
+    .from('pos_outlets')
+    .select('id, inventory_location_id')
+    .eq('branch_id', branchId)
+    .in('outlet_type', Array.from(BAR_OUTLET_TYPES));
+
+  if (outletId) {
+    query = query.eq('id', outletId);
+  }
+
+  const { data: outlet } = await query.maybeSingle();
+
+  if (outlet?.inventory_location_id) {
+    return { locationId: outlet.inventory_location_id, outletId: outlet.id };
+  }
+
+  // Fallback: create a location on-the-fly if missing
+  const { data: existingLoc } = await supabase
+    .from('inventory_locations')
+    .select('id')
+    .eq('branch_id', branchId)
+    .eq('location_type', 'pos_outlet')
+    .maybeSingle();
+
+  if (existingLoc) {
+    return { locationId: existingLoc.id, outletId: outlet?.id || null };
+  }
+
+  return { locationId: null, outletId: outlet?.id || null };
+}
+
+/**
+ * Resolve inventory_item_id from SKU, creating one if needed.
+ */
+async function resolveInventoryItemId(sku: string): Promise<string | null> {
+  const { data: existing } = await supabase
+    .from('inventory_items')
+    .select('id')
+    .eq('sku', sku)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  // Try to create from bar_drinks
+  const { data: drink } = await supabase
+    .from('bar_drinks')
+    .select('id, name, category, unit, cost_price, price, selling_price, min_stock, sku, category_id, is_available')
+    .or(`sku.eq.${sku},id.eq.${sku.replace('BAR-', '')}`)
+    .maybeSingle();
+
+  if (!drink) return null;
+
+  const { data: category } = await supabase
+    .from('bar_drink_categories')
+    .select('name')
+    .eq('id', drink.category_id)
+    .maybeSingle();
+
+  const { data: inserted } = await supabase
+    .from('inventory_items')
+    .insert({
+      sku: drink.sku || `BAR-${drink.id}`,
+      item_name: drink.name,
+      category: category?.name || 'bar',
+      unit: drink.unit || 'bottle',
+      item_type: 'menu_item',
+      default_unit_cost: drink.cost_price || 0,
+      default_selling_price: drink.price || drink.selling_price || 0,
+      reorder_level: drink.min_stock || 5,
+      is_active: drink.is_available !== false,
+      metadata: { source: 'bar_drinks', source_id: drink.id }
+    })
+    .select('id')
+    .single();
+
+  return inserted?.id || null;
+}
+
+/**
+ * Record a bar stock movement. Atomically updates:
+ *   1. inventory_balances (source of truth)
+ *   2. bar_stock (legacy screen)
+ *   3. pos_outlet_items (legacy POS)
+ *   4. pos_shift_stock_counts (shift tracking)
+ *   5. inventory_movements (audit trail)
+ */
+export async function recordBarStockMovement(
+  input: RecordBarStockMovementInput
+): Promise<{ previousStock: number; newStock: number; source: string }> {
+  const {
+    branchId,
+    outletId: inputOutletId,
+    drinkId: inputDrinkId,
+    sku: inputSku,
+    quantityDelta,
+    movementType,
+    referenceId,
+    referenceNumber,
+    performedBy,
+    notes,
+    costPerUnit,
+    shiftId
+  } = input;
+
+  // ── Resolve identifiers ────────────────────────────────────────────
+  const resolved = await resolveBarItem(branchId, inputDrinkId, inputSku);
+  const sku = resolved.sku || '';
+  const drinkId = resolved.drinkId;
+  let itemId = resolved.itemId;
+
+  if (!sku) {
+    throw new Error('Could not resolve SKU for bar item');
+  }
+
+  if (!itemId && drinkId) {
+    itemId = await resolveInventoryItemId(sku);
+  }
+
+  const { locationId, outletId } = await resolveBarOutletLocation(branchId, inputOutletId);
+
+  // ── Step 1: Update inventory_balances (source of truth) ─────────────
+  let previousStock = 0;
+  let newStock = 0;
+  let source = 'none';
+
+  if (itemId && locationId) {
+    const { data: balance } = await supabase
+      .from('inventory_balances')
+      .select('id, current_quantity')
+      .eq('item_id', itemId)
+      .eq('location_id', locationId)
+      .is('batch_id', null)
+      .maybeSingle();
+
+    previousStock = toNumber(balance?.current_quantity);
+    newStock = Math.max(0, previousStock + quantityDelta);
+
+    if (balance?.id) {
+      const { error: balError } = await supabase
+        .from('inventory_balances')
+        .update({
+          current_quantity: newStock,
+          unit_cost: costPerUnit !== undefined && costPerUnit !== null ? costPerUnit : undefined,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', balance.id);
+      if (balError) throw balError;
+    } else {
+      const { error: insertBalError } = await supabase
+        .from('inventory_balances')
+        .insert({
+          item_id: itemId,
+          location_id: locationId,
+          current_quantity: newStock,
+          unit_cost: costPerUnit || 0,
+          reserved_quantity: 0,
+          damaged_quantity: 0,
+          expired_quantity: 0
+        });
+      if (insertBalError) throw insertBalError;
+    }
+    source = 'inventory_balances';
+  }
+
+  // ── Step 2: Update bar_stock (legacy) ──────────────────────────────
+  if (drinkId) {
+    const { data: barStock } = await supabase
+      .from('bar_stock')
+      .select('id, current_stock')
+      .eq('branch_id', branchId)
+      .eq('drink_id', drinkId)
+      .maybeSingle();
+
+    if (barStock?.id) {
+      const barNewStock = Math.max(0, toNumber(barStock.current_stock) + quantityDelta);
+      await supabase
+        .from('bar_stock')
+        .update({
+          current_stock: barNewStock,
+          last_updated: new Date().toISOString()
+        })
+        .eq('id', barStock.id);
+    } else {
+      // Create bar_stock row if missing
+      await supabase
+        .from('bar_stock')
+        .insert({
+          branch_id: branchId,
+          drink_id: drinkId,
+          item_sku: sku,
+          item_name: sku,
+          current_stock: Math.max(0, quantityDelta),
+          unit: 'bottle',
+          par_level: 5
+        });
+    }
+  }
+
+  // ── Step 3: Update pos_outlet_items (legacy POS) ───────────────────
+  if (outletId) {
+    const { data: posItem } = await supabase
+      .from('pos_outlet_items')
+      .select('id, current_stock')
+      .eq('outlet_id', outletId)
+      .or(`sku.eq.${sku},source_item_id.eq.${drinkId || ''}`)
+      .maybeSingle();
+
+    if (posItem?.id) {
+      const posNewStock = Math.max(0, toNumber(posItem.current_stock) + quantityDelta);
+      await supabase
+        .from('pos_outlet_items')
+        .update({
+          current_stock: posNewStock,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', posItem.id);
+    }
+  }
+
+  // ── Step 4: Update pos_shift_stock_counts ─────────────────────────
+  if (shiftId && outletId) {
+    const { data: countRow } = await supabase
+      .from('pos_shift_stock_counts')
+      .select('id, opening_stock, additions, sold_quantity, system_closing_stock, physical_count')
+      .eq('shift_id', shiftId)
+      .or(`sku.eq.${sku},outlet_item_id.in.(SELECT id FROM pos_outlet_items WHERE outlet_id = '${outletId}' AND sku = '${sku}')`)
+      .maybeSingle();
+
+    if (countRow?.id) {
+      let newSold = toNumber(countRow.sold_quantity);
+      let newAdditions = toNumber(countRow.additions);
+
+      if (quantityDelta < 0) {
+        newSold = Math.max(0, newSold + Math.abs(quantityDelta));
+      } else if (quantityDelta > 0) {
+        newAdditions = newAdditions + quantityDelta;
+      }
+
+      const newSysClosing = toNumber(countRow.opening_stock) + newAdditions - newSold;
+
+      await supabase
+        .from('pos_shift_stock_counts')
+        .update({
+          sold_quantity: newSold,
+          additions: newAdditions,
+          system_closing_stock: newSysClosing,
+          variance: countRow.physical_count === null || countRow.physical_count === undefined
+            ? 0
+            : toNumber(countRow.physical_count) - newSysClosing,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', countRow.id);
+    }
+  }
+
+  // ── Step 5: Log inventory_movement ─────────────────────────────────
+  if (itemId && locationId) {
+    const { error: movError } = await supabase
+      .from('inventory_movements')
+      .insert({
+        branch_id: branchId,
+        movement_type: movementType,
+        item_id: itemId,
+        source_location_id: quantityDelta < 0 ? locationId : null,
+        destination_location_id: quantityDelta >= 0 ? locationId : null,
+        quantity: Math.abs(quantityDelta),
+        reason: notes || movementType,
+        document_type: referenceId ? 'order' : 'manual',
+        document_number: referenceNumber || referenceId || null,
+        actor_id: performedBy || null
+      });
+
+    if (movError) {
+      logger.warn('Bar stock movement audit log failed (non-critical):', movError.message);
+    }
+  }
+
+  // ── Step 6: Log bar_stock_ledger (legacy audit) ────────────────────
+  if (drinkId) {
+    const { error: ledgerError } = await supabase
+      .from('bar_stock_ledger')
+      .insert({
+        branch_id: branchId,
+        drink_id: drinkId,
+        item_sku: sku,
+        transaction_type: movementType === 'sale' ? 'sale' :
+                          movementType === 'sale_reversal' ? 'sale_reversal' :
+                          movementType === 'restock' ? 'restock' :
+                          movementType === 'dispatch_receive' ? 'restock' :
+                          movementType === 'stock_take_adjustment' ? 'stock_take' :
+                          movementType === 'production' ? 'restock' :
+                          'adjustment',
+        quantity: Math.abs(quantityDelta),
+        opening_balance: previousStock,
+        closing_balance: newStock,
+        reference: referenceNumber || notes || movementType,
+        performed_by: performedBy || null
+      });
+
+    if (ledgerError) {
+      logger.warn('Bar stock ledger insert failed (non-critical):', ledgerError.message);
+    }
+  }
+
+  logger.info(`Bar stock ${movementType}: ${sku} branch ${branchId} ${previousStock} -> ${newStock} (delta ${quantityDelta})`);
+
+  return { previousStock, newStock, source };
+}
+
+/**
+ * Get unified bar stock for a branch (optionally filtered by outlet).
+ * Returns live data from inventory_balances when available,
+ * falling back to bar_stock, then pos_outlet_items.
+ */
+export async function getBarStock(
+  branchId: number,
+  outletId?: string | null
+): Promise<BarStockResult[]> {
+  const { data: location } = await supabase
+    .from('inventory_locations')
+    .select('id')
+    .eq('branch_id', branchId)
+    .eq('location_type', 'pos_outlet')
+    .maybeSingle();
+
+  const locationId = location?.id;
+
+  // Get all bar drinks for this branch (global + branch-specific)
+  const { data: drinks, error: drinksError } = await supabase
+    .from('bar_drinks')
+    .select(`
+      id, name, sku, unit, price, selling_price, cost_price, min_stock, is_available,
+      category:bar_drink_categories(name)
+    `)
+    .or(`branch_id.is.null,branch_id.eq.${branchId}`)
+    .eq('is_available', true)
+    .order('name');
+
+  if (drinksError) throw drinksError;
+
+  if (!drinks || drinks.length === 0) return [];
+
+  const drinkIds = drinks.map((d: any) => d.id);
+  const skus = drinks.map((d: any) => d.sku || `BAR-${d.id}`).filter(Boolean);
+
+  // Get inventory_balances keyed by SKU for lookup
+  let skuToBalance: Record<string, { current_quantity: number; unit_cost: number }> = {};
+  if (locationId && skus.length > 0) {
+    const { data: invItems } = await supabase
+      .from('inventory_items')
+      .select('id, sku')
+      .in('sku', skus);
+
+    const itemIds = (invItems || []).map((i: any) => i.id);
+    const skuByItemId = Object.fromEntries(
+      (invItems || []).map((i: any) => [i.id, i.sku])
+    );
+
+    if (itemIds.length > 0) {
+      const { data: balData } = await supabase
+        .from('inventory_balances')
+        .select('item_id, current_quantity, unit_cost')
+        .eq('location_id', locationId)
+        .in('item_id', itemIds);
+
+      skuToBalance = Object.fromEntries(
+        (balData || []).map((b: any) => [skuByItemId[b.item_id], b]).filter((e: any) => e[0])
+      );
+    }
+  }
+
+  // Get bar_stock fallback
+  const { data: barStockRows } = await supabase
+    .from('bar_stock')
+    .select('drink_id, current_stock, par_level, last_updated')
+    .eq('branch_id', branchId)
+    .in('drink_id', drinkIds);
+
+  const barStockByDrinkId = Object.fromEntries(
+    (barStockRows || []).map((s: any) => [s.drink_id, s])
+  );
+
+  // Get pos_outlet_items fallback
+  let posItemsBySku: Record<string, { current_stock: number; selling_price: number }> = {};
+  if (outletId) {
+    const { data: posItems } = await supabase
+      .from('pos_outlet_items')
+      .select('sku, current_stock, selling_price')
+      .eq('outlet_id', outletId)
+      .in('sku', skus);
+
+    posItemsBySku = Object.fromEntries(
+      (posItems || []).map((p: any) => [p.sku, p])
+    );
+  }
+
+  // Build unified result
+  return drinks.map((drink: any) => {
+    const sku = drink.sku || `BAR-${drink.id}`;
+    const bal = skuToBalance[sku];
+    const bar = barStockByDrinkId[drink.id];
+    const pos = posItemsBySku[sku];
+
+    // Determine current stock source
+    let currentStock = 0;
+    let stockSource: 'inventory_balances' | 'bar_stock' | 'none' = 'none';
+
+    if (bal) {
+      currentStock = toNumber(bal.current_quantity);
+      stockSource = 'inventory_balances';
+    } else if (bar) {
+      currentStock = toNumber(bar.current_stock);
+      stockSource = 'bar_stock';
+    } else if (pos) {
+      currentStock = toNumber(pos.current_stock);
+      stockSource = 'bar_stock'; // Treat pos_outlet as bar_stock source
+    }
+
+    const category = drink.category?.name || drink.category || 'bar';
+
+    return {
+      drinkId: drink.id,
+      sku,
+      name: drink.name,
+      category,
+      unit: drink.unit || 'bottle',
+      costPrice: toNumber(drink.cost_price),
+      sellingPrice: toNumber(drink.price ?? drink.selling_price),
+      currentStock,
+      minStock: toNumber(drink.min_stock),
+      source: stockSource
+    };
+  });
+}
+
+/**
+ * Get complete bar stock ledger (audit trail).
+ */
+export async function getBarStockLedger(
+  branchId: number,
+  drinkId?: string | null,
+  limit = 100
+): Promise<any[]> {
+  let query = supabase
+    .from('bar_stock_ledger')
+    .select('*')
+    .eq('branch_id', branchId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (drinkId) query = query.eq('drink_id', drinkId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}

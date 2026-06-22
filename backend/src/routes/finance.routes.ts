@@ -58,6 +58,7 @@ import {
 import {
   getStaffPosAccountingSummary,
   getStaffPosAccountingOrders,
+  getPosDeepDrillOrders,
 } from "../controllers/branch-pos-staff-accounting.controller";
 import { DirectorController } from "../controllers/director.controller";
 import { DirectorEnhancedController } from "../controllers/director-enhanced.controller";
@@ -1067,6 +1068,11 @@ router.get(
   "/staff-pos-accounting/:waiterId/orders",
   authorize(STAFF_POS_ACCOUNTING_ROLES),
   getStaffPosAccountingOrders,
+);
+router.get(
+  "/staff-pos-accounting/deep-drill",
+  authorize(STAFF_POS_ACCOUNTING_ROLES),
+  getPosDeepDrillOrders,
 );
 
 export default router;

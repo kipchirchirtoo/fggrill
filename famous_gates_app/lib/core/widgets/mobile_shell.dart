@@ -77,7 +77,6 @@ class _MobileShellState extends ConsumerState<MobileShell> {
         ),
         actions: [
           ...?widget.actions,
-          const AppUpdateButton(iconColor: Colors.white),
           const AppNotificationButton(iconColor: Colors.white),
           const SizedBox(width: 4),
         ],

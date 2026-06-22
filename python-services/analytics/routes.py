@@ -124,13 +124,37 @@ def export_branch_sales_pdf():
             filters=filters
         )
         branch_name = branch_sales_analytics.get_branch_name(branch_id)
+
+        # Best-effort: the PDF should still generate even if the financials
+        # or staff-audit side queries fail for some reason.
+        extra = None
+        try:
+            expense_breakdown = branch_sales_analytics.get_expense_breakdown(branch_id, start_date, end_date)
+            ar_ap = branch_sales_analytics.get_receivables_payables(branch_id)
+            staff_audit = branch_sales_analytics.get_staff_audit_summary(branch_id, start_date, end_date)
+            revenue_by_source = sales_data.get('revenue_by_source', {})
+            revenue_total = sum(revenue_by_source.values())
+            extra = {
+                'revenue': round(revenue_total, 2),
+                'expenses': expense_breakdown['total'],
+                'net_profit': round(revenue_total - expense_breakdown['total'], 2),
+                'revenue_by_source': revenue_by_source,
+                'expenses_by_category': expense_breakdown['by_category'],
+                'receivables': ar_ap['receivables'],
+                'payables': ar_ap['payables'],
+                'staff_audit': staff_audit,
+            }
+        except Exception:
+            extra = None
+
         file_path = asyncio.run(pdf_generator.generate_branch_sales_report(
             sales_data=sales_data,
             branch_name=branch_name,
             date_range={
                 "start": start_date,
                 "end": end_date
-            }
+            },
+            extra=extra
         ))
 
         return send_file(

@@ -5,6 +5,7 @@ import { emailTemplates } from '../utils/emailTemplates';
 import { enterpriseEmailTemplates } from '../utils/emailTemplates.enterprise';
 import { landingEmailTemplates } from '../utils/emailTemplates.landing';
 import { barcodeGeneratorService } from './barcodeGenerator.service';
+import { PYTHON_SERVICE_URL } from '../config/pythonService';
 
 interface EmailOptions {
   to: string;
@@ -15,9 +16,15 @@ interface EmailOptions {
 }
 
 class EmailService {
-  private transporter: nodemailer.Transporter;
+  private transporter!: nodemailer.Transporter;
+  private etherealAccount?: { user: string; pass: string };
+  private usingEthereal = false;
 
   constructor() {
+    this.initTransporter();
+  }
+
+  private initTransporter() {
     const isGmail = process.env.EMAIL_SERVICE === 'gmail';
 
     if (isGmail) {
@@ -41,9 +48,29 @@ class EmailService {
     }
   }
 
-  async sendEmail(options: EmailOptions): Promise<void> {
+  async setupEtherealFallback(): Promise<void> {
     try {
-      // Ensure FROM email is properly set and verified in Brevo
+      const testAccount = await nodemailer.createTestAccount();
+      this.etherealAccount = { user: testAccount.user, pass: testAccount.pass };
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      this.usingEthereal = true;
+      logger.info(`Ethereal Email fallback active. Preview inbox: https://ethereal.email/login`);
+      logger.info(`  User: ${testAccount.user} | Pass: ${testAccount.pass}`);
+    } catch (err: any) {
+      logger.error('Failed to create Ethereal test account:', err.message);
+    }
+  }
+
+  async sendEmail(options: EmailOptions): Promise<{ previewUrl?: string }> {
+    try {
       const fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgateshotels.com';
       const fromName = process.env.SMTP_FROM_NAME || 'FamousGate Hotels';
 
@@ -57,16 +84,39 @@ class EmailService {
       };
 
       logger.info(`Sending email from ${fromName} <${fromEmail}> to ${options.to}`);
-      await this.transporter.sendMail(mailOptions);
+      const info = await this.transporter.sendMail(mailOptions);
       logger.info(`Email sent successfully to ${options.to}`);
+
+      if (this.usingEthereal && info.messageId) {
+        const previewUrl = nodemailer.getTestMessageUrl(info);
+        logger.info(`Ethereal preview URL: ${previewUrl}`);
+        return { previewUrl: previewUrl || undefined };
+      }
+      return {};
     } catch (error: any) {
-      logger.error('Error sending email:', error);
-      logger.error('Email error details:', {
-        code: error.code,
-        command: error.command,
-        response: error.response,
-        responseCode: error.responseCode
-      });
+      logger.error('Error sending email:', error.message);
+      if (!this.usingEthereal) {
+        logger.info('SMTP failed. Trying Ethereal Email fallback...');
+        await this.setupEtherealFallback();
+        try {
+          const fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgateshotels.com';
+          const fromName = process.env.SMTP_FROM_NAME || 'FamousGate Hotels';
+          const info = await this.transporter.sendMail({
+            from: `${fromName} <${fromEmail}>`,
+            to: options.to,
+            subject: options.subject,
+            html: options.html,
+            text: options.text || this.stripHtml(options.html),
+            attachments: options.attachments
+          });
+          logger.info(`Email sent via Ethereal fallback to ${options.to}`);
+          const previewUrl = nodemailer.getTestMessageUrl(info);
+          logger.info(`Ethereal preview URL: ${previewUrl}`);
+          return { previewUrl: previewUrl || undefined };
+        } catch (ethErr: any) {
+          logger.error('Ethereal fallback also failed:', ethErr.message);
+        }
+      }
       throw new Error(`Email could not be sent: ${error.message}`);
     }
   }
@@ -137,6 +187,78 @@ class EmailService {
         html: enterpriseEmailTemplates.bookingConfirmation(bookingDetails)
       });
     }
+  }
+
+  async sendBookingCancellation(
+    email: string,
+    bookingDetails: any
+  ): Promise<void> {
+    await this.sendEmail({
+      to: email,
+      subject: 'Booking Cancellation - Famous Gates Hotels',
+      html: emailTemplates.bookingCancellation(bookingDetails)
+    });
+    logger.info(`Booking cancellation email sent to ${email}`);
+  }
+
+  async sendPaymentReceipt(
+    email: string,
+    paymentDetails: any
+  ): Promise<void> {
+    await this.sendEmail({
+      to: email,
+      subject: 'Payment Receipt - Famous Gates Hotels',
+      html: emailTemplates.paymentReceipt(paymentDetails)
+    });
+    logger.info(`Payment receipt email sent to ${email}`);
+  }
+
+  async sendInvoice(
+    email: string,
+    invoiceDetails: any
+  ): Promise<void> {
+    await this.sendEmail({
+      to: email,
+      subject: `Invoice ${invoiceDetails.invoice_number || invoiceDetails.id} - Famous Gates Hotels`,
+      html: emailTemplates.invoice(invoiceDetails)
+    });
+    logger.info(`Invoice email sent to ${email}`);
+  }
+
+  async sendCheckInReminder(
+    email: string,
+    bookingDetails: any
+  ): Promise<void> {
+    await this.sendEmail({
+      to: email,
+      subject: 'Check-in Reminder - Famous Gates Hotels',
+      html: emailTemplates.checkInReminder(bookingDetails)
+    });
+    logger.info(`Check-in reminder sent to ${email}`);
+  }
+
+  async sendCheckOutReminder(
+    email: string,
+    bookingDetails: any
+  ): Promise<void> {
+    await this.sendEmail({
+      to: email,
+      subject: 'Check-out Reminder - Famous Gates Hotels',
+      html: emailTemplates.checkOutReminder(bookingDetails)
+    });
+    logger.info(`Check-out reminder sent to ${email}`);
+  }
+
+  async sendCheckInWelcome(
+    email: string,
+    bookingDetails: any
+  ): Promise<void> {
+    await this.sendEmail({
+      to: email,
+      subject: 'Welcome to Famous Gates Hotels!',
+      html: emailTemplates.checkInWelcome(bookingDetails)
+    });
+    logger.info(`Check-in welcome email sent to ${email}`);
   }
 
   async sendMaintenanceAlert(
@@ -234,9 +356,6 @@ class EmailService {
     try {
       const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
 
-      // PDF generation is not available yet - send email without PDF attachment
-      logger.info(`Sending booking confirmation email to ${email} (PDF attachment not available)`);
-
       const html = landingEmailTemplates.bookingConfirmation({
         guestName: `${details.firstName} ${details.lastName}`,
         confirmationNumber: details.confirmationNumber,
@@ -251,10 +370,60 @@ class EmailService {
         hotelEmail: 'info@famousgatehotels.com'
       });
 
+      // Fetch the branded PDF invoice from the Python service (same branded,
+      // thermal-style generator used for the cashier receipt / checkout bill)
+      let attachments: any[] | undefined;
+      try {
+        logger.info(`📄 Fetching branded PDF invoice from Python service...`);
+        const nights = Math.max(1, Math.ceil(
+          (new Date(details.checkOutDate).getTime() - new Date(details.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
+        ));
+        const depositAmount = details.depositAmount || 0;
+        const pdfResponse = await axios.post(
+          `${PYTHON_SERVICE_URL}/api/reports/generate/booking-confirmation-invoice`,
+          {
+            confirmation_number: details.confirmationNumber,
+            guest_name: `${details.firstName} ${details.lastName}`,
+            guest_email: email,
+            guest_phone: details.phone || '',
+            room_number: details.roomNumber || '',
+            room_type: details.roomType,
+            check_in: details.checkInDate,
+            check_out: details.checkOutDate,
+            nights,
+            guests: details.guests,
+            total_amount: details.totalAmount,
+            deposit_amount: depositAmount,
+            balance_due: details.totalAmount - depositAmount,
+            payment_method: details.paymentMethod || '',
+            branch_name: details.branchName
+          },
+          { responseType: 'arraybuffer' }
+        );
+
+        attachments = [{
+          filename: `invoice_${details.confirmationNumber}.pdf`,
+          content: Buffer.from(pdfResponse.data),
+          contentType: 'application/pdf'
+        }];
+        logger.info(`✅ PDF invoice generated successfully`);
+      } catch (pdfError: any) {
+        logger.error('⚠️ Failed to generate PDF invoice:', pdfError.message);
+        if (pdfError.response) {
+          const rawBody = Buffer.isBuffer(pdfError.response.data)
+            ? pdfError.response.data.toString('utf-8')
+            : pdfError.response.data;
+          logger.error('Python service response:', rawBody);
+          logger.error('Python service status:', pdfError.response.status);
+        }
+        logger.warn('Continuing to send email without PDF attachment');
+      }
+
       await this.sendEmail({
         to: email,
         subject: `Booking Confirmation - ${details.branchName || 'Famous Gate Hotel'}`,
-        html
+        html,
+        attachments
       });
 
       logger.info(`Booking confirmation email sent successfully to ${email}`);
@@ -349,7 +518,18 @@ class EmailService {
       logger.info('SMTP connection verified successfully');
       return true;
     } catch (error: any) {
-      logger.error('SMTP connection failed:', error);
+      logger.error('SMTP connection failed:', error.message);
+      if (!this.usingEthereal) {
+        logger.info('Switching to Ethereal Email fallback for development...');
+        await this.setupEtherealFallback();
+        try {
+          await this.transporter.verify();
+          logger.info('Ethereal Email fallback verified');
+          return true;
+        } catch (ethErr: any) {
+          logger.error('Ethereal fallback also failed:', ethErr.message);
+        }
+      }
       return false;
     }
   }

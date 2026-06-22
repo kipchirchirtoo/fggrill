@@ -1,11 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { brevoEmailService } from '../services/brevo-email.service';
+import { emailService } from '../services/email.service';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 
 /**
  * Controller for handling email requests specifically from the landing page
- * Uses Brevo API for direct email sending
+ * Uses Gmail SMTP for direct email sending
  */
 export const sendLandingConfirmation = async (
     req: Request,
@@ -18,12 +18,12 @@ export const sendLandingConfirmation = async (
         logger.info(`Guest: ${details.firstName} ${details.lastName}`);
         logger.info(`Email: ${details.email}`);
         logger.info(`Confirmation: ${details.confirmationNumber}`);
-        
-        await brevoEmailService.sendLandingBookingConfirmation(details.email, details);
+
+        await emailService.sendLandingBookingConfirmation(details.email, details);
 
         res.status(200).json({
             success: true,
-            message: 'Booking confirmation email sent successfully via Brevo API'
+            message: 'Booking confirmation email sent successfully via SMTP'
         });
     } catch (error) {
         logger.error('❌ Failed to send landing confirmation email:', error);

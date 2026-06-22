@@ -18,6 +18,7 @@ export interface IFolio {
   folioNumber: string;
   reservationId: string;
   guestId: string;
+  branchId?: number;
   status: 'open' | 'closed' | 'posted';
 
   // Billing
@@ -43,6 +44,7 @@ export class Folio implements IFolio {
   folioNumber: string;
   reservationId: string;
   guestId: string;
+  branchId?: number;
   status: 'open' | 'closed' | 'posted';
 
   roomCharges: number;
@@ -65,6 +67,7 @@ export class Folio implements IFolio {
     this.folioNumber = data.folioNumber || this.generateFolioNumber();
     this.reservationId = data.reservationId || '';
     this.guestId = data.guestId || '';
+    this.branchId = data.branchId;
     this.status = data.status || 'open';
 
     this.roomCharges = data.roomCharges || 0;
@@ -96,6 +99,7 @@ export class Folio implements IFolio {
           folio_number: this.folioNumber,
           reservation_id: this.reservationId,
           guest_id: this.guestId,
+          branch_id: this.branchId,
           status: this.status,
           room_charges: this.roomCharges,
           food_charges: this.foodCharges,
@@ -204,6 +208,7 @@ export class Folio implements IFolio {
       folioNumber: data.folio_number,
       reservationId: data.reservation_id,
       guestId: data.guest_id,
+      branchId: data.branch_id,
       status: data.status,
       roomCharges: data.room_charges,
       foodCharges: data.food_charges,

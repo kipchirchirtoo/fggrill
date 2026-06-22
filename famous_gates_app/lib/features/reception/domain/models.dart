@@ -5,6 +5,7 @@ class Booking {
     this.roomId,
     this.guestName,
     this.guestPhone,
+    this.guestEmail,
     this.roomNumber,
     this.roomType,
     required this.checkIn,
@@ -23,6 +24,7 @@ class Booking {
   final String? roomId;
   final String? guestName;
   final String? guestPhone;
+  final String? guestEmail;
   final String? roomNumber;
   final String? roomType;
   final DateTime checkIn;
@@ -51,6 +53,8 @@ class Booking {
           _name(guest)),
       guestPhone:
           _string(json['guest_phone'] ?? json['phone'] ?? guest?['phone']),
+      guestEmail:
+          _string(json['guest_email'] ?? json['email'] ?? guest?['email']),
       roomNumber: _string(json['room_number'] ??
           json['roomNumber'] ??
           room?['room_number'] ??

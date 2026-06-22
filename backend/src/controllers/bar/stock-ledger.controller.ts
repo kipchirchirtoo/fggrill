@@ -1,10 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
+import { recordBarStockMovement } from '../../services/unified-bar-stock.service';
+import { logger } from '../../utils/logger';
 
 // ==========================================
 // STOCK LEDGER
 // Storekeeper-managed bar stock balances (bar_stock) plus the
 // append-only audit trail of every movement (bar_stock_ledger).
+// All writes now flow through unified-bar-stock.service.ts so that
+// inventory_balances, bar_stock, pos_outlet_items and pos_shift_stock_counts
+// stay in sync.
 // ==========================================
 
 const branchIdFor = (req: Request): number | null => {
@@ -16,10 +21,24 @@ const branchIdFor = (req: Request): number | null => {
 export const getStockLedger = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const branchId = branchIdFor(req);
+    const search = req.query.search as string | undefined;
 
     let query = supabase
       .from('bar_stock')
-      .select('*')
+      .select(`
+        *,
+        bar_drinks (
+          name,
+          price,
+          selling_price,
+          cost_price,
+          unit,
+          category_id,
+          bar_drink_categories (
+            name
+          )
+        )
+      `)
       .order('item_name', { ascending: true });
 
     if (branchId !== null) query = query.eq('branch_id', branchId);
@@ -27,7 +46,38 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
     const { data, error } = await query;
     if (error) throw error;
 
-    res.status(200).json({ success: true, data: data || [] });
+    let rows = data || [];
+
+    // Server-side search fallback (client also filters, but this reduces payload)
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter((row) => {
+        const itemName = row.item_name || '';
+        const drinkName = row.bar_drinks?.name || '';
+        const categoryName = row.bar_drinks?.bar_drink_categories?.name || '';
+        return itemName.toLowerCase().includes(q) ||
+               drinkName.toLowerCase().includes(q) ||
+               categoryName.toLowerCase().includes(q);
+      });
+    }
+
+    const mapped = rows.map((row) => {
+      const drink = row.bar_drinks;
+      const category = drink?.bar_drink_categories;
+      return {
+        id: row.id,
+        name: drink?.name || row.item_name || '',
+        category: category?.name || '',
+        unit: row.unit || drink?.unit || '—',
+        price: drink?.price ?? drink?.selling_price ?? 0,
+        cost_price: drink?.cost_price ?? row.cost_per_unit ?? 0,
+        quantity: row.current_stock,
+        min_stock: row.par_level,
+        last_restocked: row.last_updated
+      };
+    });
+
+    res.status(200).json({ success: true, data: mapped });
   } catch (error) {
     next(error);
   }
@@ -39,6 +89,7 @@ export const addStock = async (req: Request, res: Response, next: NextFunction):
     const branchId = branchIdFor(req);
     const quantity = Number(req.body?.quantity);
     const reference = req.body?.reference ?? null;
+    const costPerUnit = req.body?.cost_per_unit ?? req.body?.costPrice ?? null;
 
     if (branchId === null) {
       res.status(400).json({ success: false, message: 'branch_id is required' });
@@ -49,68 +100,45 @@ export const addStock = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
-    const { data: existing, error: existingError } = await supabase
+    // Flow through unified service so inventory_balances, bar_stock,
+    // pos_outlet_items and pos_shift_stock_counts all stay in sync.
+    const result = await recordBarStockMovement({
+      branchId,
+      drinkId,
+      quantityDelta: quantity,
+      movementType: 'restock',
+      referenceNumber: reference || undefined,
+      performedBy: req.user?.id ?? null,
+      costPerUnit: costPerUnit ?? undefined,
+      notes: reference || 'Bar restock'
+    });
+
+    // Fetch the updated bar_stock row for the legacy response contract
+    const { data: stockRow } = await supabase
       .from('bar_stock')
       .select('*')
       .eq('branch_id', branchId)
       .eq('drink_id', drinkId)
       .maybeSingle();
-    if (existingError) throw existingError;
 
-    const openingBalance = Number(existing?.current_stock ?? 0);
-    const closingBalance = openingBalance + quantity;
-
-    let stockRow = existing;
-    if (existing) {
-      const { data, error } = await supabase
-        .from('bar_stock')
-        .update({ current_stock: closingBalance, last_updated: new Date().toISOString() })
-        .eq('id', existing.id)
-        .select('*')
-        .single();
-      if (error) throw error;
-      stockRow = data;
-    } else {
-      const { data: drink, error: drinkError } = await supabase
-        .from('bar_drinks')
-        .select('id, name, unit, branch_id')
-        .eq('id', drinkId)
-        .single();
-      if (drinkError || !drink) throw drinkError || new Error('Drink not found');
-
-      const { data, error } = await supabase
-        .from('bar_stock')
-        .insert([{
-          branch_id: branchId,
-          drink_id: drinkId,
-          item_sku: drinkId,
-          item_name: drink.name,
-          current_stock: closingBalance,
-          unit: drink.unit || 'bottle'
-        }])
-        .select('*')
-        .single();
-      if (error) throw error;
-      stockRow = data;
-    }
-
-    const { data: ledgerRow, error: ledgerError } = await supabase
+    // Fetch the auto-inserted ledger row for the legacy response contract
+    const { data: ledgerRows } = await supabase
       .from('bar_stock_ledger')
-      .insert([{
-        branch_id: branchId,
-        drink_id: drinkId,
-        transaction_type: 'restock',
-        quantity,
-        opening_balance: openingBalance,
-        closing_balance: closingBalance,
-        reference,
-        performed_by: req.user?.id ?? null
-      }])
       .select('*')
-      .single();
-    if (ledgerError) throw ledgerError;
+      .eq('branch_id', branchId)
+      .eq('drink_id', drinkId)
+      .eq('transaction_type', 'restock')
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-    res.status(200).json({ success: true, data: { stock: stockRow, ledger: ledgerRow } });
+    res.status(200).json({
+      success: true,
+      data: {
+        stock: stockRow || { drink_id: drinkId, current_stock: result.newStock },
+        ledger: ledgerRows?.[0] || null,
+        unified: result
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -136,68 +164,39 @@ export const submitStockTake = async (req: Request, res: Response, next: NextFun
       const countedStock = Number(entry.counted_stock ?? entry.quantity);
       if (!drinkId || !Number.isFinite(countedStock)) continue;
 
-      const { data: existing, error: existingError } = await supabase
+      // Get current stock before adjustment
+      const { data: existing } = await supabase
+        .from('bar_stock')
+        .select('current_stock')
+        .eq('branch_id', branchId)
+        .eq('drink_id', drinkId)
+        .maybeSingle();
+
+      const openingBalance = Number(existing?.current_stock ?? 0);
+      const variance = countedStock - openingBalance;
+
+      // Flow through unified service
+      if (variance !== 0) {
+        await recordBarStockMovement({
+          branchId,
+          drinkId,
+          quantityDelta: variance,
+          movementType: 'stock_take_adjustment',
+          referenceNumber: req.body?.reference ?? 'Stock take',
+          performedBy: req.user?.id ?? null,
+          notes: req.body?.notes ?? 'Bar stock take adjustment'
+        });
+      }
+
+      // Fetch the updated row for legacy response compatibility
+      const { data: stockRow } = await supabase
         .from('bar_stock')
         .select('*')
         .eq('branch_id', branchId)
         .eq('drink_id', drinkId)
         .maybeSingle();
-      if (existingError) throw existingError;
 
-      const openingBalance = Number(existing?.current_stock ?? 0);
-      const variance = countedStock - openingBalance;
-
-      let stockRow = existing;
-      if (existing) {
-        const { data, error } = await supabase
-          .from('bar_stock')
-          .update({ current_stock: countedStock, last_updated: new Date().toISOString() })
-          .eq('id', existing.id)
-          .select('*')
-          .single();
-        if (error) throw error;
-        stockRow = data;
-      } else {
-        const { data: drink, error: drinkError } = await supabase
-          .from('bar_drinks')
-          .select('id, name, unit')
-          .eq('id', drinkId)
-          .single();
-        if (drinkError || !drink) continue;
-
-        const { data, error } = await supabase
-          .from('bar_stock')
-          .insert([{
-            branch_id: branchId,
-            drink_id: drinkId,
-            item_sku: drinkId,
-            item_name: drink.name,
-            current_stock: countedStock,
-            unit: drink.unit || 'bottle'
-          }])
-          .select('*')
-          .single();
-        if (error) throw error;
-        stockRow = data;
-      }
-
-      if (variance !== 0) {
-        const { error: ledgerError } = await supabase
-          .from('bar_stock_ledger')
-          .insert([{
-            branch_id: branchId,
-            drink_id: drinkId,
-            transaction_type: 'stock_take',
-            quantity: variance,
-            opening_balance: openingBalance,
-            closing_balance: countedStock,
-            reference: req.body?.reference ?? 'Stock take',
-            performed_by: req.user?.id ?? null
-          }]);
-        if (ledgerError) throw ledgerError;
-      }
-
-      results.push(stockRow);
+      results.push(stockRow || { drink_id: drinkId, current_stock: countedStock });
     }
 
     res.status(200).json({ success: true, data: results });

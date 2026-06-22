@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { supabase } from '../config/database';
 import { bookingService, BookingRequest } from '../services/booking.service';
+import { emailService } from '../services/email.service';
 import { isGlobalRole } from '../utils/branchIsolation';
 
 // @desc    Get all bookings
@@ -209,7 +210,7 @@ export const createBooking = async (
       paymentMethod: req.body.paymentMethod || 'card',
       depositAmount: req.body.depositAmount || req.body.total_amount,
       bookingSource: req.body.bookingSource || 'WEBSITE',
-      branchId: req.user?.branch_id || req.body.branchId || req.body.branch_id
+      branchId: req.user?.branch_id || parseInt(req.body.branchId || req.body.branch_id) || undefined
     };
 
     const booking = await bookingService.createBooking(bookingRequest);
@@ -225,6 +226,37 @@ export const createBooking = async (
     });
 
     logger.info(`New booking created: ${booking.confirmationNumber} by ${req.body.guestInfo?.email || 'system'}`);
+
+    // Auto-send booking confirmation email (fire-and-forget)
+    const guestEmail = req.body.guestInfo?.email;
+    if (guestEmail) {
+      try {
+        const bookingDetails = {
+          id: booking.id,
+          confirmation_number: booking.confirmationNumber,
+          guest_name: `${req.body.guestInfo?.firstName || ''} ${req.body.guestInfo?.lastName || ''}`.trim(),
+          check_in: booking.checkInDate || req.body.checkInDate,
+          check_out: booking.checkOutDate || req.body.checkOutDate,
+          room_number: req.body.roomNumber || req.body.room_number || booking.roomId || 'TBA',
+          room_type: req.body.roomType || req.body.room_type || booking.roomTypeId || 'Standard',
+          adults: req.body.adults || 1,
+          children: req.body.children || 0,
+          total_amount: booking.totalAmount,
+          room_rate: booking.roomRate,
+          subtotal: booking.subtotal,
+          tax_amount: booking.taxAmount,
+          service_charge: booking.serviceCharge,
+          deposit_paid: booking.depositPaid,
+          payment_method: req.body.paymentMethod,
+          special_requests: req.body.specialRequests
+        };
+        emailService.sendBookingConfirmation(guestEmail, bookingDetails)
+          .then(() => logger.info(`Auto-sent booking confirmation to ${guestEmail}`))
+          .catch((err: any) => logger.error('Auto-send booking confirmation failed:', err.message));
+      } catch (emailErr: any) {
+        logger.error('Auto-send booking confirmation error:', emailErr.message);
+      }
+    }
   } catch (error) {
     next(error);
   }
@@ -332,6 +364,29 @@ export const checkInBooking = async (
     }
 
     logger.info(`Successfully checked in booking ${id}`);
+
+    // Auto-send check-in welcome email (fire-and-forget)
+    try {
+      const { data: bookingWithGuest } = await supabase
+        .from('reservations')
+        .select('*, guest:guests!guest_id(email, first_name, last_name), room:rooms(room_number, room_type)')
+        .eq('id', id)
+        .single();
+      const guest = bookingWithGuest?.guest;
+      if (guest?.email) {
+        const room = Array.isArray(bookingWithGuest?.room) ? bookingWithGuest.room[0] : bookingWithGuest?.room;
+        emailService.sendCheckInWelcome(guest.email, {
+          guest_name: `${guest.first_name || ''} ${guest.last_name || ''}`.trim(),
+          room_number: room?.room_number || '-',
+          room_type: room?.room_type || 'Standard'
+        })
+          .then(() => logger.info(`Auto-sent check-in welcome to ${guest.email}`))
+          .catch((err: any) => logger.error('Auto-send check-in welcome failed:', err.message));
+      }
+    } catch (emailErr: any) {
+      logger.error('Auto-send check-in welcome error:', emailErr.message);
+    }
+
     res.status(200).json({ success: true, data: updatedBooking });
   } catch (error: any) {
     logger.error(`Check-in error for booking ${req.params.id}:`, error);
@@ -414,6 +469,42 @@ export const checkOutBooking = async (
     }
 
     res.status(200).json({ success: true, data: updatedBooking });
+
+    // Auto-send checkout invoice email (fire-and-forget)
+    try {
+      const { data: bookingWithGuest } = await supabase
+        .from('reservations')
+        .select('*, guest:guests!guest_id(email, first_name, last_name), room:rooms(room_number, room_type)')
+        .eq('id', id)
+        .single();
+      const guest = bookingWithGuest?.guest;
+      if (guest?.email) {
+        const room = Array.isArray(bookingWithGuest?.room) ? bookingWithGuest.room[0] : bookingWithGuest?.room;
+        const nights = booking.check_in_date && booking.check_out_date
+          ? Math.ceil((new Date(booking.check_out_date).getTime() - new Date(booking.check_in_date).getTime()) / (1000 * 60 * 60 * 24))
+          : 1;
+        emailService.sendInvoice(guest.email, {
+          guest_name: `${guest.first_name || ''} ${guest.last_name || ''}`.trim(),
+          confirmation_number: booking.confirmation_number || id,
+          room_number: room?.room_number || '-',
+          room_type: room?.room_type || 'Standard',
+          nights,
+          invoice_number: `INV-${booking.confirmation_number || id}`,
+          invoice_date: new Date().toISOString(),
+          room_charges: (booking.room_rate || 0) * nights,
+          subtotal: booking.subtotal || 0,
+          tax_amount: booking.tax_amount || 0,
+          service_charge: booking.service_charge || 0,
+          total_amount: booking.total_amount || 0,
+          amount_paid: booking.deposit_amount || 0,
+          status: (booking.total_amount || 0) <= (booking.deposit_amount || 0) ? 'paid' : 'unpaid'
+        })
+          .then(() => logger.info(`Auto-sent checkout invoice to ${guest.email}`))
+          .catch((err: any) => logger.error('Auto-send checkout invoice failed:', err.message));
+      }
+    } catch (emailErr: any) {
+      logger.error('Auto-send checkout invoice error:', emailErr.message);
+    }
   } catch (error) {
     next(error);
   }
@@ -482,6 +573,32 @@ export const cancelBooking = async (
     }
 
     res.status(200).json({ success: true, data: updatedBooking });
+
+    // Auto-send cancellation email (fire-and-forget)
+    try {
+      const { data: bookingWithGuest } = await supabase
+        .from('reservations')
+        .select('*, guest:guests!guest_id(email, first_name, last_name), room:rooms(room_number, room_type)')
+        .eq('id', id)
+        .single();
+      const guest = bookingWithGuest?.guest;
+      if (guest?.email) {
+        const room = Array.isArray(bookingWithGuest?.room) ? bookingWithGuest.room[0] : bookingWithGuest?.room;
+        emailService.sendBookingCancellation(guest.email, {
+          guest_name: `${guest.first_name || ''} ${guest.last_name || ''}`.trim(),
+          confirmation_number: booking.confirmation_number || id,
+          check_in: booking.check_in_date,
+          check_out: booking.check_out_date,
+          room_type: room?.room_type || 'Standard Room',
+          cancellation_reason: reason || 'User cancelled',
+          cancelled_at: new Date().toISOString()
+        })
+          .then(() => logger.info(`Auto-sent cancellation email to ${guest.email}`))
+          .catch((err: any) => logger.error('Auto-send cancellation email failed:', err.message));
+      }
+    } catch (emailErr: any) {
+      logger.error('Auto-send cancellation email error:', emailErr.message);
+    }
   } catch (error) {
     next(error);
   }
@@ -584,7 +701,7 @@ export const checkAvailability = async (
     }
 
     const isGlobal = isGlobalRole(req.user?.role);
-    const effectiveBranchId = isGlobal && branchId ? branchId as string : req.user?.branch_id?.toString();
+    const effectiveBranchId = isGlobal && branchId ? Number(branchId) : req.user?.branch_id;
 
     const availability = await bookingService.checkAvailability(
       checkInDate as string,

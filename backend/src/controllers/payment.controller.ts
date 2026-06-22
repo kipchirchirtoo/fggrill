@@ -22,7 +22,7 @@ async function sendBookingConfirmationEmail(bookingId: string): Promise<void> {
       .select(`
         *,
         guest:guests(*),
-        room:rooms(room_number, room_type:room_types(name))
+        room:rooms(room_number, room_type:room_types!rooms_room_type_id_fkey(name))
       `)
       .eq('id', bookingId)
       .single();

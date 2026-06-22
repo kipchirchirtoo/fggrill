@@ -9,6 +9,7 @@ import {
   postPosInventorySale
 } from '../services/enterprise-inventory.service';
 import { closeOutletVariance } from '../services/inventory-operations.service';
+import { recordBarStockMovement } from '../services/unified-bar-stock.service';
 import {
   assignedOutletIds,
   canAccessPosOutlet,
@@ -642,6 +643,14 @@ const updateStockForItems = async (
   items: Array<Record<string, any>>,
   direction: 1 | -1
 ): Promise<void> => {
+  // Fetch branch_id once for unified bar stock updates
+  const { data: shift } = await supabase
+    .from('pos_outlet_shifts')
+    .select('branch_id')
+    .eq('id', shiftId)
+    .maybeSingle();
+  const branchId = shift?.branch_id;
+
   for (const item of items) {
     const outletItemId = String(item.outlet_item_id ?? item.product_id ?? item.id ?? '');
     const quantity = numberValue(item.qty ?? item.quantity);
@@ -678,7 +687,7 @@ const updateStockForItems = async (
 
     const { data: outletItem, error: itemError } = await supabase
       .from('pos_outlet_items')
-      .select('current_stock, outlet_id, track_stock, stock_pool_item_id, pool_fraction')
+      .select('current_stock, outlet_id, track_stock, stock_pool_item_id, pool_fraction, source_table, source_item_id, sku')
       .eq('id', outletItemId)
       .maybeSingle();
 
@@ -717,6 +726,26 @@ const updateStockForItems = async (
       })
       .eq('id', outletItemId)
       .eq('outlet_id', outletItem.outlet_id || outletId);
+
+    // ── Unified bar stock sync ──────────────────────────────────────
+    // Only bar drinks flow into the unified ledger.
+    if (branchId && outletItem.source_table === 'bar_drinks' && outletItem.source_item_id) {
+      try {
+        await recordBarStockMovement({
+          branchId,
+          outletId: outletItem.outlet_id || outletId,
+          drinkId: outletItem.source_item_id,
+          sku: outletItem.sku || undefined,
+          quantityDelta: direction * quantity * -1, // POS sale = negative delta on stock
+          movementType: direction === 1 ? 'sale' : 'sale_reversal',
+          referenceId: shiftId,
+          shiftId,
+          notes: direction === 1 ? 'POS bar sale' : 'POS bar sale reversal'
+        });
+      } catch (syncErr: any) {
+        logger.warn('Unified bar stock sync failed (non-critical):', syncErr.message);
+      }
+    }
   }
 };
 

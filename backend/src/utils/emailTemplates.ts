@@ -372,6 +372,480 @@ export const emailTemplates = {
   `,
 
   // Inventory alert template
+  // Booking cancellation template
+  bookingCancellation: (bookingDetails: any) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Booking Cancellation - Famous Gates Hotels</title>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #e74c3c; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { text-align: center; padding: 20px; color: #666; }
+        .booking-details { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .highlight { background: #F2F2F7; font-weight: bold; }
+        .cancelled { color: #e74c3c; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Booking Cancelled</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${bookingDetails.guest_name || 'Guest'},</p>
+          <p>Your reservation at Famous Gates Hotels has been cancelled as requested.</p>
+          
+          <div class="booking-details">
+            <h3 class="cancelled">Cancellation Details</h3>
+            <table>
+              <tr>
+                <td class="highlight">Booking Reference:</td>
+                <td>${bookingDetails.confirmation_number || bookingDetails.id}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Check-in Date:</td>
+                <td>${new Date(bookingDetails.check_in).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Check-out Date:</td>
+                <td>${new Date(bookingDetails.check_out).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Room Type:</td>
+                <td>${bookingDetails.room_type || 'Standard Room'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Cancellation Reason:</td>
+                <td>${bookingDetails.cancellation_reason || 'Guest request'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Cancelled At:</td>
+                <td>${new Date(bookingDetails.cancelled_at || Date.now()).toLocaleString()}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="booking-details">
+            <h3>Refund Information</h3>
+            <p>If a refund is applicable per our cancellation policy, it will be processed to your original payment method within 5-7 business days.</p>
+          </div>
+
+          <p>We hope to welcome you again in the future. If you have any questions, please contact us.</p>
+        </div>
+        <div class="footer">
+          <p>Famous Gates Hotels<br>Phone: 0706 782 828<br>Email: famous-gates-hotelsbmt@gmail.com</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `,
+
+  // Payment receipt template
+  paymentReceipt: (paymentDetails: any) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Payment Receipt - Famous Gates Hotels</title>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #27ae60; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { text-align: center; padding: 20px; color: #666; }
+        .receipt-box { background: white; padding: 20px; margin: 15px 0; border-radius: 5px; border: 2px solid #27ae60; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .highlight { background: #F2F2F7; font-weight: bold; }
+        .paid { color: #27ae60; font-weight: bold; font-size: 18px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Payment Receipt</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${paymentDetails.guest_name || 'Guest'},</p>
+          <p>Thank you for your payment. Here is your receipt:</p>
+          
+          <div class="receipt-box">
+            <h2 style="text-align: center; margin-top: 0;">Famous Gates Hotels</h2>
+            <p style="text-align: center; color: #666;">Bomet, Kenya</p>
+            <hr>
+            <table>
+              <tr>
+                <td class="highlight">Receipt No:</td>
+                <td>${paymentDetails.receipt_number || paymentDetails.id}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Date:</td>
+                <td>${new Date(paymentDetails.payment_date || Date.now()).toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Booking Ref:</td>
+                <td>${paymentDetails.confirmation_number || paymentDetails.booking_id}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Guest Name:</td>
+                <td>${paymentDetails.guest_name || 'Guest'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Description:</td>
+                <td>${paymentDetails.description || 'Room booking payment'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Amount Paid:</td>
+                <td class="paid">KES ${(paymentDetails.amount || 0).toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Payment Method:</td>
+                <td>${paymentDetails.payment_method || 'Card'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Transaction Ref:</td>
+                <td>${paymentDetails.transaction_reference || 'N/A'}</td>
+              </tr>
+            </table>
+            <hr>
+            <p style="text-align: center;" class="paid">PAYMENT CONFIRMED</p>
+          </div>
+
+          <p>If you have any questions about this receipt, please contact our front desk.</p>
+        </div>
+        <div class="footer">
+          <p>Famous Gates Hotels<br>Phone: 0706 782 828<br>Email: famous-gates-hotelsbmt@gmail.com</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `,
+
+  // Invoice template
+  invoice: (invoiceDetails: any) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Invoice - Famous Gates Hotels</title>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #3C3C43; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { text-align: center; padding: 20px; color: #666; }
+        .invoice-box { background: white; padding: 20px; margin: 15px 0; border-radius: 5px; border: 1px solid #ddd; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+        th { background: #F2F2F7; font-weight: bold; }
+        .total-row { font-weight: bold; font-size: 16px; border-top: 2px solid #3C3C43; }
+        .status-paid { color: #27ae60; font-weight: bold; }
+        .status-unpaid { color: #e74c3c; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Invoice</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${invoiceDetails.guest_name || 'Guest'},</p>
+          <p>Please find your invoice below:</p>
+          
+          <div class="invoice-box">
+            <h2 style="margin-top: 0;">Famous Gates Hotels</h2>
+            <p style="color: #666;">Bomet, Kenya | Phone: 0706 782 828</p>
+            <hr>
+            <table>
+              <tr>
+                <th colspan="2">Invoice Details</th>
+              </tr>
+              <tr>
+                <td>Invoice Number:</td>
+                <td>${invoiceDetails.invoice_number || invoiceDetails.id}</td>
+              </tr>
+              <tr>
+                <td>Date:</td>
+                <td>${new Date(invoiceDetails.invoice_date || Date.now()).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td>Booking Ref:</td>
+                <td>${invoiceDetails.confirmation_number || invoiceDetails.booking_id}</td>
+              </tr>
+              <tr>
+                <td>Guest Name:</td>
+                <td>${invoiceDetails.guest_name || 'Guest'}</td>
+              </tr>
+              <tr>
+                <td>Status:</td>
+                <td class="${invoiceDetails.status === 'paid' ? 'status-paid' : 'status-unpaid'}">${(invoiceDetails.status || 'unpaid').toUpperCase()}</td>
+              </tr>
+            </table>
+            
+            <table style="margin-top: 15px;">
+              <tr>
+                <th>Description</th>
+                <th>Amount (KES)</th>
+              </tr>
+              <tr>
+                <td>Room Charges (${invoiceDetails.nights || 1} nights)</td>
+                <td>${(invoiceDetails.room_charges || 0).toLocaleString()}</td>
+              </tr>
+              ${(invoiceDetails.extras || []).map((extra: any) => `
+              <tr>
+                <td>${extra.description}</td>
+                <td>${(extra.amount || 0).toLocaleString()}</td>
+              </tr>
+              `).join('')}
+              <tr>
+                <td>Subtotal</td>
+                <td>${(invoiceDetails.subtotal || 0).toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td>Tax (16% VAT)</td>
+                <td>${(invoiceDetails.tax_amount || 0).toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td>Service Charge (10%)</td>
+                <td>${(invoiceDetails.service_charge || 0).toLocaleString()}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Total Amount</td>
+                <td>KES ${(invoiceDetails.total_amount || 0).toLocaleString()}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Amount Paid</td>
+                <td>KES ${(invoiceDetails.amount_paid || 0).toLocaleString()}</td>
+              </tr>
+              ${(invoiceDetails.total_amount || 0) > (invoiceDetails.amount_paid || 0) ? `
+              <tr class="total-row status-unpaid">
+                <td>Balance Due</td>
+                <td>KES ${((invoiceDetails.total_amount || 0) - (invoiceDetails.amount_paid || 0)).toLocaleString()}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+
+          <p>Thank you for choosing Famous Gates Hotels. We look forward to your stay.</p>
+        </div>
+        <div class="footer">
+          <p>Famous Gates Hotels<br>Phone: 0706 782 828<br>Email: famous-gates-hotelsbmt@gmail.com</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `,
+
+  // Check-in reminder template
+  checkInReminder: (bookingDetails: any) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Check-in Reminder - Famous Gates Hotels</title>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #3498db; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { text-align: center; padding: 20px; color: #666; }
+        .booking-details { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .highlight { background: #F2F2F7; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Check-in Reminder</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${bookingDetails.guest_name || 'Guest'},</p>
+          <p>This is a friendly reminder that your check-in at Famous Gates Hotels is tomorrow!</p>
+          
+          <div class="booking-details">
+            <h3>Reservation Summary</h3>
+            <table>
+              <tr>
+                <td class="highlight">Booking Reference:</td>
+                <td>${bookingDetails.confirmation_number || bookingDetails.id}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Check-in Date:</td>
+                <td>${new Date(bookingDetails.check_in).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Check-out Date:</td>
+                <td>${new Date(bookingDetails.check_out).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Room Number:</td>
+                <td>${bookingDetails.room_number || 'Will be assigned upon arrival'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Room Type:</td>
+                <td>${bookingDetails.room_type || 'Standard Room'}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="booking-details">
+            <h3>What to Bring</h3>
+            <ul>
+              <li>Valid ID or Passport</li>
+              <li>Booking confirmation (this email)</li>
+              <li>Credit card for incidentals</li>
+            </ul>
+          </div>
+
+          <p>Check-in starts from 3:00 PM. If you need early check-in, please contact us in advance.</p>
+          <p>We look forward to welcoming you!</p>
+        </div>
+        <div class="footer">
+          <p>Famous Gates Hotels<br>Phone: 0706 782 828<br>Email: famous-gates-hotelsbmt@gmail.com</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `,
+
+  // Check-out reminder template
+  checkOutReminder: (bookingDetails: any) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Check-out Reminder - Famous Gates Hotels</title>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #9b59b6; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { text-align: center; padding: 20px; color: #666; }
+        .booking-details { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .highlight { background: #F2F2F7; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Check-out Reminder</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${bookingDetails.guest_name || 'Guest'},</p>
+          <p>We hope you enjoyed your stay at Famous Gates Hotels. This is a reminder that your check-out is tomorrow by 11:00 AM.</p>
+          
+          <div class="booking-details">
+            <h3>Stay Summary</h3>
+            <table>
+              <tr>
+                <td class="highlight">Booking Reference:</td>
+                <td>${bookingDetails.confirmation_number || bookingDetails.id}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Check-out Date:</td>
+                <td>${new Date(bookingDetails.check_out).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Room Number:</td>
+                <td>${bookingDetails.room_number || '-'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">Balance:</td>
+                <td>KES ${(bookingDetails.balance || 0).toLocaleString()}</td>
+              </tr>
+            </table>
+          </div>
+
+          <p>Please settle any outstanding balance at the front desk before departure. Late check-out may be available upon request (subject to availability and additional charges).</p>
+          <p>Thank you for choosing Famous Gates Hotels. We hope to see you again soon!</p>
+        </div>
+        <div class="footer">
+          <p>Famous Gates Hotels<br>Phone: 0706 782 828<br>Email: famous-gates-hotelsbmt@gmail.com</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `,
+
+  // Check-in welcome template (sent after check-in)
+  checkInWelcome: (bookingDetails: any) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Welcome - Famous Gates Hotels</title>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #27ae60; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { text-align: center; padding: 20px; color: #666; }
+        .welcome-box { background: white; padding: 20px; margin: 15px 0; border-radius: 5px; text-align: center; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        .highlight { background: #F2F2F7; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Welcome to Famous Gates Hotels!</h1>
+        </div>
+        <div class="content">
+          <div class="welcome-box">
+            <h2 style="color: #27ae60; margin-top: 0;">Checked In Successfully</h2>
+            <p>Dear ${bookingDetails.guest_name || 'Guest'},</p>
+            <p>Welcome! We are delighted to have you as our guest.</p>
+          </div>
+          
+          <div class="welcome-box">
+            <h3>Your Room Details</h3>
+            <table>
+              <tr>
+                <td class="highlight">Room Number:</td>
+                <td>${bookingDetails.room_number || '-'}</td>
+              </tr>
+              <tr>
+                <td class="highlight">WiFi Password:</td>
+                <td>FamousGate2024</td>
+              </tr>
+              <tr>
+                <td class="highlight">Breakfast:</td>
+                <td>6:30 AM - 10:00 AM (Main Restaurant)</td>
+              </tr>
+              <tr>
+                <td class="highlight">Front Desk:</td>
+                <td>Available 24/7 | Dial 0 from your room</td>
+              </tr>
+            </table>
+          </div>
+
+          <p>Enjoy your stay! If you need anything, our team is here to help.</p>
+        </div>
+        <div class="footer">
+          <p>Famous Gates Hotels<br>Phone: 0706 782 828</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `,
+
   inventoryAlert: (itemDetails: any) => `
     <!DOCTYPE html>
     <html>

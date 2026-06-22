@@ -11,6 +11,7 @@ class BranchSalesAnalytics:
 
     def __init__(self):
         self.conn = None
+        self._table_exists_cache: Dict[str, bool] = {}
 
     def _get_connection(self):
         if not self.conn or self.conn.closed:
@@ -19,6 +20,28 @@ class BranchSalesAnalytics:
                 cursor_factory=RealDictCursor
             )
         return self.conn
+
+    def _table_exists(self, table_name: str) -> bool:
+        """Some deployments of this schema are missing tables/columns that
+        the migration files claim to add (confirmed via live testing: e.g.
+        pos_shift_orders.payment_method and conference_bookings were both
+        absent on at least one live database). Rather than hard-crash the
+        whole report when an optional revenue source isn't present on a
+        given installation, check existence once and skip that source."""
+        if table_name in self._table_exists_cache:
+            return self._table_exists_cache[table_name]
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            cursor.execute("SELECT to_regclass(%s) IS NOT NULL as exists", (f'public.{table_name}',))
+            exists = bool(cursor.fetchone()['exists'])
+        except Exception:
+            conn.rollback()
+            exists = False
+        finally:
+            cursor.close()
+        self._table_exists_cache[table_name] = exists
+        return exists
 
     def aggregate_sales_data(
         self,
@@ -32,10 +55,44 @@ class BranchSalesAnalytics:
 
         try:
             filter_conditions = self._build_filter_conditions(filters)
+            has_conference = self._table_exists('conference_bookings')
+
+            # bar_sales and pos_sales were missing entirely until this fix, so
+            # "Total Sales" silently excluded every bar_orders sale and every
+            # outlet-POS sale (pos_shift_orders) -- the primary sales path for
+            # restaurant/bar outlets. pos_shift_orders has no branch_id of its
+            # own (it's outlet-scoped), so it's joined through pos_outlets.
+            # conference_bookings is conditional: some deployments of this
+            # schema don't have the table even though the migration claims to
+            # create it (confirmed via live testing), so skip it gracefully
+            # rather than 500 the whole report for branches without a hall.
+            conference_cte = f"""
+            , conference_sales AS (
+                SELECT
+                    cb.id,
+                    cb.branch_id,
+                    cb.total_amount,
+                    NULL::text as payment_method,
+                    'conference'::text as source,
+                    'conference'::text as category,
+                    NULL::text as order_type,
+                    cb.created_at as transaction_date,
+                    cb.status::text as status,
+                    cb.booking_number::text as code,
+                    NULL::text as short_code,
+                    'Conference Hall'::text as outlet
+                FROM conference_bookings cb
+                WHERE cb.branch_id = %s
+                    AND cb.status NOT IN ('cancelled', 'draft')
+                    AND DATE(cb.created_at) BETWEEN %s AND %s
+                    {filter_conditions['conference']}
+            )
+            """ if has_conference else ""
+            conference_union = "UNION ALL SELECT * FROM conference_sales" if has_conference else ""
 
             query = f"""
             WITH bookings_sales AS (
-                SELECT 
+                SELECT
                     b.id,
                     b.branch_id,
                     b.total_amount,
@@ -55,11 +112,11 @@ class BranchSalesAnalytics:
                     {filter_conditions['bookings']}
             ),
             restaurant_sales AS (
-                SELECT 
+                SELECT
                     ro.id,
                     ro.branch_id,
-                    ro.total_amount,
-                    ro.payment_method::text as payment_method,
+                    COALESCE(ro.grand_total, ro.total_amount) as total_amount,
+                    ro.payment_status::text as payment_method,
                     'restaurant'::text as source,
                     'restaurant'::text as category,
                     ro.order_type::text as order_type,
@@ -74,8 +131,57 @@ class BranchSalesAnalytics:
                     AND DATE(ro.created_at) BETWEEN %s AND %s
                     {filter_conditions['restaurant']}
             ),
+            bar_sales AS (
+                SELECT
+                    bo.id,
+                    bo.branch_id,
+                    COALESCE(bo.total, bo.subtotal, 0) as total_amount,
+                    bo.payment_method::text as payment_method,
+                    'bar'::text as source,
+                    'bar'::text as category,
+                    NULL::text as order_type,
+                    bo.created_at as transaction_date,
+                    bo.status::text as status,
+                    bo.order_number::text as code,
+                    NULL::text as short_code,
+                    'Bar'::text as outlet
+                FROM bar_orders bo
+                WHERE bo.branch_id = %s
+                    AND bo.status NOT IN ('cancelled')
+                    AND DATE(bo.created_at) BETWEEN %s AND %s
+                    {filter_conditions['bar']}
+            ),
+            pos_sales AS (
+                SELECT
+                    pso.id,
+                    po.branch_id,
+                    pso.total_amount,
+                    COALESCE(
+                        (SELECT psp.payment_method FROM pos_shift_payments psp
+                         WHERE psp.order_id = pso.id ORDER BY psp.created_at DESC LIMIT 1),
+                        pso.payment_status
+                    )::text as payment_method,
+                    'pos'::text as source,
+                    CASE
+                        WHEN po.outlet_type = 'restaurant' THEN 'restaurant'
+                        WHEN po.outlet_type IN ('main_bar', 'executive_bar', 'sports_bar') THEN 'bar'
+                        ELSE 'other'
+                    END::text as category,
+                    pso.order_type::text as order_type,
+                    pso.created_at as transaction_date,
+                    CASE WHEN pso.payment_status = 'credit_bill' THEN 'credit_bill' ELSE 'completed' END::text as status,
+                    pso.order_number::text as code,
+                    pso.short_code::text as short_code,
+                    COALESCE(po.name, 'POS Outlet')::text as outlet
+                FROM pos_shift_orders pso
+                JOIN pos_outlets po ON po.id = pso.outlet_id
+                WHERE po.branch_id = %s
+                    AND (pso.status IN ('paid', 'credit_bill') OR pso.payment_status IN ('paid', 'credit_bill'))
+                    AND DATE(pso.created_at) BETWEEN %s AND %s
+                    {filter_conditions['pos']}
+            ),
             shift_sales AS (
-                SELECT 
+                SELECT
                     st.id,
                     st.branch_id,
                     st.total_amount,
@@ -92,15 +198,21 @@ class BranchSalesAnalytics:
                 WHERE st.branch_id = %s
                     AND DATE(st.created_at) BETWEEN %s AND %s
                     {filter_conditions['shift']}
-            ),
-            all_sales AS (
+            )
+            {conference_cte}
+            , all_sales AS (
                 SELECT * FROM bookings_sales
                 UNION ALL
                 SELECT * FROM restaurant_sales
                 UNION ALL
+                SELECT * FROM bar_sales
+                UNION ALL
+                SELECT * FROM pos_sales
+                UNION ALL
                 SELECT * FROM shift_sales
+                {conference_union}
             )
-            SELECT 
+            SELECT
                 id,
                 branch_id,
                 total_amount,
@@ -121,8 +233,12 @@ class BranchSalesAnalytics:
             params = [
                 branch_id, start_date, end_date,
                 branch_id, start_date, end_date,
-                branch_id, start_date, end_date
+                branch_id, start_date, end_date,
+                branch_id, start_date, end_date,
+                branch_id, start_date, end_date,
             ]
+            if has_conference:
+                params += [branch_id, start_date, end_date]
 
             cursor.execute(query, params)
             transactions = cursor.fetchall()
@@ -131,12 +247,14 @@ class BranchSalesAnalytics:
             daily_breakdown = self._calculate_daily_breakdown(transactions)
             payment_breakdown = self._calculate_payment_breakdown(transactions)
             category_breakdown = self._calculate_category_breakdown(transactions)
+            revenue_by_source = self._calculate_revenue_by_source(transactions)
 
             return {
                 'summary': summary,
                 'daily_breakdown': daily_breakdown,
                 'payment_method_breakdown': payment_breakdown,
                 'category_breakdown': category_breakdown,
+                'revenue_by_source': revenue_by_source,
                 'transactions': [self._serialize_transaction(t) for t in transactions[:1000]]
             }
         except Exception:
@@ -149,7 +267,10 @@ class BranchSalesAnalytics:
         conditions = {
             'bookings': '',
             'restaurant': '',
-            'shift': ''
+            'bar': '',
+            'pos': '',
+            'shift': '',
+            'conference': ''
         }
 
         if not filters:
@@ -160,6 +281,8 @@ class BranchSalesAnalytics:
             payment_filter = f"AND payment_method IN ({payment_methods})"
             conditions['bookings'] += f" {payment_filter}"
             conditions['restaurant'] += f" {payment_filter}"
+            conditions['bar'] += f" {payment_filter}"
+            conditions['pos'] += f" {payment_filter}"
             conditions['shift'] += f" {payment_filter}"
 
         if filters.get('order_types'):
@@ -171,6 +294,115 @@ class BranchSalesAnalytics:
             conditions['shift'] += f" AND service_category IN ({categories})"
 
         return conditions
+
+    def _calculate_revenue_by_source(self, transactions: List[Dict[str, Any]]) -> Dict[str, float]:
+        sources = {'bookings': 0.0, 'restaurant': 0.0, 'bar': 0.0, 'other': 0.0}
+        for transaction in transactions:
+            amount = float(transaction['total_amount'] or 0)
+            category = transaction['category'] or 'other'
+            if category == 'rooms':
+                sources['bookings'] += amount
+            elif category == 'restaurant':
+                sources['restaurant'] += amount
+            elif category == 'bar':
+                sources['bar'] += amount
+            else:
+                sources['other'] += amount
+        return {key: round(value, 2) for key, value in sources.items()}
+
+    def get_expense_breakdown(self, branch_id: int, start_date: str, end_date: str) -> Dict[str, Any]:
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            categories: Dict[str, float] = {}
+
+            cursor.execute(
+                """
+                SELECT category, amount FROM expenses
+                WHERE branch_id = %s AND status IN ('approved', 'paid')
+                    AND expense_date BETWEEN %s AND %s
+                """,
+                (branch_id, start_date, end_date)
+            )
+            for row in cursor.fetchall():
+                cat = row['category'] or 'Other'
+                categories[cat] = categories.get(cat, 0) + float(row['amount'] or 0)
+
+            cursor.execute(
+                """
+                SELECT category, amount FROM finance_transactions
+                WHERE branch_id = %s AND transaction_type = 'expense'
+                    AND DATE(created_at) BETWEEN %s AND %s
+                """,
+                (branch_id, start_date, end_date)
+            )
+            for row in cursor.fetchall():
+                cat = row['category'] or 'Other'
+                categories[cat] = categories.get(cat, 0) + float(row['amount'] or 0)
+
+            total = round(sum(categories.values()), 2)
+            return {'total': total, 'by_category': {k: round(v, 2) for k, v in categories.items()}}
+        finally:
+            cursor.close()
+
+    def get_receivables_payables(self, branch_id: int) -> Dict[str, float]:
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            cursor.execute(
+                "SELECT COALESCE(SUM(balance), 0) as total FROM accounting_ar_invoices WHERE branch_id = %s AND status != 'paid'",
+                (branch_id,)
+            )
+            receivables = float(cursor.fetchone()['total'] or 0)
+
+            cursor.execute(
+                "SELECT COALESCE(SUM(balance), 0) as total FROM accounting_ap_bills WHERE branch_id = %s AND status != 'paid'",
+                (branch_id,)
+            )
+            payables = float(cursor.fetchone()['total'] or 0)
+
+            return {'receivables': round(receivables, 2), 'payables': round(payables, 2)}
+        finally:
+            cursor.close()
+
+    def get_staff_audit_summary(self, branch_id: int, start_date: str, end_date: str) -> Dict[str, Any]:
+        conn = self._get_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        critical_actions = ('delete', 'void', 'discount', 'refund', 'role_change', 'permission_change')
+        try:
+            cursor.execute(
+                """
+                SELECT al.id, al.user_id, al.action, al.created_at,
+                       u.first_name, u.last_name
+                FROM audit_logs al
+                LEFT JOIN users u ON u.id = al.user_id
+                WHERE u.branch_id = %s
+                    AND DATE(al.created_at) BETWEEN %s AND %s
+                ORDER BY al.created_at DESC
+                LIMIT 500
+                """,
+                (branch_id, start_date, end_date)
+            )
+            logs = cursor.fetchall()
+
+            critical = [log for log in logs if str(log['action'] or '').lower() in critical_actions]
+            recent_critical = [
+                {
+                    'user_name': f"{log['first_name'] or ''} {log['last_name'] or ''}".strip() or 'Unknown',
+                    'action': log['action'],
+                    'created_at': log['created_at'].isoformat() if log['created_at'] else None,
+                }
+                for log in critical[:15]
+            ]
+
+            return {
+                'total_actions': len(logs),
+                'critical_actions': len(critical),
+                'unique_users': len({log['user_id'] for log in logs if log['user_id']}),
+                'recent_critical': recent_critical,
+            }
+        finally:
+            cursor.close()
 
     def _calculate_summary_metrics(self, transactions: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not transactions:

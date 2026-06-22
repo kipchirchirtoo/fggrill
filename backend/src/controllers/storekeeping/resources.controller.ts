@@ -716,6 +716,68 @@ const getDayBounds = (date?: string) => {
   };
 };
 
+/**
+ * Get live branch stock from the new inventory_balances schema.
+ * Returns a Map of SKU -> { quantity, item_name, category, unit, cost_price, ... }
+ * Falls back to empty map if no branch_store location or no balances.
+ */
+async function getLiveBranchStockBySku(branchId: number): Promise<Map<string, any>> {
+  const { data: locRows } = await supabase
+    .from('inventory_locations')
+    .select('id')
+    .eq('branch_id', branchId)
+    .eq('location_type', 'branch_store')
+    .limit(1);
+
+  const locationId = locRows?.[0]?.id;
+  if (!locationId) return new Map();
+
+  const { data: balances, error: balError } = await supabase
+    .from('inventory_balances')
+    .select('item_id, current_quantity, unit_cost')
+    .eq('location_id', locationId);
+
+  if (balError || !balances || balances.length === 0) return new Map();
+
+  const itemIds = balances.map((b: any) => b.item_id);
+  const { data: invItems, error: itemsError } = await supabase
+    .from('inventory_items')
+    .select('id, sku, item_name, category, unit, default_unit_cost, reorder_level')
+    .in('id', itemIds);
+
+  if (itemsError || !invItems) return new Map();
+
+  const itemById = new Map(invItems.map((i: any) => [i.id, i]));
+  const result = new Map<string, any>();
+
+  for (const bal of balances) {
+    const invItem = itemById.get(bal.item_id);
+    if (!invItem?.sku) continue;
+
+    const sku = invItem.sku;
+    const existing = result.get(sku);
+    const qty = toNumber(bal.current_quantity);
+
+    if (existing) {
+      existing.quantity = existing.quantity + qty;
+    } else {
+      result.set(sku, {
+        item_sku: sku,
+        quantity: qty,
+        item_name: invItem.item_name,
+        description: invItem.description,
+        category: invItem.category,
+        unit_of_measure: invItem.unit,
+        cost_price: toNumber(bal.unit_cost) || toNumber(invItem.default_unit_cost),
+        reorder_level: toNumber(invItem.reorder_level),
+        store_type: null,
+      });
+    }
+  }
+
+  return result;
+}
+
 const seedStockCountItemsFromBranchStock = async (
   stockCountId: string,
   branchId: number,
@@ -741,58 +803,78 @@ const seedStockCountItemsFromBranchStock = async (
   const normalizedStoreType = normalizeStoreType(storeType);
   const { day, start, end } = getDayBounds(countDate);
 
-  let { data: branchStock, error: stockError } = await supabase
-    .from('branch_stock')
-    .select('item_sku, quantity')
-    .eq('branch_id', branchId)
-    .order('item_sku');
+  // ─────────────────────────────────────────────────────────────────────────
+  // 1. New inventory_balances schema (source of truth since Phase-3 migration)
+  // ─────────────────────────────────────────────────────────────────────────
+  const inventoryBySku = await getLiveBranchStockBySku(branchId);
+  let stockRows: any[] = [];
+  let simpleBySku = new Map<string, any>();
 
-  if (stockError) throw stockError;
-  let stockRows = branchStock || [];
+  if (inventoryBySku.size > 0) {
+    stockRows = Array.from(inventoryBySku.values()).map((detail) => ({
+      item_sku: detail.item_sku,
+      quantity: detail.quantity,
+    }));
+    simpleBySku = inventoryBySku;
+  }
 
-  const initialSkus = stockRows.map((item: any) => item.item_sku).filter(Boolean);
-  const { data: simpleItems, error: itemsError } = await supabase
-    .from('simple_items')
-    .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
-    .in('sku', initialSkus.length > 0 ? initialSkus : ['__none__']);
-
-  if (itemsError) throw itemsError;
-  let simpleRows = simpleItems || [];
-  let simpleBySku = new Map(simpleRows.map((item: any) => [item.sku, item]));
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2. Legacy branch_stock fallback
+  // ─────────────────────────────────────────────────────────────────────────
   if (stockRows.length === 0) {
-    const { data: branchItems, error: branchItemsError } = await supabase
+    const { data: branchStock, error: stockError } = await supabase
+      .from('branch_stock')
+      .select('item_sku, quantity')
+      .eq('branch_id', branchId)
+      .order('item_sku');
+
+    if (stockError) throw stockError;
+    stockRows = branchStock || [];
+
+    const initialSkus = stockRows.map((item: any) => item.item_sku).filter(Boolean);
+    const { data: simpleItems, error: itemsError } = await supabase
       .from('simple_items')
       .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
-      .eq('branch_id', branchId)
-      .eq('is_active', true)
-      .order('sku');
+      .in('sku', initialSkus.length > 0 ? initialSkus : ['__none__']);
 
-    if (branchItemsError) throw branchItemsError;
-    simpleRows = branchItems || [];
+    if (itemsError) throw itemsError;
+    let simpleRows = simpleItems || [];
+    simpleBySku = new Map(simpleRows.map((item: any) => [item.sku, item]));
 
-    // Some deployed branches keep inventory in the shared central catalog and
-    // only materialize branch_stock rows after the first receipt/dispatch. A
-    // new daily stock count must still open with countable rows instead of a
-    // blank sheet, so fall back to active shared catalog items when the branch
-    // has neither branch_stock nor branch-scoped simple_items rows.
-    if (simpleRows.length === 0) {
-      const { data: sharedItems, error: sharedItemsError } = await supabase
+    if (stockRows.length === 0) {
+      const { data: branchItems, error: branchItemsError } = await supabase
         .from('simple_items')
         .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
-        .is('branch_id', null)
+        .eq('branch_id', branchId)
         .eq('is_active', true)
         .order('sku');
 
-      if (sharedItemsError) throw sharedItemsError;
-      simpleRows = sharedItems || [];
-    }
+      if (branchItemsError) throw branchItemsError;
+      simpleRows = branchItems || [];
 
-    simpleBySku = new Map(simpleRows.map((item: any) => [item.sku, item]));
-    stockRows = simpleRows.map((item: any) => ({
-      item_sku: item.sku,
-      quantity: 0,
-    }));
+      // Some deployed branches keep inventory in the shared central catalog and
+      // only materialize branch_stock rows after the first receipt/dispatch. A
+      // new daily stock count must still open with countable rows instead of a
+      // blank sheet, so fall back to active shared catalog items when the branch
+      // has neither branch_stock nor branch-scoped simple_items rows.
+      if (simpleRows.length === 0) {
+        const { data: sharedItems, error: sharedItemsError } = await supabase
+          .from('simple_items')
+          .select('sku, item_name, description, category, unit_of_measure, cost_price, store_type')
+          .is('branch_id', null)
+          .eq('is_active', true)
+          .order('sku');
+
+        if (sharedItemsError) throw sharedItemsError;
+        simpleRows = sharedItems || [];
+      }
+
+      simpleBySku = new Map(simpleRows.map((item: any) => [item.sku, item]));
+      stockRows = simpleRows.map((item: any) => ({
+        item_sku: item.sku,
+        quantity: 0,
+      }));
+    }
   }
 
   // Explicit selection: guarantee every chosen SKU appears on the sheet (with a
@@ -1053,6 +1135,20 @@ export const getEnrichedStockCountItems = async (
   const itemSkus = [...new Set(items.map((item: any) => item.item_sku).filter(Boolean))];
   const itemIds = [...new Set(items.map((item: any) => item.item_id).filter(Boolean))];
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fetch live inventory data from the new schema (inventory_balances)
+  // ─────────────────────────────────────────────────────────────────────────
+  let liveStockBySku = new Map<string, number>();
+  let inventoryBySku = new Map<string, any>();
+
+  if (branchId) {
+    const invStock = await getLiveBranchStockBySku(branchId);
+    for (const [sku, detail] of invStock) {
+      liveStockBySku.set(sku, detail.quantity);
+    }
+    inventoryBySku = invStock;
+  }
+
   const [{ data: simpleItems }, { data: storeItems }] = await Promise.all([
     itemSkus.length > 0
       ? supabase
@@ -1078,10 +1174,21 @@ export const getEnrichedStockCountItems = async (
     const rawSku = `${item.item_sku || ''}`.trim();
     const simple = rawSku ? (simpleBySku.get(rawSku) || simpleBySku.get(rawSku.toLowerCase())) : null;
     const store = item.item_id ? storeById.get(item.item_id) : null;
+    const inv = rawSku ? inventoryBySku.get(rawSku) || inventoryBySku.get(rawSku.toLowerCase()) : null;
     const physical = item.physical_quantity;
     const counted = physical === null || physical === undefined ? null : toNumber(physical);
-    const systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
-    const unitCost = toNumber(item.unit_cost ?? simple?.cost_price);
+
+    // Use live inventory_balances data when the stored system_closing_stock
+    // is 0 but live stock exists (indicates stale seeding from legacy branch_stock).
+    const liveQuantity = rawSku ? (liveStockBySku.get(rawSku) ?? null) : null;
+    let systemClosing = toNumber(item.system_closing_stock ?? item.system_quantity);
+    if (systemClosing === 0 && liveQuantity !== null && liveQuantity > 0) {
+      systemClosing = liveQuantity;
+    }
+
+    const unitCost = toNumber(
+      item.unit_cost ?? inv?.cost_price ?? simple?.cost_price
+    );
     const variance = counted === null ? null : counted - systemClosing;
     const variancePct = variance === null
       ? null
@@ -1090,7 +1197,7 @@ export const getEnrichedStockCountItems = async (
         : (variance / systemClosing) * 100;
     const itemSku = rawSku || store?.item_code || item.item_id;
     const itemName = item.item_name || item.name || item.description ||
-      simple?.item_name || simple?.description || store?.name || itemSku || 'Unknown Item';
+      inv?.item_name || simple?.item_name || simple?.description || store?.name || itemSku || 'Unknown Item';
     let additions = toNumber(item.additions ?? item.added_quantity ?? item.transfers_in);
     const issuedQuantity = toNumber(item.issued_quantity ?? item.sales_quantity ?? item.quantity_issued);
     let openingStock = toNumber(item.opening_stock ?? item.opening_quantity);
@@ -1110,14 +1217,15 @@ export const getEnrichedStockCountItems = async (
       ...item,
       item_sku: itemSku,
       item_name: itemName,
-      unit: item.unit_of_measure || item.unit || simple?.unit_of_measure || store?.unit || 'pcs',
-      unit_of_measure: item.unit_of_measure || item.unit || simple?.unit_of_measure || store?.unit || 'pcs',
-      category: item.category || simple?.category || simple?.store_type || store?.category || null,
+      unit: item.unit_of_measure || item.unit || (inv?.unit_of_measure || simple?.unit_of_measure) || store?.unit || 'pcs',
+      unit_of_measure: item.unit_of_measure || item.unit || (inv?.unit_of_measure || simple?.unit_of_measure) || store?.unit || 'pcs',
+      category: item.category || (inv?.category || simple?.category) || simple?.store_type || store?.category || null,
       store_type: item.store_type || simple?.store_type || null,
       opening_stock: openingStock,
       additions,
       issued_quantity: issuedQuantity,
       system_closing_stock: systemClosing,
+      system_quantity: systemClosing,
       physical_quantity: counted,
       counted_quantity: counted,
       actual_quantity: counted,
@@ -1136,8 +1244,8 @@ export const getEnrichedStockCountItems = async (
         item_code: itemSku,
         name: itemName,
         item_name: itemName,
-        category: simple?.category || store?.category || null,
-        unit: simple?.unit_of_measure || store?.unit || 'pcs',
+        category: (inv?.category || simple?.category) || store?.category || null,
+        unit: (inv?.unit_of_measure || simple?.unit_of_measure) || store?.unit || 'pcs',
       },
     };
   });

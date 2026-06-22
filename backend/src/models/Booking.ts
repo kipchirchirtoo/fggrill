@@ -21,10 +21,13 @@ export enum PaymentStatus {
 export interface IBooking {
   id: string;
   confirmationNumber: string;
+  // FK to the parent bookings table row (every reservation must belong to
+  // a booking, whether created online via the landing page or by reception).
+  bookingId?: string;
   guestId: string;
   roomId?: string;
   roomTypeId: string;
-  branchId?: string;
+  branchId?: number;
   checkInDate: Date;
   checkOutDate: Date;
   status: BookingStatus;
@@ -75,10 +78,11 @@ export interface IBooking {
 export class Booking implements IBooking {
   id: string;
   confirmationNumber: string;
+  bookingId?: string;
   guestId: string;
   roomId?: string;
   roomTypeId: string;
-  branchId?: string;
+  branchId?: number;
   checkInDate: Date;
   checkOutDate: Date;
   status: BookingStatus;
@@ -123,6 +127,7 @@ export class Booking implements IBooking {
   constructor(data: Partial<IBooking>) {
     this.id = data.id || crypto.randomUUID();
     this.confirmationNumber = data.confirmationNumber || this.generateConfirmationNumber();
+    this.bookingId = data.bookingId;
     this.guestId = data.guestId || '';
     this.roomId = data.roomId;
     this.roomTypeId = data.roomTypeId || '';
@@ -264,12 +269,19 @@ export class Booking implements IBooking {
         {
           id: this.id,
           confirmation_number: this.confirmationNumber,
+          reservation_number: this.confirmationNumber,
+          booking_id: this.bookingId,
           guest_id: this.guestId,
           room_id: this.roomId,
           room_type_id: this.roomTypeId,
-          // branch_id: this.branchId, // Column missing in DB
+          branch_id: this.branchId,
           check_in_date: this.checkInDate,
           check_out_date: this.checkOutDate,
+          // Legacy NOT NULL columns from the original reservations schema;
+          // newer code only set check_in_date/check_out_date, which left
+          // these null and violated the not-null constraint on insert.
+          reserved_from: this.checkInDate,
+          reserved_to: this.checkOutDate,
           status: this.status,
 
           adults: this.adults,
@@ -320,6 +332,7 @@ export class Booking implements IBooking {
     return new Booking({
       id: data.id,
       confirmationNumber: data.confirmation_number,
+      bookingId: data.booking_id,
       guestId: data.guest_id,
       roomId: data.room_id,
       roomTypeId: data.room_type_id,

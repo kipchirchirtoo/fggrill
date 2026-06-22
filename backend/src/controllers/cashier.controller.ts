@@ -1486,7 +1486,7 @@ export const getBillDetails = async (
                 .from('reservations')
                 .select(`
                     *,
-                    room:rooms!room_id(number, branch_id, type:room_types(name, price))
+                    room:rooms!room_id(number, branch_id, type:room_types!rooms_room_type_id_fkey(name, price))
                 `)
                 .eq('confirmation_number', searchId);
 
@@ -1510,7 +1510,7 @@ export const getBillDetails = async (
                 .from('reservations')
                 .select(`
                     *,
-                    room:rooms!room_id(number, branch_id, type:room_types(name, price))
+                    room:rooms!room_id(number, branch_id, type:room_types!rooms_room_type_id_fkey(name, price))
                 `)
                 .eq('id', bookingId);
 
@@ -1686,7 +1686,7 @@ export const getBillDetails = async (
                     .from('reservations')
                     .select(`
                         *,
-                        room:rooms!room_id!inner(number, branch_id, type:room_types(name, price))
+                        room:rooms!room_id!inner(number, branch_id, type:room_types!rooms_room_type_id_fkey(name, price))
                     `)
                     .eq('room.number', searchId)
                     .eq('status', 'checked_in')
@@ -1777,7 +1777,7 @@ export const getBillDetails = async (
                 .from('reservations')
                 .select(`
                     *,
-                    room:rooms!room_id!inner(number, branch_id, type:room_types(name, price))
+                    room:rooms!room_id!inner(number, branch_id, type:room_types!rooms_room_type_id_fkey(name, price))
                 `)
                 .eq('room.number', searchId)
                 .eq('status', 'checked_in');
@@ -4568,7 +4568,8 @@ export const createCreditBill = async (req: Request, res: Response, next: NextFu
                 amount: totalAmount,
                 amount_paid: 0,
                 balance: totalAmount,
-                status: 'open'
+                status: 'pending',
+                source_cashier_credit_bill_id: data.id
             })
             .select('id')
             .single();

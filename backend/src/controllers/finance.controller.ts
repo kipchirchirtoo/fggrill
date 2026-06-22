@@ -1629,6 +1629,57 @@ export const getFinancialKPIs = async (
     next(error);
   }
 };
+/**
+ * Compact staff-audit-trail summary for the branch over the same date range
+ * as the financial profile, so Branch Analytics can surface "who did what"
+ * (critical actions, unique staff involved) alongside the money figures
+ * instead of requiring a separate trip to the Staff Audit screen.
+ */
+export async function fetchStaffAuditSummary(branchId: number, startDate: string, endDate: string) {
+  const CRITICAL_ACTIONS = ['delete', 'void', 'discount', 'refund', 'role_change', 'permission_change'];
+
+  const { data: branchUsers, error: usersError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('branch_id', branchId);
+  if (usersError) throw usersError;
+
+  const userIds = (branchUsers || []).map((u: any) => u.id).filter(Boolean);
+  if (userIds.length === 0) {
+    return { total_actions: 0, critical_actions: 0, unique_users: 0, action_types: [], recent_critical: [] };
+  }
+
+  const { data: logs, error: logsError } = await supabase
+    .from('audit_logs')
+    .select('id, user_id, action, created_at')
+    .in('user_id', userIds)
+    .gte('created_at', startDate)
+    .lte('created_at', endDate)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (logsError) throw logsError;
+
+  const allLogs = logs || [];
+  const criticalLogs = allLogs.filter((l: any) => CRITICAL_ACTIONS.includes(String(l.action || '').toLowerCase()));
+
+  const criticalUserIds = Array.from(new Set(criticalLogs.slice(0, 15).map((l: any) => l.user_id).filter(Boolean)));
+  const { data: criticalUsers } = criticalUserIds.length > 0
+    ? await supabase.from('users').select('id, first_name, last_name').in('id', criticalUserIds)
+    : { data: [] };
+  const userNameById = new Map((criticalUsers || []).map((u: any) => [u.id, `${u.first_name || ''} ${u.last_name || ''}`.trim()]));
+
+  return {
+    total_actions: allLogs.length,
+    critical_actions: criticalLogs.length,
+    unique_users: new Set(allLogs.map((l: any) => l.user_id)).size,
+    action_types: Array.from(new Set(allLogs.map((l: any) => l.action))),
+    recent_critical: criticalLogs.slice(0, 15).map((l: any) => ({
+      ...l,
+      user_name: userNameById.get(l.user_id) || 'Unknown',
+    })),
+  };
+}
+
 // @desc    Get detailed branch financial profile
 // @route   GET /api/finance/branch-financials/:branchId
 // @access  Private (Finance Staff, Branch Accountant)
@@ -1763,6 +1814,9 @@ export const getBranchFinancialProfile = async (
     const arTotal = invoices?.reduce((sum, inv) => sum + Number(inv.balance || 0), 0) || 0;
     const apTotal = bills?.reduce((sum, bill) => sum + Number(bill.balance || 0), 0) || 0;
 
+    // 7. Staff Audit Summary
+    const staffAudit = await fetchStaffAuditSummary(branch_id, startDate, endDate);
+
     res.status(200).json({
       success: true,
       data: {
@@ -1776,6 +1830,7 @@ export const getBranchFinancialProfile = async (
           bar: barOrders.data || []
         },
         logbooks: logbooks || [],
+        staffAudit,
         period: dateRange
       }
     });

@@ -530,4 +530,56 @@ class ReceptionRepository {
   Future<void> updateHousekeepingTask(String taskId, String status) async {
     await _dio.patch('/housekeeping/tasks/$taskId', data: {'status': status});
   }
+
+  // ── Email (SMTP) ──
+
+  /// Send a booking confirmation email for a specific booking.
+  /// The backend fetches guest email and room details automatically.
+  Future<Map<String, dynamic>> sendBookingConfirmationEmail(
+      String bookingId) async {
+    final response =
+        await _dio.post('/email/send-booking/$bookingId');
+    return _payload(response.data);
+  }
+
+  /// Test the backend SMTP (Gmail) connection.
+  Future<Map<String, dynamic>> testEmailConnection() async {
+    final response = await _dio.get('/email/test-connection');
+    return _payload(response.data);
+  }
+
+  /// Send a booking cancellation email.
+  Future<Map<String, dynamic>> sendCancellationEmail(
+      String bookingId, {String? reason}) async {
+    final response = await _dio.post('/email/send-cancellation/$bookingId',
+        data: {'reason': reason});
+    return _payload(response.data);
+  }
+
+  /// Send a payment receipt email.
+  Future<Map<String, dynamic>> sendPaymentReceiptEmail(
+      String bookingId, Map<String, dynamic> paymentData) async {
+    final response =
+        await _dio.post('/email/send-receipt/$bookingId', data: paymentData);
+    return _payload(response.data);
+  }
+
+  /// Send an invoice email for a booking.
+  Future<Map<String, dynamic>> sendInvoiceEmail(String bookingId) async {
+    final response = await _dio.post('/email/send-invoice/$bookingId');
+    return _payload(response.data);
+  }
+
+  /// Send a check-in reminder email.
+  Future<Map<String, dynamic>> sendCheckInReminder(String bookingId) async {
+    final response = await _dio.post('/email/send-checkin-reminder/$bookingId');
+    return _payload(response.data);
+  }
+
+  /// Send a check-out reminder email.
+  Future<Map<String, dynamic>> sendCheckOutReminder(String bookingId) async {
+    final response =
+        await _dio.post('/email/send-checkout-reminder/$bookingId');
+    return _payload(response.data);
+  }
 }

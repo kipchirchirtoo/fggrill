@@ -1447,6 +1447,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                     values: _map(financialSummary['expensesByCategory'] ??
                         financialSummary['expenses_by_category'])),
               ),
+              _StaffAuditSummaryCard(staffAudit: _map(financials['staffAudit'])),
               _TwoColumn(
                 left: _SectionCard(
                   title: 'Recent Finance Transactions',
@@ -2013,6 +2014,59 @@ class _LegendItem extends StatelessWidget {
         const SizedBox(width: 6),
         Text(label, style: const TextStyle(fontSize: 12)),
       ],
+    );
+  }
+}
+
+class _StaffAuditSummaryCard extends StatelessWidget {
+  const _StaffAuditSummaryCard({required this.staffAudit});
+  final Map<String, dynamic> staffAudit;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalActions = _num(staffAudit['total_actions']).toInt();
+    final criticalActions = _num(staffAudit['critical_actions']).toInt();
+    final uniqueUsers = _num(staffAudit['unique_users']).toInt();
+    final recentCritical = _list(staffAudit['recent_critical']);
+
+    return _SectionCard(
+      title: 'Staff Audit Summary',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                  child: _MetricCard('Staff Actions', '$totalActions',
+                      Icons.fact_check, Colors.blueGrey)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _MetricCard('Critical Actions', '$criticalActions',
+                      Icons.warning_amber, Colors.deepOrange)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _MetricCard('Staff Involved', '$uniqueUsers',
+                      Icons.groups, Colors.indigo)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text('Recent Critical Actions (delete / void / discount / refund / role change)',
+              style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          _SimpleTable(
+            columns: const ['Staff', 'Action', 'Date'],
+            rows: recentCritical
+                .map((e) => [
+                      _text(e, ['user_name']).isEmpty
+                          ? 'Unknown'
+                          : _text(e, ['user_name']),
+                      _title(_text(e, ['action'])),
+                      _shortDate(_text(e, ['created_at'])),
+                    ])
+                .toList(),
+          ),
+        ],
+      ),
     );
   }
 }

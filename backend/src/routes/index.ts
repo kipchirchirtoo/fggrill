@@ -25,7 +25,16 @@ import emailRoutes from './email.routes';
 import landingEmailRoutes from './landing-email.routes';
 import paymentRoutes from './payment.routes';
 import barcodeRoutes from './barcode.routes';
-import { sendBookingEmail, sendAllConfirmedBookingEmails, testEmailService } from '../controllers/email-booking.controller';
+import {
+  sendBookingEmail,
+  sendAllConfirmedBookingEmails,
+  testEmailService,
+  sendCancellationEmail,
+  sendPaymentReceiptEmail,
+  sendInvoiceEmail,
+  sendCheckInReminderEmail,
+  sendCheckOutReminderEmail
+} from '../controllers/email-booking.controller';
 import notificationRoutes from './notification.routes';
 import folioRoutes from './folio.routes';
 import guestRoutes from './guest.routes';
@@ -239,6 +248,11 @@ router.use('/branch-food-control-config', branchFoodControlConfigRoutes);
 router.post('/email/send-booking/:bookingId', sendBookingEmail);
 router.post('/email/send-all-bookings', sendAllConfirmedBookingEmails);
 router.get('/email/test-connection', testEmailService);
+router.post('/email/send-cancellation/:bookingId', sendCancellationEmail);
+router.post('/email/send-receipt/:bookingId', sendPaymentReceiptEmail);
+router.post('/email/send-invoice/:bookingId', sendInvoiceEmail);
+router.post('/email/send-checkin-reminder/:bookingId', sendCheckInReminderEmail);
+router.post('/email/send-checkout-reminder/:bookingId', sendCheckOutReminderEmail);
 
 // Legacy M-Pesa Route Fix (for cached clients calling /api/mpesa/initiate)
 import { initiateMpesaPayment, mpesaCallback } from '../controllers/payment.controller';

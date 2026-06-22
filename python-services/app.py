@@ -447,6 +447,26 @@ def generate_checkout_bill():
     except Exception as e:
         logger.error(f"Error generating checkout bill: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reports/generate/booking-confirmation-invoice', methods=['POST'])
+def generate_booking_confirmation_invoice():
+    """Generate Booking Confirmation invoice PDF, attached to the confirmation email"""
+    try:
+        data = request.get_json()
+        logger.info(f"Generating booking confirmation invoice for: {data.get('guest_name')}")
+
+        pdf_file = branded_pdf_generator.generate_booking_confirmation_invoice(data)
+
+        return send_file(
+            pdf_file,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'Invoice_{data.get("confirmation_number", "Booking")}.pdf'
+        )
+    except Exception as e:
+        logger.error(f"Error generating booking confirmation invoice: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/reports/generate/dispatch-note', methods=['POST'])
 def generate_dispatch_note():
     """Generate Dispatch Note PDF"""

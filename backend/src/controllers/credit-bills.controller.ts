@@ -94,36 +94,53 @@ export const getCreditBills = async (req: Request, res: Response, next: NextFunc
         if (staff_id) staffQuery = staffQuery.eq('staff_id', staff_id);
         if (status && status !== 'all') {
             if (status === 'outstanding') {
-                staffQuery = staffQuery.in('status', ['open', 'pending', 'accountant_confirmed', 'auditor_confirmed']);
+                staffQuery = staffQuery.in('status', ['pending', 'accountant_confirmed', 'auditor_confirmed']);
             } else {
                 staffQuery = staffQuery.eq('status', status);
             }
         }
 
         // ===== QUERY CREDIT_BILLS (cashier station credits) =====
-        let cashierQuery = supabase
-            .from('credit_bills')
-            .select('*')
-            .order('bill_date', { ascending: false });
+        // Wrapped in try-catch so a schema mismatch (missing bill_date/staff_id)
+        // doesn't crash the whole endpoint — we still return staff_credit_bills.
+        let cashierCreditBills: any[] = [];
+        try {
+            let cashierQuery = supabase
+                .from('credit_bills')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-        cashierQuery = applyBranchFilter(cashierQuery, req);
+            cashierQuery = applyBranchFilter(cashierQuery, req);
 
-        if (staff_id) cashierQuery = cashierQuery.eq('staff_id', staff_id);
-        if (status && status !== 'all') {
-            if (status === 'outstanding') {
-                cashierQuery = cashierQuery.in('status', ['open', 'pending']);
-            } else {
-                cashierQuery = cashierQuery.eq('status', status);
+            if (staff_id) {
+                cashierQuery = cashierQuery.eq('staff_id', staff_id);
             }
+            if (status && status !== 'all') {
+                if (status === 'outstanding') {
+                    // Unpaid in both tables
+                    cashierQuery = cashierQuery.in('status', ['open', 'pending']);
+                } else if (status === 'pending') {
+                    // staff_credit_bills calls it 'pending', credit_bills calls it 'open'
+                    cashierQuery = cashierQuery.in('status', ['open', 'pending']);
+                } else if (status === 'paid_cash' || status === 'deducted') {
+                    // Paid / settled in credit_bills
+                    cashierQuery = cashierQuery.eq('status', 'paid');
+                } else if (status === 'cancelled') {
+                    cashierQuery = cashierQuery.in('status', ['written_off', 'voided']);
+                } else {
+                    cashierQuery = cashierQuery.eq('status', status);
+                }
+            }
+
+            const { data, error } = await cashierQuery;
+            if (!error) cashierCreditBills = data || [];
+            else logger.warn('credit_bills query failed (non-critical):', error.message);
+        } catch (cashierErr: any) {
+            logger.warn('credit_bills query exception (non-critical):', cashierErr.message);
         }
 
-        const [
-            { data: staffCreditBills, error: staffError },
-            { data: cashierCreditBills, error: cashierError }
-        ] = await Promise.all([staffQuery, cashierQuery]);
-
+        const { data: staffCreditBills, error: staffError } = await staffQuery;
         if (staffError) throw staffError;
-        if (cashierError) throw cashierError;
 
         // ===== NORMALIZE BOTH SOURCES TO COMMON SHAPE =====
         const normalizedStaffBills = (staffCreditBills || []).map((bill: any) => ({

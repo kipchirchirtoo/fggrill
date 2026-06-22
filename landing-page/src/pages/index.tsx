@@ -3,7 +3,6 @@ import { SEO } from '@/components/SEO';
 import { useState, useEffect, useRef } from 'react';
 import { hotelsService, FALLBACK_BRANCHES } from '@/services/hotels.service';
 import { bookingService } from '@/services/booking.service';
-import { emailService } from '@/services/email.service';
 import { Branch } from '@/types';
 import toast from 'react-hot-toast';
 import { Toaster } from 'react-hot-toast';
@@ -180,31 +179,8 @@ export default function Home() {
         bookingSource: 'WEBSITE'
       });
 
-      // Send confirmation email asynchronously (does not block UI)
-      const branch = branches.find(b => b.id === selectedBranchId);
-      const branchName = branch?.name || 'Famous Gates';
-
-      // Calculate stay duration
-      const nights = Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24)));
-      const roomPrice = selectedRoom.type?.base_price || 5000;
-      const totalAmount = roomPrice * nights;
-
-      emailService.sendBookingConfirmation({
-        email: guestInfo.email,
-        firstName: guestInfo.firstName,
-        lastName: guestInfo.lastName,
-        branchName: branchName,
-        checkInDate: checkIn,
-        checkOutDate: checkOut,
-        confirmationNumber: confirmation.confirmationNumber || confirmation.referenceNumber || confirmation.bookingId,
-        roomType: selectedRoom.type?.name || 'Standard Room',
-        guests: parseInt(guests),
-        totalAmount: totalAmount,
-        hotelName: branchName,
-        hotelAddress: branch?.address || 'Bomet, Kenya',
-        hotelPhone: '0706782828',
-        hotelEmail: 'famousgatesbmt@gmail.com'
-      });
+      // Confirmation email is sent by the backend's createBooking flow itself -
+      // do not also send one from here, or the guest gets it twice.
 
       setShowModal(false);
       toast.success(`Reservation Successful! Confirmation: ${confirmation.confirmationNumber || confirmation.referenceNumber}`, {

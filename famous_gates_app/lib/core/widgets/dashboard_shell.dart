@@ -216,10 +216,6 @@ class _TopBar extends StatelessWidget {
           if (actions != null && !mobile) ...actions!,
           if (actions != null && !mobile) const SizedBox(width: 8),
 
-          // ── Update button — hidden on phone ───────────────────────────
-          if (!mobile) const AppUpdateButton(),
-          if (!mobile) const SizedBox(width: 4),
-
           // ── Notification bell — always visible ────────────────────────
           const AppNotificationButton(),
 

@@ -21,6 +21,53 @@ interface DateRange {
 
 export class AggregationService {
     /**
+     * Branch revenue from the legacy `payments` table alone misses every sale
+     * made through the outlet POS system (pos_shift_orders), which is the
+     * primary sales path for restaurant/bar outlets. Without this, "Branch
+     * Revenue" silently reads 0 while "Total Sales" (computed separately from
+     * POS data) shows real figures, so the two numbers never reconcile.
+     */
+    private async getPosOutletRevenue(
+        dateRange: DateRange,
+        branchId?: number
+    ): Promise<{ total: number; bySource: { bookings: number; restaurant: number; bar: number; other: number } }> {
+        const sources = { bookings: 0, restaurant: 0, bar: 0, other: 0 };
+        if (!branchId) return { total: 0, bySource: sources };
+
+        const { startDate, endDate } = dateRange;
+        const { data: outlets, error: outletsError } = await supabase
+            .from('pos_outlets')
+            .select('id, outlet_type')
+            .eq('branch_id', branchId);
+        if (outletsError) throw outletsError;
+
+        const outletIds = (outlets || []).map((o: any) => o.id);
+        if (outletIds.length === 0) return { total: 0, bySource: sources };
+
+        const outletTypeById = new Map((outlets || []).map((o: any) => [String(o.id), o.outlet_type]));
+
+        const { data: orders, error: ordersError } = await supabase
+            .from('pos_shift_orders')
+            .select('outlet_id, total_amount, status, payment_status')
+            .in('outlet_id', outletIds)
+            .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)')
+            .gte('created_at', startDate)
+            .lte('created_at', endDate);
+        if (ordersError) throw ordersError;
+
+        for (const order of orders || []) {
+            const amount = Number((order as any).total_amount) || 0;
+            const outletType = outletTypeById.get(String((order as any).outlet_id));
+            if (outletType === 'restaurant') sources.restaurant += amount;
+            else if (['main_bar', 'executive_bar', 'sports_bar'].includes(String(outletType))) sources.bar += amount;
+            else sources.other += amount;
+        }
+
+        const total = sources.bookings + sources.restaurant + sources.bar + sources.other;
+        return { total, bySource: sources };
+    }
+
+    /**
      * Get aggregated revenue from all sources using the central payments table
      */
     async getAggregatedRevenue(
@@ -133,6 +180,12 @@ export class AggregationService {
                     }
                 }
             }
+
+            const posRevenue = await this.getPosOutletRevenue(dateRange, branchId);
+            sources.bookings += posRevenue.bySource.bookings;
+            sources.restaurant += posRevenue.bySource.restaurant;
+            sources.bar += posRevenue.bySource.bar;
+            sources.other += posRevenue.bySource.other;
 
             const total = sources.bookings + sources.restaurant + sources.bar + sources.other;
 
@@ -301,6 +354,15 @@ export class AggregationService {
                 dailyData[date].inflow += Number(payment.amount) || 0;
             });
 
+            // POS shift orders are the primary sales path for outlet POS and
+            // aren't in the `payments` table at all, so add them as inflows too.
+            const posInflows = await this.getPosOutletInflowsByDate(dateRange, branchId);
+            posInflows.forEach((item) => {
+                const date = item.date.split('T')[0];
+                if (!dailyData[date]) dailyData[date] = { inflow: 0, outflow: 0 };
+                dailyData[date].inflow += item.amount;
+            });
+
             // Get outflows from expenses
             const [expenses, financeExpenses] = await Promise.all([
                 this.getExpensesByDate(dateRange, branchId),
@@ -327,6 +389,26 @@ export class AggregationService {
             logger.error('Error getting daily cash flow:', error);
             return [];
         }
+    }
+
+    private async getPosOutletInflowsByDate(dateRange: DateRange, branchId?: number) {
+        if (!branchId) return [];
+        const { data: outlets } = await supabase
+            .from('pos_outlets')
+            .select('id')
+            .eq('branch_id', branchId);
+        const outletIds = (outlets || []).map((o: any) => o.id);
+        if (outletIds.length === 0) return [];
+
+        const { data: orders } = await supabase
+            .from('pos_shift_orders')
+            .select('total_amount, created_at')
+            .in('outlet_id', outletIds)
+            .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)')
+            .gte('created_at', dateRange.startDate)
+            .lte('created_at', dateRange.endDate);
+
+        return (orders || []).map((o: any) => ({ amount: Number(o.total_amount) || 0, date: o.created_at }));
     }
 
     // Helper methods to get data by date (only for expenses now)
