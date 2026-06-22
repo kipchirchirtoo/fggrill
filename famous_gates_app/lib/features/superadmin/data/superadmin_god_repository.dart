@@ -274,4 +274,41 @@ class SuperadminGodRepository {
       return List<Map<String, dynamic>>.from(data is List ? data : []);
     });
   }
+
+  /// Full inventory_items catalogue (id is a UUID).
+  Future<List<Map<String, dynamic>>> getInventoryItems() async {
+    return _guard(() async {
+      final r = await _dio.get('/inventory/items');
+      final data = r.data['data'] ?? r.data;
+      return List<Map<String, dynamic>>.from(data is List ? data : []);
+    });
+  }
+
+  /// Items currently visible in the kitchen ledger, for [branchId] if given.
+  Future<List<Map<String, dynamic>>> getKitchenLedgerItems({
+    int? branchId,
+  }) async {
+    return _guard(() async {
+      final r = await _dio.get('/superadmin/kitchen-ledger-items',
+          queryParameters: {
+            if (branchId != null) 'branch_id': branchId,
+          });
+      final data = r.data['data'] ?? r.data;
+      return List<Map<String, dynamic>>.from(data is List ? data : []);
+    });
+  }
+
+  /// itemId is the inventory_items UUID (String); branchId is numeric.
+  Future<void> addKitchenLedgerItem({
+    required int branchId,
+    required String itemId,
+  }) async {
+    await _guard(() async => _dio.post('/superadmin/kitchen-ledger-items',
+        data: {'branch_id': branchId, 'item_id': itemId}));
+  }
+
+  Future<void> removeKitchenLedgerItem(String id) async {
+    await _guard(
+        () async => _dio.delete('/superadmin/kitchen-ledger-items/$id'));
+  }
 }

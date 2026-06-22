@@ -130,6 +130,10 @@ class SuperAdminNavItem {
                 section: SuperAdminSection.nonConsumablesCatalog,
                 label: 'Non-Consumables POS',
                 icon: PhosphorIcons.package()),
+            const SuperAdminNavItem(
+                section: SuperAdminSection.posOutletMenu,
+                label: 'POS Outlet Menu',
+                icon: Icons.storefront),
             SuperAdminNavItem(
                 section: SuperAdminSection.tillNumbers,
                 label: 'POS Till Numbers',
@@ -151,6 +155,10 @@ class SuperAdminNavItem {
                 section: SuperAdminSection.storekeepingConfig,
                 label: 'Storekeeping Config',
                 icon: PhosphorIcons.warehouse()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.kitchenLedgerItems,
+                label: 'Kitchen Ledger Items',
+                icon: PhosphorIcons.cookingPot()),
             SuperAdminNavItem(
                 section: SuperAdminSection.suppliers,
                 label: 'Suppliers',

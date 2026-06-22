@@ -41,5 +41,6 @@ router.post('/', authorize(INITIATE_ROLES), ctrl.createPayment);
 router.put('/:id/approve', authorize(APPROVE_ROLES), ctrl.approvePayment);
 router.put('/:id/reject', authorize(APPROVE_ROLES), ctrl.rejectPayment);
 router.put('/:id/release', authorize(RELEASE_ROLES), ctrl.releasePayment);
+router.put('/:id/settle', authorize(RELEASE_ROLES), ctrl.settlePayment);
 
 export default router;

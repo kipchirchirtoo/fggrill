@@ -17,7 +17,8 @@ import {
     updateProductionRecipe,
     deactivateProductionRecipe,
     listProductionRecipes,
-    getKitchenShiftStats
+    getKitchenShiftStats,
+    getProductionSessionView
 } from '../controllers/kitchen-shift.controller';
 
 const router = express.Router();
@@ -42,6 +43,8 @@ const KITCHEN_ROLES = [
 router.post('/', authorize(KITCHEN_ROLES), openKitchenShift);
 router.get('/', authorize(KITCHEN_ROLES), listKitchenShifts);
 router.get('/stats', authorize(KITCHEN_ROLES), getKitchenShiftStats);
+// Compatibility view for old kitchen_production_sessions-shaped consumers
+router.get('/production-sessions-view', authorize(KITCHEN_ROLES), getProductionSessionView);
 router.post('/recipes', authorize(KITCHEN_ROLES), createProductionRecipe);
 router.get('/recipes/list', authorize(KITCHEN_ROLES), listProductionRecipes);
 router.put('/recipes/:recipe_id', authorize(KITCHEN_ROLES), updateProductionRecipe);

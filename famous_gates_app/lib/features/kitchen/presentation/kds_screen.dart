@@ -179,7 +179,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       total: effectiveTotal,
       paymentMethod: 'PENDING', // Captain orders are not yet paid
       cashierName: order.waiterName ?? 'Waiter',
-      createdAt: order.createdAt,
+      createdAt: order.effectiveCreatedAt,
     );
 
     await printService.printCaptainOrder(
@@ -207,6 +207,15 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       initials: 'KD',
       breadcrumbRoot: 'Kitchen',
       searchHint: 'Search order, item, table...',
+      palette: const ShellPalette(
+        background: Color(0xFF1A1A2E),
+        surface: Color(0xFF22223D),
+        accent: AppColors.kAccent,
+        onAccent: Color(0xFF1A1A2E),
+        border: Color(0xFF34345A),
+        text: Color(0xFFF5F6FA),
+        mutedText: Color(0xFFAAAFC4),
+      ),
       currentSection: _section,
       items: const [
         MasterNavItem(
@@ -1049,6 +1058,12 @@ class _OrderTicket extends StatelessWidget {
                     if (order.isCaptainOrder)
                       const _MetaPill(
                           label: 'Captain', icon: Icons.point_of_sale),
+                    if (order.isExchangeOrder)
+                      const _MetaPill(
+                        label: 'Exchange',
+                        icon: Icons.swap_horiz,
+                        color: AppColors.kWarning,
+                      ),
                     if (hasRecalledTicket)
                       const _MetaPill(
                         label: 'Recalled items',
@@ -1086,6 +1101,8 @@ class _OrderTicket extends StatelessWidget {
                 // were already prepared before the recall happened — cross
                 // them out so the kitchen knows to only cook the new lines.
                 final isAlreadyMade = hasRecalledTicket && !isRecalledItem;
+                final itemVoid = item.voidRequest;
+                final isItemVoidActive = itemVoid?.isActive ?? false;
                 return Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -1181,6 +1198,35 @@ class _OrderTicket extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
+                            if (itemVoid != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: _voidChipColor(itemVoid.status)
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: _voidChipColor(itemVoid.status)
+                                          .withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    itemVoid.reason == null ||
+                                            itemVoid.reason!.isEmpty
+                                        ? itemVoid.label
+                                        : '${itemVoid.label} • ${itemVoid.reason}',
+                                    style: TextStyle(
+                                      color: _voidChipColor(itemVoid.status),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -1189,7 +1235,8 @@ class _OrderTicket extends StatelessWidget {
                             item.isReady ? 'Item ready' : 'Mark item ready',
                         onPressed: item.isReady ||
                                 order.hasPendingVoidRequest ||
-                                order.isVoided
+                                order.isVoided ||
+                                isItemVoidActive
                             ? null
                             : () => onItemReady(item),
                         icon: Icon(
@@ -1273,6 +1320,23 @@ class _OrderTicket extends StatelessWidget {
     }
     return const SizedBox.shrink();
   }
+
+  Color _voidChipColor(String status) {
+    switch (status) {
+      case 'pending':
+        return AppColors.kWarning;
+      case 'void_acknowledged':
+        return Colors.orange;
+      case 'approved':
+        return AppColors.kSuccess;
+      case 'rejected':
+        return AppColors.kError;
+      case 'void_cashier_declined':
+        return Colors.grey;
+      default:
+        return AppColors.kTextSecondary;
+    }
+  }
 }
 
 class _OrderList extends StatelessWidget {
@@ -1321,29 +1385,31 @@ class _OrderList extends StatelessWidget {
 }
 
 class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label, required this.icon});
+  const _MetaPill({required this.label, required this.icon, this.color});
 
   final String label;
   final IconData icon;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final pillColor = color ?? AppColors.kPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.kPrimary.withValues(alpha: 0.08),
+        color: pillColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.kPrimary.withValues(alpha: 0.18)),
+        border: Border.all(color: pillColor.withValues(alpha: 0.18)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: AppColors.kPrimary),
+          Icon(icon, size: 12, color: pillColor),
           const SizedBox(width: 4),
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.kPrimary,
+            style: TextStyle(
+              color: pillColor,
               fontSize: 10,
               fontWeight: FontWeight.w800,
             ),

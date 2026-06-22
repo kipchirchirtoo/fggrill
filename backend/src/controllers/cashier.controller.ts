@@ -11,6 +11,7 @@ import { mpesaService } from '../services/mpesa.service';
 import notificationService from '../services/notification.service';
 import { deductIngredientsForItem } from './kitchen/recipes.controller';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import { getPaymentMethodBreakdown } from '../utils/paymentMethodBreakdown';
 import {
     assignedOutletIds,
     canAccessPosOutlet,
@@ -1885,14 +1886,29 @@ async function linkPaymentToActiveShift(
     amount: number
 ): Promise<void> {
     try {
-        const { data: shift } = await supabase
+        // .single() throws if the cashier has 0 or 2+ rows with status='open'
+        // (e.g. a prior shift left open while a new one is pending approval),
+        // which silently dropped this shift's cashier_shift_transactions row
+        // and undercounted Shift Collections even though the payment itself
+        // succeeded. order+limit+maybeSingle tolerates duplicates and picks
+        // the most recent, matching activeCashierShiftLogId below.
+        const { data: shift, error: shiftLookupError } = await supabase
             .from('cashier_shift_logs')
             .select('id')
             .eq('cashier_id', cashierId)
             .eq('status', 'open')
-            .single();
+            .order('shift_start', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (!shift) return;
+        if (shiftLookupError || !shift) {
+            logger.warn('linkPaymentToActiveShift: no active shift resolved', {
+                cashierId,
+                paymentId,
+                error: shiftLookupError?.message
+            });
+            return;
+        }
 
         const { error } = await supabase.from('cashier_shift_transactions').insert({
             shift_id: shift.id,
@@ -1900,22 +1916,40 @@ async function linkPaymentToActiveShift(
             transaction_ref: paymentRef,
             payment_method: paymentMethod?.toUpperCase(),
             amount,
-            transaction_time: new Date().toISOString()
+            transaction_time: new Date().toISOString(),
+            // Dedup (migration 20260622_famousgate_major_redesign.sql, section 7)
+            // ranks 'cashier' rows above 'pos' rows when the same payment lands
+            // in both flows.
+            source: 'cashier'
         });
 
-
         if (error) {
-
-
-          console.error('Database error:', error);
-
-
-          throw error;
-
-
+            logger.warn('linkPaymentToActiveShift: failed to insert cashier_shift_transactions', {
+                cashierId,
+                paymentId,
+                error: error.message
+            });
+            return; // don't increment totals if the transaction row didn't land
         }
-    } catch {
-        // Non-critical — don't fail the payment if shift linking fails
+
+        // Atomically increment the shift's running totals. A single UPDATE
+        // inside a PL/pgSQL function is the only way to do this without a
+        // read-then-write race: two payments arriving at the same millisecond
+        // would both read the same stale total and overwrite each other.
+        const { error: incrError } = await supabase.rpc('increment_cashier_shift_totals', {
+            p_shift_id: shift.id,
+            p_amount: amount,
+            p_method: (paymentMethod || '').toUpperCase()
+        });
+        if (incrError) {
+            logger.warn('linkPaymentToActiveShift: failed to increment cashier_shift_logs totals', {
+                cashierId,
+                shiftId: shift.id,
+                error: incrError.message
+            });
+        }
+    } catch (err) {
+        logger.warn('linkPaymentToActiveShift threw', { cashierId, paymentId, error: (err as Error)?.message });
     }
 }
 
@@ -1967,10 +2001,28 @@ async function recordActiveShiftSale(params: {
         transaction_ref: params.transactionRef,
         payment_method: method,
         amount: params.amount,
-        transaction_time: new Date().toISOString()
+        transaction_time: new Date().toISOString(),
+        // Dedup (migration 20260622_famousgate_major_redesign.sql, section 7)
+        // ranks 'cashier' rows above 'pos' rows for the same shift/ref/amount.
+        source: 'pos'
     });
     if (error) {
         logger.warn('Unable to add payment to active cashier shift sales', { error: error.message, shiftId });
+        return;
+    }
+    // Atomically increment the shift's running totals. Same reasoning as in
+    // linkPaymentToActiveShift — a single PL/pgSQL UPDATE avoids the
+    // read-modify-write race that supabase-js's plain .update() would create.
+    const { error: incrError } = await supabase.rpc('increment_cashier_shift_totals', {
+        p_shift_id: shiftId,
+        p_amount: params.amount,
+        p_method: method
+    });
+    if (incrError) {
+        logger.warn('recordActiveShiftSale: failed to increment cashier_shift_logs totals', {
+            shiftId,
+            error: incrError.message
+        });
     }
 }
 
@@ -6199,8 +6251,14 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
         const defaultStatus = ['branch_accountant', 'accountant'].includes(reviewerRole)
             ? 'pending_accountant_review'
             : 'pending_audit';
+        // status=all returns full logbook history across every status
+        // (open, pending review/audit, audited, rejected, etc.) instead of
+        // just the reviewer's pending queue.
         const status = requestedStatus || defaultStatus;
-        const { from_date, to_date } = req.query;
+        // date_from/date_to accepted as aliases for from_date/to_date.
+        const from_date = req.query.from_date || req.query.date_from;
+        const to_date = req.query.to_date || req.query.date_to;
+        const { cashier_id } = req.query;
 
         // NOTE: branch is hydrated separately below — there is no FK relationship
         // between cashier_logbooks and branches in PostgREST's schema cache, so an
@@ -6211,8 +6269,11 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
                 *,
                 lines:cashier_logbook_lines!logbook_id(id, section, customer_name, amount, reference)
             `)
-            .eq('status', status)
             .order('log_date', { ascending: false });
+
+        if (status !== 'all') {
+            query = query.eq('status', status);
+        }
 
         query = applyBranchFilter(query, req);
         const isGlobal = isGlobalRole(req.user?.role);
@@ -6223,6 +6284,10 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
             if (Number.isFinite(requestedBranchId) && (isGlobal || requestedBranchId === userBranchId)) {
                 query = query.eq('branch_id', requestedBranchId);
             }
+        }
+
+        if (cashier_id) {
+            query = query.eq('cashier_id', cashier_id);
         }
 
         if (from_date) {
@@ -7539,8 +7604,10 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
  */
 export const getPOSReconciliation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { date, branch_id } = req.query;
+        const { date, branch_id, from_date, to_date } = req.query;
         const targetDate = date ? (date as string) : new Date().toISOString().split('T')[0];
+        const rangeFrom = (from_date as string) || targetDate;
+        const rangeTo = (to_date as string) || targetDate;
 
         const isGlobal = isGlobalRole(req.user?.role);
         const effectiveBranchId = isGlobal && branch_id ? parseInt(branch_id as string) : (req.user?.branch_id || 0);
@@ -7575,11 +7642,20 @@ export const getPOSReconciliation = async (req: Request, res: Response, next: Ne
             }
         });
 
+        // Normalized (mpesa/cash/card/credit) breakdown across both POS and
+        // cashier-recorded transactions for the requested range — additive,
+        // alongside the existing day-level `totals` above.
+        const paymentMethodBreakdown = effectiveBranchId
+            ? await getPaymentMethodBreakdown(Number(effectiveBranchId), rangeFrom, rangeTo).catch(() => null)
+            : null;
+
         res.json({
             success: true,
             data: {
                 date: targetDate,
+                period: { from: rangeFrom, to: rangeTo },
                 summary: totals,
+                payment_method_breakdown: paymentMethodBreakdown,
                 gross_total: Object.values(totals).reduce((sum, t) => sum + t.total, 0)
             }
         });
@@ -7805,9 +7881,57 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             }
         }
 
+        // Item-level voids (pos_item_void_requests) never flip the order's own
+        // status/payment_status/void_request_status -- void_order_item() only
+        // mutates the JSONB item and reduces total/balance -- so the whole-bill
+        // OR-filter above can never find them. Pull approved item-void records
+        // for these shifts separately and merge in any orders not already
+        // present so the cashier's voided-orders view also surfaces item-level
+        // voids, not just whole-bill voids.
+        const itemVoidsByOrder = new Map<string, any[]>();
+        if (wantsVoidedOrders && posShiftIds.length) {
+            try {
+                const { data: itemVoidRows, error: itemVoidErr } = await supabase
+                    .from('pos_item_void_requests')
+                    .select('*')
+                    .in('shift_id', posShiftIds)
+                    .eq('status', 'approved')
+                    .order('actioned_at', { ascending: false });
+                if (itemVoidErr) throw itemVoidErr;
+
+                for (const row of itemVoidRows || []) {
+                    const orderId = String((row as any).order_id);
+                    const list = itemVoidsByOrder.get(orderId) || [];
+                    list.push(row);
+                    itemVoidsByOrder.set(orderId, list);
+                }
+
+                const knownOrderIds = new Set(posOrders.map((o: any) => String(o.id)));
+                const missingOrderIds = Array.from(itemVoidsByOrder.keys())
+                    .filter((id) => !knownOrderIds.has(id));
+                if (missingOrderIds.length) {
+                    const { data: extraOrders, error: extraErr } = await supabase
+                        .from('pos_shift_orders')
+                        .select('*')
+                        .in('id', missingOrderIds);
+                    if (extraErr) throw extraErr;
+                    posOrders = [...posOrders, ...(extraOrders || [])];
+                }
+            } catch (itemVoidError: any) {
+                if (!['42P01', '42703', 'PGRST205', 'PGRST204'].includes(itemVoidError?.code)) {
+                    throw itemVoidError;
+                }
+            }
+        }
+
+        const itemVoidActionerIds = Array.from(itemVoidsByOrder.values())
+            .flat()
+            .flatMap((row: any) => [row.actioned_by, row.requested_by]);
+
         const waiterMap = await fetchCashierUsersById([
             ...(restaurantOrders || []).map((order: any) => order.created_by),
             ...(barOrders || []).map((order: any) => order.created_by),
+            ...itemVoidActionerIds,
         ]);
 
         // Normalise into a common shape
@@ -7881,6 +8005,16 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
                 const location = posOrderLocation(o, stationName);
                 const isVoided = o.status === 'voided' || o.payment_status === 'voided' || ['approved','pending'].includes(o.void_request_status);
+                const itemVoids = itemVoidsByOrder.get(String(o.id)) || [];
+                // A bill can have item-level voids without the bill itself ever
+                // being voided (the waiter voided one line, the rest was paid
+                // normally) -- only fall back to the item-void view when the
+                // bill isn't already a whole-bill void.
+                const isItemLevelVoid = !isVoided && itemVoids.length > 0;
+                const latestItemVoid = itemVoids[0]; // already sorted desc by actioned_at
+                const voidedAmount = itemVoids.reduce(
+                    (sum: number, v: any) => sum + Number(v.qty_to_void || 0) * Number(v.unit_price || 0), 0
+                );
                 return {
                     id: o.id,
                     source: 'pos',
@@ -7893,11 +8027,11 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     location,
                     guest_name: o.customer_name || 'Walk-in',
                     customer_name: o.customer_name || 'Walk-in',
-                    total_amount: Number(o.total_amount || 0),
+                    total_amount: isItemLevelVoid ? voidedAmount : Number(o.total_amount || 0),
                     paid_amount: Number(o.amount_paid || 0),
-                    balance_amount: isVoided ? 0 : Number(o.balance_amount || o.total_amount || 0),
-                    payment_status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
-                    status: isVoided ? 'voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status),
+                    balance_amount: (isVoided || isItemLevelVoid) ? 0 : Number(o.balance_amount || o.total_amount || 0),
+                    payment_status: isVoided ? 'voided' : (isItemLevelVoid ? 'item_voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status)),
+                    status: isVoided ? 'voided' : (isItemLevelVoid ? 'item_voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status)),
                     created_at: o.created_at,
                     bill_date: o.created_at,
                     branch_id: shift?.branch_id || effectiveBranchId,
@@ -7905,23 +8039,39 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     outlet_type: outlet?.outlet_type || null,
                     outlet_name: outlet?.name || null,
                     station_name: stationName,
+                    void_type: isVoided ? 'whole_bill' : (isItemLevelVoid ? 'item_level' : null),
                     void_request_status: o.void_request_status || null,
-                    void_reason: o.void_reason || null,
-                    voided_at: o.voided_at || null,
-                    voided_by: o.voided_by || null,
+                    void_reason: isItemLevelVoid
+                        ? Array.from(new Set(itemVoids.map((v: any) => v.reason).filter(Boolean))).join('; ')
+                        : (o.void_reason || null),
+                    voided_at: isItemLevelVoid ? (latestItemVoid?.actioned_at || null) : (o.voided_at || null),
+                    voided_by: isItemLevelVoid
+                        ? (() => {
+                            const actioner = waiterMap.get(String(latestItemVoid?.actioned_by || ''));
+                            return actioner ? `${actioner.first_name || ''} ${actioner.last_name || ''}`.trim() : null;
+                        })()
+                        : (o.voided_by || null),
                     waiter: null,
                     waiter_id: o.waiter_id || o.created_by,
                     waiter_name: o.waiter_name || '',
-                    items: items.map((item: any, index: number) => ({
-                        id: item.outlet_item_id || `${o.id}-${index}`,
-                        item_name: item.name || item.item_name || 'POS item',
-                        quantity: Number(item.quantity || item.qty || 1),
-                        unit_price: Number(item.unit_price || item.price || 0),
-                        total_price: Number(item.line_total || 0)
-                    })),
+                    items: isItemLevelVoid
+                        ? itemVoids.map((v: any) => ({
+                            id: v.id,
+                            item_name: v.item_name || 'POS item',
+                            quantity: Number(v.qty_to_void || 0),
+                            unit_price: Number(v.unit_price || 0),
+                            total_price: Number(v.qty_to_void || 0) * Number(v.unit_price || 0)
+                        }))
+                        : items.map((item: any, index: number) => ({
+                            id: item.outlet_item_id || `${o.id}-${index}`,
+                            item_name: item.name || item.item_name || 'POS item',
+                            quantity: Number(item.quantity || item.qty || 1),
+                            unit_price: Number(item.unit_price || item.price || 0),
+                            total_price: Number(item.line_total || 0)
+                        })),
                     is_waiter_order: true,
                     is_captain_order: true,
-                    is_voided: isVoided
+                    is_voided: isVoided || isItemLevelVoid
                 };
             })
         ].filter((row) => {

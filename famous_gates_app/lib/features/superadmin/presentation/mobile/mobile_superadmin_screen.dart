@@ -44,6 +44,7 @@ class MobileSuperAdminScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return MobileShell(
       title: 'Super Admin',
+      backgroundColor: const Color(0xFFF0F4F8),
       tabs: const [
         MobileTab(
           label: 'System',

@@ -28,6 +28,50 @@ async function resolveStaffProfileId(value: any): Promise<string | null> {
     return byUser?.id || null;
 }
 
+// ── WASTAGE THRESHOLDS / ALERTS ──────────────────────────────
+// Branch-level defaults (kitchen_wastage_thresholds, migration
+// 20260622_kitchen_storekeeper_integration.sql). A recipe's own
+// allowed_variance_percent, where set, overrides the branch-level
+// recipe_variance_critical_pct for that recipe specifically.
+const DEFAULT_WASTAGE_THRESHOLDS = {
+    recipe_variance_warning_pct: 5,
+    recipe_variance_critical_pct: 15,
+    spoilage_warning_pct: 5,
+    spoilage_critical_pct: 10,
+    shortage_warning_kes: 500,
+    shortage_critical_kes: 2000,
+    production_shortfall_warning_pct: 5,
+    production_shortfall_critical_pct: 15,
+    bar_variance_warning_kes: 500,
+    bar_variance_critical_kes: 2000
+};
+
+async function getWastageThresholds(branchId: number): Promise<typeof DEFAULT_WASTAGE_THRESHOLDS> {
+    const { data } = await supabase
+        .from('kitchen_wastage_thresholds')
+        .select('*')
+        .eq('branch_id', branchId)
+        .maybeSingle();
+    return data ? { ...DEFAULT_WASTAGE_THRESHOLDS, ...data } : DEFAULT_WASTAGE_THRESHOLDS;
+}
+
+async function createWastageAlert(payload: {
+    shift_id: string;
+    branch_id: number;
+    alert_type: 'recipe_variance' | 'spoilage_spike' | 'unexplained_shortage' | 'production_shortfall';
+    severity: 'warning' | 'critical';
+    item_sku?: string | null;
+    item_name?: string | null;
+    expected_value?: number | null;
+    actual_value?: number | null;
+    variance_value?: number | null;
+    variance_cost?: number | null;
+    message?: string | null;
+}): Promise<void> {
+    const { error } = await supabase.from('kitchen_wastage_alerts').insert(payload);
+    if (error) logger.error('createWastageAlert insert failed', error);
+}
+
 async function staffProfileSummaries(userIds: string[]) {
     const ids = [...new Set((userIds || []).filter(Boolean))];
     if (!ids.length) return [];
@@ -105,6 +149,12 @@ export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
 });
 
 // ── RECORD PRODUCTION ───────────────────────────────────────
+// Recipe variance enforcement: when a production line references a recipe
+// (kitchen_production_recipes), the raw quantity used is checked against the
+// recipe's yield ratio. A variance beyond the critical threshold (the
+// recipe's own allowed_variance_percent, falling back to the branch-level
+// kitchen_wastage_thresholds.recipe_variance_critical_pct) blocks the save
+// unless a variance_reason is supplied on that production line.
 export const recordProduction = asyncWrap(async (req: Request, res: Response) => {
     const { shift_id } = req.params;
     const { productions } = req.body;
@@ -113,6 +163,7 @@ export const recordProduction = asyncWrap(async (req: Request, res: Response) =>
     if (!shift) throw new AppError('Shift not found', 404);
     if (shift.status !== 'open') throw new AppError('Shift not open', 400);
 
+    const thresholds = await getWastageThresholds(shift.branch_id);
     const results: any[] = [];
     for (const p of productions || []) {
         const { data: raw } = await supabase.from('kitchen_shift_items').select('*').eq('shift_id', shift_id).eq('item_sku', p.raw_item_sku).single();
@@ -120,14 +171,60 @@ export const recordProduction = asyncWrap(async (req: Request, res: Response) =>
         const avail = n(raw.opening_stock) + n(raw.additions) - n(raw.sold_quantity) - n(raw.spoilage_quantity);
         if (n(p.raw_quantity_used) > avail) throw new AppError(`Insufficient ${p.raw_item_name}: ${avail} available`, 400);
 
+        let recipe: any = null;
+        let maxRawAllowed: number | null = null;
+        let variancePct: number | null = null;
+        let varianceFlagged = false;
+        let severity: 'warning' | 'critical' | null = null;
+
+        if (p.recipe_id) {
+            const { data: recipeRow } = await supabase.from('kitchen_production_recipes').select('*').eq('id', p.recipe_id).maybeSingle();
+            recipe = recipeRow;
+            if (recipe && n(recipe.produced_quantity) > 0 && n(p.produced_quantity) > 0) {
+                maxRawAllowed = (n(p.produced_quantity) / n(recipe.produced_quantity)) * n(recipe.raw_quantity);
+                if (maxRawAllowed > 0) {
+                    variancePct = ((n(p.raw_quantity_used) - maxRawAllowed) / maxRawAllowed) * 100;
+                    const criticalPct = n(recipe.allowed_variance_percent) > 0 ? n(recipe.allowed_variance_percent) : thresholds.recipe_variance_critical_pct;
+                    const warningPct = thresholds.recipe_variance_warning_pct;
+
+                    if (variancePct > criticalPct && !p.variance_reason) {
+                        res.status(400).json({
+                            success: false,
+                            code: 'RECIPE_VARIANCE_EXCEEDED',
+                            message: `Recipe allows ${maxRawAllowed.toFixed(3)}${recipe.raw_unit} for ${p.produced_quantity} ${recipe.produced_unit || 'portions'}. You used ${p.raw_quantity_used}${recipe.raw_unit} (${variancePct.toFixed(1)}% over). Please provide a variance explanation.`,
+                            data: { recipe, maxRawAllowed, actualUsed: n(p.raw_quantity_used), variancePct }
+                        });
+                        return;
+                    }
+
+                    if (variancePct > criticalPct) severity = 'critical';
+                    else if (variancePct > warningPct) severity = 'warning';
+                    varianceFlagged = variancePct > warningPct;
+                }
+            }
+        }
+
         const { data: prod } = await supabase.from('kitchen_shift_production').insert({
             shift_id, branch_id: shift.branch_id, recipe_id: p.recipe_id, food_control_id: p.food_control_id,
             raw_item_sku: p.raw_item_sku, raw_item_name: p.raw_item_name, raw_quantity_used: n(p.raw_quantity_used), raw_unit: p.raw_unit,
             produced_item_name: p.produced_item_name, produced_item_sku: p.produced_item_sku, pos_outlet_item_id: p.pos_outlet_item_id,
             produced_quantity: n(p.produced_quantity), produced_unit: p.produced_unit || 'portion', conversion_ratio: n(p.conversion_ratio),
-            conversion_notes: p.conversion_notes, produced_by: p.produced_by || userId
+            conversion_notes: p.conversion_notes, produced_by: p.produced_by || userId,
+            variance_pct: variancePct, recipe_max_raw_allowed: maxRawAllowed, variance_flagged: varianceFlagged,
+            variance_reason: p.variance_reason ?? null
         }).select().single();
         results.push(prod);
+
+        if (severity && maxRawAllowed !== null) {
+            await createWastageAlert({
+                shift_id, branch_id: shift.branch_id, alert_type: 'recipe_variance', severity,
+                item_sku: p.raw_item_sku, item_name: p.raw_item_name,
+                expected_value: maxRawAllowed, actual_value: n(p.raw_quantity_used),
+                variance_value: n(p.raw_quantity_used) - maxRawAllowed,
+                variance_cost: Math.round((n(p.raw_quantity_used) - maxRawAllowed) * n(raw.cost_price) * 100) / 100,
+                message: `Recipe variance ${variancePct?.toFixed(1)}% on ${p.raw_item_name} for shift ${shift_id}`
+            });
+        }
 
         await supabase.from('kitchen_shift_items').update({ sold_quantity: n(raw.sold_quantity) + n(p.raw_quantity_used) }).eq('id', raw.id);
         if (p.pos_outlet_item_id) await addToPos(p.pos_outlet_item_id, n(p.produced_quantity));
@@ -279,6 +376,7 @@ export const closeKitchenShift = asyncWrap(async (req: Request, res: Response) =
     if (!shift) throw new AppError('Shift not found', 404);
     if (shift.status !== 'open') throw new AppError('Shift must be open', 400);
 
+    const thresholds = await getWastageThresholds(shift.branch_id);
     const records: any[] = [];
     let spoilageCost = 0, varianceCost = 0, revenue = 0, cogs = 0;
 
@@ -301,6 +399,24 @@ export const closeKitchenShift = asyncWrap(async (req: Request, res: Response) =
             variance_category: varQty < 0 ? 'shortage' : varQty > 0 ? 'overage' : 'ok', variance_reason: c.notes, counted_by: userId, counted_at: new Date().toISOString()
         }).select().single();
         records.push(st);
+
+        // Unexplained shortage alert — a real-time-visible counterpart to the
+        // kitchen_shift_stock_take row above, surfaced via /api/kitchen/wastage-alerts.
+        if (varQty < 0) {
+            const shortageCost = Math.abs(varVal);
+            const severity: 'warning' | 'critical' | null =
+                shortageCost > thresholds.shortage_critical_kes ? 'critical'
+                : shortageCost > thresholds.shortage_warning_kes ? 'warning'
+                : null;
+            if (severity) {
+                await createWastageAlert({
+                    shift_id, branch_id: shift.branch_id, alert_type: 'unexplained_shortage', severity,
+                    item_sku: c.sku, item_name: si.item_name,
+                    expected_value: sysClose, actual_value: phys, variance_value: varQty, variance_cost: Math.round(shortageCost * 100) / 100,
+                    message: `${severity === 'critical' ? 'Critical' : 'Warning'} shortage on ${si.item_name}: KES ${shortageCost.toFixed(2)} unexplained`
+                });
+            }
+        }
 
         spoilageCost += spoil * cp;
         varianceCost += varVal;
@@ -366,6 +482,21 @@ export const accountantReviewShift = asyncWrap(async (req: Request, res: Respons
 
     if (approved && action === 'write_off' && !String(write_off_reason || notes || '').trim()) {
         throw new AppError('Write-off reason is required', 400);
+    }
+
+    // Deliberate-allocation guard: when the accountant explicitly chooses
+    // liability_action='staff_liability', credit bills must never be
+    // auto-created from a blank allocation list — the accountant must name
+    // who is being billed and how much.
+    if (approved && action === 'staff_liability' && absMoney(shift.total_variance_cost) > 0) {
+        if (!Array.isArray(allocations) || allocations.length === 0) {
+            res.status(400).json({
+                success: false,
+                code: 'ALLOCATIONS_REQUIRED',
+                message: 'Staff liability allocations must be explicitly provided by the accountant before credit bills are created.'
+            });
+            return;
+        }
     }
 
     const { data: upd } = await supabase.from('kitchen_shifts').update({
@@ -470,6 +601,30 @@ export const listKitchenShifts = asyncWrap(async (req: Request, res: Response) =
     if (from_date) q = q.gte('shift_date', from_date);
     if (to_date) q = q.lte('shift_date', to_date);
     const { data, error } = await q;
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: data || [] });
+});
+
+// ── PRODUCTION SESSION VIEW (compatibility) ──────────────────
+// Returns kitchen_shifts data in the shape expected by old
+// kitchen_production_sessions consumers — read-only, additive.
+export const getProductionSessionView = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id, status, shift_type } = req.query;
+    let query = supabase
+        .from('kitchen_shifts')
+        .select(`
+            *,
+            kitchen_shift_items(*),
+            kitchen_shift_production(*),
+            opened_by_user:users!opened_by(first_name,last_name)
+        `)
+        .order('opened_at', { ascending: false });
+
+    if (branch_id) query = query.eq('branch_id', Number(branch_id));
+    if (status) query = query.eq('status', status as string);
+    if (shift_type) query = query.eq('shift_type', shift_type as string);
+
+    const { data, error } = await query;
     if (error) throw new AppError(error.message, 500);
     res.json({ success: true, data: data || [] });
 });

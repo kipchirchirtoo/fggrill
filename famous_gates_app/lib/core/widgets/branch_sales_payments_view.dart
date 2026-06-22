@@ -7,6 +7,7 @@ import '../storage/secure_storage_provider.dart';
 import '../theme/app_theme.dart';
 import '../../features/auth/data/auth_repository.dart';
 import 'branch_sale_detail_screen.dart';
+import 'payment_method_breakdown_widget.dart';
 
 /// Shared "Branch Sales & Payments" view used by Branch Manager, Branch
 /// Accountant, Auditor and Director so every branch sale flows to all of them
@@ -204,6 +205,14 @@ class _BranchSalesPaymentsViewState
 
   num _n(dynamic v) => v is num ? v : num.tryParse('${v ?? 0}') ?? 0;
 
+  num _sumMethod(List<Map<String, dynamic>> methods, List<String> rawNames) {
+    return methods
+        .where((m) =>
+            rawNames.contains('${m['payment_method'] ?? ''}'.toLowerCase()))
+        .fold<num>(
+            0, (sum, m) => sum + _n(m['total_sales'] ?? m['amount']));
+  }
+
   String _money0(num v) => 'KES ${_money.format(v)}';
 
   // ── Payment method display ────────────────────────────────────────────────
@@ -386,6 +395,15 @@ class _BranchSalesPaymentsViewState
         const Text('By Payment Method',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         const SizedBox(height: 10),
+        if (methods.isNotEmpty) ...[
+          PaymentMethodBreakdownWidget(
+            mpesa: _sumMethod(methods, const ['mpesa', 'mobile_money']),
+            cash: _sumMethod(methods, const ['cash']),
+            card: _sumMethod(methods, const ['card', 'swipe']),
+            credit: _sumMethod(methods, const ['credit', 'credit_bill']),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (methods.isEmpty)
           _muted('No payments in this period.')
         else

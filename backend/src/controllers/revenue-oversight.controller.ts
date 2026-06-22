@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+import { getPaymentMethodBreakdown } from '../utils/paymentMethodBreakdown';
 
 /**
  * @desc    Get revenue oversight dashboard data
@@ -13,10 +14,26 @@ export const getRevenueOversight = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { branch_id, period } = req.query;
-        const periodDays = parseInt(period as string) || 30;
-        const startDate = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const endDate = new Date().toISOString().split('T')[0];
+        const { branch_id, period, from_date, to_date } = req.query;
+        const isValidDate = (d: any): d is string => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d));
+
+        // Explicit from_date/to_date take precedence over the rolling `period` window.
+        let startDate: string;
+        let endDate: string;
+        let periodDays: number;
+        if (isValidDate(from_date) && isValidDate(to_date)) {
+            if (from_date > to_date) {
+                res.status(400).json({ success: false, error: 'from_date must not be after to_date' });
+                return;
+            }
+            startDate = from_date;
+            endDate = to_date;
+            periodDays = Math.max(1, Math.round((Date.parse(to_date) - Date.parse(from_date)) / (24 * 60 * 60 * 1000)) + 1);
+        } else {
+            periodDays = parseInt(period as string) || 30;
+            startDate = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            endDate = new Date().toISOString().split('T')[0];
+        }
 
         console.log('🔍 [Revenue Oversight] Fetching data:', { branch_id, startDate, endDate, periodDays });
 
@@ -248,6 +265,13 @@ export const getRevenueOversight = async (
         const previousRevenue = prevRooms?.reduce((sum, r) => sum + Number(r.total_amount || 0), 0) || 0;
         const growthRate = previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
+        // Payment method breakdown (mpesa/cash/card/credit) — only meaningful
+        // when scoped to a single branch (the source tables are branch-scoped).
+        const branchIdNum = branch_id && branch_id !== '0' ? Number(branch_id) : null;
+        const paymentMethodBreakdown = branchIdNum && Number.isInteger(branchIdNum)
+            ? await getPaymentMethodBreakdown(branchIdNum, startDate, endDate)
+            : null;
+
         const data = {
             summary: {
                 total_revenue: totalRevenue,
@@ -259,8 +283,10 @@ export const getRevenueOversight = async (
                 period_days: periodDays
             },
             category_breakdown: categoryBreakdown,
+            payment_method_breakdown: paymentMethodBreakdown,
             daily_trend: dailyTrend,
-            targets: targets || []
+            targets: targets || [],
+            period: { from: startDate, to: endDate }
         };
 
         console.log('✅ [Revenue Oversight] Data calculated successfully');

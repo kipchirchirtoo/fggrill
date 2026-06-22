@@ -269,18 +269,20 @@ class _MasterSideNav<T> extends ConsumerWidget {
                                 sidebarTitle ?? title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
+                                  color: palette?.text,
                                 ),
                               ),
                               Text(
                                 sidebarSubtitle ?? subtitle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
-                                  color: AppColors.kTextSecondary,
+                                  color:
+                                      palette?.mutedText ?? AppColors.kTextSecondary,
                                 ),
                               ),
                             ],
@@ -322,7 +324,7 @@ class _MasterSideNav<T> extends ConsumerWidget {
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 1.3,
-                              color: Colors.grey.shade500,
+                              color: palette?.mutedText ?? Colors.grey.shade500,
                             ),
                           ),
                         ),
@@ -510,7 +512,7 @@ class _MasterTopBar extends ConsumerWidget {
             IconButton(
               onPressed: onMenuTap,
               icon: Icon(PhosphorIcons.listBullets(),
-                  color: Colors.grey.shade700),
+                  color: palette?.mutedText ?? Colors.grey.shade700),
             ),
             const SizedBox(width: 12),
           ],
@@ -522,20 +524,23 @@ class _MasterTopBar extends ConsumerWidget {
                   child: Text(
                     breadcrumbRoot,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: palette?.mutedText ?? Colors.grey.shade500),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Icon(Icons.chevron_right,
-                      size: 14, color: Colors.grey.shade400),
+                      size: 14,
+                      color: palette?.mutedText ?? Colors.grey.shade400),
                 ),
                 Text(
                   'Dashboard',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
+                    color: palette?.text ?? Colors.grey.shade700,
                   ),
                 ),
               ],
@@ -544,7 +549,9 @@ class _MasterTopBar extends ConsumerWidget {
           const Spacer(),
           if (!isCompact) _SearchBox(hint: searchHint),
           if (!isCompact) const SizedBox(width: 16),
-          AppNotificationButton(iconColor: Colors.grey.shade700),
+          AppUpdateButton(iconColor: palette?.mutedText ?? Colors.grey.shade700),
+          AppNotificationButton(
+              iconColor: palette?.mutedText ?? Colors.grey.shade700),
           const SizedBox(width: 12),
           PopupMenuButton<String>(
             offset: const Offset(0, 42),
@@ -584,7 +591,8 @@ class _MasterTopBar extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade200),
+                border:
+                    Border.all(color: palette?.border ?? Colors.grey.shade200),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -614,9 +622,10 @@ class _MasterTopBar extends ConsumerWidget {
                             name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
+                              color: palette?.text,
                             ),
                           ),
                           Text(
@@ -625,7 +634,7 @@ class _MasterTopBar extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.grey.shade500,
+                              color: palette?.mutedText ?? Colors.grey.shade500,
                             ),
                           ),
                         ],
@@ -634,7 +643,7 @@ class _MasterTopBar extends ConsumerWidget {
                   ],
                   const SizedBox(width: 8),
                   Icon(Icons.expand_more,
-                      size: 16, color: Colors.grey.shade500),
+                      size: 16, color: palette?.mutedText ?? Colors.grey.shade500),
                 ],
               ),
             ),

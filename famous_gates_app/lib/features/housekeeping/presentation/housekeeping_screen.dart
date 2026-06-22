@@ -21,6 +21,7 @@ class _HousekeepingScreenState extends ConsumerState<HousekeepingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF0FAF4),
       appBar: AppBar(
         title: const Text('Housekeeping'),
         backgroundColor: AppColors.kPrimary,

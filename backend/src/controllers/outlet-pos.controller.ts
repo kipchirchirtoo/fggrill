@@ -63,11 +63,10 @@ const isFoodOrBarOutlet = (outletType: unknown): boolean =>
 //  - Main Bar / Executive Bar: the bar cashier's Flutter screen polls
 //    getBarCaptainOrders below and prints locally via PrintService -> a
 //    local print agent at localhost (see print_service.dart).
-//  - Restaurant: orders placed through the generic Outlet POS screen land
-//    in pos_shift_orders (a different table from the dedicated waiter/
-//    table-ordering flow that feeds KDS's restaurant_orders feed, so KDS
-//    never sees these) — outlet_pos_screen.dart prints the kitchen ticket
-//    locally itself, for both new and recalled orders.
+//  - Restaurant: orders land in pos_shift_orders; GET /restaurant/kitchen/orders
+//    merges these into the KDS feed (alongside restaurant_orders), so the KDS
+//    auto-prints the captain order on the kitchen printer within its 5 s poll.
+//    The waiter screen prints the customer bill only.
 // This backend only ever supplies the order data; it never attempts the
 // print itself.
 //
@@ -745,6 +744,80 @@ const updateStockForItems = async (
       } catch (syncErr: any) {
         logger.warn('Unified bar stock sync failed (non-critical):', syncErr.message);
       }
+    }
+  }
+};
+
+// Links a POS sale to the kitchen raw-material stock it consumed, via
+// kitchen_production_recipes (yield ratio: raw_quantity -> produced_quantity).
+// Logs the consumption to kitchen_shift_pos_consumption and increments the
+// matching kitchen_shift_items.sold_quantity for the branch's currently open
+// kitchen shift — the same field recordProduction() increments, so
+// closeKitchenShift()'s existing variance formula (opening + additions -
+// sold - spoilage) already accounts for POS-driven consumption without any
+// changes to that formula. Best-effort: items with no recipe, or branches
+// with no open kitchen shift, are silently skipped (not every POS item is
+// kitchen-produced).
+const recordKitchenConsumption = async (
+  orderItems: Array<Record<string, any>>,
+  branchId: number,
+  posShiftId: string,
+  orderId: string
+): Promise<void> => {
+  if (!branchId || !orderItems.length) return;
+
+  const { data: shift } = await supabase
+    .from('kitchen_shifts')
+    .select('id')
+    .eq('branch_id', branchId)
+    .eq('status', 'open')
+    .order('opened_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!shift) return;
+
+  for (const item of orderItems) {
+    const outletItemId = item.outlet_item_id;
+    const portionsSold = numberValue(item.quantity);
+    if (!outletItemId || portionsSold <= 0) continue;
+
+    const { data: recipe } = await supabase
+      .from('kitchen_production_recipes')
+      .select('*')
+      .eq('pos_outlet_item_id', outletItemId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!recipe || numberValue(recipe.produced_quantity) <= 0) continue;
+
+    const rawQtyConsumed = (numberValue(recipe.raw_quantity) / numberValue(recipe.produced_quantity)) * portionsSold;
+
+    await supabase.from('kitchen_shift_pos_consumption').insert({
+      shift_id: shift.id,
+      branch_id: branchId,
+      pos_shift_id: posShiftId,
+      pos_order_id: orderId,
+      pos_outlet_item_id: outletItemId,
+      produced_item_sku: recipe.produced_item_sku,
+      produced_item_name: recipe.produced_item_name,
+      portions_sold: portionsSold,
+      raw_item_sku: recipe.raw_item_sku,
+      raw_item_name: recipe.raw_item_name,
+      raw_quantity_consumed: rawQtyConsumed,
+      raw_unit: recipe.raw_unit,
+      cost_price: numberValue(recipe.cost_per_output)
+    });
+
+    const { data: shiftItem } = await supabase
+      .from('kitchen_shift_items')
+      .select('id, sold_quantity')
+      .eq('shift_id', shift.id)
+      .eq('item_sku', recipe.raw_item_sku)
+      .maybeSingle();
+    if (shiftItem) {
+      await supabase
+        .from('kitchen_shift_items')
+        .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + rawQtyConsumed, updated_at: new Date().toISOString() })
+        .eq('id', shiftItem.id);
     }
   }
 };
@@ -1838,7 +1911,31 @@ export const getShiftOrders = async (req: Request, res: Response, next: NextFunc
     }
     const { data, error } = await query;
     if (error) throw error;
-    res.json({ success: true, data: data || [] });
+
+    // A bill that already has a pending or approved exchange request must not
+    // accept another one — surfaced here so the waiter's "Request Exchange"
+    // action can be disabled without a second round trip per order.
+    const orderIds = (data || []).map((order: any) => order.id);
+    const activeExchangeOrderIds = new Set<string>();
+    if (orderIds.length) {
+      const { data: exchangeRows, error: exchangeError } = await supabase
+        .from('pos_item_exchange_requests')
+        .select('order_id')
+        .in('order_id', orderIds)
+        .in('status', ['pending', 'approved']);
+      if (exchangeError) {
+        console.warn('Failed to fetch active exchange requests for order list:', exchangeError.message);
+      } else {
+        for (const row of (exchangeRows || [])) activeExchangeOrderIds.add(row.order_id);
+      }
+    }
+
+    const enriched = (data || []).map((order: any) => ({
+      ...order,
+      has_active_exchange_request: activeExchangeOrderIds.has(order.id)
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }
@@ -1917,7 +2014,12 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
     }
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
-    
+
+    // Kitchen raw-material consumption link — best-effort, never blocks order
+    // placement. See recordKitchenConsumption() below.
+    recordKitchenConsumption(normalizedItems, Number(shift.branch_id), shiftId, order.id)
+      .catch((consumptionError) => logger.warn('recordKitchenConsumption failed', consumptionError as any));
+
     // Captain order printing is entirely the cashier app's job now (this
     // backend never attempts its own cloud-side print, see the comment
     // above BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES near the top of this
@@ -2594,6 +2696,25 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
         })
         .eq('id', requestRow.order_id);
       if (voidOrderError) throw voidOrderError;
+
+      // Defensive reverse-increment guard. ensureEditableOrder currently blocks
+      // voiding a paid bill, so amount_paid is almost always 0 here. This guard
+      // future-proofs the system: if that restriction is ever relaxed or bypassed,
+      // the shift totals will still reflect reality rather than counting
+      // voided revenue forever.
+      if (numberValue(order.amount_paid) > 0) {
+        const { error: reverseError } = await supabase.rpc('reverse_cashier_shift_for_order', {
+          p_order_id: requestRow.order_id
+        });
+        if (reverseError) {
+          logger.warn('reviewPosVoidRequest: failed to reverse shift totals for voided order', {
+            orderId: requestRow.order_id,
+            amountPaid: order.amount_paid,
+            error: reverseError.message
+          });
+        }
+      }
+
       await notificationService.notifyRole(
         'auditor',
         'POS void approved',
@@ -2630,6 +2751,19 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
           }
         }
       );
+      if (requestRow.requested_by) {
+        await notificationService.notifyUser(
+          requestRow.requested_by,
+          'Void request APPROVED ✓',
+          `Your void request for bill ${order.order_number || requestRow.order_id} was approved. The bill has been cancelled.`,
+          {
+            type: 'success',
+            category: 'pos_void_request',
+            priority: 'medium',
+            metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id }
+          }
+        );
+      }
     } else {
       await supabase
         .from('pos_shift_orders')
@@ -2675,6 +2809,19 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
           }
         }
       );
+      if (requestRow.requested_by) {
+        await notificationService.notifyUser(
+          requestRow.requested_by,
+          'Void request REJECTED',
+          `Your void request for bill ${order.order_number || requestRow.order_id} was rejected${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back in the active queue.`,
+          {
+            type: 'warning',
+            category: 'pos_void_request',
+            priority: 'medium',
+            metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
+          }
+        );
+      }
     }
 
     res.json({ success: true, data: { id: requestId, status: approved ? 'approved' : 'rejected' } });
@@ -2783,6 +2930,27 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       .single();
     if (error || !requestRow) throw error || new AppError('Failed to create item void request', 500);
 
+    // Stage 1: notify only the cashier who has the open shift for this
+    // specific outlet — not all cashiers at the branch.
+    // shift.cashier_id is the user who opened this pos_outlet_shift.
+    const voidNotifMeta = {
+      request_id: requestRow.id,
+      order_id: orderId,
+      order_number: order.order_number,
+      shift_id: shiftId,
+      item_name: String(item.name || ''),
+      qty_to_void: qtyToVoid
+    };
+    const shiftCashierId = (shift as any).cashier_id;
+    if (shiftCashierId) {
+      await notificationService.notifyUser(
+        shiftCashierId,
+        'Item void request',
+        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} — void requested (qty: ${qtyToVoid}). Acknowledge or decline.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', metadata: voidNotifMeta }
+      );
+    }
+
     res.status(201).json({ success: true, data: requestRow });
   } catch (error) {
     next(error);
@@ -2889,13 +3057,12 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
     if (error || !requestRow) throw new AppError('Void request not found', 404);
     ensureBranchAccess(req, requestRow.branch_id);
 
-    if (requestRow.status !== 'pending') {
-      const namesById = await userDisplayNamesById(requestRow.actioned_by ? [requestRow.actioned_by] : []);
-      const actorName = requestRow.actioned_by ? namesById.get(String(requestRow.actioned_by)) : null;
-      throw new AppError(
-        actorName ? `Already actioned by ${actorName}` : 'Void request already processed',
-        409
-      );
+    // Stage 2: request must have been cashier-acknowledged first.
+    if (requestRow.status !== 'void_acknowledged') {
+      const check = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by the cashier yet'
+        : 'Void request already processed';
+      throw new AppError(check, 409);
     }
 
     const { data: updatedOrder, error: rpcError } = await supabase.rpc('void_order_item', {
@@ -2908,6 +3075,23 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
       }
       throw rpcError;
     }
+
+    const approverName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Manager';
+    const approveNotifMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item void APPROVED ✓',
+        `Void APPROVED by ${approverName} — "${requestRow.item_name}" removed from bill ${requestRow.order_number || ''}.`,
+        { type: 'success', category: 'pos_item_void_request', priority: 'medium', metadata: approveNotifMeta }
+      ),
+      requestRow.cashier_id && notificationService.notifyUser(
+        requestRow.cashier_id,
+        'Item void approved',
+        `Void on bill ${requestRow.order_number || ''} was approved by ${approverName} — "${requestRow.item_name}" removed.`,
+        { type: 'success', category: 'pos_item_void_request', priority: 'low', metadata: approveNotifMeta }
+      ),
+    ]);
 
     res.json({ success: true, data: updatedOrder });
   } catch (error) {
@@ -2930,13 +3114,33 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
     if (error || !requestRow) throw new AppError('Void request not found', 404);
     ensureBranchAccess(req, requestRow.branch_id);
 
-    if (requestRow.status !== 'pending') {
-      const namesById = await userDisplayNamesById(requestRow.actioned_by ? [requestRow.actioned_by] : []);
-      const actorName = requestRow.actioned_by ? namesById.get(String(requestRow.actioned_by)) : null;
-      throw new AppError(
-        actorName ? `Already actioned by ${actorName}` : 'Void request already processed',
-        409
-      );
+    if (requestRow.status !== 'void_acknowledged') {
+      const check = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by the cashier yet'
+        : 'Void request already processed';
+      throw new AppError(check, 409);
+    }
+
+    const now = new Date().toISOString();
+
+    // Reinstate the item: clear the void_pending_approval flag set at Stage 1
+    // so the item reappears on the bill as fully active.
+    const { data: orderData } = await supabase
+      .from('pos_shift_orders')
+      .select('items, total_amount, balance_amount')
+      .eq('id', requestRow.order_id)
+      .single();
+
+    if (orderData && Array.isArray(orderData.items)) {
+      const items = orderData.items as Array<Record<string, any>>;
+      if (items[requestRow.item_index]) {
+        const reinstated = { ...items[requestRow.item_index], void_pending_approval: false };
+        items[requestRow.item_index] = reinstated;
+        await supabase
+          .from('pos_shift_orders')
+          .update({ items, updated_at: now })
+          .eq('id', requestRow.order_id);
+      }
     }
 
     const { data: updatedRow, error: updateError } = await supabase
@@ -2944,33 +3148,686 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
       .update({
         status: 'rejected',
         actioned_by: req.user.id,
-        actioned_at: new Date().toISOString(),
+        actioned_at: now,
+        manager_id: req.user.id,
+        manager_reviewed_at: now,
         rejection_reason: rejectionReason || null,
-        updated_at: new Date().toISOString()
+        updated_at: now
       })
       .eq('id', id)
-      .eq('status', 'pending')
+      .eq('status', 'void_acknowledged')
       .select('*')
       .single();
     if (updateError || !updatedRow) {
       throw updateError || new AppError('Void request already processed', 409);
     }
 
+    const rejectorName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Manager';
+    const rejectMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item void REJECTED',
+        `Void REJECTED by ${rejectorName} — "${requestRow.item_name}" reinstated on bill ${requestRow.order_number || ''}. Item is back on the bill.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'medium', metadata: rejectMeta }
+      ),
+      requestRow.cashier_id && notificationService.notifyUser(
+        requestRow.cashier_id,
+        'Item void rejected — bill reinstated',
+        `Void on bill ${requestRow.order_number || ''} was REJECTED by ${rejectorName} — "${requestRow.item_name}" is back. Bill returned to unpaid queue.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', metadata: rejectMeta }
+      ),
+    ]);
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Stage 1: Cashier acknowledge/decline ───────────────────────────────────
+
+export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: cashier acknowledgment required', 403);
+    }
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+
+    const now = new Date().toISOString();
+
+    // Mark item as void_pending_approval in the JSONB array — this hides
+    // it from the bill display without changing financial totals yet.
+    const { data: orderData, error: orderErr } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .eq('id', requestRow.order_id)
+      .single();
+    if (orderErr || !orderData) throw new AppError('Order not found', 404);
+
+    const items = Array.isArray(orderData.items) ? [...orderData.items] as Array<Record<string, any>> : [];
+    if (!items[requestRow.item_index]) throw new AppError('Item no longer exists on bill', 404);
+    items[requestRow.item_index] = { ...items[requestRow.item_index], void_pending_approval: true };
+
+    const { data: updatedOrder, error: orderUpdateErr } = await supabase
+      .from('pos_shift_orders')
+      .update({ items, updated_at: now })
+      .eq('id', requestRow.order_id)
+      .select('*')
+      .single();
+    if (orderUpdateErr) throw orderUpdateErr;
+
+    const { data: updatedReq, error: reqUpdateErr } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'void_acknowledged',
+        cashier_id: req.user.id,
+        cashier_acknowledged_at: now,
+        cashier_action: 'acknowledged',
+        updated_at: now
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (reqUpdateErr) throw reqUpdateErr;
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    const ackMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void acknowledged — awaiting manager',
+        `Cashier ${cashierName} acknowledged the void for "${requestRow.item_name}" on bill ${requestRow.order_number || ''}. Awaiting manager approval.`,
+        { type: 'info', category: 'pos_item_void_request', priority: 'medium', metadata: ackMeta }
+      ),
+      notificationService.notifyRole(
+        'branch_accountant',
+        'Item void requires manager approval',
+        `"${requestRow.item_name}" on bill ${requestRow.order_number || ''} — void acknowledged by cashier. Please approve or reject.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: requestRow.branch_id, metadata: ackMeta }
+      ),
+      notificationService.notifyRole(
+        'branch_manager',
+        'Item void requires approval',
+        `"${requestRow.item_name}" on bill ${requestRow.order_number || ''} — cashier acknowledged void. Awaiting your decision.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: requestRow.branch_id, metadata: ackMeta }
+      ),
+    ]);
+
+    // Return both the updated request and the updated order so Flutter can
+    // immediately print the void receipt and the revised customer bill.
+    res.json({ success: true, data: { request: updatedReq, order: updatedOrder } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cashierDeclineItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: cashier action required', 403);
+    }
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+
+    const now = new Date().toISOString();
+    const { error: updateErr } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'void_cashier_declined',
+        cashier_id: req.user.id,
+        cashier_acknowledged_at: now,
+        cashier_action: 'declined',
+        updated_at: now
+      })
+      .eq('id', id);
+    if (updateErr) throw updateErr;
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
     if (requestRow.requested_by) {
       await notificationService.notifyUser(
         requestRow.requested_by,
-        'Item void rejected',
-        `Your void request for "${requestRow.item_name}" on ${requestRow.order_number || 'a bill'} was rejected.`,
+        'Void request declined by cashier',
+        `Cashier ${cashierName} declined the void for "${requestRow.item_name}" on bill ${requestRow.order_number || ''} — item stays on the bill.`,
+        { type: 'error', category: 'pos_item_void_request', priority: 'medium',
+          metadata: { request_id: id, order_id: requestRow.order_id } }
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Cashier Stage 1 queue ──────────────────────────────────────────────────
+
+export const getPendingVoidsCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = branchIdFor(req);
+
+    // Find shifts the caller has open (they are the cashier_id on those shifts).
+    const { data: myShifts } = await supabase
+      .from('pos_outlet_shifts')
+      .select('id')
+      .eq('cashier_id', req.user.id)
+      .eq('status', 'open');
+
+    const myShiftIds = (myShifts || []).map((s: any) => s.id);
+    if (!myShiftIds.length) { res.json({ success: true, data: [] }); return; }
+
+    const { data, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .in('shift_id', myShiftIds)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(rows.map((r: any) => r.requested_by).filter(Boolean)));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Manager Stage 2 queue and void history ─────────────────────────────────
+
+export const getPendingVoidsManager = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden', 403);
+    const branchId = branchIdFor(req);
+
+    let query = supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('status', 'void_acknowledged')
+      .order('cashier_acknowledged_at', { ascending: true });
+
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(
+      rows.flatMap((r: any) => [r.requested_by, r.cashier_id]).filter(Boolean)
+    ));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null,
+      cashier_name: r.cashier_id ? namesById.get(String(r.cashier_id)) || null : null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getVoidHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden', 403);
+
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const status = nullableText(String(req.query.status || ''));
+    const from = nullableText(String(req.query.from || ''));
+    const to = nullableText(String(req.query.to || ''));
+    const requestedBy = nullableText(String(req.query.requested_by || ''));
+    const cashierId = nullableText(String(req.query.cashier_id || ''));
+
+    let query = supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (!isGlobalUser(req) && branchId) query = query.eq('branch_id', branchId);
+    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+    if (status) query = query.eq('status', status);
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
+    if (requestedBy) query = query.eq('requested_by', requestedBy);
+    if (cashierId) query = query.eq('cashier_id', cashierId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(
+      rows.flatMap((r: any) => [r.requested_by, r.cashier_id, r.manager_id, r.actioned_by]).filter(Boolean)
+    ));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null,
+      cashier_name: r.cashier_id ? namesById.get(String(r.cashier_id)) || null : null,
+      manager_name: r.manager_id ? namesById.get(String(r.manager_id)) || null : null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Post-payment item exchange ──────────────────────────────────────────────
+// Distinct from both void flows above: the original pos_shift_orders row is
+// CLOSED and PAID, and is never mutated by this flow — it stays the
+// historical record of what was actually collected. An exchange creates a
+// new, linked pos_shift_orders row (is_exchange/exchange_parent_order_id/
+// exchange_request_id, same linking convention as is_split/is_merged)
+// carrying the new item(s). Approval is single-stage and cashier-only: per
+// product requirement, branch_manager/branch_accountant/accountant/auditor
+// get read-only visibility (getExchangeHistory) but cannot approve, reject,
+// or issue a refund — unlike the void flows above, REVIEW_ROLES is
+// deliberately NOT part of the approval gate here.
+const isExchangeApprover = (req: Request): boolean =>
+  isCashierStationRole(roleFor(req)) || roleFor(req) === 'super_admin';
+
+export const requestItemExchange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const shiftId = String(req.body.shift_id || '');
+    const orderId = String(req.body.order_id || '');
+    const oldItems = Array.isArray(req.body.old_items) ? req.body.old_items : [];
+    const newItems = Array.isArray(req.body.new_items) ? req.body.new_items : [];
+    const reason = nullableText(req.body.reason);
+
+    if (!shiftId || !orderId) throw new AppError('shift_id and order_id are required', 400);
+    if (!oldItems.length) throw new AppError('At least one item to return is required', 400);
+    if (!newItems.length) throw new AppError('At least one replacement item is required', 400);
+
+    const shift = await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
+
+    if (!['paid', 'credit_bill'].includes(String(order.payment_status || ''))) {
+      throw new AppError('Only a closed, paid bill can be exchanged', 400);
+    }
+
+    const billItems = Array.isArray(order.items) ? order.items : [];
+    const normalizedOldItems = oldItems.map((entry: Record<string, any>, index: number) => {
+      const itemIndex = Number(entry.item_index);
+      if (!Number.isInteger(itemIndex) || itemIndex < 0) {
+        throw new AppError(`A valid item_index is required for returned item ${index + 1}`, 400);
+      }
+      const billItem = billItems[itemIndex];
+      if (!billItem) throw new AppError(`Returned item ${index + 1} was not found on this bill`, 404);
+      const { activeQty } = activeQtyForItem(billItem);
+      const quantity = numberValue(entry.quantity ?? entry.qty);
+      if (!(quantity > 0)) throw new AppError(`Returned item ${index + 1} must have a quantity greater than zero`, 400);
+      if (quantity > activeQty) {
+        throw new AppError(`Returned quantity exceeds the active quantity for "${billItem.name}"`, 400);
+      }
+      const unitPrice = numberValue(billItem.unit_price ?? billItem.price);
+      return {
+        item_index: itemIndex,
+        outlet_item_id: billItem.outlet_item_id ?? null,
+        name: String(billItem.name || ''),
+        unit_price: unitPrice,
+        quantity
+      };
+    });
+
+    const normalizedNewItems = await normalizeOrderItems(shift.outlet_id, newItems);
+
+    const oldTotal = normalizedOldItems.reduce((sum: number, item: any) => sum + item.unit_price * item.quantity, 0);
+    const newTotal = normalizedNewItems.reduce((sum: number, item: any) => sum + item.line_total, 0);
+    const priceDifference = Math.round((newTotal - oldTotal) * 100) / 100;
+    const direction = priceDifference > 0.004 ? 'top_up' : priceDifference < -0.004 ? 'refund' : 'even';
+
+    const { data: existing, error: existingError } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('id')
+      .eq('order_id', orderId)
+      .in('status', ['pending', 'approved'])
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) throw new AppError('This bill has already been exchanged or has an exchange request awaiting approval', 409);
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .insert({
+        shift_id: shiftId,
+        outlet_id: shift.outlet_id,
+        branch_id: shift.branch_id,
+        order_id: orderId,
+        order_number: order.order_number,
+        old_items: normalizedOldItems,
+        new_items: normalizedNewItems,
+        old_total: oldTotal,
+        new_total: newTotal,
+        price_difference: priceDifference,
+        direction,
+        reason,
+        requested_by: req.user.id,
+        status: 'pending'
+      })
+      .select('*')
+      .single();
+    if (error || !requestRow) throw error || new AppError('Failed to create exchange request', 500);
+
+    const shiftCashierId = (shift as any).cashier_id;
+    if (shiftCashierId) {
+      const directionLabel = direction === 'top_up'
+        ? `top-up KES ${priceDifference.toFixed(2)}`
+        : direction === 'refund'
+          ? `refund KES ${Math.abs(priceDifference).toFixed(2)}`
+          : 'even exchange';
+      await notificationService.notifyUser(
+        shiftCashierId,
+        'Item exchange request',
+        `Bill ${order.order_number || orderId} — exchange requested (${directionLabel}). Approve or reject.`,
         {
           type: 'warning',
-          category: 'pos_item_void_request',
+          category: 'pos_item_exchange_request',
+          priority: 'high',
+          metadata: { request_id: requestRow.id, order_id: orderId, shift_id: shiftId, direction, price_difference: priceDifference }
+        }
+      );
+    }
+
+    res.status(201).json({ success: true, data: requestRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPendingExchangesCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+
+    const { data: myShifts } = await supabase
+      .from('pos_outlet_shifts')
+      .select('id')
+      .eq('cashier_id', req.user.id)
+      .eq('status', 'open');
+
+    const myShiftIds = (myShifts || []).map((s: any) => s.id);
+    if (!myShiftIds.length) { res.json({ success: true, data: [] }); return; }
+
+    const { data, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .in('shift_id', myShiftIds)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(rows.map((r: any) => r.requested_by).filter(Boolean)));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const approveItemExchange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isExchangeApprover(req)) throw new AppError('Forbidden: cashier approval required', 403);
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Exchange request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Exchange request already processed', 409);
+
+    const { data: newOrder, error: rpcError } = await supabase.rpc('approve_item_exchange', {
+      p_request_id: id,
+      p_actioned_by: req.user.id
+    });
+    if (rpcError) {
+      if (String(rpcError.message || '').includes('already processed')) {
+        throw new AppError('Exchange request already processed', 409);
+      }
+      throw rpcError;
+    }
+
+    // Stock: return the old item(s), deduct the new item(s). Mirrors the
+    // two-call shape used for whole-bill void reversal (reviewPosVoidRequest)
+    // and original sale posting (payShiftOrder).
+    await postPosInventorySale({
+      branchId: Number(requestRow.branch_id),
+      outletId: requestRow.outlet_id,
+      shiftId: requestRow.shift_id,
+      orderId: requestRow.order_id,
+      items: requestRow.old_items,
+      actorId: req.user.id,
+      reverse: true
+    });
+    await postPosInventorySale({
+      branchId: Number(requestRow.branch_id),
+      outletId: requestRow.outlet_id,
+      shiftId: requestRow.shift_id,
+      orderId: newOrder.id,
+      items: requestRow.new_items,
+      actorId: req.user.id
+    });
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    const approveMeta = { request_id: id, order_id: requestRow.order_id, exchange_order_id: newOrder.id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item exchange APPROVED ✓',
+        `Exchange APPROVED by ${cashierName} on bill ${requestRow.order_number || ''}. New ticket ${newOrder.order_number || ''} sent to kitchen.`,
+        { type: 'success', category: 'pos_item_exchange_request', priority: 'medium', metadata: approveMeta }
+      ),
+      notificationService.notifyRole(
+        'branch_accountant',
+        'Item exchange approved',
+        `Exchange approved by ${cashierName} on bill ${requestRow.order_number || ''}.`,
+        { type: 'info', category: 'pos_item_exchange_request', priority: 'low', branchId: requestRow.branch_id, metadata: approveMeta }
+      )
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        request: { ...requestRow, status: 'approved', cashier_id: req.user.id, actioned_at: new Date().toISOString(), exchange_order_id: newOrder.id },
+        order: newOrder
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rejectItemExchange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isExchangeApprover(req)) throw new AppError('Forbidden: cashier approval required', 403);
+    const { id } = req.params;
+    const rejectionReason = String(req.body.rejection_reason || req.body.reason || '').trim();
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Exchange request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Exchange request already processed', 409);
+
+    const now = new Date().toISOString();
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('pos_item_exchange_requests')
+      .update({
+        status: 'rejected',
+        cashier_id: req.user.id,
+        actioned_at: now,
+        rejection_reason: rejectionReason || null,
+        updated_at: now
+      })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select('*')
+      .single();
+    if (updateError || !updatedRow) {
+      throw updateError || new AppError('Exchange request already processed', 409);
+    }
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item exchange REJECTED',
+        `Exchange on bill ${requestRow.order_number || ''} was REJECTED by ${cashierName}. Original bill remains as closed.`,
+        {
+          type: 'warning',
+          category: 'pos_item_exchange_request',
           priority: 'medium',
-          metadata: { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
+          metadata: { request_id: id, order_id: requestRow.order_id, rejection_reason: rejectionReason }
         }
       );
     }
 
     res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const issueExchangeRefund = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isExchangeApprover(req)) throw new AppError('Forbidden: cashier action required', 403);
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Exchange request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'approved') throw new AppError('Exchange request must be approved before a refund can be issued', 400);
+    if (requestRow.direction !== 'refund') throw new AppError('This exchange does not owe a refund', 400);
+    if (requestRow.refund_issued_at) throw new AppError('Refund has already been issued for this exchange', 409);
+
+    const refundAmount = Math.abs(numberValue(requestRow.price_difference));
+    const now = new Date().toISOString();
+
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('pos_item_exchange_requests')
+      .update({
+        refund_amount: refundAmount,
+        refund_issued_at: now,
+        refund_issued_by: req.user.id,
+        updated_at: now
+      })
+      .eq('id', id)
+      .is('refund_issued_at', null)
+      .select('*')
+      .single();
+    if (updateError || !updatedRow) {
+      throw updateError || new AppError('Refund has already been issued for this exchange', 409);
+    }
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Exchange refund issued',
+        `${cashierName} issued a KES ${refundAmount.toFixed(2)} cash refund for the exchange on bill ${requestRow.order_number || ''}.`,
+        {
+          type: 'success',
+          category: 'pos_item_exchange_request',
+          priority: 'low',
+          metadata: { request_id: id, order_id: requestRow.order_id, refund_amount: refundAmount }
+        }
+      );
+    }
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getExchangeHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req)) && !isCashierStationRole(roleFor(req))) {
+      throw new AppError('Forbidden', 403);
+    }
+
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const status = nullableText(String(req.query.status || ''));
+    const direction = nullableText(String(req.query.direction || ''));
+    const from = nullableText(String(req.query.from || ''));
+    const to = nullableText(String(req.query.to || ''));
+
+    let query = supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (!isGlobalUser(req) && branchId) query = query.eq('branch_id', branchId);
+    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+    if (status) query = query.eq('status', status);
+    if (direction) query = query.eq('direction', direction);
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(
+      rows.flatMap((r: any) => [r.requested_by, r.cashier_id, r.refund_issued_by]).filter(Boolean)
+    ));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null,
+      cashier_name: r.cashier_id ? namesById.get(String(r.cashier_id)) || null : null,
+      refund_issued_by_name: r.refund_issued_by ? namesById.get(String(r.refund_issued_by)) || null : null
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }

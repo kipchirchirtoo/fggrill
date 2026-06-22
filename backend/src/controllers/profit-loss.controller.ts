@@ -723,6 +723,58 @@ export const exportPosProfitLossPDF = async (req: Request, res: Response, next: 
 };
 
 /**
+ * @desc    Branch P&L sourced from the get_branch_profit_loss() Postgres RPC
+ *          (migration 20260622_famousgate_major_redesign.sql, section 2) —
+ *          aggregates revenue, verified collections, expenses, and COGS
+ *          server-side in a single JSONB-returning function call.
+ * @route   GET /api/finance/branch-profit-loss
+ * @access  Branch Accountant, Branch Manager, Director, Auditor, GM, Super Admin
+ */
+export const getBranchProfitLossRpc = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const params = resolvePnlParams(req);
+        if (!params) {
+            res.status(400).json({ success: false, error: 'Branch ID is required' });
+            return;
+        }
+        const branchId = Number(params.branchId);
+        if (!Number.isInteger(branchId)) {
+            res.status(400).json({ success: false, error: 'branch_id must be an integer' });
+            return;
+        }
+        const isValidDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d));
+        if (!isValidDate(params.startDate) || !isValidDate(params.endDate)) {
+            res.status(400).json({ success: false, error: 'from_date/to_date must be valid YYYY-MM-DD dates' });
+            return;
+        }
+        if (params.startDate > params.endDate) {
+            res.status(400).json({ success: false, error: 'from_date must not be after to_date' });
+            return;
+        }
+
+        const { data, error } = await supabase.rpc('get_branch_profit_loss', {
+            branch_id: branchId,
+            start_date: params.startDate,
+            end_date: params.endDate,
+        });
+
+        if (error) throw error;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                period: { from: params.startDate, to: params.endDate },
+                branch_id: branchId,
+                ...(data || {}),
+            },
+        });
+    } catch (error) {
+        logger.error('Error generating branch profit & loss (RPC):', error);
+        next(error);
+    }
+};
+
+/**
  * @desc    Get expense breakdown by category
  * @route   GET /api/finance/expense-breakdown
  * @access  Private

@@ -103,6 +103,7 @@ class DashboardShell extends ConsumerWidget {
     this.currentTab,
     this.onTabChanged,
     this.showBackButton = true,
+    this.backgroundColor,
   });
 
   final String title;
@@ -111,6 +112,7 @@ class DashboardShell extends ConsumerWidget {
   final int? currentTab;
   final ValueChanged<int>? onTabChanged;
   final bool showBackButton;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -124,6 +126,7 @@ class DashboardShell extends ConsumerWidget {
             : tabs.first.content;
 
     return Scaffold(
+      backgroundColor: backgroundColor,
       body: Column(
         children: [
           _TopBar(title: title, nav: nav, actions: actions, showBackButton: showBackButton),

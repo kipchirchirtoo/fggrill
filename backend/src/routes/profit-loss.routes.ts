@@ -4,7 +4,8 @@ import {
     getProfitLossStatement,
     getExpenseBreakdown,
     getPosProfitLoss,
-    exportPosProfitLossPDF
+    exportPosProfitLossPDF,
+    getBranchProfitLossRpc
 } from '../controllers/profit-loss.controller';
 
 const router = express.Router();
@@ -34,5 +35,8 @@ router.get('/expense-breakdown', authorize(...FINANCE_ROLES), getExpenseBreakdow
 // Per-POS-outlet P&L (cashier transactions + sold items) + branded PDF export
 router.get('/pos-profit-loss', authorize(...FINANCE_ROLES), getPosProfitLoss);
 router.get('/pos-profit-loss/export/pdf', authorize(...FINANCE_ROLES), exportPosProfitLossPDF);
+
+// Branch P&L via the get_branch_profit_loss() Postgres RPC
+router.get('/branch-profit-loss', authorize(...FINANCE_ROLES), getBranchProfitLossRpc);
 
 export default router;

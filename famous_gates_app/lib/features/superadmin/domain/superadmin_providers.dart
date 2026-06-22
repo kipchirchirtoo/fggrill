@@ -35,11 +35,13 @@ enum SuperAdminSection {
   kyogongServices,
   cashierStationConfig,
   nonConsumablesCatalog,
+  posOutletMenu,
 
   // Finance & Inventory
   finance,
   inventory,
   storekeepingConfig,
+  kitchenLedgerItems,
   suppliers,
   payrollSettings,
 

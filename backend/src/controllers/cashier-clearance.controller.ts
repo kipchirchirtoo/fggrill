@@ -3,6 +3,29 @@ import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
 
+const num = (v: any): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+};
+
+const loadShiftForReconciliation = async (
+    shiftId: string,
+    req: Request,
+    res: Response
+): Promise<Record<string, any> | null> => {
+    const { data: shift, error } = await supabase
+        .from('cashier_shifts')
+        .select('*')
+        .eq('id', shiftId)
+        .maybeSingle();
+    if (error) throw error;
+    if (!shift) {
+        res.status(404).json({ success: false, message: 'Shift not found' });
+        return null;
+    }
+    return shift;
+};
+
 /**
  * @desc    Get cashier clearances for a branch
  * @route   GET /api/cashier/clearances
@@ -334,6 +357,155 @@ export const flagCashierClearance = async (
     } catch (error) {
         console.error('❌ [Cashier Clearance] Error:', error);
         logger.error('Error flagging cashier clearance:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Shift reconciliation detail — actual collections (system vs.
+ *          counted, by payment method) and reconciliation expenses
+ *          (shift_actual_collections / shift_reconciliation_expenses,
+ *          migration 20260622_famousgate_major_redesign.sql section 6).
+ * @route   GET /api/cashier/clearances/:id/reconciliation
+ * @access  Private (Branch Manager, Branch Accountant, Auditor, Super Admin)
+ */
+export const getShiftReconciliation = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const shift = await loadShiftForReconciliation(req.params.id, req, res);
+        if (!shift) return;
+
+        const [{ data: collections, error: collErr }, { data: expenses, error: expErr }] = await Promise.all([
+            supabase
+                .from('shift_actual_collections')
+                .select('*')
+                .eq('shift_id', shift.id)
+                .order('created_at', { ascending: true }),
+            supabase
+                .from('shift_reconciliation_expenses')
+                .select('*')
+                .eq('shift_id', shift.id)
+                .order('created_at', { ascending: true }),
+        ]);
+        if (collErr) throw collErr;
+        if (expErr) throw expErr;
+
+        const totalSystem = (collections || []).reduce((s, c) => s + num(c.system_amount), 0);
+        const totalActual = (collections || []).reduce((s, c) => s + num(c.actual_amount), 0);
+        const totalExpenses = (expenses || []).reduce((s, e) => s + num(e.amount), 0);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                shift,
+                actual_collections: collections || [],
+                reconciliation_expenses: expenses || [],
+                summary: {
+                    total_system: totalSystem,
+                    total_actual: totalActual,
+                    total_variance: totalActual - totalSystem,
+                    total_expenses: totalExpenses,
+                },
+            },
+        });
+    } catch (error) {
+        logger.error('Error fetching shift reconciliation:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Record the accountant-verified actual cash/mpesa/card/credit
+ *          collection for a shift, against the system-recorded amount.
+ * @route   POST /api/cashier/clearances/:id/actual-collections
+ *          body: { payment_method: 'mpesa'|'cash'|'card'|'credit', system_amount, actual_amount }
+ * @access  Private (Branch Accountant, Branch Manager, Auditor, Super Admin)
+ */
+export const addShiftActualCollection = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const shift = await loadShiftForReconciliation(req.params.id, req, res);
+        if (!shift) return;
+
+        const { payment_method, system_amount, actual_amount } = req.body || {};
+        const allowedMethods = ['mpesa', 'cash', 'card', 'credit'];
+        if (!allowedMethods.includes(String(payment_method))) {
+            res.status(400).json({ success: false, message: `payment_method must be one of ${allowedMethods.join(', ')}` });
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('shift_actual_collections')
+            .insert({
+                shift_id: shift.id,
+                branch_id: Number(shift.branch_id),
+                payment_method,
+                system_amount: num(system_amount),
+                actual_amount: num(actual_amount),
+                verified_by: req.user?.id || null,
+            })
+            .select()
+            .single();
+        if (error) throw error;
+
+        res.status(201).json({ success: true, data });
+    } catch (error) {
+        logger.error('Error recording shift actual collection:', error);
+        next(error);
+    }
+};
+
+/**
+ * @desc    Record a reconciliation expense (petty cash, transaction cost,
+ *          other) discovered while reconciling a shift.
+ * @route   POST /api/cashier/clearances/:id/reconciliation-expenses
+ *          body: { category: 'petty_cash'|'transaction_cost'|'other', amount, description }
+ * @access  Private (Branch Accountant, Branch Manager, Auditor, Super Admin)
+ */
+export const addShiftReconciliationExpense = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const shift = await loadShiftForReconciliation(req.params.id, req, res);
+        if (!shift) return;
+
+        const { category, amount, description } = req.body || {};
+        const allowedCategories = ['petty_cash', 'transaction_cost', 'other'];
+        if (!allowedCategories.includes(String(category))) {
+            res.status(400).json({ success: false, message: `category must be one of ${allowedCategories.join(', ')}` });
+            return;
+        }
+        const amt = num(amount);
+        if (amt <= 0) {
+            res.status(400).json({ success: false, message: 'amount must be greater than zero' });
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('shift_reconciliation_expenses')
+            .insert({
+                shift_id: shift.id,
+                branch_id: Number(shift.branch_id),
+                category,
+                amount: amt,
+                description: description || null,
+                recorded_by: req.user?.id || null,
+            })
+            .select()
+            .single();
+        if (error) throw error;
+
+        res.status(201).json({ success: true, data });
+    } catch (error) {
+        logger.error('Error recording shift reconciliation expense:', error);
         next(error);
     }
 };

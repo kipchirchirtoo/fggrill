@@ -212,6 +212,11 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
       initials: 'FD',
       breadcrumbRoot: 'Reception',
       searchHint: 'Search room, guest, booking...',
+      palette: const ShellPalette(
+        background: Color(0xFFF4F0FA),
+        surface: Colors.white,
+        accent: AppColors.kPrimary,
+      ),
       currentSection: _section,
       items: const [
         MasterNavItem(

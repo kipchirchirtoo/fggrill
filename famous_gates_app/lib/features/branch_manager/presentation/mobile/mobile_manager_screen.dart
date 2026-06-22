@@ -53,6 +53,7 @@ class MobileManagerScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return const MobileShell(
       title: 'Branch Manager',
+      backgroundColor: Color(0xFFFAF0F2),
       tabs: [
         MobileTab(
           label: 'Overview',
