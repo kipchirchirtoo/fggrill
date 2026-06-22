@@ -2619,6 +2619,19 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
           }
         }
       );
+      if (requestRow.requested_by) {
+        await notificationService.notifyUser(
+          requestRow.requested_by,
+          'Void request APPROVED ✓',
+          `Your void request for bill ${order.order_number || requestRow.order_id} was approved. The bill has been cancelled.`,
+          {
+            type: 'success',
+            category: 'pos_void_request',
+            priority: 'medium',
+            metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id }
+          }
+        );
+      }
     } else {
       await supabase
         .from('pos_shift_orders')
@@ -2664,6 +2677,19 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
           }
         }
       );
+      if (requestRow.requested_by) {
+        await notificationService.notifyUser(
+          requestRow.requested_by,
+          'Void request REJECTED',
+          `Your void request for bill ${order.order_number || requestRow.order_id} was rejected${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back in the active queue.`,
+          {
+            type: 'warning',
+            category: 'pos_void_request',
+            priority: 'medium',
+            metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
+          }
+        );
+      }
     }
 
     res.json({ success: true, data: { id: requestId, status: approved ? 'approved' : 'rejected' } });

@@ -16,6 +16,17 @@ ALTER TABLE public.pos_item_void_requests
   ADD COLUMN IF NOT EXISTS manager_id              UUID,
   ADD COLUMN IF NOT EXISTS manager_reviewed_at     TIMESTAMPTZ;
 
+-- The original table (20260621_item_level_void_system.sql) only allowed
+-- ('pending', 'approved', 'rejected', 'expired'). The two-stage flow inserts
+-- 'void_acknowledged' and 'void_cashier_declined', so the constraint must be
+-- widened or every cashier acknowledge/decline fails with a check violation.
+ALTER TABLE public.pos_item_void_requests
+  DROP CONSTRAINT IF EXISTS pos_item_void_requests_status_check;
+
+ALTER TABLE public.pos_item_void_requests
+  ADD CONSTRAINT pos_item_void_requests_status_check
+  CHECK (status IN ('pending', 'void_acknowledged', 'void_cashier_declined', 'approved', 'rejected', 'expired'));
+
 -- The void_order_item RPC previously checked status = 'pending'.
 -- Stage 2 approve now only fires on 'void_acknowledged' requests.
 CREATE OR REPLACE FUNCTION public.void_order_item(p_request_id uuid, p_actioned_by uuid)

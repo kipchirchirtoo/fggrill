@@ -27,6 +27,7 @@ import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
+import '../../pos/data/outlet_pos_repository.dart';
 
 enum BranchAccountantSection {
   overview,
@@ -47,6 +48,7 @@ enum BranchAccountantSection {
   shiftReview,
   cashierLogbooks,
   voidApprovals,
+  itemVoidApprovals,
   banking,
   payments,
   outboundPayments,
@@ -175,6 +177,8 @@ class _BranchAccountantDashboardState
         return const _CashierLogbooksSection();
       case BranchAccountantSection.voidApprovals:
         return const _PosVoidApprovalsSection();
+      case BranchAccountantSection.itemVoidApprovals:
+        return const _ItemVoidApprovalsSection();
       case BranchAccountantSection.banking:
         return const _BankingSection();
       case BranchAccountantSection.payments:
@@ -259,6 +263,8 @@ const _navItems = [
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
   _NavItem(
       BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
+  _NavItem(BranchAccountantSection.itemVoidApprovals, 'Item Void Approvals',
+      Icons.remove_circle_outline),
   _NavItem(
       BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
   // ── Finance & oversight ──
@@ -7143,6 +7149,160 @@ class _PosVoidApprovalsSectionState
       approve ? 'Void request approved' : 'Void request rejected',
     );
     _refresh();
+  }
+}
+
+// ── Item-level void approvals (Stage 2: manager/accountant queue) ─────────────
+
+class _ItemVoidApprovalsSection extends ConsumerStatefulWidget {
+  const _ItemVoidApprovalsSection();
+
+  @override
+  ConsumerState<_ItemVoidApprovalsSection> createState() =>
+      _ItemVoidApprovalsSectionState();
+}
+
+class _ItemVoidApprovalsSectionState
+    extends ConsumerState<_ItemVoidApprovalsSection> {
+  late Future<List<ItemVoidRequest>> _future = _load();
+  bool _actioning = false;
+
+  Future<List<ItemVoidRequest>> _load() =>
+      ref.read(outletPosRepositoryProvider).getPendingVoidsManager();
+
+  void _refresh() => setState(() => _future = _load());
+
+  String _fmt(double v) =>
+      NumberFormat('#,##0.00', 'en_KE').format(v);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<ItemVoidRequest>>(
+      future: _future,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refresh,
+        builder: (items) => _Page(
+          title: 'Item Void Approvals',
+          subtitle:
+              'Cashier-acknowledged item voids awaiting your approval or rejection.',
+          actions: [_RefreshButton(onPressed: _refresh)],
+          children: [
+            _ResponsiveGrid(children: [
+              _MetricCard('Awaiting Approval', '${items.length}',
+                  Icons.remove_circle_outline, Colors.orange),
+              _MetricCard(
+                'Total Amount at Risk',
+                'KES ${_fmt(items.fold(0.0, (s, r) => s + r.amount))}',
+                Icons.payments,
+                Colors.red,
+              ),
+            ]),
+            _SectionCard(
+              title: 'Pending Item Voids',
+              child: items.isEmpty
+                  ? Padding(
+                      padding: ScreenSize.p(context),
+                      child: Center(
+                        child: Text(
+                          'No item voids awaiting approval',
+                          style: TextStyle(color: AppColors.kTextSecondary),
+                        ),
+                      ),
+                    )
+                  : Column(
+                      children: items
+                          .map((r) => _ActionCard(
+                                title: r.itemName,
+                                subtitle: [
+                                  if ((r.orderNumber ?? '').isNotEmpty)
+                                    r.orderNumber!,
+                                  r.reason,
+                                ].join(' • '),
+                                trailing: _StatusPill('void_acknowledged'),
+                                rows: {
+                                  'Bill': r.orderNumber ?? '—',
+                                  'Qty to void':
+                                      r.qtyToVoid.toStringAsFixed(
+                                          r.qtyToVoid.truncateToDouble() ==
+                                                  r.qtyToVoid
+                                              ? 0
+                                              : 2),
+                                  'Amount': 'KES ${_fmt(r.amount)}',
+                                  'Reason': r.reason,
+                                  'Requested by':
+                                      r.requestedByName ?? r.requestedBy ?? '—',
+                                  'Cashier': r.cashierName ?? '—',
+                                  'Acknowledged at': r.cashierAcknowledgedAt
+                                          ?.toLocal()
+                                          .toString()
+                                          .substring(0, 16) ??
+                                      '—',
+                                },
+                                actions: [
+                                  FilledButton.tonal(
+                                    onPressed: _actioning
+                                        ? null
+                                        : () => _approve(r),
+                                    child: const Text('Approve'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: _actioning
+                                        ? null
+                                        : () => _reject(r),
+                                    child: const Text('Reject'),
+                                  ),
+                                ],
+                              ))
+                          .toList(),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _approve(ItemVoidRequest request) async {
+    final confirmed = await _confirm(
+      context,
+      'Approve void of ${request.qtyToVoid.toStringAsFixed(0)}× "${request.itemName}" '
+      'on bill ${request.orderNumber ?? request.orderId}?',
+    );
+    if (!confirmed) return;
+    setState(() => _actioning = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).approveItemVoid(request.id);
+      _notify(context, 'Item void approved');
+      _refresh();
+    } on StateError catch (e) {
+      _notify(context, e.message);
+    } finally {
+      if (mounted) setState(() => _actioning = false);
+    }
+  }
+
+  Future<void> _reject(ItemVoidRequest request) async {
+    final reason = await _textDialog(
+      context,
+      'Reject Item Void',
+      hint: 'Reason for rejecting this void request',
+      minLines: 3,
+    );
+    if (reason == null || reason.trim().isEmpty) return;
+    setState(() => _actioning = true);
+    try {
+      await ref.read(outletPosRepositoryProvider).rejectItemVoid(
+            request.id,
+            rejectionReason: reason.trim(),
+          );
+      _notify(context, 'Item void rejected');
+      _refresh();
+    } on StateError catch (e) {
+      _notify(context, e.message);
+    } finally {
+      if (mounted) setState(() => _actioning = false);
+    }
   }
 }
 
