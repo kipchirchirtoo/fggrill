@@ -141,6 +141,12 @@ class KitchenOrder {
 
   bool get hasRecalledItems => recalledItems.isNotEmpty;
 
+  /// The original order time, unless the order has been recalled — then the
+  /// time the most recent recall was triggered. Printed tickets must show
+  /// when the recall actually happened, not the stale original order time.
+  DateTime get effectiveCreatedAt =>
+      recalledItems.isEmpty ? createdAt : (recalledItems.first.recalledAt ?? createdAt);
+
   String get kdsPrintKey {
     final batches = recalledItems
         .map((item) => item.recallBatchId ?? item.recalledAt?.toIso8601String())
@@ -183,6 +189,7 @@ class KitchenOrderItem {
   final String? recallBatchId;
   final DateTime? recalledAt;
   final String? recallNote;
+  final KitchenItemVoidRequest? voidRequest;
 
   const KitchenOrderItem({
     required this.id,
@@ -195,9 +202,11 @@ class KitchenOrderItem {
     this.recallBatchId,
     this.recalledAt,
     this.recallNote,
+    this.voidRequest,
   });
 
   factory KitchenOrderItem.fromJson(Map<String, dynamic> json) {
+    final voidRequestJson = json['void_request'];
     return KitchenOrderItem(
       id: '${json['id'] ?? json['item_id']}',
       name:
@@ -216,6 +225,45 @@ class KitchenOrderItem {
       isReady: json['is_ready'] == true ||
           json['isReady'] == true ||
           '${json['status'] ?? ''}'.toLowerCase() == 'ready',
+      voidRequest: voidRequestJson is Map
+          ? KitchenItemVoidRequest.fromJson(
+              Map<String, dynamic>.from(voidRequestJson))
+          : null,
+    );
+  }
+}
+
+/// Item-level void state surfaced on the KDS so kitchen staff know to stop
+/// (or continue) preparing a specific item while its void request works
+/// through the cashier-then-manager flow. `status` is one of: pending,
+/// void_acknowledged, approved, rejected, void_cashier_declined.
+class KitchenItemVoidRequest {
+  final String status;
+  final String label;
+  final String? reason;
+  final double qtyToVoid;
+
+  const KitchenItemVoidRequest({
+    required this.status,
+    required this.label,
+    this.reason,
+    this.qtyToVoid = 0,
+  });
+
+  bool get isPending => status == 'pending';
+  bool get isAcknowledged => status == 'void_acknowledged';
+  bool get isApproved => status == 'approved';
+  bool get isRejected => status == 'rejected';
+  bool get isCashierDeclined => status == 'void_cashier_declined';
+  // Non-terminal: the kitchen should still stop work on this item.
+  bool get isActive => isPending || isAcknowledged;
+
+  factory KitchenItemVoidRequest.fromJson(Map<String, dynamic> json) {
+    return KitchenItemVoidRequest(
+      status: '${json['status'] ?? 'pending'}'.toLowerCase(),
+      label: '${json['label'] ?? 'PENDING'}',
+      reason: KitchenOrder._optionalString(json['reason']),
+      qtyToVoid: KitchenOrder._doubleValue(json['qty_to_void']),
     );
   }
 }

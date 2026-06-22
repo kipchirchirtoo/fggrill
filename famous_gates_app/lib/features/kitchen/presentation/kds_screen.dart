@@ -179,7 +179,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       total: effectiveTotal,
       paymentMethod: 'PENDING', // Captain orders are not yet paid
       cashierName: order.waiterName ?? 'Waiter',
-      createdAt: order.createdAt,
+      createdAt: order.effectiveCreatedAt,
     );
 
     await printService.printCaptainOrder(
@@ -1086,6 +1086,8 @@ class _OrderTicket extends StatelessWidget {
                 // were already prepared before the recall happened — cross
                 // them out so the kitchen knows to only cook the new lines.
                 final isAlreadyMade = hasRecalledTicket && !isRecalledItem;
+                final itemVoid = item.voidRequest;
+                final isItemVoidActive = itemVoid?.isActive ?? false;
                 return Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -1181,6 +1183,35 @@ class _OrderTicket extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
+                            if (itemVoid != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: _voidChipColor(itemVoid.status)
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: _voidChipColor(itemVoid.status)
+                                          .withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    itemVoid.reason == null ||
+                                            itemVoid.reason!.isEmpty
+                                        ? itemVoid.label
+                                        : '${itemVoid.label} • ${itemVoid.reason}',
+                                    style: TextStyle(
+                                      color: _voidChipColor(itemVoid.status),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -1189,7 +1220,8 @@ class _OrderTicket extends StatelessWidget {
                             item.isReady ? 'Item ready' : 'Mark item ready',
                         onPressed: item.isReady ||
                                 order.hasPendingVoidRequest ||
-                                order.isVoided
+                                order.isVoided ||
+                                isItemVoidActive
                             ? null
                             : () => onItemReady(item),
                         icon: Icon(
@@ -1272,6 +1304,23 @@ class _OrderTicket extends StatelessWidget {
       );
     }
     return const SizedBox.shrink();
+  }
+
+  Color _voidChipColor(String status) {
+    switch (status) {
+      case 'pending':
+        return AppColors.kWarning;
+      case 'void_acknowledged':
+        return Colors.orange;
+      case 'approved':
+        return AppColors.kSuccess;
+      case 'rejected':
+        return AppColors.kError;
+      case 'void_cashier_declined':
+        return Colors.grey;
+      default:
+        return AppColors.kTextSecondary;
+    }
   }
 }
 
