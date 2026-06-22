@@ -31,12 +31,14 @@ class MobileShell extends ConsumerStatefulWidget {
     required this.tabs,
     this.onTabChanged,
     this.actions,
+    this.backgroundColor,
   });
 
   final String title;
   final List<MobileTab> tabs;
   final ValueChanged<int>? onTabChanged;
   final List<Widget>? actions;
+  final Color? backgroundColor;
 
   @override
   ConsumerState<MobileShell> createState() => _MobileShellState();
@@ -49,7 +51,7 @@ class _MobileShellState extends ConsumerState<MobileShell> {
     final tab = widget.tabs[selectedIndex.clamp(0, widget.tabs.length - 1)];
 
     return Scaffold(
-      backgroundColor: AppColors.kSurface,
+      backgroundColor: widget.backgroundColor ?? AppColors.kSurface,
       appBar: AppBar(
         backgroundColor: AppColors.kPrimary,
         elevation: 0,

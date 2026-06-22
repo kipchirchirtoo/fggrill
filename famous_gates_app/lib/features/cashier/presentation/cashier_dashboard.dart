@@ -224,6 +224,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
       onTabChanged: (index) => setState(() => _tab = index),
       tabs: tabs,
       showBackButton: false,
+      backgroundColor: const Color(0xFFEEF2F7),
       actions: [
         OutlinedButton.icon(
           onPressed: () {

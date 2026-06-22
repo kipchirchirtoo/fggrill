@@ -158,7 +158,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     final navGroups = _navGroups;
 
     return Scaffold(
-      backgroundColor: AppColors.kSurface,
+      backgroundColor: const Color(0xFFF0F4F8),
       body: Row(
         children: [
           if (!isMobile)

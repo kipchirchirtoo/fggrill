@@ -983,6 +983,11 @@ class _BranchStorekeeperDashboardState
       sidebarSubtitle: 'Management System',
       sidebarInitials: 'FG',
       breadcrumbRoot: 'Branch Storekeeper',
+      palette: const ShellPalette(
+        background: Color(0xFFFDF8F0),
+        surface: Colors.white,
+        accent: AppColors.kPrimary,
+      ),
       currentSection: _section,
       items: _navItems,
       onSectionSelected: (section) {

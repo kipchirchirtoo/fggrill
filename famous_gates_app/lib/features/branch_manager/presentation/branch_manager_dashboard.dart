@@ -401,6 +401,11 @@ class _BranchManagerDashboardState
       initials: 'BM',
       breadcrumbRoot: 'Branch Manager',
       searchHint: 'Search branch workflows...',
+      palette: const ShellPalette(
+        background: Color(0xFFFAF0F2),
+        surface: Colors.white,
+        accent: AppColors.kPrimary,
+      ),
       currentSection: _section,
       items: _navItems,
       onSectionSelected: (section) {

@@ -32,6 +32,7 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
       title: 'Audit Control',
       currentTab: _tab,
       onTabChanged: (i) => setState(() => _tab = i),
+      backgroundColor: const Color(0xFFF2F4F6),
       tabs: [
         DashboardTab(
             label: 'Audit Control',

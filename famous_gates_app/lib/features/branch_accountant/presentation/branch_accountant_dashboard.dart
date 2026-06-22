@@ -100,7 +100,7 @@ class _BranchAccountantDashboardState
     final tick = ref.watch(globalRefreshTickProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.kSurface,
+      backgroundColor: const Color(0xFFF0F4F0),
       body: Row(
         children: [
           if (!isMobile)

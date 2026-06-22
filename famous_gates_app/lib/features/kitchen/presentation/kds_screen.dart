@@ -207,6 +207,15 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       initials: 'KD',
       breadcrumbRoot: 'Kitchen',
       searchHint: 'Search order, item, table...',
+      palette: const ShellPalette(
+        background: Color(0xFF1A1A2E),
+        surface: Color(0xFF22223D),
+        accent: AppColors.kAccent,
+        onAccent: Color(0xFF1A1A2E),
+        border: Color(0xFF34345A),
+        text: Color(0xFFF5F6FA),
+        mutedText: Color(0xFFAAAFC4),
+      ),
       currentSection: _section,
       items: const [
         MasterNavItem(

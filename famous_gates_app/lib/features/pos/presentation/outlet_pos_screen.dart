@@ -213,11 +213,12 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _PosPalette.isDark = !_isRestaurant;
     return MasterDashboardShell<OutletPosSection>(
       title: widget.title,
       subtitle: 'Outlet POS',
       initials: widget.initials,
-      palette: const ShellPalette(
+      palette: ShellPalette(
         background: _PosPalette.canvas,
         surface: _PosPalette.surface,
         accent: _PosPalette.accent,
@@ -1331,7 +1332,7 @@ class _NoShiftBanner extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('$stationLabel shift is closed',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: _PosPalette.text,
                       fontSize: 15)),
@@ -1340,7 +1341,7 @@ class _NoShiftBanner extends StatelessWidget {
                 canOpenShift
                     ? 'Open a shift to start taking orders for this station.'
                     : 'Orders cannot be placed until the station cashier opens a shift.',
-                style: const TextStyle(color: _PosPalette.text, fontSize: 12),
+                style: TextStyle(color: _PosPalette.text, fontSize: 12),
               ),
             ],
           ),
@@ -1447,17 +1448,36 @@ class _OrderContextPanel extends StatelessWidget {
   }
 }
 
-/// Eye-friendly WARM ORANGE POS palette — soft cream surfaces (no glaring
-/// white) with a warm orange accent. Low-glare for long shifts.
+/// Restaurant/waiter stations get a soft cream palette; bar/outlet stations
+/// get a dark slate palette with light text. [isDark] is set once per build
+/// from `_isRestaurant` (see OutletPOSScreen.build) -- there is only ever one
+/// outlet POS station mounted per terminal, so a static toggle is safe here
+/// and avoids threading a palette object through every leaf widget below.
 class _PosPalette {
-  static const canvas = Color(0xFFEAD0AC); // warm sand/orange base (60%)
-  static const surface = Color(0xFFFBE6CB); // warm peach card (30%)
-  static const surfaceAlt = Color(0xFFF2D9B8); // deeper warm chip / input
-  static const border = Color(0xFFDDC09A); // warm tan border
-  static const accent = Color(0xFFD9701F); // rich warm orange action (10%)
+  static bool isDark = false;
+
+  static Color get canvas => isDark ? _darkCanvas : _lightCanvas;
+  static Color get surface => isDark ? _darkSurface : _lightSurface;
+  static Color get surfaceAlt => isDark ? _darkSurfaceAlt : _lightSurfaceAlt;
+  static Color get border => isDark ? _darkBorder : _lightBorder;
+  static const accent = Color(0xFFD9701F); // warm orange action, both themes
   static const onAccent = Color(0xFFFFFFFF); // white text on orange buttons
-  static const text = Color(0xFF3A2917); // warm dark brown (readable)
-  static const textMuted = Color(0xFF8A7252); // secondary labels
+  static Color get text => isDark ? _darkText : _lightText;
+  static Color get textMuted => isDark ? _darkTextMuted : _lightTextMuted;
+
+  static const _lightCanvas = Color(0xFFFAF7F2);
+  static const _lightSurface = Color(0xFFFFFFFF);
+  static const _lightSurfaceAlt = Color(0xFFF2ECE2);
+  static const _lightBorder = Color(0xFFE3DACB);
+  static const _lightText = Color(0xFF3A2917); // warm dark brown (readable)
+  static const _lightTextMuted = Color(0xFF8A7252);
+
+  static const _darkCanvas = Color(0xFF2C3E50);
+  static const _darkSurface = Color(0xFF34495E);
+  static const _darkSurfaceAlt = Color(0xFF3D5266);
+  static const _darkBorder = Color(0xFF4A6178);
+  static const _darkText = Color(0xFFF5F7FA); // light text on dark slate
+  static const _darkTextMuted = Color(0xFFAAB7C4);
 }
 
 class _Surface extends StatelessWidget {
@@ -1467,8 +1487,10 @@ class _Surface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context);
+    final brightness =
+        _PosPalette.isDark ? Brightness.dark : Brightness.light;
     final scheme = base.colorScheme.copyWith(
-      brightness: Brightness.light,
+      brightness: brightness,
       primary: _PosPalette.accent,
       onPrimary: _PosPalette.onAccent,
       secondary: _PosPalette.accent,
@@ -1480,7 +1502,7 @@ class _Surface extends StatelessWidget {
     // Scope the dark theme to the POS only (doesn't touch the rest of the app).
     return Theme(
       data: base.copyWith(
-        brightness: Brightness.light,
+        brightness: brightness,
         scaffoldBackgroundColor: _PosPalette.canvas,
         canvasColor: _PosPalette.canvas,
         cardColor: _PosPalette.surface,
@@ -1499,11 +1521,11 @@ class _Surface extends StatelessWidget {
         inputDecorationTheme: base.inputDecorationTheme.copyWith(
           filled: true,
           fillColor: _PosPalette.surfaceAlt,
-          hintStyle: const TextStyle(color: _PosPalette.textMuted),
-          labelStyle: const TextStyle(color: _PosPalette.textMuted),
+          hintStyle: TextStyle(color: _PosPalette.textMuted),
+          labelStyle: TextStyle(color: _PosPalette.textMuted),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _PosPalette.border),
+            borderSide: BorderSide(color: _PosPalette.border),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
@@ -1519,7 +1541,7 @@ class _Surface extends StatelessWidget {
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             foregroundColor: _PosPalette.text,
-            side: const BorderSide(color: _PosPalette.border),
+            side: BorderSide(color: _PosPalette.border),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
