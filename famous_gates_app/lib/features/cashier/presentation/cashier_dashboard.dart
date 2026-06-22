@@ -33,6 +33,7 @@ enum CashierTab {
   pos,
   bills,
   voidRequests,
+  exchangeRequests,
   voided,
   credit,
   shifts,
@@ -67,6 +68,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   static const _visibleTabs = [
     CashierTab.station,
     CashierTab.voidRequests,
+    CashierTab.exchangeRequests,
     CashierTab.voided,
     CashierTab.credit,
     CashierTab.shifts,
@@ -78,16 +80,19 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     return index >= 0 ? index : 0;
   }();
 
-  // Keeps the "Void Requests" tab badge fresh without requiring the cashier
-  // to switch tabs or pull-to-refresh -- mirrors the bar captain-order poll
-  // timer in _StationTabState.
+  // Keeps the "Void Requests" / "Exchange Requests" tab badges fresh without
+  // requiring the cashier to switch tabs or pull-to-refresh -- mirrors the
+  // bar captain-order poll timer in _StationTabState.
   Timer? _voidBadgeTimer;
 
   @override
   void initState() {
     super.initState();
     _voidBadgeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) ref.invalidate(cashierPendingItemVoidsProvider);
+      if (!mounted) return;
+      ref.invalidate(cashierPendingItemVoidsProvider);
+      ref.invalidate(cashierPendingExchangesProvider);
+      ref.invalidate(cashierAwaitingRefundExchangesProvider);
     });
   }
 
@@ -103,6 +108,16 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           data: (rows) => rows.length,
           orElse: () => 0,
         );
+    final pendingExchangesCount =
+        ref.watch(cashierPendingExchangesProvider).maybeWhen(
+              data: (rows) => rows.length,
+              orElse: () => 0,
+            );
+    final awaitingRefundCount =
+        ref.watch(cashierAwaitingRefundExchangesProvider).maybeWhen(
+              data: (rows) => rows.length,
+              orElse: () => 0,
+            );
     final tabs = [
       DashboardTab(
         label: 'Station',
@@ -119,6 +134,12 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         icon: Icons.report_problem_outlined,
         badgeCount: pendingVoidsCount,
         content: const _VoidRequestsTab(),
+      ),
+      DashboardTab(
+        label: 'Exchange Requests',
+        icon: Icons.swap_horiz,
+        badgeCount: pendingExchangesCount + awaitingRefundCount,
+        content: const _ExchangeRequestsTab(),
       ),
       const DashboardTab(
         label: 'Voided Orders',
@@ -2495,6 +2516,352 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
       await ref.read(outletPosRepositoryProvider).cashierDeclineVoid(r.id);
       ref.invalidate(cashierPendingItemVoidsProvider);
       _snack('Void request declined.');
+    } catch (error) {
+      _snack(apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(r.id));
+    }
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    AppNotifier.show(context, message);
+  }
+}
+
+/// Post-payment item exchanges: a single-stage flow where this cashier is
+/// the sole approver/rejecter (no manager/accountant step, unlike item
+/// voids). Approved refund-direction exchanges still need a second action
+/// here -- handing back cash from the drawer -- so this tab also surfaces
+/// approved-but-unrefunded rows in a separate section.
+class _ExchangeRequestsTab extends ConsumerStatefulWidget {
+  const _ExchangeRequestsTab();
+
+  @override
+  ConsumerState<_ExchangeRequestsTab> createState() =>
+      _ExchangeRequestsTabState();
+}
+
+class _ExchangeRequestsTabState extends ConsumerState<_ExchangeRequestsTab> {
+  final Set<String> _busyIds = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingAsync = ref.watch(cashierPendingExchangesProvider);
+    final awaitingRefundAsync = ref.watch(cashierAwaitingRefundExchangesProvider);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Exchange Requests',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  ref.invalidate(cashierPendingExchangesProvider);
+                  ref.invalidate(cashierAwaitingRefundExchangesProvider);
+                },
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Waiters submit these when a customer wants to swap an item on '
+            'a bill that is already paid and closed. Approving notifies the '
+            'kitchen of the new item and adjusts stock; rejecting leaves the '
+            'original bill untouched.',
+            style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          pendingAsync.when(
+            data: (rows) => rows.isEmpty
+                ? const EmptyState(
+                    icon: Icons.check_circle_outline,
+                    message: 'No exchange requests waiting on you.',
+                  )
+                : Column(children: [for (final r in rows) _pendingCard(r)]),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(
+              message: apiErrorMessage(error),
+              onRetry: () => ref.invalidate(cashierPendingExchangesProvider),
+            ),
+          ),
+          const SizedBox(height: 28),
+          Text('Awaiting Refund', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          const Text(
+            'Approved exchanges where the new item was cheaper -- issue the '
+            'cash difference from the drawer, then mark it refunded.',
+            style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          awaitingRefundAsync.when(
+            data: (rows) => rows.isEmpty
+                ? const EmptyState(
+                    icon: Icons.check_circle_outline,
+                    message: 'No refunds waiting to be issued.',
+                  )
+                : Column(children: [for (final r in rows) _refundCard(r)]),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(
+              message: apiErrorMessage(error),
+              onRetry: () =>
+                  ref.invalidate(cashierAwaitingRefundExchangesProvider),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _itemsSummary(List<dynamic> items) {
+    return items
+        .whereType<Map>()
+        .map((item) {
+          final name = '${item['name'] ?? ''}';
+          final qty = item['quantity'];
+          final qtyNum = qty is num ? qty : num.tryParse('$qty') ?? 0;
+          final qtyLabel = qtyNum % 1 == 0
+              ? qtyNum.toStringAsFixed(0)
+              : qtyNum.toStringAsFixed(1);
+          return '$name ×$qtyLabel';
+        })
+        .where((label) => label.trim().isNotEmpty && label != ' ×0')
+        .join(', ');
+  }
+
+  Widget _directionLabel(ItemExchangeRequest r) {
+    if (r.isTopUp) {
+      return Text('Top-up due: ${_money(r.priceDifference.abs())}',
+          style: const TextStyle(
+              color: AppColors.kWarning, fontWeight: FontWeight.w700));
+    }
+    if (r.isRefund) {
+      return Text('Refund due: ${_money(r.priceDifference.abs())}',
+          style: const TextStyle(
+              color: AppColors.kError, fontWeight: FontWeight.w700));
+    }
+    return const Text('Even exchange -- no money movement',
+        style:
+            TextStyle(color: AppColors.kTextSecondary, fontWeight: FontWeight.w600));
+  }
+
+  Widget _pendingCard(ItemExchangeRequest r) {
+    final busy = _busyIds.contains(r.id);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    r.orderNumber != null && r.orderNumber!.isNotEmpty
+                        ? 'Order ${r.orderNumber}'
+                        : 'Exchange request',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                if (r.requestedByName != null && r.requestedByName!.isNotEmpty)
+                  Text('by ${r.requestedByName}',
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Returning: ${_itemsSummary(r.oldItems)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 2),
+            Text('Replacing with: ${_itemsSummary(r.newItems)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 8),
+            _directionLabel(r),
+            if (r.reason != null && r.reason!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Reason: ${r.reason}', style: const TextStyle(fontSize: 13)),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: busy ? null : () => _reject(r),
+                  icon: const Icon(Icons.close, size: 16, color: AppColors.kError),
+                  label: const Text('Reject',
+                      style: TextStyle(color: AppColors.kError)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: busy ? null : () => _approve(r),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.check, size: 16),
+                  label: const Text('Approve'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _refundCard(ItemExchangeRequest r) {
+    final busy = _busyIds.contains(r.id);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    r.orderNumber != null && r.orderNumber!.isNotEmpty
+                        ? 'Order ${r.orderNumber}'
+                        : 'Exchange request',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                Text(_money((r.refundAmount ?? r.priceDifference).abs()),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: AppColors.kError)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Returned: ${_itemsSummary(r.oldItems)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 2),
+            Text('Replaced with: ${_itemsSummary(r.newItems)}',
+                style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: busy ? null : () => _issueRefund(r),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.payments_outlined, size: 16),
+                  label: const Text('Issue Refund'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _approve(ItemExchangeRequest r) async {
+    setState(() => _busyIds.add(r.id));
+    try {
+      await ref.read(outletPosRepositoryProvider).approveItemExchange(r.id);
+      ref.invalidate(cashierPendingExchangesProvider);
+      ref.invalidate(cashierAwaitingRefundExchangesProvider);
+      _snack('Exchange approved.');
+    } catch (error) {
+      _snack(apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(r.id));
+    }
+  }
+
+  Future<void> _reject(ItemExchangeRequest r) async {
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject exchange request?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'The original bill stays exactly as-is. This cannot be undone.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Reject')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busyIds.add(r.id));
+    try {
+      await ref.read(outletPosRepositoryProvider).rejectItemExchange(
+            r.id,
+            rejectionReason: reasonController.text.trim().isEmpty
+                ? null
+                : reasonController.text.trim(),
+          );
+      ref.invalidate(cashierPendingExchangesProvider);
+      _snack('Exchange request rejected.');
+    } catch (error) {
+      _snack(apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(r.id));
+    }
+  }
+
+  Future<void> _issueRefund(ItemExchangeRequest r) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Issue cash refund?'),
+        content: Text(
+            'Confirm you have handed back ${_money((r.refundAmount ?? r.priceDifference).abs())} '
+            'in cash from the drawer for this exchange.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm Refund')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busyIds.add(r.id));
+    try {
+      await ref.read(outletPosRepositoryProvider).issueExchangeRefund(r.id);
+      ref.invalidate(cashierAwaitingRefundExchangesProvider);
+      _snack('Refund recorded.');
     } catch (error) {
       _snack(apiErrorMessage(error));
     } finally {

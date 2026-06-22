@@ -125,6 +125,29 @@ final cashierPendingItemVoidsProvider =
   return ref.watch(outletPosRepositoryProvider).getPendingVoidsCashier();
 });
 
+/// Post-payment exchange requests awaiting this cashier's approve/reject
+/// decision -- single-stage, cashier-only (see outlet_pos_repository.dart's
+/// ItemExchangeRequest for why this doesn't go through REVIEW_ROLES like the
+/// void flows do).
+final cashierPendingExchangesProvider =
+    FutureProvider.autoDispose<List<ItemExchangeRequest>>((ref) {
+  return ref.watch(outletPosRepositoryProvider).getPendingExchangesCashier();
+});
+
+/// Approved refund-direction exchanges that haven't had the cash refund
+/// issued yet. There's no dedicated "pending refund" endpoint -- this reuses
+/// exchange history (which the cashier role is already allowed to read) and
+/// filters client-side, since the set is always small (one branch's open
+/// shifts) and history is the only place an approved exchange still lives
+/// once it drops out of the pending queue.
+final cashierAwaitingRefundExchangesProvider =
+    FutureProvider.autoDispose<List<ItemExchangeRequest>>((ref) async {
+  final rows = await ref
+      .watch(outletPosRepositoryProvider)
+      .getExchangeHistory(status: 'approved', direction: 'refund');
+  return rows.where((r) => !r.refundIssued).toList();
+});
+
 final cashierInsightsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   // Scope Python insights to the current shift's branch so the analysis
