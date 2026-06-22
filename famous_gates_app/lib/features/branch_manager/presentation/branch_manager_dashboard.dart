@@ -12,6 +12,7 @@ import '../../kitchen_operations/presentation/kitchen_operations_dashboard.dart'
 import '../data/repository.dart';
 import '../domain/models.dart';
 import '../../kitchen/presentation/kds_screen.dart';
+import '../../pos/data/outlet_pos_repository.dart';
 import 'mobile/mobile_manager_reviews_screen.dart';
 
 enum BranchManagerSection {
@@ -56,6 +57,7 @@ enum BranchManagerSection {
   kitchenRecipes,
   kitchenUsage,
   kitchenWastage,
+  exchangeHistory,
 }
 
 class BranchManagerDashboard extends ConsumerStatefulWidget {
@@ -331,6 +333,7 @@ class _BranchManagerDashboardState
         case BranchManagerSection.kitchenRecipes:
         case BranchManagerSection.kitchenUsage:
         case BranchManagerSection.kitchenWastage:
+        case BranchManagerSection.exchangeHistory:
           break;
       }
     } catch (error) {
@@ -434,6 +437,12 @@ class _BranchManagerDashboardState
           section: BranchManagerSection.cashierClearance,
           label: 'Cashier Clearance',
           icon: PhosphorIcons.receipt(),
+          group: 'Financial Performance',
+        ),
+        const MasterNavItem(
+          section: BranchManagerSection.exchangeHistory,
+          label: 'Item Exchanges',
+          icon: Icons.swap_horiz,
           group: 'Financial Performance',
         ),
         MasterNavItem(
@@ -659,6 +668,8 @@ class _BranchManagerDashboardState
           initialSection: KitchenOperationsSection.wastage,
           embedded: true,
         );
+      case BranchManagerSection.exchangeHistory:
+        return const _ExchangeHistorySection();
       default:
         return _genericPage(
           title: _label(_section),
@@ -3784,6 +3795,181 @@ class _BranchManagerDashboardState
   }
 }
 
+/// Read-only history of post-payment item exchanges. The cashier is the
+/// sole approver/rejecter for these -- the branch manager only ever views
+/// this list, never acts on it (mirrors the equivalent read-only section in
+/// branch_accountant_dashboard.dart).
+class _ExchangeHistorySection extends ConsumerStatefulWidget {
+  const _ExchangeHistorySection();
+
+  @override
+  ConsumerState<_ExchangeHistorySection> createState() =>
+      _ExchangeHistorySectionState();
+}
+
+class _ExchangeHistorySectionState
+    extends ConsumerState<_ExchangeHistorySection> {
+  String _status = 'all';
+  String _direction = 'all';
+  late Future<List<ItemExchangeRequest>> _future = _load();
+
+  Future<List<ItemExchangeRequest>> _load() {
+    return ref.read(outletPosRepositoryProvider).getExchangeHistory(
+          status: _status == 'all' ? null : _status,
+          direction: _direction == 'all' ? null : _direction,
+        );
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  String _itemsSummary(List<dynamic> items) {
+    return items
+        .whereType<Map>()
+        .map((item) => '${item['name'] ?? ''} ×${item['quantity'] ?? ''}')
+        .join(', ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Item Exchanges',
+                    style: Theme.of(context).textTheme.headlineSmall),
+              ),
+              OutlinedButton.icon(
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Post-payment item exchanges. The cashier approves, rejects, '
+            'and issues refunds directly -- this is a view-only history.',
+            style: TextStyle(color: AppColors.kTextSecondary),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              DropdownButton<String>(
+                value: _status,
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All statuses')),
+                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                  DropdownMenuItem(
+                      value: 'approved', child: Text('Approved')),
+                  DropdownMenuItem(
+                      value: 'rejected', child: Text('Rejected')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _status = value);
+                  _refresh();
+                },
+              ),
+              DropdownButton<String>(
+                value: _direction,
+                items: const [
+                  DropdownMenuItem(
+                      value: 'all', child: Text('All directions')),
+                  DropdownMenuItem(value: 'top_up', child: Text('Top-up')),
+                  DropdownMenuItem(value: 'refund', child: Text('Refund')),
+                  DropdownMenuItem(value: 'even', child: Text('Even')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _direction = value);
+                  _refresh();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: FutureBuilder<List<ItemExchangeRequest>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return _EmptyNotice('Failed to load: ${snap.error}');
+                }
+                final rows = snap.data ?? const [];
+                if (rows.isEmpty) {
+                  return const _EmptyNotice('No exchange requests found');
+                }
+                return ListView.separated(
+                  itemCount: rows.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final r = rows[index];
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    (r.orderNumber ?? '').isEmpty
+                                        ? 'Exchange request'
+                                        : 'Order ${r.orderNumber}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 15),
+                                  ),
+                                ),
+                                Text(r.status.toUpperCase(),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text('Returned: ${_itemsSummary(r.oldItems)}'),
+                            Text(
+                                'Replaced with: ${_itemsSummary(r.newItems)}'),
+                            const SizedBox(height: 4),
+                            Text(
+                                'Direction: ${r.direction}  ·  Price difference: KES ${r.priceDifference.abs().toStringAsFixed(2)}'),
+                            if ((r.requestedByName ?? '').isNotEmpty)
+                              Text('Requested by: ${r.requestedByName}'),
+                            if ((r.cashierName ?? '').isNotEmpty)
+                              Text('Cashier: ${r.cashierName}'),
+                            if (r.isRejected &&
+                                (r.rejectionReason ?? '').isNotEmpty)
+                              Text('Rejection reason: ${r.rejectionReason}'),
+                            if (r.isRefund)
+                              Text(r.refundIssued
+                                  ? 'Refund issued by ${r.refundIssuedByName ?? '—'}'
+                                  : 'Refund not yet issued'),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyNotice extends StatelessWidget {
   const _EmptyNotice(this.message);
   final String message;
@@ -3935,6 +4121,8 @@ String _label(BranchManagerSection section) {
       return 'Kitchen Usage';
     case BranchManagerSection.kitchenWastage:
       return 'Kitchen Wastage';
+    case BranchManagerSection.exchangeHistory:
+      return 'Item Exchanges';
   }
 }
 

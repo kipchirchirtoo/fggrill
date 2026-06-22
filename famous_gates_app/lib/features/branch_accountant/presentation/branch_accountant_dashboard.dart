@@ -48,6 +48,7 @@ enum BranchAccountantSection {
   shiftReview,
   cashierLogbooks,
   voidApprovals,
+  exchangeHistory,
   banking,
   payments,
   outboundPayments,
@@ -176,6 +177,8 @@ class _BranchAccountantDashboardState
         return const _CashierLogbooksSection();
       case BranchAccountantSection.voidApprovals:
         return const _VoidApprovalsSection();
+      case BranchAccountantSection.exchangeHistory:
+        return const _ExchangeHistorySection();
       case BranchAccountantSection.banking:
         return const _BankingSection();
       case BranchAccountantSection.payments:
@@ -260,6 +263,8 @@ const _navItems = [
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
   _NavItem(
       BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
+  _NavItem(BranchAccountantSection.exchangeHistory, 'Item Exchanges',
+      Icons.swap_horiz),
   _NavItem(
       BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
   // ── Finance & oversight ──
@@ -7369,6 +7374,199 @@ class _VoidTypeBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Read-only history of post-payment item exchanges. The cashier is the sole
+/// approver/rejecter for these (see outlet_pos_repository.dart) -- the
+/// accountant and branch manager only ever view this list, never act on it.
+class _ExchangeHistorySection extends ConsumerStatefulWidget {
+  const _ExchangeHistorySection();
+
+  @override
+  ConsumerState<_ExchangeHistorySection> createState() =>
+      _ExchangeHistorySectionState();
+}
+
+class _ExchangeHistorySectionState
+    extends ConsumerState<_ExchangeHistorySection> {
+  String _status = 'all';
+  String _direction = 'all';
+  late Future<List<ItemExchangeRequest>> _future = _load();
+
+  Future<List<ItemExchangeRequest>> _load() {
+    return ref.read(outletPosRepositoryProvider).getExchangeHistory(
+          status: _status == 'all' ? null : _status,
+          direction: _direction == 'all' ? null : _direction,
+        );
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  String _fmt(double v) => NumberFormat('#,##0.00', 'en_KE').format(v);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              ScreenSize.p(context).horizontal / 2,
+              ScreenSize.p(context).vertical / 2,
+              ScreenSize.p(context).horizontal / 2,
+              0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Item Exchanges',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Post-payment item exchanges. The cashier approves, '
+                      'rejects, and issues refunds directly -- this is a '
+                      'view-only history.',
+                      style: TextStyle(color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              _RefreshButton(onPressed: _refresh),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: EdgeInsets.symmetric(
+              horizontal: ScreenSize.p(context).horizontal / 2),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              DropdownButton<String>(
+                value: _status,
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('All statuses')),
+                  DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                  DropdownMenuItem(
+                      value: 'approved', child: Text('Approved')),
+                  DropdownMenuItem(
+                      value: 'rejected', child: Text('Rejected')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _status = value);
+                  _refresh();
+                },
+              ),
+              DropdownButton<String>(
+                value: _direction,
+                items: const [
+                  DropdownMenuItem(
+                      value: 'all', child: Text('All directions')),
+                  DropdownMenuItem(value: 'top_up', child: Text('Top-up')),
+                  DropdownMenuItem(value: 'refund', child: Text('Refund')),
+                  DropdownMenuItem(value: 'even', child: Text('Even')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _direction = value);
+                  _refresh();
+                },
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 24),
+        Expanded(
+          child: FutureBuilder<List<ItemExchangeRequest>>(
+            future: _future,
+            builder: (context, snap) => _FuturePage(
+              snapshot: snap,
+              onRefresh: _refresh,
+              builder: (rows) => ListView(
+                padding: ScreenSize.p(context),
+                children: [
+                  _ResponsiveGrid(children: [
+                    _MetricCard('Total Exchanges', '${rows.length}',
+                        Icons.swap_horiz, Colors.indigo),
+                    _MetricCard(
+                      'Pending Approval',
+                      '${rows.where((r) => r.isPending).length}',
+                      Icons.hourglass_empty,
+                      Colors.orange,
+                    ),
+                    _MetricCard(
+                      'Refunds Outstanding',
+                      '${rows.where((r) => r.isApproved && r.isRefund && !r.refundIssued).length}',
+                      Icons.payments,
+                      Colors.red,
+                    ),
+                  ]),
+                  const SizedBox(height: 16),
+                  if (rows.isEmpty)
+                    Padding(
+                      padding: ScreenSize.p(context),
+                      child: Center(
+                        child: Text(
+                          'No exchange requests found',
+                          style: TextStyle(color: AppColors.kTextSecondary),
+                        ),
+                      ),
+                    )
+                  else
+                    ...rows.map((r) => _ActionCard(
+                          title: (r.orderNumber ?? '').isEmpty
+                              ? 'Exchange request'
+                              : 'Order ${r.orderNumber}',
+                          subtitle: r.reason ?? '',
+                          trailing: Wrap(
+                            spacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _StatusPill(r.status),
+                            ],
+                          ),
+                          rows: {
+                            'Returned': _exchangeItemsSummary(r.oldItems),
+                            'Replaced with': _exchangeItemsSummary(r.newItems),
+                            'Old total': 'KES ${_fmt(r.oldTotal)}',
+                            'New total': 'KES ${_fmt(r.newTotal)}',
+                            'Direction': r.direction,
+                            'Price difference':
+                                'KES ${_fmt(r.priceDifference)}',
+                            'Requested by': r.requestedByName ?? '—',
+                            'Cashier': r.cashierName ?? '—',
+                            'Actioned at': r.actionedAt
+                                    ?.toLocal()
+                                    .toString()
+                                    .substring(0, 16) ??
+                                '—',
+                            if (r.isRejected)
+                              'Rejection reason': r.rejectionReason ?? '—',
+                            if (r.isRefund)
+                              'Refund issued': r.refundIssued
+                                  ? '${r.refundIssuedByName ?? '—'} at ${r.refundIssuedAt?.toLocal().toString().substring(0, 16) ?? '—'}'
+                                  : 'Not yet issued',
+                          },
+                        )),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _exchangeItemsSummary(List<dynamic> items) {
+  return items
+      .whereType<Map>()
+      .map((item) => '${item['name'] ?? ''} ×${item['quantity'] ?? ''}')
+      .join(', ');
 }
 
 class _BankingSection extends ConsumerStatefulWidget {
