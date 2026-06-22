@@ -1808,7 +1808,31 @@ export const getShiftOrders = async (req: Request, res: Response, next: NextFunc
     }
     const { data, error } = await query;
     if (error) throw error;
-    res.json({ success: true, data: data || [] });
+
+    // A bill that already has a pending or approved exchange request must not
+    // accept another one — surfaced here so the waiter's "Request Exchange"
+    // action can be disabled without a second round trip per order.
+    const orderIds = (data || []).map((order: any) => order.id);
+    const activeExchangeOrderIds = new Set<string>();
+    if (orderIds.length) {
+      const { data: exchangeRows, error: exchangeError } = await supabase
+        .from('pos_item_exchange_requests')
+        .select('order_id')
+        .in('order_id', orderIds)
+        .in('status', ['pending', 'approved']);
+      if (exchangeError) {
+        console.warn('Failed to fetch active exchange requests for order list:', exchangeError.message);
+      } else {
+        for (const row of (exchangeRows || [])) activeExchangeOrderIds.add(row.order_id);
+      }
+    }
+
+    const enriched = (data || []).map((order: any) => ({
+      ...order,
+      has_active_exchange_request: activeExchangeOrderIds.has(order.id)
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }
@@ -3378,10 +3402,10 @@ export const requestItemExchange = async (req: Request, res: Response, next: Nex
       .from('pos_item_exchange_requests')
       .select('id')
       .eq('order_id', orderId)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'approved'])
       .maybeSingle();
     if (existingError) throw existingError;
-    if (existing) throw new AppError('A pending exchange request already exists for this bill', 409);
+    if (existing) throw new AppError('This bill has already been exchanged or has an exchange request awaiting approval', 409);
 
     const { data: requestRow, error } = await supabase
       .from('pos_item_exchange_requests')

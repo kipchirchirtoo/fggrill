@@ -1099,7 +1099,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   // hands, so this is a separate flow from voiding an unpaid item.
   bool _canExchangeOrder(OutletShiftOrder order) {
     return ['paid', 'credit_bill'].contains(order.paymentStatus) &&
-        !order.isExchange;
+        !order.isExchange &&
+        !order.hasActiveExchangeRequest;
   }
 
   void _recallOrder(OutletShiftOrder order) {

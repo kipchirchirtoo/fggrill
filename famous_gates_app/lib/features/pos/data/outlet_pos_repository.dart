@@ -773,6 +773,7 @@ class OutletShiftOrder {
     this.isMerged = false,
     this.isExchange = false,
     this.exchangeParentOrderId,
+    this.hasActiveExchangeRequest = false,
     this.voidRequestStatus,
     this.createdAt,
     this.items = const [],
@@ -796,6 +797,9 @@ class OutletShiftOrder {
   final bool isMerged;
   final bool isExchange;
   final String? exchangeParentOrderId;
+  // True once a pending or approved exchange request exists for this bill —
+  // an already-exchanged (or in-flight) bill cannot be exchanged again.
+  final bool hasActiveExchangeRequest;
   final String? voidRequestStatus;
   final DateTime? createdAt;
   final List<dynamic> items;
@@ -853,6 +857,7 @@ class OutletShiftOrder {
       isMerged: json['is_merged'] == true,
       isExchange: json['is_exchange'] == true,
       exchangeParentOrderId: json['exchange_parent_order_id'] as String?,
+      hasActiveExchangeRequest: json['has_active_exchange_request'] == true,
       voidRequestStatus: json['void_request_status'] as String?,
       createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
       items: items is List ? items : const [],
