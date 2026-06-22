@@ -82,6 +82,32 @@ const isKitchenVisiblePosOrder = (order: any): boolean => {
   return orderStatus === 'voided' || paymentStatus === 'voided';
 };
 
+// Status -> {label, color} for the KDS void chip. Item-level voids go through
+// the full two-stage flow (cashier then manager); whole-bill voids skip the
+// cashier stage entirely, so they only ever use 3 of the 5 states.
+const ITEM_VOID_STATUS_META: Record<string, { label: string; color: string }> = {
+  pending: { label: 'PENDING CASHIER', color: 'amber' },
+  void_acknowledged: { label: 'VOID ACKNOWLEDGED', color: 'orange' },
+  approved: { label: 'APPROVED', color: 'green' },
+  rejected: { label: 'REJECTED', color: 'red' },
+  void_cashier_declined: { label: 'CASHIER DECLINED', color: 'grey' }
+};
+
+const WHOLE_BILL_VOID_STATUS_META: Record<string, { label: string; color: string }> = {
+  pending: { label: 'PENDING APPROVAL', color: 'amber' },
+  approved: { label: 'APPROVED', color: 'green' },
+  rejected: { label: 'REJECTED', color: 'red' }
+};
+
+const mapVoidStatus = (
+  status: string | null | undefined,
+  meta: Record<string, { label: string; color: string }>
+): { status: string; label: string; color: string } | null => {
+  const key = String(status || '').toLowerCase();
+  const entry = meta[key];
+  return entry ? { status: key, ...entry } : null;
+};
+
 const resolveKitchenBranchId = (req: express.Request): number | undefined => {
   const queryBranch = Number(req.query.branch_id);
   if (Number.isFinite(queryBranch) && queryBranch > 0) return queryBranch;
@@ -384,9 +410,36 @@ router.get('/kitchen/orders',
 
           if (posOrdersError) throw posOrdersError;
 
+          // Item-level void requests are never written to kitchen_status, so the
+          // kitchen has no visibility into them unless we attach them here.
+          // Only the latest request per (order_id, item_index) is kept — a
+          // resolved (declined/rejected/approved) request can be superseded by
+          // a fresh one on the same line.
+          const posOrderIds = (posOrders || []).map((o: any) => o.id);
+          const itemVoidsByOrder: Record<string, Record<number, any>> = {};
+          if (posOrderIds.length) {
+            const { data: itemVoidRows, error: itemVoidError } = await supabase
+              .from('pos_item_void_requests')
+              .select('order_id, item_index, item_name, qty_to_void, reason, status, created_at')
+              .in('order_id', posOrderIds)
+              .gte('created_at', stopSignalSince);
+            if (itemVoidError) {
+              console.warn('Failed to fetch item void requests for kitchen display:', itemVoidError.message);
+            } else {
+              for (const row of (itemVoidRows || [])) {
+                const byItem = itemVoidsByOrder[row.order_id] || (itemVoidsByOrder[row.order_id] = {});
+                const existing = byItem[row.item_index];
+                if (!existing || new Date(row.created_at).getTime() > new Date(existing.created_at).getTime()) {
+                  byItem[row.item_index] = row;
+                }
+              }
+            }
+          }
+
           posOrdersWithTime = (posOrders || []).filter(isKitchenVisiblePosOrder).map((order: any) => {
             const shift = shiftsById.get(order.shift_id) || {};
             const orderItems = Array.isArray(order.items) ? order.items : [];
+            const itemVoidsForOrder = itemVoidsByOrder[order.id] || {};
             return {
               id: `pos:${order.id}`,
               source: 'pos_shift_order',
@@ -406,6 +459,7 @@ router.get('/kitchen/orders',
               payment_status: order.payment_status,
               void_request_status: order.void_request_status,
               void_reason: order.void_reason,
+              void_status: mapVoidStatus(order.void_request_status, WHOLE_BILL_VOID_STATUS_META),
               voided_at: order.voided_at,
               voided_by: order.voided_by,
               created_at: order.created_at,
@@ -416,6 +470,8 @@ router.get('/kitchen/orders',
               captain_order_already_printed: isCaptainOrderAlreadyPrinted(order, orderItems),
               items: orderItems.map((item: any, index: number) => {
                 const itemStatus = normalizeKitchenStatus(item.kitchen_status || item.status || order.kitchen_status);
+                const itemVoidRow = itemVoidsForOrder[index];
+                const itemVoidMeta = itemVoidRow ? mapVoidStatus(itemVoidRow.status, ITEM_VOID_STATUS_META) : null;
                 return {
                 id: posItemKey(item, index),
                 name: item.name || item.item_name || 'POS item',
@@ -427,7 +483,14 @@ router.get('/kitchen/orders',
                 recalled_at: item.recalled_at || null,
                 recall_note: item.recall_note || null,
                 status: itemStatus,
-                is_ready: itemStatus === 'ready'
+                is_ready: itemStatus === 'ready',
+                void_request: itemVoidMeta
+                  ? {
+                      ...itemVoidMeta,
+                      reason: itemVoidRow.reason,
+                      qty_to_void: Number(itemVoidRow.qty_to_void || 0)
+                    }
+                  : null
               };
               })
             };
