@@ -445,6 +445,7 @@ export const createPayment = async (req: Request, res: Response, next: NextFunct
     const {
       category, payment_method, payee_name, payee_account, amount, currency,
       description, reference, receipt_url, po_id, grn_id, invoice_id,
+      cash_flow_category, source,
     } = req.body || {};
 
     if (!category || !payment_method || !payee_name) {
@@ -484,6 +485,9 @@ export const createPayment = async (req: Request, res: Response, next: NextFunct
         po_id: po_id || null,
         grn_id: grn_id || null,
         invoice_id: invoice_id || null,
+        cash_flow_category: cash_flow_category || null,
+        source: source || 'manual',
+        settlement_status: 'pending',
         status: finalStatus,
         requires_director: requiresDirector,
         created_by: (req as any).user?.id || null,
@@ -542,6 +546,15 @@ export const listPayments = async (req: Request, res: Response, next: NextFuncti
     }
     if (req.query.status && req.query.status !== 'all') {
       query = query.eq('status', req.query.status);
+    }
+    if (req.query.cash_flow_category && req.query.cash_flow_category !== 'all') {
+      query = query.eq('cash_flow_category', req.query.cash_flow_category);
+    }
+    if (req.query.settlement_status && req.query.settlement_status !== 'all') {
+      query = query.eq('settlement_status', req.query.settlement_status);
+    }
+    if (req.query.source && req.query.source !== 'all') {
+      query = query.eq('source', req.query.source);
     }
     const { data, error } = await query.limit(300);
     if (error) {
@@ -714,6 +727,51 @@ export const releasePayment = async (req: Request, res: Response, next: NextFunc
     res.status(200).json({ success: true, data: { ...data, receipt } });
   } catch (error) {
     logger.error('releasePayment failed:', error);
+    next(error);
+  }
+};
+
+// @desc    Mark an outbound payment as settled against its purchase order
+//          (cash_flow_category/settlement_status added in migration
+//          20260622_famousgate_major_redesign.sql, section 3). The
+//          fn_po_received_settle_outbound() trigger auto-settles PO-linked
+//          payments when the PO is received; this endpoint covers the
+//          manual case (non-PO payments, or a correction).
+// @route   PUT /api/branch-payments/:id/settle
+export const settlePayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { data: existing, error: loadError } = await supabase
+      .from('branch_payments').select('*').eq('id', req.params.id).maybeSingle();
+    if (loadError) throw loadError;
+    if (!existing) {
+      res.status(404).json({ success: false, message: 'Payment not found' });
+      return;
+    }
+    if (!isGlobalRole((req as any).user?.role)) {
+      const ub = (req as any).user?.branch_id;
+      if (ub && Number(existing.branch_id) !== Number(ub)) {
+        res.status(404).json({ success: false, message: 'Payment not found in your branch' });
+        return;
+      }
+    }
+    if (existing.status !== 'released') {
+      res.status(400).json({ success: false, message: 'Only released payments can be settled' });
+      return;
+    }
+    if (existing.settlement_status === 'settled') {
+      res.status(400).json({ success: false, message: 'Payment is already settled' });
+      return;
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('branch_payments')
+      .update({ settlement_status: 'settled', updated_at: now })
+      .eq('id', req.params.id).select().single();
+    if (error) throw error;
+    await writeAudit(req.params.id, 'settled', req, { note: req.body?.note || null });
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    logger.error('settlePayment failed:', error);
     next(error);
   }
 };

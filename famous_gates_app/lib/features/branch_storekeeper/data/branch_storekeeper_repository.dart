@@ -1495,4 +1495,224 @@ class BranchStorekeeperRepository {
     );
     return _unwrapMap(response.data);
   }
+
+  // ---------------------------------------------------------------------
+  // Opening stock gate — submission side (Branch Storekeeper).
+  // ---------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getOpeningStockStatus(String shiftId) async {
+    final response = await _dio.get(
+      '/storekeeping/opening-stock/$shiftId',
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  /// itemId values are inventory_items UUIDs (String); branchId/quantities
+  /// are numeric.
+  Future<Map<String, dynamic>> submitOpeningStock(
+    String shiftId, {
+    required String stockLocation,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final response = await _dio.post(
+      '/storekeeping/opening-stock/$shiftId',
+      data: {
+        'stock_location': stockLocation,
+        'items': items,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  /// Today's open cashier shifts for this branch, used to resolve which
+  /// shiftId the opening-stock gate applies to.
+  Future<List<Map<String, dynamic>>> openCashierShifts() async {
+    final response = await _dio.get(
+      '/cashier/shifts',
+      queryParameters: await _branchQuery({'status': 'pending_open,open'}),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  // ---------------------------------------------------------------------
+  // Pastry production (Branch Storekeeper).
+  // ---------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> pastryProduction({String? date}) async {
+    final response = await _dio.get(
+      '/storekeeping/pastry-production',
+      queryParameters:
+          await _branchQuery({if (date != null) 'date': date}),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  /// itemId is the inventory_items UUID (String); branchId/quantityProduced
+  /// are numeric.
+  Future<Map<String, dynamic>> recordPastryProduction({
+    required String itemId,
+    required num quantityProduced,
+    String? shiftId,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/storekeeping/pastry-production',
+      data: {
+        if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId),
+        'item_id': itemId,
+        'quantity_produced': quantityProduced,
+        if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> issuePastryToKitchen(
+    String id, {
+    num? issuedQuantity,
+  }) async {
+    final response = await _dio.post(
+      '/storekeeping/pastry-production/$id/issue',
+      data: {
+        if (issuedQuantity != null) 'issued_quantity': issuedQuantity,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  // ---------------------------------------------------------------------
+  // Bar stocktake — submission (Branch Storekeeper) + review (Accountant).
+  // ---------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> barStocktakeRecords({
+    String? barLocation,
+    String? status,
+    String? date,
+  }) async {
+    final response = await _dio.get(
+      '/storekeeping/bar-stocktake',
+      queryParameters: await _branchQuery({
+        if (barLocation != null) 'bar_location': barLocation,
+        if (status != null) 'status': status,
+        if (date != null) 'stocktake_date': date,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> barStocktakeSummary() async {
+    final response = await _dio.get(
+      '/storekeeping/bar-stocktake/summary',
+      queryParameters: await _branchQuery(),
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  /// itemId values are inventory_items UUIDs (String); branchId is numeric.
+  Future<Map<String, dynamic>> submitBarStocktake({
+    required String barLocation,
+    required List<Map<String, dynamic>> items,
+    String? stocktakeDate,
+    String? shiftId,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/storekeeping/bar-stocktake',
+      data: {
+        if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId),
+        'bar_location': barLocation,
+        'items': items,
+        if (stocktakeDate != null) 'stocktake_date': stocktakeDate,
+        if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> approveBarStocktake(String id,
+      {String? notes}) async {
+    final response = await _dio.patch(
+      '/storekeeping/bar-stocktake/$id/approve',
+      data: {if (notes != null && notes.isNotEmpty) 'notes': notes},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> rejectBarStocktake(String id,
+      {required String notes}) async {
+    final response = await _dio.patch(
+      '/storekeeping/bar-stocktake/$id/reject',
+      data: {'notes': notes},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  // ---------------------------------------------------------------------
+  // Wastage alerts / report (Kitchen — surfaced in Storekeeper module).
+  // ---------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> kitchenWastageAlerts({
+    bool? acknowledged,
+    String? shiftId,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/wastage/alerts',
+      queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        if (acknowledged != null) 'acknowledged': '$acknowledged',
+        if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> acknowledgeWastageAlert(String id) async {
+    await _dio.patch(
+      '/kitchen/wastage/alerts/$id/acknowledge',
+      options: await _authOptions,
+    );
+  }
+
+  Future<Map<String, dynamic>> kitchenWastageReport({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/wastage/report',
+      queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        'from_date': fromDate,
+        'to_date': toDate,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  // ---------------------------------------------------------------------
+  // Stock balance ledger summary (Storekeeper dashboard card).
+  // ---------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> stockBalanceSummary() async {
+    final response = await _dio.get(
+      '/storekeeping/stock-ledger',
+      queryParameters: await _branchQuery(),
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
 }

@@ -951,3 +951,73 @@ export const deleteNonConsumable = async (req: Request, res: Response): Promise<
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ─── Kitchen Ledger Items (configurable item list, per-branch) ────────────────
+// kitchen_ledger_items (migration 20260622_famousgate_major_redesign.sql,
+// section 11) — distinct from the existing kitchen_ledger_entries feature;
+// this is just the enable/disable list of which inventory items appear on a
+// branch's kitchen ledger.
+
+export const getKitchenLedgerItems = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { branch_id } = req.query;
+    if (!branch_id) {
+      res.status(400).json({ success: false, message: 'branch_id is required' });
+      return;
+    }
+    const branchId = Number(branch_id);
+    if (!Number.isInteger(branchId)) {
+      res.status(400).json({ success: false, message: 'branch_id must be an integer' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('kitchen_ledger_items')
+      .select('*, item:inventory_items(id, name, unit)')
+      .eq('branch_id', branchId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const addKitchenLedgerItem = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { branch_id, item_id } = req.body || {};
+    const branchId = Number(branch_id);
+    if (!Number.isInteger(branchId)) {
+      res.status(400).json({ success: false, message: 'branch_id must be an integer' });
+      return;
+    }
+    if (!item_id) {
+      res.status(400).json({ success: false, message: 'item_id is required' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('kitchen_ledger_items')
+      .upsert(
+        { branch_id: branchId, item_id: String(item_id), enabled_by: (req as any).user?.id || null },
+        { onConflict: 'branch_id,item_id' }
+      )
+      .select('*, item:inventory_items(id, name, unit)')
+      .single();
+    if (error) throw error;
+    res.status(201).json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const removeKitchenLedgerItem = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from('kitchen_ledger_items').delete().eq('id', id);
+    if (error) throw error;
+    res.json({ success: true, message: 'Kitchen ledger item removed' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

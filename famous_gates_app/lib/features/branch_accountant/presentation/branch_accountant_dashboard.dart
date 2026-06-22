@@ -11,6 +11,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:famous_gates_app/core/widgets/branch_sales_payments_view.dart';
+import 'package:famous_gates_app/core/widgets/payment_method_breakdown_widget.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/state/app_refresh.dart';
@@ -23,6 +24,7 @@ import '../../branch_search/presentation/branch_search_screen.dart';
 import '../data/repository.dart';
 import '../domain/providers.dart';
 import 'daily_close_screen.dart';
+import 'bar_stocktake_review_screen.dart';
 import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
@@ -64,6 +66,7 @@ enum BranchAccountantSection {
   catering,
   budgets,
   kitchenVariance,
+  barStocktakeReview,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -212,6 +215,8 @@ class _BranchAccountantDashboardState
         return const _BudgetsSection();
       case BranchAccountantSection.kitchenVariance:
         return const _KitchenVarianceSection();
+      case BranchAccountantSection.barStocktakeReview:
+        return const BarStocktakeReviewScreen();
     }
   }
 
@@ -291,6 +296,8 @@ const _navItems = [
       Icons.account_balance_wallet),
   _NavItem(BranchAccountantSection.kitchenVariance, 'Kitchen Variance',
       Icons.soup_kitchen),
+  _NavItem(BranchAccountantSection.barStocktakeReview, 'Bar Stocktake Review',
+      Icons.liquor),
 ];
 
 class _BranchAccountantSideNav extends ConsumerWidget {
@@ -581,7 +588,9 @@ class _OverviewSection extends ConsumerWidget {
         final clearance = _map(payload['clearances']);
         final summary = _map(clearance['summary']);
         final clearanceItems = _list(clearance['clearances']);
-        final dailyRecords = _list(payload['daily_records']);
+        // NOTE: daily_financial_records data must only be rendered on the
+        // dedicated Daily Close screen (BranchAccountantSection.financialClose) —
+        // it is intentionally not fetched/derived here.
         // Branch-sales analytics nests its totals under `summary`.
         final sales = _map(payload['sales']);
         final salesSummary = _map(sales['summary']);
@@ -592,14 +601,6 @@ class _OverviewSection extends ConsumerWidget {
         final openDiscrepancies =
             discrepancies.where(_isOpenDiscrepancy).toList();
         final budget = _map(payload['budget_summary']);
-
-        final postedRevenue = dailyRecords.fold<num>(
-            0, (sum, e) => sum + _num(e['total_revenue']));
-        final postedExpenses = dailyRecords.fold<num>(
-            0, (sum, e) => sum + _num(e['total_expenses']));
-        final postedNetProfit =
-            dailyRecords.fold<num>(0, (sum, e) => sum + _num(e['net_profit']));
-        final hasDailyFinancialRecords = dailyRecords.isNotEmpty;
 
         final analyticsRevenue = _firstNonZeroNum([
           salesSummary['total_sales'],
@@ -631,12 +632,6 @@ class _OverviewSection extends ConsumerWidget {
             financials['net_profit'] ??
             financials['netProfit'] ??
             financials['net_income']);
-        final accountedRevenue = hasDailyFinancialRecords ? postedRevenue : 0;
-        final accountedExpenses = hasDailyFinancialRecords ? postedExpenses : 0;
-        final netProfit = hasDailyFinancialRecords ? postedNetProfit : 0;
-        final unpostedSales = analyticsRevenue > accountedRevenue
-            ? analyticsRevenue - accountedRevenue
-            : 0;
         num receivables =
             _num(financials['receivables'] ?? finSummary['receivables']);
         num payables = _num(financials['payables'] ?? finSummary['payables']);
@@ -656,8 +651,6 @@ class _OverviewSection extends ConsumerWidget {
         final budgetBalance = _num(budget['remaining_budget'] ??
             budget['total_remaining'] ??
             budget['balance']);
-        final postedDays = dailyRecords.length;
-        final hasUnpostedSales = unpostedSales.abs() > 0;
 
         return _Page(
           title: 'Branch Accountant Overview',
@@ -677,31 +670,13 @@ class _OverviewSection extends ConsumerWidget {
             ),
             _OverviewControlBand(
               periodLabel: _overviewPeriodLabel(),
-              postedDays: postedDays,
-              hasPostedRecords: hasDailyFinancialRecords,
-              accountedRevenue: accountedRevenue,
               capturedSales: analyticsRevenue,
-              unpostedSales: unpostedSales,
               onOpenWorkspace: () =>
                   onNavigate(BranchAccountantSection.financialClose),
             ),
             _ResponsiveGrid(children: [
-              _MetricCard('Posted Revenue', _money(accountedRevenue),
-                  Icons.fact_check, Colors.green),
               _MetricCard('POS Sales Captured', _money(analyticsRevenue),
                   Icons.point_of_sale, Colors.blue),
-              _MetricCard('Posted Expenses', _money(accountedExpenses),
-                  Icons.receipt_long, Colors.orange),
-              _MetricCard(
-                  'Net Position',
-                  _money(netProfit),
-                  Icons.account_balance_wallet,
-                  netProfit >= 0 ? Colors.teal : Colors.red),
-              _MetricCard(
-                  'Unposted Sales',
-                  _money(unpostedSales),
-                  Icons.pending_actions,
-                  hasUnpostedSales ? Colors.red : Colors.green),
               _MetricCard(
                   'Cashier Variance',
                   _money(variance),
@@ -720,33 +695,17 @@ class _OverviewSection extends ConsumerWidget {
             const SizedBox(height: 8),
             _QuickActions(onNavigate: onNavigate),
             const SizedBox(height: 8),
-            _TwoColumn(
-              left: _SectionCard(
-                title: 'Posted Financial Position',
-                child: _KeyValueList({
-                  'Accounting Source': hasDailyFinancialRecords
-                      ? 'Daily financial workspace'
-                      : 'No daily finance records posted',
-                  'Posted Days': postedDays,
-                  'Posted Revenue': _money(accountedRevenue),
-                  'Posted Expenses': _money(accountedExpenses),
-                  'Posted Net Position': _money(netProfit),
-                  'Receivables': _money(receivables),
-                  'Payables': _money(payables),
-                  'Budget Balance': _money(budgetBalance),
-                }),
-              ),
-              right: _SectionCard(
-                title: 'Sales Reconciliation',
-                child: _KeyValueList({
-                  'POS Sales Captured': _money(analyticsRevenue),
-                  'Posted Revenue': _money(accountedRevenue),
-                  'Unposted Sales Difference': _money(unpostedSales),
-                  'Profile Revenue Reference': _money(profileRevenue),
-                  'Profile Expenses Reference': _money(profileExpenses),
-                  'Profile Net Reference': _money(profileNetProfit),
-                }),
-              ),
+            _SectionCard(
+              title: 'Branch Financial Position',
+              child: _KeyValueList({
+                'POS Sales Captured': _money(analyticsRevenue),
+                'Profile Revenue Reference': _money(profileRevenue),
+                'Profile Expenses Reference': _money(profileExpenses),
+                'Profile Net Reference': _money(profileNetProfit),
+                'Receivables': _money(receivables),
+                'Payables': _money(payables),
+                'Budget Balance': _money(budgetBalance),
+              }),
             ),
           ],
         );
@@ -764,36 +723,16 @@ String _overviewPeriodLabel() {
 class _OverviewControlBand extends StatelessWidget {
   const _OverviewControlBand({
     required this.periodLabel,
-    required this.postedDays,
-    required this.hasPostedRecords,
-    required this.accountedRevenue,
     required this.capturedSales,
-    required this.unpostedSales,
     required this.onOpenWorkspace,
   });
 
   final String periodLabel;
-  final int postedDays;
-  final bool hasPostedRecords;
-  final num accountedRevenue;
   final num capturedSales;
-  final num unpostedSales;
   final VoidCallback onOpenWorkspace;
 
   @override
   Widget build(BuildContext context) {
-    final hasGap = unpostedSales.abs() > 0;
-    final statusColor = !hasPostedRecords
-        ? Colors.red
-        : hasGap
-            ? Colors.orange
-            : Colors.green;
-    final statusText = !hasPostedRecords
-        ? 'No posted daily records'
-        : hasGap
-            ? 'Sales pending posting'
-            : 'Posted revenue reconciled';
-
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -813,44 +752,12 @@ class _OverviewControlBand extends StatelessWidget {
               color: AppColors.kPrimary,
             ),
             _OverviewBandMetric(
-              label: 'Posted Days',
-              value: '$postedDays',
-              icon: Icons.fact_check,
-              color: Colors.green,
-            ),
-            _OverviewBandMetric(
-              label: 'Posted Revenue',
-              value: _money(accountedRevenue),
-              icon: Icons.account_balance_wallet,
-              color: Colors.teal,
-            ),
-            _OverviewBandMetric(
               label: 'Captured POS Sales',
               value: _money(capturedSales),
               icon: Icons.point_of_sale,
               color: Colors.blue,
             ),
           ],
-        );
-        final status = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: statusColor.withValues(alpha: .1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: statusColor.withValues(alpha: .22)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.circle, size: 10, color: statusColor),
-              const SizedBox(width: 8),
-              Text(
-                statusText,
-                style:
-                    TextStyle(color: statusColor, fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
         );
         final action = FilledButton.icon(
           onPressed: onOpenWorkspace,
@@ -863,7 +770,7 @@ class _OverviewControlBand extends StatelessWidget {
             children: [
               summary,
               const SizedBox(height: 14),
-              Wrap(spacing: 10, runSpacing: 10, children: [status, action]),
+              action,
             ],
           );
         }
@@ -872,8 +779,6 @@ class _OverviewControlBand extends StatelessWidget {
           children: [
             Expanded(child: summary),
             const SizedBox(width: 14),
-            status,
-            const SizedBox(width: 10),
             action,
           ],
         );
@@ -1298,14 +1203,20 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
 
   Future<Map<String, dynamic>> _load() async {
     final repo = ref.read(branchAccountantRepositoryProvider);
-    final sales = await repo.getBranchSalesAnalytics(
-      startDate: _start,
-      endDate: _end,
-      filters: _filtersPayload,
-    );
-    final financials =
-        await repo.getBranchFinancials(startDate: _start, endDate: _end);
-    return {'sales': sales, 'financials': financials};
+    final results = await Future.wait([
+      repo.getBranchSalesAnalytics(
+        startDate: _start,
+        endDate: _end,
+        filters: _filtersPayload,
+      ),
+      repo.getBranchFinancials(startDate: _start, endDate: _end),
+      repo.getSoldItems(startDate: _start, endDate: _end),
+    ]);
+    return {
+      'sales': results[0],
+      'financials': results[1],
+      'soldItems': results[2],
+    };
   }
 
   void _refresh() => setState(() {
@@ -1330,6 +1241,33 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
           final paymentBreakdown = _list(sales['payment_method_breakdown']);
           final categoryBreakdown = _list(sales['category_breakdown']);
           final transactions = _list(sales['transactions']);
+          final soldItemsPayload = _map(payload['soldItems']);
+          final soldItemsData = _map(soldItemsPayload['data']).isNotEmpty
+              ? _map(soldItemsPayload['data'])
+              : soldItemsPayload;
+          final soldItemsSummary = _map(soldItemsData['summary']);
+          final outletBreakdown = _list(soldItemsSummary['outlet_breakdown']);
+          final topSellingItems = ([..._list(soldItemsData['analysis'])]
+                ..sort((a, b) => _num(b['quantity']).compareTo(_num(a['quantity']))))
+              .take(10)
+              .toList();
+          final byMethodMap = paymentBreakdown.fold<Map<String, num>>(
+            {'mpesa': 0, 'cash': 0, 'card': 0, 'credit': 0},
+            (acc, m) {
+              final key = _text(m, ['payment_method']).toLowerCase();
+              final amount = _num(m['total_sales'] ?? m['amount']);
+              if (key.contains('mpesa') || key.contains('mobile')) {
+                acc['mpesa'] = (acc['mpesa'] ?? 0) + amount;
+              } else if (key.contains('cash')) {
+                acc['cash'] = (acc['cash'] ?? 0) + amount;
+              } else if (key.contains('card') || key.contains('swipe')) {
+                acc['card'] = (acc['card'] ?? 0) + amount;
+              } else if (key.contains('credit')) {
+                acc['credit'] = (acc['credit'] ?? 0) + amount;
+              }
+              return acc;
+            },
+          );
           return _Page(
             title: 'Branch Sales Analytics',
             subtitle:
@@ -1433,11 +1371,28 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                     Icons.account_balance_wallet,
                     Colors.brown),
               ]),
+              PaymentMethodBreakdownWidget(
+                title: 'Payment Method Breakdown',
+                mpesa: byMethodMap['mpesa'] ?? 0,
+                cash: byMethodMap['cash'] ?? 0,
+                card: byMethodMap['card'] ?? 0,
+                credit: byMethodMap['credit'] ?? 0,
+              ),
+              const SizedBox(height: 12),
               _TwoColumn(
                 left: _SalesTrendChart(data: dailyBreakdown),
                 right: _PaymentMethodPieChart(data: paymentBreakdown),
               ),
               _CategoryBreakdownBarChart(data: categoryBreakdown),
+              _TwoColumn(
+                left: _RevenueByOutletChart(data: outletBreakdown),
+                right: _DailyTransactionsBarChart(data: dailyBreakdown),
+              ),
+              _TwoColumn(
+                left: _TopSellingItemsChart(data: topSellingItems),
+                right: _HourlySalesBarChart(transactions: transactions),
+              ),
+              _CreditBillsTrendChart(transactions: transactions),
               _TwoColumn(
                 left: _BreakdownCard(
                     title: 'Revenue Sources',
@@ -1996,6 +1951,399 @@ class _CategoryBreakdownBarChart extends StatelessWidget {
   }
 }
 
+class _RevenueByOutletChart extends StatelessWidget {
+  const _RevenueByOutletChart({required this.data});
+  final List<Map<String, dynamic>> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...data]
+      ..sort((a, b) => _num(b['revenue']).compareTo(_num(a['revenue'])));
+    final top = sorted.take(10).toList();
+    final maxRevenue = top.fold<double>(
+        0, (max, e) => _num(e['revenue']).toDouble() > max ? _num(e['revenue']).toDouble() : max);
+    return _SectionCard(
+      title: 'Revenue by Outlet',
+      child: top.isEmpty
+          ? const SizedBox(
+              height: 200,
+              child: Center(child: Text('No outlet revenue data available')))
+          : SizedBox(
+              height: 46.0 * top.length + 20,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxRevenue <= 0 ? 1 : maxRevenue * 1.2,
+                  gridData: const FlGridData(show: true),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 90,
+                        getTitlesWidget: (value, meta) {
+                          final index = value.round();
+                          if (index < 0 || index >= top.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Text(
+                              _text(top[index], ['label', 'key']),
+                              style: const TextStyle(fontSize: 10));
+                        },
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) => Text(
+                            '${(value / 1000).toStringAsFixed(0)}K',
+                            style: const TextStyle(fontSize: 10)),
+                      ),
+                    ),
+                  ),
+                  barGroups: top.asMap().entries.map((entry) {
+                    return BarChartGroupData(
+                      x: entry.key,
+                      barRods: [
+                        BarChartRodData(
+                          toY: _num(entry.value['revenue']).toDouble(),
+                          color: const Color(0xFF3B82F6),
+                          width: 18,
+                          borderRadius:
+                              const BorderRadius.horizontal(right: Radius.circular(6)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final item = top[group.x];
+                        return BarTooltipItem(
+                          '${_text(item, [
+                                'label',
+                                'key'
+                              ])}\n${_money(_num(item['revenue']))}',
+                          const TextStyle(color: Colors.white),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _DailyTransactionsBarChart extends StatelessWidget {
+  const _DailyTransactionsBarChart({required this.data});
+  final List<Map<String, dynamic>> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxCount = data.fold<double>(0,
+        (max, e) => _num(e['transaction_count']).toDouble() > max ? _num(e['transaction_count']).toDouble() : max);
+    return _SectionCard(
+      title: 'Daily Transactions',
+      child: SizedBox(
+        height: 280,
+        child: data.isEmpty
+            ? const Center(child: Text('No transaction data available'))
+            : BarChart(
+                BarChartData(
+                  maxY: maxCount <= 0 ? 1 : maxCount * 1.2,
+                  gridData: const FlGridData(show: true),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 36,
+                        getTitlesWidget: (value, meta) =>
+                            Text('${value.toInt()}', style: const TextStyle(fontSize: 10)),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        interval: (data.length / 5).ceilToDouble().clamp(1, 99),
+                        getTitlesWidget: (value, meta) {
+                          final index = value.round();
+                          if (index < 0 || index >= data.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Text(_shortDate(_text(data[index], ['date'])),
+                              style: const TextStyle(fontSize: 10));
+                        },
+                      ),
+                    ),
+                  ),
+                  barGroups: data.asMap().entries.map((entry) {
+                    return BarChartGroupData(
+                      x: entry.key,
+                      barRods: [
+                        BarChartRodData(
+                          toY: _num(entry.value['transaction_count']).toDouble(),
+                          color: const Color(0xFF6366F1),
+                          width: 10,
+                          borderRadius:
+                              const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _TopSellingItemsChart extends StatelessWidget {
+  const _TopSellingItemsChart({required this.data});
+  final List<Map<String, dynamic>> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxQty = data.fold<double>(0,
+        (max, e) => _num(e['quantity']).toDouble() > max ? _num(e['quantity']).toDouble() : max);
+    return _SectionCard(
+      title: 'Top 10 Selling Items',
+      child: data.isEmpty
+          ? const SizedBox(
+              height: 200, child: Center(child: Text('No item sales data available')))
+          : SizedBox(
+              height: 46.0 * data.length + 20,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxQty <= 0 ? 1 : maxQty * 1.2,
+                  gridData: const FlGridData(show: true),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 110,
+                        getTitlesWidget: (value, meta) {
+                          final index = value.round();
+                          if (index < 0 || index >= data.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Text(_text(data[index], ['name']),
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 10));
+                        },
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: true),
+                    ),
+                  ),
+                  barGroups: data.asMap().entries.map((entry) {
+                    return BarChartGroupData(
+                      x: entry.key,
+                      barRods: [
+                        BarChartRodData(
+                          toY: _num(entry.value['quantity']).toDouble(),
+                          color: const Color(0xFF10B981),
+                          width: 18,
+                          borderRadius:
+                              const BorderRadius.horizontal(right: Radius.circular(6)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final item = data[group.x];
+                        return BarTooltipItem(
+                          '${_text(item, [
+                                'name'
+                              ])}\n${_num(item['quantity']).toStringAsFixed(0)} units\n${_money(_num(item['revenue']))}',
+                          const TextStyle(color: Colors.white),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// Buckets raw transactions by hour-of-day (0-23) from `transaction_date`.
+class _HourlySalesBarChart extends StatelessWidget {
+  const _HourlySalesBarChart({required this.transactions});
+  final List<Map<String, dynamic>> transactions;
+
+  @override
+  Widget build(BuildContext context) {
+    final hourly = List<double>.filled(24, 0);
+    for (final t in transactions) {
+      final raw = _text(t, ['transaction_date', 'created_at']);
+      final parsed = DateTime.tryParse(raw);
+      if (parsed == null) continue;
+      hourly[parsed.hour] += _num(t['total_amount']).toDouble();
+    }
+    final maxVal = hourly.fold<double>(0, (max, v) => v > max ? v : max);
+    return _SectionCard(
+      title: 'Hourly Sales',
+      child: SizedBox(
+        height: 260,
+        child: maxVal <= 0
+            ? const Center(child: Text('No hourly sales data available'))
+            : BarChart(
+                BarChartData(
+                  maxY: maxVal * 1.2,
+                  gridData: const FlGridData(show: true),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 44,
+                        getTitlesWidget: (value, meta) => Text(
+                            '${(value / 1000).toStringAsFixed(0)}K',
+                            style: const TextStyle(fontSize: 10)),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        interval: 3,
+                        getTitlesWidget: (value, meta) =>
+                            Text('${value.toInt()}h', style: const TextStyle(fontSize: 10)),
+                      ),
+                    ),
+                  ),
+                  barGroups: hourly.asMap().entries.map((entry) {
+                    return BarChartGroupData(
+                      x: entry.key,
+                      barRods: [
+                        BarChartRodData(
+                          toY: entry.value,
+                          color: const Color(0xFFF59E0B),
+                          width: 8,
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+/// Aggregates credit/credit_bill transactions by date for a daily trend line.
+class _CreditBillsTrendChart extends StatelessWidget {
+  const _CreditBillsTrendChart({required this.transactions});
+  final List<Map<String, dynamic>> transactions;
+
+  @override
+  Widget build(BuildContext context) {
+    final byDate = <String, double>{};
+    for (final t in transactions) {
+      final method = _text(t, ['payment_method']).toLowerCase();
+      if (!method.contains('credit')) continue;
+      final raw = _text(t, ['transaction_date', 'created_at']);
+      final date = raw.length >= 10 ? raw.substring(0, 10) : raw;
+      if (date.isEmpty) continue;
+      byDate[date] = (byDate[date] ?? 0) + _num(t['total_amount']).toDouble();
+    }
+    final dates = byDate.keys.toList()..sort();
+    final spots = dates.asMap().entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), byDate[entry.value] ?? 0);
+    }).toList();
+    final maxVal = spots.fold<double>(0, (max, s) => s.y > max ? s.y : max);
+    return _SectionCard(
+      title: 'Credit Bills Trend',
+      child: SizedBox(
+        height: 260,
+        child: dates.isEmpty
+            ? const Center(child: Text('No credit bills recorded for this period'))
+            : LineChart(
+                LineChartData(
+                  minY: 0,
+                  maxY: maxVal <= 0 ? 1 : maxVal * 1.2,
+                  gridData: const FlGridData(show: true),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 48,
+                        getTitlesWidget: (value, meta) => Text(
+                            '${(value / 1000).toStringAsFixed(0)}K',
+                            style: const TextStyle(fontSize: 10)),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        interval: (dates.length / 5).ceilToDouble().clamp(1, 99),
+                        getTitlesWidget: (value, meta) {
+                          final index = value.round();
+                          if (index < 0 || index >= dates.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Text(_shortDate(dates[index]),
+                              style: const TextStyle(fontSize: 10));
+                        },
+                      ),
+                    ),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: true,
+                      color: const Color(0xFFDC2626),
+                      barWidth: 3,
+                      dotData: const FlDotData(show: true),
+                    ),
+                  ],
+                  lineTouchData: LineTouchData(
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipItems: (spots) => spots.map((spot) {
+                        final index = spot.x.round().clamp(0, dates.length - 1);
+                        return LineTooltipItem(
+                          '${_shortDate(dates[index])}\n${_money(spot.y)}',
+                          const TextStyle(color: Colors.white, fontSize: 11),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
 class _LegendItem extends StatelessWidget {
   const _LegendItem({required this.color, required this.label});
   final Color color;
@@ -2248,30 +2596,48 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
   late String _from =
       _date(DateTime(DateTime.now().year, DateTime.now().month));
   late String _to = _today();
-  late Future<Map<String, dynamic>> _future = _load();
+  late Future<List<Map<String, dynamic>>> _future = _load();
   bool _exporting = false;
 
-  // Sourced from cashier transactions + sold items, broken down per POS outlet.
-  Future<Map<String, dynamic>> _load() => ref
-      .read(branchAccountantRepositoryProvider)
-      .getPosProfitLoss(fromDate: _from, toDate: _to);
+  // [0] = get_branch_profit_loss() RPC (system/verified revenue, expense
+  // categories, COGS, bar stock variance). [1] = per-POS-outlet breakdown,
+  // sourced from cashier transactions + sold items, used only for the
+  // collapsible "P&L by POS Outlet" section and the unchanged PDF export.
+  Future<List<Map<String, dynamic>>> _load() {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    return Future.wait([
+      repo.getBranchProfitLoss(startDate: _from, endDate: _to),
+      repo.getPosProfitLoss(fromDate: _from, toDate: _to),
+    ]);
+  }
+
   void _refresh() => setState(() {
         _future = _load();
       });
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
+    return FutureBuilder<List<Map<String, dynamic>>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (pl) {
-          final outlets = _list(pl['outlets']);
+        builder: (results) {
+          final pl = results[0];
+          final posOutletData = results[1];
+          final outlets = _list(posOutletData['outlets']);
+          final byMethod = _map(pl['system_revenue_by_method']);
+          final expenses = _map(pl['expenses_by_category']);
+          final systemRevenue = _num(pl['system_revenue']);
+          final verifiedRevenue = _num(pl['verified_revenue']);
+          final revenueVariance = _num(pl['revenue_variance']);
+          final totalExpenses = expenses.values
+              .fold<num>(0, (sum, v) => sum + _num(v));
+
           return _Page(
             title: 'Profit & Loss Statement',
             subtitle:
-                'From cashier transactions & sold items — per POS outlet, COGS, and net margin.',
+                'System vs verified revenue, expense categories, COGS, and net margin.',
             actions: [
               _DateField(
                   value: _from, onChanged: (v) => setState(() => _from = v)),
@@ -2289,33 +2655,56 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
               ),
             ],
             children: [
+              PaymentMethodBreakdownWidget(
+                title: 'Revenue by Payment Method',
+                mpesa: _num(byMethod['mpesa']),
+                cash: _num(byMethod['cash']),
+                card: _num(byMethod['card']),
+                credit: _num(byMethod['credit']),
+              ),
+              const SizedBox(height: 12),
               _ResponsiveGrid(children: [
-                _MetricCard('Revenue', _money(_num(pl['revenue'])),
+                _MetricCard('System Revenue', _money(systemRevenue),
                     Icons.payments, Colors.teal),
-                _MetricCard('Cashier Sales', _money(_num(pl['cashierRevenue'])),
-                    Icons.point_of_sale, Colors.indigo),
-                _MetricCard('Cost of Goods', _money(_num(pl['costOfGoods'])),
+                _MetricCard('Verified Revenue', _money(verifiedRevenue),
+                    Icons.verified, Colors.indigo),
+                _MetricCard(
+                    'Variance',
+                    _money(revenueVariance),
+                    Icons.compare_arrows,
+                    revenueVariance >= 0 ? Colors.green : Colors.red),
+                _MetricCard('Cost of Goods', _money(_num(pl['cogs'])),
                     Icons.inventory_2, Colors.orange),
-                _MetricCard('Gross Profit', _money(_num(pl['grossProfit'])),
+                _MetricCard('Gross Profit', _money(_num(pl['gross_profit'])),
                     Icons.trending_up, Colors.green),
                 _MetricCard(
-                    'Operating Expenses',
-                    _money(_num(pl['operatingExpenses'])),
-                    Icons.receipt_long,
-                    Colors.redAccent),
-                _MetricCard(
                     'Net Profit',
-                    _money(_num(pl['netProfit'])),
+                    _money(_num(pl['net_profit'])),
                     Icons.wallet,
-                    _num(pl['netProfit']) >= 0 ? Colors.green : Colors.red),
+                    _num(pl['net_profit']) >= 0 ? Colors.green : Colors.red),
                 _MetricCard(
                     'Net Margin',
-                    '${_num(pl['margin']).toStringAsFixed(1)}%',
+                    '${_num(pl['net_margin']).toStringAsFixed(1)}%',
                     Icons.percent,
                     Colors.purple),
               ]),
               _SectionCard(
-                title: 'Profit & Loss by POS Outlet',
+                title: 'Expenses Breakdown',
+                child: _KeyValueList({
+                  'Daily Purchases': _money(_num(expenses['daily_purchase'])),
+                  'Petty Cash': _money(_num(expenses['petty_cash'])),
+                  'Transaction Costs':
+                      _money(_num(expenses['transaction_cost'])),
+                  'Operational': _money(_num(expenses['operational'])),
+                  if (_num(expenses['bar_stock_variance']) != 0)
+                    'Bar Stock Variance':
+                        _money(_num(expenses['bar_stock_variance'])),
+                  'Total': _money(totalExpenses),
+                }),
+              ),
+              _CollapsibleSectionCard(
+                title: 'P&L by POS Outlet',
+                initiallyExpanded: false,
                 child: outlets.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.all(12),
@@ -2342,28 +2731,14 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
                               ]),
                           [
                             'TOTAL',
-                            _money(_num(pl['revenue'])),
-                            _money(_num(pl['costOfGoods'])),
-                            _money(_num(pl['grossProfit'])),
-                            '${_num(pl['grossMargin']).toStringAsFixed(1)}%',
+                            _money(_num(posOutletData['revenue'])),
+                            _money(_num(posOutletData['costOfGoods'])),
+                            _money(_num(posOutletData['grossProfit'])),
+                            '${_num(posOutletData['grossMargin']).toStringAsFixed(1)}%',
                             '',
                           ],
                         ],
                       ),
-              ),
-              _TwoColumn(
-                left: _BreakdownCard(
-                  title: 'Revenue by Outlet',
-                  values: _map(pl['revenueBySource']).isNotEmpty
-                      ? _map(pl['revenueBySource'])
-                      : {'Total Revenue': pl['revenue']},
-                ),
-                right: _BreakdownCard(
-                  title: 'Operating Expenses',
-                  values: _map(pl['expensesByCategory']).isNotEmpty
-                      ? _map(pl['expensesByCategory'])
-                      : {'Operating Expenses': pl['operatingExpenses']},
-                ),
               ),
             ],
           );
@@ -2402,43 +2777,122 @@ class _RevenueOversightSection extends ConsumerStatefulWidget {
 class _RevenueOversightSectionState
     extends ConsumerState<_RevenueOversightSection> {
   int _period = 30;
-  late Future<Map<String, dynamic>> _future = _load();
-  Future<Map<String, dynamic>> _load() => ref
-      .read(branchAccountantRepositoryProvider)
-      .getRevenueOversight(period: _period);
+  bool _isCustom = false;
+  String _customFrom = _date(DateTime.now().subtract(const Duration(days: 30)));
+  String _customTo = _today();
+  late Future<List<Map<String, dynamic>>> _future = _load();
+
+  String get _effectiveFrom => _isCustom
+      ? _customFrom
+      : _date(DateTime.now().subtract(Duration(days: _period)));
+  String get _effectiveTo => _isCustom ? _customTo : _today();
+
+  Future<List<Map<String, dynamic>>> _load() {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    return Future.wait([
+      repo.getRevenueOversight(
+          startDate: _effectiveFrom, endDate: _effectiveTo),
+      repo.getBranchProfitLoss(
+          startDate: _effectiveFrom, endDate: _effectiveTo),
+    ]);
+  }
+
   void _refresh() => setState(() {
         _future = _load();
       });
 
+  void _selectQuickRange(int days) {
+    setState(() {
+      _isCustom = false;
+      _period = days;
+      _future = _load();
+    });
+  }
+
+  void _selectCustom() {
+    setState(() {
+      _isCustom = true;
+      _future = _load();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
+    return FutureBuilder<List<Map<String, dynamic>>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (data) {
+        builder: (results) {
+          final data = results[0];
+          final pl = results[1];
           final summary = _map(data['summary']);
           final categories = _list(data['category_breakdown']);
           final trend = _list(data['daily_trend']);
+          final byMethod = _map(pl['system_revenue_by_method']);
           return _Page(
             title: 'Revenue Oversight',
             subtitle:
                 'Targets, achievement, category performance, and daily trend.',
             actions: [
-              _Dropdown(
-                value: '$_period',
-                values: const ['7', '30', '90'],
-                labels: const {
-                  '7': 'Last 7 Days',
-                  '30': 'Last 30 Days',
-                  '90': 'Last 90 Days'
-                },
-                onChanged: (v) => setState(() => _period = int.parse(v)),
-              ),
               _RefreshButton(onPressed: _refresh),
             ],
             children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Last 7 Days'),
+                    selected: !_isCustom && _period == 7,
+                    onSelected: (_) => _selectQuickRange(7),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Last 30 Days'),
+                    selected: !_isCustom && _period == 30,
+                    onSelected: (_) => _selectQuickRange(30),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Last 90 Days'),
+                    selected: !_isCustom && _period == 90,
+                    onSelected: (_) => _selectQuickRange(90),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Custom'),
+                    selected: _isCustom,
+                    onSelected: (_) => _selectCustom(),
+                  ),
+                ],
+              ),
+              if (_isCustom) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _DateField(
+                      value: _customFrom,
+                      onChanged: (v) => setState(() => _customFrom = v),
+                    ),
+                    _DateField(
+                      value: _customTo,
+                      onChanged: (v) => setState(() => _customTo = v),
+                    ),
+                    _RefreshButton(onPressed: _refresh),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+              if (byMethod.isNotEmpty)
+                PaymentMethodBreakdownWidget(
+                  title: 'Payment Method Breakdown',
+                  mpesa: _num(byMethod['mpesa']),
+                  cash: _num(byMethod['cash']),
+                  card: _num(byMethod['card']),
+                  credit: _num(byMethod['credit']),
+                ),
+              const SizedBox(height: 12),
               _ResponsiveGrid(children: [
                 _MetricCard(
                     'Total Revenue',
@@ -4368,9 +4822,29 @@ class _ShiftOpeningApprovalsSectionState
   Future<void> _approve(Map<String, dynamic> shift) async {
     final id = '${shift['id'] ?? ''}';
     if (id.isEmpty || _busyIds.contains(id)) return;
+    final repo = ref.read(branchAccountantRepositoryProvider);
     setState(() => _busyIds.add(id));
     try {
-      await ref.read(branchAccountantRepositoryProvider).approveShiftOpening(
+      final gate = await repo.getOpeningStockStatus(id);
+      final gateData = _map(gate['data']).isNotEmpty ? _map(gate['data']) : gate;
+      if (gateData['gate_open'] != true) {
+        if (mounted) {
+          await _showOpeningStockGateDialog(_map(gateData['status']));
+        }
+        return;
+      }
+    } catch (_) {
+      // If the gate status itself can't be loaded, fail safe by blocking.
+      if (mounted) {
+        _notify(context, 'Could not verify opening stock status. Try again.');
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(id));
+    }
+    setState(() => _busyIds.add(id));
+    try {
+      await repo.approveShiftOpening(
             id,
             notes: 'Approved from Shift Openings queue',
           );
@@ -4412,6 +4886,53 @@ class _ShiftOpeningApprovalsSectionState
     } finally {
       if (mounted) setState(() => _busyIds.remove(id));
     }
+  }
+
+  Future<void> _showOpeningStockGateDialog(Map<String, dynamic> status) async {
+    final locations = const [
+      ('Branch Store', 'branch_store_complete'),
+      ('Main Bar', 'main_bar_complete'),
+      ('Executive Bar', 'executive_bar_complete'),
+    ];
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Opening Stock Incomplete'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'The shift cannot be opened until all stock counts are submitted.'),
+            const SizedBox(height: 14),
+            for (final (label, key) in locations)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      status[key] == true
+                          ? Icons.check_circle
+                          : Icons.cancel,
+                      color: status[key] == true ? Colors.green : Colors.red,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(label),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<String?> _askForRejectionNote() async {
@@ -5439,6 +5960,23 @@ class _ShiftReconciliationPanel extends StatelessWidget {
             title: 'Full POS Bill & Order Evidence',
             child: _LogbookEvidenceTable(lines: lines),
           ),
+          const SizedBox(height: 14),
+          if (!_isShiftLogbookReview(shift!))
+            _ShiftCollectionsAndExpensesSection(
+              shiftId: _firstTextFrom(shift!, ['id']),
+              systemAmounts: {
+                'mpesa': _num(payments.firstWhere(
+                    (p) => '${p['method']}'.toLowerCase().contains('mpesa'),
+                    orElse: () => const {})['amount']),
+                'cash': _num(payments.firstWhere(
+                    (p) => '${p['method']}'.toLowerCase().contains('cash'),
+                    orElse: () => const {})['amount']),
+                'card': _num(payments.firstWhere(
+                    (p) => '${p['method']}'.toLowerCase().contains('card'),
+                    orElse: () => const {})['amount']),
+                'credit': creditBillsTotal,
+              },
+            ),
           const SizedBox(height: 18),
           const Text(
             'Reconciliation Notes',
@@ -5466,6 +6004,378 @@ class _ShiftReconciliationPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+const _reconciliationMethodLabels = {
+  'mpesa': 'Mpesa',
+  'cash': 'Cash',
+  'card': 'Card',
+  'credit': 'Credit',
+};
+const _reconciliationExpenseCategoryLabels = {
+  'petty_cash': 'Petty Cash',
+  'transaction_cost': 'Transaction Cost',
+  'other': 'Other',
+};
+
+/// Section A (actual collections vs system amounts) and Section B (shift
+/// expenses) for a closed cashier shift being reconciled. Self-contained —
+/// fetches and submits independently of the parent panel.
+class _ShiftCollectionsAndExpensesSection extends ConsumerStatefulWidget {
+  const _ShiftCollectionsAndExpensesSection({
+    required this.shiftId,
+    required this.systemAmounts,
+  });
+
+  final String shiftId;
+  final Map<String, num> systemAmounts;
+
+  @override
+  ConsumerState<_ShiftCollectionsAndExpensesSection> createState() =>
+      _ShiftCollectionsAndExpensesSectionState();
+}
+
+class _ShiftCollectionsAndExpensesSectionState
+    extends ConsumerState<_ShiftCollectionsAndExpensesSection> {
+  late Future<Map<String, dynamic>> _future = _load();
+  final Map<String, TextEditingController> _actualCtrls = {
+    'mpesa': TextEditingController(),
+    'cash': TextEditingController(),
+    'card': TextEditingController(),
+    'credit': TextEditingController(),
+  };
+  bool _submittingCollections = false;
+  bool _showExpenseForm = false;
+  String _expenseCategory = 'petty_cash';
+  final _expenseAmountCtrl = TextEditingController();
+  final _expenseDescriptionCtrl = TextEditingController();
+  bool _submittingExpense = false;
+
+  Future<Map<String, dynamic>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .getShiftReconciliation(widget.shiftId);
+
+  @override
+  void didUpdateWidget(covariant _ShiftCollectionsAndExpensesSection old) {
+    super.didUpdateWidget(old);
+    if (old.shiftId != widget.shiftId) {
+      setState(() => _future = _load());
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _actualCtrls.values) {
+      c.dispose();
+    }
+    _expenseAmountCtrl.dispose();
+    _expenseDescriptionCtrl.dispose();
+    super.dispose();
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  Future<void> _submitCollections() async {
+    setState(() => _submittingCollections = true);
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      for (final method in const ['mpesa', 'cash', 'card', 'credit']) {
+        final actual = double.tryParse(_actualCtrls[method]!.text.trim());
+        if (actual == null) continue;
+        await repo.addShiftActualCollection(
+          widget.shiftId,
+          paymentMethod: method,
+          systemAmount: widget.systemAmounts[method] ?? 0,
+          actualAmount: actual,
+        );
+      }
+      if (mounted) {
+        _notify(context, 'Collections submitted');
+        _refresh();
+      }
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to submit collections: $e');
+    } finally {
+      if (mounted) setState(() => _submittingCollections = false);
+    }
+  }
+
+  Future<void> _submitExpense() async {
+    final amount = double.tryParse(_expenseAmountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) {
+      _notify(context, 'Enter a valid expense amount');
+      return;
+    }
+    setState(() => _submittingExpense = true);
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .addShiftReconciliationExpense(
+            widget.shiftId,
+            category: _expenseCategory,
+            amount: amount,
+            description: _expenseDescriptionCtrl.text.trim(),
+          );
+      _expenseAmountCtrl.clear();
+      _expenseDescriptionCtrl.clear();
+      if (mounted) {
+        setState(() => _showExpenseForm = false);
+        _notify(context, 'Expense recorded');
+        _refresh();
+      }
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to record expense: $e');
+    } finally {
+      if (mounted) setState(() => _submittingExpense = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(minHeight: 2),
+          );
+        }
+        final data = _map(snap.data?['data']).isNotEmpty
+            ? _map(snap.data?['data'])
+            : _map(snap.data);
+        final collections = _list(data['actual_collections']);
+        final expenses = _list(data['reconciliation_expenses']);
+        final collectedByMethod = {
+          for (final c in collections) _text(c, ['payment_method']): c,
+        };
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionCard(
+              title: 'Section A — Actual Collections',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Table(
+                    columnWidths: const {
+                      0: FlexColumnWidth(2),
+                      1: FlexColumnWidth(2),
+                      2: FlexColumnWidth(2),
+                      3: FlexColumnWidth(2),
+                    },
+                    children: [
+                      const TableRow(children: [
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Method',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('System Amount',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Actual Amount',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Variance',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ]),
+                      for (final method in const [
+                        'mpesa',
+                        'cash',
+                        'card',
+                        'credit'
+                      ])
+                        _buildCollectionRow(method, collectedByMethod),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 44,
+                    child: FilledButton.icon(
+                      onPressed:
+                          _submittingCollections ? null : _submitCollections,
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: Text(_submittingCollections
+                          ? 'Submitting…'
+                          : 'Submit Collections'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            _SectionCard(
+              title: 'Section B — Shift Expenses',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (expenses.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('No expenses recorded for this shift.'),
+                    )
+                  else
+                    ...expenses.map((e) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              _CashFlowCategoryBadge(
+                                  category: _text(e, ['category'])),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _text(e, ['description']).isEmpty
+                                      ? (_reconciliationExpenseCategoryLabels[
+                                              _text(e, ['category'])] ??
+                                          _text(e, ['category']))
+                                      : _text(e, ['description']),
+                                ),
+                              ),
+                              Text(_money(_num(e['amount'])),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800)),
+                            ],
+                          ),
+                        )),
+                  const SizedBox(height: 8),
+                  if (_showExpenseForm) ...[
+                    Row(children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _expenseCategory,
+                          decoration:
+                              const InputDecoration(labelText: 'Category'),
+                          items: const ['petty_cash', 'transaction_cost']
+                              .map((k) => DropdownMenuItem(
+                                    value: k,
+                                    child: Text(
+                                        _reconciliationExpenseCategoryLabels[
+                                                k] ??
+                                            k),
+                                  ))
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _expenseCategory = v!),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _expenseAmountCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration:
+                              const InputDecoration(labelText: 'Amount'),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _expenseDescriptionCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'Description'),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      OutlinedButton(
+                        onPressed: () =>
+                            setState(() => _showExpenseForm = false),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 10),
+                      FilledButton(
+                        onPressed:
+                            _submittingExpense ? null : _submitExpense,
+                        child: Text(
+                            _submittingExpense ? 'Saving…' : 'Save Expense'),
+                      ),
+                    ]),
+                  ] else
+                    OutlinedButton.icon(
+                      onPressed: () => setState(() => _showExpenseForm = true),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Expense'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  TableRow _buildCollectionRow(
+      String method, Map<String, Map<String, dynamic>> collectedByMethod) {
+    final existing = collectedByMethod[method];
+    final systemAmount = widget.systemAmounts[method] ?? 0;
+    if (existing != null) {
+      final actual = _num(existing['actual_amount']);
+      final variance = actual - _num(existing['system_amount']);
+      return TableRow(children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(_reconciliationMethodLabels[method] ?? method),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(_money(_num(existing['system_amount']))),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(_money(actual)),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(_money(variance),
+              style: TextStyle(
+                  color: variance.abs() < 0.01 ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.w700)),
+        ),
+      ]);
+    }
+    final ctrl = _actualCtrls[method]!;
+    return TableRow(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(_reconciliationMethodLabels[method] ?? method),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(_money(systemAmount)),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(isDense: true, hintText: '0.00'),
+          onChanged: (_) => setState(() {}),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Builder(builder: (context) {
+          final actual = double.tryParse(ctrl.text.trim());
+          if (actual == null) return const Text('—');
+          final variance = actual - systemAmount;
+          return Text(_money(variance),
+              style: TextStyle(
+                  color: variance.abs() < 0.01 ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.w700));
+        }),
+      ),
+    ]);
   }
 }
 
@@ -6232,13 +7142,34 @@ class _CashierLogbooksSection extends ConsumerStatefulWidget {
       _CashierLogbooksSectionState();
 }
 
-class _CashierLogbooksSectionState
-    extends ConsumerState<_CashierLogbooksSection> {
+class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController =
+      TabController(length: 2, vsync: this);
   late Future<List<Map<String, dynamic>>> _future =
       ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks();
+  late Future<List<Map<String, dynamic>>> _historyFuture = _loadHistory();
+  String _historySearch = '';
+  String _historyFrom = _date(DateTime.now().subtract(const Duration(days: 30)));
+  String _historyTo = _today();
   Map<String, dynamic>? _selectedLogbook;
   Future<Map<String, dynamic>>? _detailFuture;
   bool _downloadingReport = false;
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadHistory() =>
+      ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks(
+            status: 'all',
+            dateFrom: _historyFrom,
+            dateTo: _historyTo,
+          );
+
+  void _refreshHistory() => setState(() => _historyFuture = _loadHistory());
 
   void _refresh() {
     final nextFuture = ref
@@ -6308,16 +7239,42 @@ class _CashierLogbooksSectionState
       );
     }
 
+    return _Page(
+      title: 'Cashier Logbooks',
+      subtitle: 'Audit submitted daily cashier logbooks and bill line entries.',
+      actions: [
+        _RefreshButton(
+          onPressed: () {
+            _refresh();
+            _refreshHistory();
+          },
+        ),
+      ],
+      children: [
+        TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabs: const [Tab(text: 'Pending Audit'), Tab(text: 'History')],
+        ),
+        const Divider(height: 1),
+        SizedBox(
+          height: 600,
+          child: TabBarView(
+            controller: _tabController,
+            children: [_pendingTab(), _historyTab()],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pendingTab() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _future,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
         onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Cashier Logbooks',
-          subtitle:
-              'Audit submitted daily cashier logbooks and bill line entries.',
-          actions: [_RefreshButton(onPressed: _refresh)],
+        builder: (items) => ListView(
           children: [
             _SectionCard(
               title: 'Pending Audit',
@@ -6330,6 +7287,121 @@ class _CashierLogbooksSectionState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _historyTab() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _historyFuture,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refreshHistory,
+        builder: (items) {
+          final filtered = items.where((logbook) {
+            if (_historySearch.trim().isEmpty) return true;
+            final name = _text(logbook, ['cashier_name', 'cashier']);
+            return name.toLowerCase().contains(_historySearch.toLowerCase());
+          }).toList();
+          return ListView(
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 240,
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Search cashier name',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (v) => setState(() => _historySearch = v),
+                    ),
+                  ),
+                  _DateField(
+                    value: _historyFrom,
+                    onChanged: (v) {
+                      setState(() => _historyFrom = v);
+                      _refreshHistory();
+                    },
+                  ),
+                  _DateField(
+                    value: _historyTo,
+                    onChanged: (v) {
+                      setState(() => _historyTo = v);
+                      _refreshHistory();
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _SectionCard(
+                title: 'Shift History (${filtered.length})',
+                child: filtered.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No past shifts match your filters.'),
+                      )
+                    : Column(
+                        children: filtered
+                            .map((logbook) => InkWell(
+                                  onTap: () => _openDetail(logbook),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 10),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                _text(logbook,
+                                                    ['cashier_name', 'cashier'],
+                                                ).isEmpty
+                                                    ? 'Cashier'
+                                                    : _text(logbook, [
+                                                        'cashier_name',
+                                                        'cashier'
+                                                      ]),
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.w700),
+                                              ),
+                                              Text(
+                                                _shortDate(_text(
+                                                    logbook, ['log_date'])),
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors
+                                                        .grey.shade600),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Text(
+                                            _money(_num(
+                                                logbook['closing_amount'] ??
+                                                    logbook['total'])),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w800)),
+                                        const SizedBox(width: 10),
+                                        _StatusPill(_text(
+                                            logbook, ['status'],
+                                            )),
+                                      ],
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -7173,6 +8245,8 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
                       'Reason': _text(item, ['reason']),
                       'Requested at': _text(item, ['created_at']),
                     },
+                    extra: _VoidItemsExpandable(
+                        items: _list(item['void_items'])),
                     actions: [
                       TextButton(
                         onPressed: () => _showRecord(context, item),
@@ -16956,6 +18030,46 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
+class _CollapsibleSectionCard extends StatelessWidget {
+  const _CollapsibleSectionCard({
+    required this.title,
+    required this.child,
+    this.initiallyExpanded = false,
+    this.trailing,
+  });
+  final String title;
+  final Widget child;
+  final bool initiallyExpanded;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 18),
+          childrenPadding:
+              const EdgeInsets.fromLTRB(18, 0, 18, 18),
+          title: Text(title,
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          trailing: trailing,
+          children: [
+            Align(alignment: Alignment.centerLeft, child: child),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TwoColumn extends StatelessWidget {
   const _TwoColumn({required this.left, required this.right});
   final Widget left;
@@ -17128,12 +18242,14 @@ class _ActionCard extends StatelessWidget {
     required this.rows,
     this.trailing,
     this.actions = const [],
+    this.extra,
   });
   final String title;
   final String subtitle;
   final Map<String, String> rows;
   final Widget? trailing;
   final List<Widget> actions;
+  final Widget? extra;
 
   @override
   Widget build(BuildContext context) {
@@ -17163,12 +18279,87 @@ class _ActionCard extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           _KeyValueList(rows),
+          if (extra != null) ...[
+            const SizedBox(height: 10),
+            extra!,
+          ],
           if (actions.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(spacing: 8, children: actions),
           ],
         ]),
       ),
+    );
+  }
+}
+
+/// Expandable items table for a whole-bill void's `void_items` JSONB array.
+/// Collapsed by default; header shows an item-count badge.
+class _VoidItemsExpandable extends StatefulWidget {
+  const _VoidItemsExpandable({required this.items});
+  final List<Map<String, dynamic>> items;
+
+  @override
+  State<_VoidItemsExpandable> createState() => _VoidItemsExpandableState();
+}
+
+class _VoidItemsExpandableState extends State<_VoidItemsExpandable> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.items.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18, color: AppColors.kPrimary),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.kPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${widget.items.length} item${widget.items.length == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                        color: AppColors.kPrimary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          _SimpleTable(
+            columns: const ['Item Name', 'Qty', 'Unit Price', 'Total'],
+            rows: widget.items.map((item) {
+              final qty = _num(item['quantity']);
+              final unitPrice = _num(item['unit_price']);
+              final total = _num(item['total_price']) > 0
+                  ? _num(item['total_price'])
+                  : qty * unitPrice;
+              return [
+                _text(item, ['name']).isEmpty
+                    ? 'Item'
+                    : _text(item, ['name']),
+                '$qty',
+                _money(unitPrice),
+                _money(total),
+              ];
+            }).toList(),
+          ),
+      ],
     );
   }
 }
@@ -18578,6 +19769,7 @@ class _OutboundPaymentsSectionState
     extends ConsumerState<_OutboundPaymentsSection> {
   String _status = 'all';
   String _search = '';
+  String _sourceTab = 'all'; // 'all' | 'po_auto' | 'manual'
   final _searchCtrl = TextEditingController();
   late Future<Map<String, dynamic>> _future = _load();
 
@@ -18687,11 +19879,23 @@ class _OutboundPaymentsSectionState
           final filteredPayments = payments
               .where((p) => _matchesOutboundSearch(Map<String, dynamic>.from(p),
                   isGrn: false))
+              .where((p) => _sourceTab == 'all' ||
+                  _txt(Map<String, dynamic>.from(p), ['source']) == _sourceTab)
               .toList();
           final filteredGrns = unbilledGrns
               .where((g) => _matchesOutboundSearch(Map<String, dynamic>.from(g),
                   isGrn: true))
               .toList();
+          final settledTotal = filteredPayments
+              .where((p) => _txt(Map<String, dynamic>.from(p),
+                      ['settlement_status']) ==
+                  'settled')
+              .fold<num>(0, (sum, p) => sum + _num(p['amount']));
+          final pendingTotal = filteredPayments
+              .where((p) => _txt(Map<String, dynamic>.from(p),
+                      ['settlement_status']) !=
+                  'settled')
+              .fold<num>(0, (sum, p) => sum + _num(p['amount']));
           return _Page(
             title: 'Outbound Payments',
             subtitle:
@@ -18717,8 +19921,47 @@ class _OutboundPaymentsSectionState
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('New Payment'),
                 ),
+              if (_canInitiate)
+                OutlinedButton.icon(
+                  onPressed: _addExpense,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Expense'),
+                ),
             ],
             children: [
+              Wrap(
+                spacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('All'),
+                    selected: _sourceTab == 'all',
+                    onSelected: (_) => setState(() => _sourceTab = 'all'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Auto (PO)'),
+                    selected: _sourceTab == 'po_auto',
+                    onSelected: (_) => setState(() => _sourceTab = 'po_auto'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Manual'),
+                    selected: _sourceTab == 'manual',
+                    onSelected: (_) => setState(() => _sourceTab = 'manual'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _ResponsiveGrid(children: [
+                _MetricCard(
+                    'Total',
+                    _money(settledTotal + pendingTotal),
+                    Icons.account_balance_wallet,
+                    Colors.blueGrey),
+                _MetricCard('Settled', _money(settledTotal),
+                    Icons.check_circle, Colors.green),
+                _MetricCard('Pending', _money(pendingTotal),
+                    Icons.hourglass_bottom, Colors.amber.shade800),
+              ]),
+              const SizedBox(height: 12),
               // ── Supplier Finance redirect banner ──────────────────────
               if (widget.preload != null && (widget.preload!['supplier_name'] ?? '').toString().isNotEmpty)
                 Container(
@@ -19142,6 +20385,8 @@ class _OutboundPaymentsSectionState
     final isCreator = _txt(p, ['created_by']) == _uid;
     final created = _txt(p, ['created_at']);
     final when = DateTime.tryParse(created);
+    final cashFlowCategory = _txt(p, ['cash_flow_category']);
+    final settlementStatus = _txt(p, ['settlement_status'], 'pending');
 
     final actions = <Widget>[];
     if (_txt(p, ['grn_id']).isNotEmpty) {
@@ -19234,6 +20479,9 @@ class _OutboundPaymentsSectionState
               children: [
                 Text(_money(amount),
                     style: const TextStyle(fontWeight: FontWeight.w800)),
+                if (cashFlowCategory.isNotEmpty)
+                  _CashFlowCategoryBadge(category: cashFlowCategory),
+                _SettlementStatusPill(status: settlementStatus),
                 _PayStatusPill(status: status),
               ],
             ),
@@ -19354,6 +20602,121 @@ class _OutboundPaymentsSectionState
       builder: (_) => const _NewPaymentDialog(),
     );
     if (saved == true) _refresh();
+  }
+
+  Future<void> _addExpense() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _AddExpenseSheet(),
+    );
+    if (saved == true) _refresh();
+  }
+}
+
+const _expenseCategoryLabels = {
+  'petty_cash': 'Petty Cash',
+  'transaction_cost': 'Transaction Cost',
+};
+
+class _AddExpenseSheet extends ConsumerStatefulWidget {
+  const _AddExpenseSheet();
+
+  @override
+  ConsumerState<_AddExpenseSheet> createState() => _AddExpenseSheetState();
+}
+
+class _AddExpenseSheetState extends ConsumerState<_AddExpenseSheet> {
+  String _category = 'petty_cash';
+  final _amountCtrl = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
+  late String _date = _today();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _descriptionCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) {
+      _notify(context, 'Enter a valid amount');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(branchAccountantRepositoryProvider).createBranchPayment({
+        'category': _category,
+        'cash_flow_category': _category,
+        'payment_method': 'cash',
+        'payee_name': _descriptionCtrl.text.trim().isEmpty
+            ? _expenseCategoryLabels[_category]!
+            : _descriptionCtrl.text.trim(),
+        'description': _descriptionCtrl.text.trim(),
+        'amount': amount,
+        'source': 'manual',
+        'created_at': _date,
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to add expense: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Add Expense',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _category,
+            decoration: const InputDecoration(labelText: 'Category'),
+            items: _expenseCategoryLabels.entries
+                .map((e) =>
+                    DropdownMenuItem(value: e.key, child: Text(e.value)))
+                .toList(),
+            onChanged: (v) => setState(() => _category = v!),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _amountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Amount (KES)'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _descriptionCtrl,
+            decoration: const InputDecoration(labelText: 'Description'),
+          ),
+          const SizedBox(height: 12),
+          _DateField(value: _date, onChanged: (v) => setState(() => _date = v)),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _saving ? null : _submit,
+              child: Text(_saving ? 'Submitting…' : 'Submit'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -19619,6 +20982,59 @@ class _PayStatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(status.replaceAll('_', ' ').toUpperCase(),
+          style:
+              TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+class _SettlementStatusPill extends StatelessWidget {
+  const _SettlementStatusPill({required this.status});
+  final String status;
+  @override
+  Widget build(BuildContext context) {
+    final settled = status.toLowerCase() == 'settled';
+    final c = settled ? Colors.green.shade700 : Colors.amber.shade800;
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(settled ? 'SETTLED' : 'PENDING',
+          style:
+              TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+const _cashFlowCategoryLabels = {
+  'daily_purchase': 'Daily Purchase',
+  'petty_cash': 'Petty Cash',
+  'transaction_cost': 'Transaction Cost',
+};
+const _cashFlowCategoryColors = {
+  'daily_purchase': Colors.blue,
+  'petty_cash': Colors.orange,
+  'transaction_cost': Colors.purple,
+};
+
+class _CashFlowCategoryBadge extends StatelessWidget {
+  const _CashFlowCategoryBadge({required this.category});
+  final String category;
+  @override
+  Widget build(BuildContext context) {
+    final c = _cashFlowCategoryColors[category] ?? Colors.blueGrey;
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+          (_cashFlowCategoryLabels[category] ?? category).toUpperCase(),
           style:
               TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
     );

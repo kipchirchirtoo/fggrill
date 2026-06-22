@@ -41,6 +41,7 @@ enum SuperAdminSection {
   finance,
   inventory,
   storekeepingConfig,
+  kitchenLedgerItems,
   suppliers,
   payrollSettings,
 

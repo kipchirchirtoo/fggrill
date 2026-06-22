@@ -540,6 +540,11 @@ export const createPurchaseOrder = async (
   try {
     const order = {
       ...req.body,
+      // branch_id is an INTEGER FK into branches(id) — the
+      // fn_po_cash_create_outbound() BEFORE INSERT trigger (migration
+      // 20260622_famousgate_major_redesign.sql, section 4) copies it
+      // straight into branch_payments.branch_id, which is also INTEGER.
+      branch_id: req.body.branch_id != null ? Number(req.body.branch_id) : req.body.branch_id,
       status: 'draft',
       created_by_id: req.user.id,
       created_at: new Date().toISOString()
@@ -553,9 +558,19 @@ export const createPurchaseOrder = async (
 
     if (error) throw error;
 
+    // The PO-cash trigger auto-creates a pending outbound branch_payments
+    // row in the same transaction — surface it so the client can show the
+    // payment that will be auto-settled once goods are received.
+    const { data: outboundPayment } = await supabase
+      .from('branch_payments')
+      .select('*')
+      .eq('purchase_order_id', data.id)
+      .maybeSingle();
+
     res.status(201).json({
       success: true,
-      data
+      data,
+      outbound_payment: outboundPayment || null
     });
   } catch (error) {
     next(error);
@@ -749,9 +764,19 @@ export const receivePurchaseOrder = async (
 
     if (itemsError) throw itemsError;
 
+    // fn_po_received_settle_outbound() (AFTER UPDATE trigger) settles the
+    // linked branch_payments row as soon as status flips to 'received' —
+    // fetch its post-settlement state to return alongside the order.
+    const { data: settledPayment } = await supabase
+      .from('branch_payments')
+      .select('*')
+      .eq('purchase_order_id', req.params.id)
+      .maybeSingle();
+
     res.status(200).json({
       success: true,
-      data: order
+      data: order,
+      outbound_payment: settledPayment || null
     });
   } catch (error) {
     next(error);

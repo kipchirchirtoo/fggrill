@@ -156,6 +156,10 @@ class SuperAdminNavItem {
                 label: 'Storekeeping Config',
                 icon: PhosphorIcons.warehouse()),
             SuperAdminNavItem(
+                section: SuperAdminSection.kitchenLedgerItems,
+                label: 'Kitchen Ledger Items',
+                icon: PhosphorIcons.cookingPot()),
+            SuperAdminNavItem(
                 section: SuperAdminSection.suppliers,
                 label: 'Suppliers',
                 icon: PhosphorIcons.truck()),

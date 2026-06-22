@@ -724,7 +724,7 @@ export const requestVoidOrder = async (
 ): Promise<void> => {
   try {
     const { id: orderId } = req.params;
-    const { reason } = req.body;
+    const { reason, void_items } = req.body;
 
     if (!reason) {
       throw new AppError('Void reason is required', 400);
@@ -744,6 +744,25 @@ export const requestVoidOrder = async (
       throw new AppError('Order already voided', 400);
     }
 
+    // void_items (migration 20260622_famousgate_major_redesign.sql, section
+    // 8) records exactly which line items are being voided. If the caller
+    // didn't pass an explicit list, snapshot the order's current items.
+    let resolvedVoidItems = Array.isArray(void_items) ? void_items : null;
+    if (!resolvedVoidItems) {
+      const { data: orderItems } = await supabase
+        .from('restaurant_order_items')
+        .select('id, menu_item_id, quantity, unit_price, total_price, item_name, menu_item:restaurant_menu_items(name)')
+        .eq('order_id', orderId);
+      resolvedVoidItems = (orderItems || []).map((it: any) => ({
+        order_item_id: it.id,
+        menu_item_id: it.menu_item_id,
+        name: it.item_name || it.menu_item?.name || null,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        total_price: it.total_price,
+      }));
+    }
+
     // Create void request
     const { data: voidRequest, error: voidError } = await supabase
       .from('void_requests')
@@ -753,6 +772,7 @@ export const requestVoidOrder = async (
         reason,
         status: 'pending',
         branch_id: order.branch_id,
+        void_items: resolvedVoidItems,
         created_at: new Date().toISOString()
       }])
       .select()

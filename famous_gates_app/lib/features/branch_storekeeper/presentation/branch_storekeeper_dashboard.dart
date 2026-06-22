@@ -21,6 +21,10 @@ import '../../../core/widgets/notification_button.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/branch_storekeeper_repository.dart';
 import 'branch_po_create_screen.dart';
+import 'opening_stock_screen.dart';
+import 'pastry_production_screen.dart';
+import 'bar_stocktake_screen.dart';
+import 'wastage_report_screen.dart';
 
 enum BranchStorekeeperSection {
   overview,
@@ -41,6 +45,10 @@ enum BranchStorekeeperSection {
   stockOut,
   foodControl,
   kitchenProduction,
+  openingStock,
+  pastryProduction,
+  barStocktake,
+  wastageReport,
   reports,
   notifications,
 }
@@ -1120,6 +1128,30 @@ class _BranchStorekeeperDashboardState
           icon: Icons.soup_kitchen_outlined,
           group: 'Usage',
         ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.openingStock,
+          label: 'Opening Stock',
+          icon: Icons.fact_check_outlined,
+          group: 'Usage',
+        ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.pastryProduction,
+          label: 'Pastry Production',
+          icon: Icons.bakery_dining_outlined,
+          group: 'Usage',
+        ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.barStocktake,
+          label: 'Bar Stocktake',
+          icon: Icons.liquor_outlined,
+          group: 'Usage',
+        ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.wastageReport,
+          label: 'Wastage Report',
+          icon: Icons.delete_outline,
+          group: 'Usage',
+        ),
         MasterNavItem(
           section: BranchStorekeeperSection.reports,
           label: 'Reports',
@@ -1175,6 +1207,14 @@ class _BranchStorekeeperDashboardState
         return _FoodControlSection(stock: _stock);
       case BranchStorekeeperSection.kitchenProduction:
         return _KitchenProductionSection(stock: _stock);
+      case BranchStorekeeperSection.openingStock:
+        return const OpeningStockScreen();
+      case BranchStorekeeperSection.pastryProduction:
+        return const PastryProductionScreen();
+      case BranchStorekeeperSection.barStocktake:
+        return const BarStocktakeScreen();
+      case BranchStorekeeperSection.wastageReport:
+        return const WastageReportScreen();
       case BranchStorekeeperSection.reports:
         return _reportsPage();
       case BranchStorekeeperSection.notifications:
@@ -1218,6 +1258,9 @@ class _BranchStorekeeperDashboardState
               PhosphorIcons.truck(),
               AppColors.kSuccess),
         ]),
+        _StockBalanceSummaryCard(
+          onViewDetails: () => _go(BranchStorekeeperSection.inventoryLedger),
+        ),
         // ── Dispatch en-route alert ──────────────────────────────────
         if (inTransit > 0)
           _AlertBanner(
@@ -10369,6 +10412,128 @@ String _poDateTime(dynamic value) {
   return '${_poDate(value)} $hour:$minute';
 }
 
+// ─────────────────────────── STOCK BALANCE SUMMARY CARD ────────────────────
+
+class _StockBalanceSummaryCard extends ConsumerStatefulWidget {
+  const _StockBalanceSummaryCard({required this.onViewDetails});
+  final VoidCallback onViewDetails;
+
+  @override
+  ConsumerState<_StockBalanceSummaryCard> createState() =>
+      _StockBalanceSummaryCardState();
+}
+
+class _StockBalanceSummaryCardState
+    extends ConsumerState<_StockBalanceSummaryCard> {
+  late Future<List<Map<String, dynamic>>> _future = _load();
+
+  Future<List<Map<String, dynamic>>> _load() async {
+    final data = await ref
+        .read(branchStorekeeperRepositoryProvider)
+        .stockBalanceSummary();
+    final rows = data['data'] is List
+        ? (data['data'] as List)
+        : (data is List ? data : const []);
+    return rows
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snap) {
+        final rows = snap.data ?? [];
+        final variances =
+            rows.where((r) => _num(r['variance']) < 0).toList();
+        return Container(
+          margin: const EdgeInsets.only(top: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.kDivider),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('Stock Balance',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  if (snap.connectionState == ConnectionState.waiting)
+                    const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (rows.isEmpty &&
+                  snap.connectionState != ConnectionState.waiting)
+                const Text('No stock balance data available.')
+              else
+                ...rows.take(5).map((r) {
+                  final negative = _num(r['variance']) < 0;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                            flex: 2,
+                            child: Text(
+                                '${r['item']?['name'] ?? r['item_name'] ?? 'Item'}')),
+                        Expanded(
+                            child: Text('Open: ${r['opening_balance'] ?? 0}',
+                                style: const TextStyle(fontSize: 11))),
+                        Expanded(
+                            child: Text('+${r['additional_stock'] ?? 0}',
+                                style: const TextStyle(fontSize: 11))),
+                        Expanded(
+                            child: Text('-${r['issued_stock'] ?? 0}',
+                                style: const TextStyle(fontSize: 11))),
+                        Expanded(
+                          child: Text(
+                            '=${r['closing_balance'] ?? 0}',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: negative ? Colors.red : Colors.black87),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'Variance items: ${variances.length}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: variances.isNotEmpty ? Colors.red : null,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: widget.onViewDetails,
+                    child: const Text('View Details'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 // ─────────────────────────── FOOD CONTROL SECTION ───────────────────────────
 
 double _fcNum(dynamic v) {
@@ -13117,11 +13282,106 @@ class _KitchenProductionSectionState
   bool _loading = true;
   Map<String, dynamic>? _selected; // open session for detail view
   String _shiftFilter = 'ALL'; // ALL | morning | afternoon | night
+  List<Map<String, dynamic>> _unacknowledgedAlerts = [];
+  Timer? _alertPollTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _refreshAlerts();
+    _alertPollTimer =
+        Timer.periodic(const Duration(seconds: 60), (_) => _refreshAlerts());
+  }
+
+  @override
+  void dispose() {
+    _alertPollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshAlerts() async {
+    try {
+      final alerts = await ref
+          .read(branchStorekeeperRepositoryProvider)
+          .kitchenWastageAlerts(acknowledged: false);
+      if (mounted) setState(() => _unacknowledgedAlerts = alerts);
+    } catch (_) {
+      // Non-fatal — alert badge just stays at its last known count.
+    }
+  }
+
+  Future<void> _acknowledgeAlert(String id) async {
+    try {
+      await ref
+          .read(branchStorekeeperRepositoryProvider)
+          .acknowledgeWastageAlert(id);
+      if (mounted) {
+        setState(() =>
+            _unacknowledgedAlerts.removeWhere((a) => '${a['id']}' == id));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Acknowledge failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showWastageAlertsModal() async {
+    if (_unacknowledgedAlerts.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Unacknowledged Wastage Alerts'),
+          content: SizedBox(
+            width: 420,
+            child: _unacknowledgedAlerts.isEmpty
+                ? const Text('All alerts acknowledged.')
+                : ListView(
+                    shrinkWrap: true,
+                    children: _unacknowledgedAlerts.map((a) {
+                      final severity = '${a['severity'] ?? 'warning'}';
+                      final color =
+                          severity == 'critical' ? Colors.red : Colors.orange;
+                      return ListTile(
+                        leading: Icon(Icons.warning_amber, color: color),
+                        title: Text('${a['item_name'] ?? a['alert_type']}'),
+                        subtitle: Text('${a['message'] ?? ''}'),
+                        trailing: Wrap(spacing: 4, children: [
+                          Chip(
+                            label: Text(severity.toUpperCase(),
+                                style: const TextStyle(
+                                    fontSize: 10, color: Colors.white)),
+                            backgroundColor: color,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.check, size: 18),
+                            tooltip: 'Acknowledge',
+                            onPressed: () async {
+                              await _acknowledgeAlert('${a['id']}');
+                              setDialogState(() {});
+                              if (_unacknowledgedAlerts.isEmpty && mounted) {
+                                Navigator.pop(ctx);
+                              }
+                            },
+                          ),
+                        ]),
+                      );
+                    }).toList(),
+                  ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close')),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -13212,6 +13472,10 @@ class _KitchenProductionSectionState
             backgroundColor: Colors.green,
           ),
         );
+      }
+      await _refreshAlerts();
+      if (mounted && _unacknowledgedAlerts.isNotEmpty) {
+        await _showWastageAlertsModal();
       }
     }
   }
@@ -13394,6 +13658,16 @@ class _KitchenProductionSectionState
           'Open kitchen shifts, issue stock, track production & variance.',
       actions: [
         _RefreshButton(onPressed: _load),
+        if (_unacknowledgedAlerts.isNotEmpty)
+          Badge(
+            label: Text('${_unacknowledgedAlerts.length}'),
+            backgroundColor: Colors.red,
+            child: IconButton(
+              tooltip: 'Wastage alerts',
+              onPressed: _showWastageAlertsModal,
+              icon: const Icon(Icons.notifications_active, color: Colors.orange),
+            ),
+          ),
         FilledButton.icon(
           onPressed: _openNewSession,
           icon: const Icon(Icons.add, size: 16),
@@ -14498,14 +14772,28 @@ class _CloseKitchenShiftSheetState
                     _physicalCounts[i]['quantity'] as TextEditingController;
                 final notesCtrl =
                     _physicalCounts[i]['notes'] as TextEditingController;
+                final opening = _fcNum(item['opening_stock']);
+                final additions = _fcNum(item['additions']);
+                final posConsumed = _fcNum(item['sold_quantity']);
+                final spoilage = _fcNum(item['spoilage_quantity']);
+                final expectedClosing =
+                    opening + additions - posConsumed - spoilage;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text('${item['item_name']} (${item['item_sku']})',
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700)),
                       Text(
-                          '${item['item_name']} (${item['item_sku']})  •  System: ${(item['current_quantity'] ?? 0).toStringAsFixed(2)} ${item['unit']}',
-                          style: const TextStyle(fontSize: 13)),
+                          'Opening: ${opening.toStringAsFixed(2)} · '
+                          '+Additions: ${additions.toStringAsFixed(2)} · '
+                          'POS Consumed: ${posConsumed.toStringAsFixed(2)} · '
+                          'Spoilage: ${spoilage.toStringAsFixed(2)} · '
+                          'Expected Closing: ${expectedClosing.toStringAsFixed(2)} ${item['unit'] ?? item['unit_of_measure'] ?? ''}',
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.kTextSecondary)),
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -15097,28 +15385,81 @@ class _RecordKitchenProductionSheetState
     final rawQty = _fcNum(recipe['raw_quantity']);
     final ratio = rawQty > 0 ? _fcNum(recipe['produced_quantity']) / rawQty : 0;
 
+    final line = {
+      'recipe_id': recipe['id'],
+      'raw_item_sku': recipe['raw_item_sku'],
+      'raw_item_name': recipe['raw_item_name'],
+      'raw_quantity_used': rawQtyUsed,
+      'raw_unit': recipe['raw_unit'],
+      'produced_item_name': recipe['produced_item_name'],
+      'produced_item_sku': recipe['produced_item_sku'],
+      'pos_outlet_item_id': recipe['pos_outlet_item_id'],
+      'produced_quantity': producedQty,
+      'produced_unit': recipe['produced_unit'],
+      'conversion_ratio': ratio,
+      'conversion_notes':
+          _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      if (_producedBy != null) 'produced_by': _producedBy,
+    };
+    await _post(line);
+  }
+
+  Future<void> _post(Map<String, dynamic> line, {String? varianceReason}) async {
     setState(() => _posting = true);
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      await repo.recordProduction(widget.shiftId, [
+      final result = await repo.recordProduction(widget.shiftId, [
         {
-          'recipe_id': recipe['id'],
-          'raw_item_sku': recipe['raw_item_sku'],
-          'raw_item_name': recipe['raw_item_name'],
-          'raw_quantity_used': rawQtyUsed,
-          'raw_unit': recipe['raw_unit'],
-          'produced_item_name': recipe['produced_item_name'],
-          'produced_item_sku': recipe['produced_item_sku'],
-          'pos_outlet_item_id': recipe['pos_outlet_item_id'],
-          'produced_quantity': producedQty,
-          'produced_unit': recipe['produced_unit'],
-          'conversion_ratio': ratio,
-          'conversion_notes':
-              _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-          if (_producedBy != null) 'produced_by': _producedBy,
+          ...line,
+          if (varianceReason != null) 'variance_reason': varianceReason,
         }
       ]);
-      if (mounted) Navigator.pop(context, true);
+      final rows = (result['data'] as List? ?? []);
+      final flagged = rows
+          .whereType<Map>()
+          .any((r) => r['variance_flagged'] == true);
+      if (mounted) {
+        if (flagged) {
+          final pct = rows
+              .whereType<Map>()
+              .map((r) => r['variance_pct'])
+              .firstWhere((v) => v != null, orElse: () => null);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(pct != null
+                  ? 'Production saved — recipe variance ${_fcNum(pct).toStringAsFixed(1)}% (within warning range).'
+                  : 'Production saved — recipe variance flagged for review.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        Navigator.pop(context, true);
+      }
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data is Map && data['code'] == 'RECIPE_VARIANCE_EXCEEDED') {
+        final detail = (data['data'] as Map?) ?? {};
+        final reason = await showDialog<String>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _RecipeVarianceDialog(
+            maxRawAllowed: _fcNum(detail['maxRawAllowed']),
+            actualUsed: _fcNum(detail['actualUsed']),
+            variancePct: _fcNum(detail['variancePct']),
+            unit: '${(detail['recipe'] as Map?)?['raw_unit'] ?? ''}',
+          ),
+        );
+        if (reason != null && reason.trim().isNotEmpty) {
+          await _post(line, varianceReason: reason.trim());
+          return;
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to record production: ${e.message}'),
+              backgroundColor: Colors.red),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -15262,6 +15603,83 @@ class _RecordKitchenProductionSheetState
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Recipe Variance Explanation Dialog ───────────────────────────────────
+// Shown when recordProduction() returns RECIPE_VARIANCE_EXCEEDED — raw
+// quantity used exceeds the recipe's critical variance threshold.
+
+class _RecipeVarianceDialog extends StatefulWidget {
+  const _RecipeVarianceDialog({
+    required this.maxRawAllowed,
+    required this.actualUsed,
+    required this.variancePct,
+    required this.unit,
+  });
+  final double maxRawAllowed;
+  final double actualUsed;
+  final double variancePct;
+  final String unit;
+
+  @override
+  State<_RecipeVarianceDialog> createState() => _RecipeVarianceDialogState();
+}
+
+class _RecipeVarianceDialogState extends State<_RecipeVarianceDialog> {
+  final _reasonCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Recipe Variance Exceeded'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'Recipe allows: ${widget.maxRawAllowed.toStringAsFixed(3)} ${widget.unit}'),
+            Text(
+                'Actual used: ${widget.actualUsed.toStringAsFixed(3)} ${widget.unit}'),
+            Text(
+              'Variance: +${widget.variancePct.toStringAsFixed(1)}%',
+              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _reasonCtrl,
+              minLines: 3,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Explain the variance',
+                hintText: 'e.g. larger batch, raw item moisture loss...',
+                alignLabelWithHint: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_reasonCtrl.text.trim().isEmpty) return;
+            Navigator.pop(context, _reasonCtrl.text.trim());
+          },
+          child: const Text('Submit with Explanation'),
+        ),
+      ],
     );
   }
 }

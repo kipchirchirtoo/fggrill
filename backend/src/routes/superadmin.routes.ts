@@ -48,6 +48,11 @@ router.post('/non-consumables', ctrl.createNonConsumable);
 router.put('/non-consumables/:id', ctrl.updateNonConsumable);
 router.delete('/non-consumables/:id', ctrl.deleteNonConsumable);
 
+// Kitchen Ledger Items (configurable per-branch item list)
+router.get('/kitchen-ledger-items', ctrl.getKitchenLedgerItems);
+router.post('/kitchen-ledger-items', ctrl.addKitchenLedgerItem);
+router.delete('/kitchen-ledger-items/:id', ctrl.removeKitchenLedgerItem);
+
 // SSE Stream (protect only — authorize not applied since it's long-lived)
 router.get('/stream', ctrl.getSystemStream);
 

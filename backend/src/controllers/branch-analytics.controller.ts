@@ -19,6 +19,7 @@ import {
 } from '../types/analytics.types';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { getPaymentMethodBreakdown } from '../utils/paymentMethodBreakdown';
 
 // Validation schemas using Zod
 const SalesFilterSchema = z.object({
@@ -762,9 +763,14 @@ export const getBranchSalesSummary = async (req: Request, res: Response): Promis
       }
     );
 
+    // Payment method breakdown (mpesa/cash/card/credit) — additive, never
+    // fails the request if the underlying tables are unavailable.
+    const paymentMethodBreakdown = await getPaymentMethodBreakdown(branchId, start_date, end_date).catch(() => null);
+
     // Return only summary metrics for quick display
     res.status(200).json({
       data: response.data.data.summary,
+      payment_method_breakdown: paymentMethodBreakdown,
       metadata: {
         branch_id: branchId,
         period: periodValue,
@@ -780,8 +786,10 @@ export const getBranchSalesSummary = async (req: Request, res: Response): Promis
     try {
       if (!requestData) throw new Error('Fallback request data unavailable');
       const fallbackResponse = await getFallbackBranchSalesResponse(requestData);
+      const paymentMethodBreakdown = await getPaymentMethodBreakdown(branchId, start_date, end_date).catch(() => null);
       res.status(200).json({
         data: fallbackResponse.data.summary,
+        payment_method_breakdown: paymentMethodBreakdown,
         metadata: {
           branch_id: branchId,
           period: periodValue,

@@ -719,6 +719,80 @@ const updateStockForItems = async (
   }
 };
 
+// Links a POS sale to the kitchen raw-material stock it consumed, via
+// kitchen_production_recipes (yield ratio: raw_quantity -> produced_quantity).
+// Logs the consumption to kitchen_shift_pos_consumption and increments the
+// matching kitchen_shift_items.sold_quantity for the branch's currently open
+// kitchen shift — the same field recordProduction() increments, so
+// closeKitchenShift()'s existing variance formula (opening + additions -
+// sold - spoilage) already accounts for POS-driven consumption without any
+// changes to that formula. Best-effort: items with no recipe, or branches
+// with no open kitchen shift, are silently skipped (not every POS item is
+// kitchen-produced).
+const recordKitchenConsumption = async (
+  orderItems: Array<Record<string, any>>,
+  branchId: number,
+  posShiftId: string,
+  orderId: string
+): Promise<void> => {
+  if (!branchId || !orderItems.length) return;
+
+  const { data: shift } = await supabase
+    .from('kitchen_shifts')
+    .select('id')
+    .eq('branch_id', branchId)
+    .eq('status', 'open')
+    .order('opened_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!shift) return;
+
+  for (const item of orderItems) {
+    const outletItemId = item.outlet_item_id;
+    const portionsSold = numberValue(item.quantity);
+    if (!outletItemId || portionsSold <= 0) continue;
+
+    const { data: recipe } = await supabase
+      .from('kitchen_production_recipes')
+      .select('*')
+      .eq('pos_outlet_item_id', outletItemId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (!recipe || numberValue(recipe.produced_quantity) <= 0) continue;
+
+    const rawQtyConsumed = (numberValue(recipe.raw_quantity) / numberValue(recipe.produced_quantity)) * portionsSold;
+
+    await supabase.from('kitchen_shift_pos_consumption').insert({
+      shift_id: shift.id,
+      branch_id: branchId,
+      pos_shift_id: posShiftId,
+      pos_order_id: orderId,
+      pos_outlet_item_id: outletItemId,
+      produced_item_sku: recipe.produced_item_sku,
+      produced_item_name: recipe.produced_item_name,
+      portions_sold: portionsSold,
+      raw_item_sku: recipe.raw_item_sku,
+      raw_item_name: recipe.raw_item_name,
+      raw_quantity_consumed: rawQtyConsumed,
+      raw_unit: recipe.raw_unit,
+      cost_price: numberValue(recipe.cost_per_output)
+    });
+
+    const { data: shiftItem } = await supabase
+      .from('kitchen_shift_items')
+      .select('id, sold_quantity')
+      .eq('shift_id', shift.id)
+      .eq('item_sku', recipe.raw_item_sku)
+      .maybeSingle();
+    if (shiftItem) {
+      await supabase
+        .from('kitchen_shift_items')
+        .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + rawQtyConsumed, updated_at: new Date().toISOString() })
+        .eq('id', shiftItem.id);
+    }
+  }
+};
+
 const hydrateOutletItemCategories = async (
   outlet: Record<string, any>,
   items: Array<Record<string, any>>
@@ -1911,7 +1985,12 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
     }
 
     await updateStockForItems(shiftId, shift.outlet_id, normalizedItems, 1);
-    
+
+    // Kitchen raw-material consumption link — best-effort, never blocks order
+    // placement. See recordKitchenConsumption() below.
+    recordKitchenConsumption(normalizedItems, Number(shift.branch_id), shiftId, order.id)
+      .catch((consumptionError) => logger.warn('recordKitchenConsumption failed', consumptionError as any));
+
     // Captain order printing is entirely the cashier app's job now (this
     // backend never attempts its own cloud-side print, see the comment
     // above BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES near the top of this

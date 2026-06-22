@@ -50,9 +50,75 @@ class BranchAccountantRepository {
     });
   }
 
+  /// Gate check before opening a cashier shift: branch store / main bar /
+  /// executive bar opening stock counts must all be submitted first.
+  Future<Map<String, dynamic>> getOpeningStockStatus(String shiftId) async {
+    return _getMap('/storekeeping/opening-stock/$shiftId');
+  }
+
+  /// Bar stocktake records pending accountant review (approve/reject is
+  /// accountant-only; submission is storekeeper-only).
+  Future<List<Map<String, dynamic>>> getBarStocktakeRecords({
+    String? status,
+    String? barLocation,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/storekeeping/bar-stocktake', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (barLocation != null && barLocation.isNotEmpty)
+        'bar_location': barLocation,
+    });
+  }
+
+  Future<void> approveBarStocktake(String id, {String? notes}) async {
+    await _dio.patch('/storekeeping/bar-stocktake/$id/approve', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> rejectBarStocktake(String id, {required String notes}) async {
+    await _dio.patch('/storekeeping/bar-stocktake/$id/reject',
+        data: {'notes': notes});
+  }
+
   Future<void> approveClearance(String id, {String? notes}) async {
     await _dio.post('/cashier/clearances/$id/approve', data: {
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  /// shiftId is the cashier_shifts id. Returns actual_collections,
+  /// reconciliation_expenses, and a system/actual/variance summary.
+  Future<Map<String, dynamic>> getShiftReconciliation(String shiftId) async {
+    return _getMap('/cashier/clearances/$shiftId/reconciliation');
+  }
+
+  Future<void> addShiftActualCollection(
+    String shiftId, {
+    required String paymentMethod,
+    required num systemAmount,
+    required num actualAmount,
+  }) async {
+    await _dio.post('/cashier/clearances/$shiftId/actual-collections', data: {
+      'payment_method': paymentMethod,
+      'system_amount': systemAmount,
+      'actual_amount': actualAmount,
+    });
+  }
+
+  Future<void> addShiftReconciliationExpense(
+    String shiftId, {
+    required String category,
+    required num amount,
+    String? description,
+  }) async {
+    await _dio
+        .post('/cashier/clearances/$shiftId/reconciliation-expenses', data: {
+      'category': category,
+      'amount': amount,
+      if (description != null && description.trim().isNotEmpty)
+        'description': description.trim(),
     });
   }
 
@@ -475,6 +541,20 @@ class BranchAccountantRepository {
     });
   }
 
+  /// Branch-wide P&L (system vs verified revenue, expense categories, COGS,
+  /// bar stock variance) sourced from the get_branch_profit_loss() RPC.
+  Future<Map<String, dynamic>> getBranchProfitLoss({
+    required String startDate,
+    required String endDate,
+  }) async {
+    final branchId = await getBranchId();
+    return _getMap('/finance/branch-profit-loss', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      'start_date': startDate,
+      'end_date': endDate,
+    });
+  }
+
   /// Per-POS-outlet P&L sourced from cashier transactions + sold items.
   Future<Map<String, dynamic>> getPosProfitLoss({
     required String fromDate,
@@ -509,12 +589,21 @@ class BranchAccountantRepository {
     );
   }
 
-  Future<Map<String, dynamic>> getRevenueOversight(
-      {required int period}) async {
+  /// Pass either [period] (quick-select 7/30/90) or an explicit
+  /// [startDate]/[endDate] custom range — not both.
+  Future<Map<String, dynamic>> getRevenueOversight({
+    int? period,
+    String? startDate,
+    String? endDate,
+  }) async {
     final branchId = await getBranchId();
     return _getMap('/finance/revenue-oversight', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
-      'period': period,
+      if (startDate != null && endDate != null) ...{
+        'from_date': startDate,
+        'to_date': endDate,
+      } else
+        'period': period ?? 30,
     });
   }
 
@@ -603,10 +692,22 @@ class BranchAccountantRepository {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getPendingCashierLogbooks() async {
+  /// status defaults to the reviewer's pending queue server-side.
+  /// Pass status: 'all' for full logbook history, optionally filtered by
+  /// [cashierId] (name match) and [dateFrom]/[dateTo].
+  Future<List<Map<String, dynamic>>> getPendingCashierLogbooks({
+    String? status,
+    String? cashierId,
+    String? dateFrom,
+    String? dateTo,
+  }) async {
     final branchId = await getBranchId();
     return _getList('/cashier/logbook/pending', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (cashierId != null && cashierId.isNotEmpty) 'cashier_id': cashierId,
+      if (dateFrom != null && dateFrom.isNotEmpty) 'date_from': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'date_to': dateTo,
     });
   }
 

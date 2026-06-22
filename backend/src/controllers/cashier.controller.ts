@@ -11,6 +11,7 @@ import { mpesaService } from '../services/mpesa.service';
 import notificationService from '../services/notification.service';
 import { deductIngredientsForItem } from './kitchen/recipes.controller';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import { getPaymentMethodBreakdown } from '../utils/paymentMethodBreakdown';
 import {
     assignedOutletIds,
     canAccessPosOutlet,
@@ -1915,7 +1916,11 @@ async function linkPaymentToActiveShift(
             transaction_ref: paymentRef,
             payment_method: paymentMethod?.toUpperCase(),
             amount,
-            transaction_time: new Date().toISOString()
+            transaction_time: new Date().toISOString(),
+            // Dedup (migration 20260622_famousgate_major_redesign.sql, section 7)
+            // ranks 'cashier' rows above 'pos' rows when the same payment lands
+            // in both flows.
+            source: 'cashier'
         });
 
         if (error) {
@@ -1996,7 +2001,10 @@ async function recordActiveShiftSale(params: {
         transaction_ref: params.transactionRef,
         payment_method: method,
         amount: params.amount,
-        transaction_time: new Date().toISOString()
+        transaction_time: new Date().toISOString(),
+        // Dedup (migration 20260622_famousgate_major_redesign.sql, section 7)
+        // ranks 'cashier' rows above 'pos' rows for the same shift/ref/amount.
+        source: 'pos'
     });
     if (error) {
         logger.warn('Unable to add payment to active cashier shift sales', { error: error.message, shiftId });
@@ -5851,8 +5859,14 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
         const defaultStatus = ['branch_accountant', 'accountant'].includes(reviewerRole)
             ? 'pending_accountant_review'
             : 'pending_audit';
+        // status=all returns full logbook history across every status
+        // (open, pending review/audit, audited, rejected, etc.) instead of
+        // just the reviewer's pending queue.
         const status = requestedStatus || defaultStatus;
-        const { from_date, to_date } = req.query;
+        // date_from/date_to accepted as aliases for from_date/to_date.
+        const from_date = req.query.from_date || req.query.date_from;
+        const to_date = req.query.to_date || req.query.date_to;
+        const { cashier_id } = req.query;
 
         // NOTE: branch is hydrated separately below — there is no FK relationship
         // between cashier_logbooks and branches in PostgREST's schema cache, so an
@@ -5863,8 +5877,11 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
                 *,
                 lines:cashier_logbook_lines!logbook_id(id, section, customer_name, amount, reference)
             `)
-            .eq('status', status)
             .order('log_date', { ascending: false });
+
+        if (status !== 'all') {
+            query = query.eq('status', status);
+        }
 
         query = applyBranchFilter(query, req);
         const isGlobal = isGlobalRole(req.user?.role);
@@ -5875,6 +5892,10 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
             if (Number.isFinite(requestedBranchId) && (isGlobal || requestedBranchId === userBranchId)) {
                 query = query.eq('branch_id', requestedBranchId);
             }
+        }
+
+        if (cashier_id) {
+            query = query.eq('cashier_id', cashier_id);
         }
 
         if (from_date) {
@@ -7191,8 +7212,10 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
  */
 export const getPOSReconciliation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { date, branch_id } = req.query;
+        const { date, branch_id, from_date, to_date } = req.query;
         const targetDate = date ? (date as string) : new Date().toISOString().split('T')[0];
+        const rangeFrom = (from_date as string) || targetDate;
+        const rangeTo = (to_date as string) || targetDate;
 
         const isGlobal = isGlobalRole(req.user?.role);
         const effectiveBranchId = isGlobal && branch_id ? parseInt(branch_id as string) : (req.user?.branch_id || 0);
@@ -7227,11 +7250,20 @@ export const getPOSReconciliation = async (req: Request, res: Response, next: Ne
             }
         });
 
+        // Normalized (mpesa/cash/card/credit) breakdown across both POS and
+        // cashier-recorded transactions for the requested range — additive,
+        // alongside the existing day-level `totals` above.
+        const paymentMethodBreakdown = effectiveBranchId
+            ? await getPaymentMethodBreakdown(Number(effectiveBranchId), rangeFrom, rangeTo).catch(() => null)
+            : null;
+
         res.json({
             success: true,
             data: {
                 date: targetDate,
+                period: { from: rangeFrom, to: rangeTo },
                 summary: totals,
+                payment_method_breakdown: paymentMethodBreakdown,
                 gross_total: Object.values(totals).reduce((sum, t) => sum + t.total, 0)
             }
         });
