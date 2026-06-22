@@ -845,26 +845,28 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   Future<void> _printCustomerBillFromSavedOrder(
     OutletShiftOrder order, {
     String fallbackTitle = 'CUSTOMER BILL',
+    List<CartItem>? itemsOverride,
   }) async {
-    final savedItems = order.items.map((raw) {
-      final m = Map<String, dynamic>.from(raw as Map);
-      final qty = (m['quantity'] is num)
-          ? (m['quantity'] as num).toInt()
-          : int.tryParse('${m['quantity']}') ?? 0;
-      final unitPrice = (m['unit_price'] is num)
-          ? (m['unit_price'] as num).toDouble()
-          : double.tryParse('${m['unit_price']}') ?? 0;
-      return CartItem(
-        productId: '${m['outlet_item_id'] ?? ''}',
-        name: '${m['name'] ?? ''}',
-        unitPrice: unitPrice,
-        qty: qty,
-      );
-    }).toList();
+    final savedItems = itemsOverride ??
+        order.items.map((raw) {
+          final m = Map<String, dynamic>.from(raw as Map);
+          final qty = (m['quantity'] is num)
+              ? (m['quantity'] as num).toInt()
+              : int.tryParse('${m['quantity']}') ?? 0;
+          final unitPrice = (m['unit_price'] is num)
+              ? (m['unit_price'] as num).toDouble()
+              : double.tryParse('${m['unit_price']}') ?? 0;
+          return CartItem(
+            productId: '${m['outlet_item_id'] ?? ''}',
+            name: '${m['name'] ?? ''}',
+            unitPrice: unitPrice,
+            qty: qty,
+          );
+        }).toList();
 
     final sale = SaleResult(
       transactionId: order.id,
-      createdAt: order.createdAt ?? DateTime.now(),
+      createdAt: order.effectiveCreatedAt ?? DateTime.now(),
       receiptNumber: order.orderNumber,
       cashierName: order.waiterName,
       total: order.totalAmount,
@@ -922,8 +924,56 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
           Navigator.of(context).pop();
           _reprintBill(order);
         },
+        onPrintUpdated: () {
+          Navigator.of(context).pop();
+          _printUpdatedBill(order);
+        },
       ),
     );
+  }
+
+  // Items still on the bill after an approved item void — qty is the
+  // remaining (post-void) quantity, so the printed total matches the
+  // already-corrected order.totalAmount.
+  List<CartItem> _activeBillItems(OutletShiftOrder order) {
+    return order.items.whereType<Map>().map((raw) {
+      final m = Map<String, dynamic>.from(raw);
+      final qty = (m['quantity'] is num)
+          ? (m['quantity'] as num).toDouble()
+          : double.tryParse('${m['quantity']}') ?? 0;
+      final voidedQty = (m['voided_qty'] is num)
+          ? (m['voided_qty'] as num).toDouble()
+          : double.tryParse('${m['voided_qty']}') ?? 0;
+      final unitPrice = (m['unit_price'] is num)
+          ? (m['unit_price'] as num).toDouble()
+          : double.tryParse('${m['unit_price']}') ?? 0;
+      final activeQty = qty - voidedQty;
+      if (activeQty <= 0) return null;
+      return CartItem(
+        productId: '${m['outlet_item_id'] ?? ''}',
+        name: '${m['name'] ?? ''}',
+        unitPrice: unitPrice,
+        qty: activeQty.round(),
+      );
+    }).whereType<CartItem>().toList();
+  }
+
+  Future<void> _printUpdatedBill(OutletShiftOrder order) async {
+    try {
+      await _printCustomerBillFromSavedOrder(
+        order,
+        fallbackTitle: 'UPDATED BILL',
+        itemsOverride: _activeBillItems(order),
+      );
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(content: Text('Updated bill printed')),
+        );
+      }
+    } catch (_) {
+      // _printCustomerBillFromSavedOrder already surfaces the error.
+    }
   }
 
   Future<void> _reprintBill(OutletShiftOrder order) async {
@@ -1756,11 +1806,13 @@ class _BillDetailSheet extends ConsumerStatefulWidget {
     required this.order,
     required this.shiftId,
     required this.onPrintDuplicate,
+    required this.onPrintUpdated,
   });
 
   final OutletShiftOrder order;
   final String shiftId;
   final VoidCallback onPrintDuplicate;
+  final VoidCallback onPrintUpdated;
 
   @override
   ConsumerState<_BillDetailSheet> createState() => _BillDetailSheetState();
@@ -1833,6 +1885,11 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
 
   bool get _isReviewer => _itemVoidReviewRoles.contains(_role);
   bool get _isCashier => _role.contains('cashier');
+
+  // Gates the "Print Updated Bill" action — only shown once a manager has
+  // approved at least one item void on this order, per the requirement that
+  // it must not appear during pending/rejected states.
+  bool get _hasApprovedVoid => _voidRequests.any((r) => r.isApproved);
 
   bool get _billEditable =>
       ['unpaid', 'partial'].contains(_order.paymentStatus) &&
@@ -2211,6 +2268,17 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                         : 'Duplicate already printed'),
               ),
             ),
+            if (_hasApprovedVoid) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: widget.onPrintUpdated,
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Print Updated Bill'),
+                ),
+              ),
+            ],
           ],
         ),
       ),

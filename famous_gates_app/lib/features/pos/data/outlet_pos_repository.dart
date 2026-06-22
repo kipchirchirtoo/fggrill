@@ -698,6 +698,23 @@ class OutletShiftOrder {
 
   bool get canReprintBill => billReprintCount < 1;
 
+  /// The original order time, unless the order has been recalled — then the
+  /// time the most recent recall was triggered. The printed bill must show
+  /// when the recall actually happened, not the stale original order time.
+  DateTime? get effectiveCreatedAt {
+    DateTime? latestRecalledAt;
+    for (final raw in items) {
+      if (raw is! Map) continue;
+      if (raw['is_recalled_item'] != true) continue;
+      final recalledAt = DateTime.tryParse('${raw['recalled_at'] ?? ''}');
+      if (recalledAt == null) continue;
+      if (latestRecalledAt == null || recalledAt.isAfter(latestRecalledAt)) {
+        latestRecalledAt = recalledAt;
+      }
+    }
+    return latestRecalledAt ?? createdAt;
+  }
+
   /// Items that should be shown on the customer bill — excludes any item that
   /// has void_pending_approval=true (cashier acknowledged, awaiting manager).
   /// Those items are hidden from the customer view until the manager decides.
