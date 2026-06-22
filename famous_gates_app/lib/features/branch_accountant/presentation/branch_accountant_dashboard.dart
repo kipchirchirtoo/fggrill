@@ -48,7 +48,6 @@ enum BranchAccountantSection {
   shiftReview,
   cashierLogbooks,
   voidApprovals,
-  itemVoidApprovals,
   banking,
   payments,
   outboundPayments,
@@ -176,9 +175,7 @@ class _BranchAccountantDashboardState
       case BranchAccountantSection.cashierLogbooks:
         return const _CashierLogbooksSection();
       case BranchAccountantSection.voidApprovals:
-        return const _PosVoidApprovalsSection();
-      case BranchAccountantSection.itemVoidApprovals:
-        return const _ItemVoidApprovalsSection();
+        return const _VoidApprovalsSection();
       case BranchAccountantSection.banking:
         return const _BankingSection();
       case BranchAccountantSection.payments:
@@ -263,8 +260,6 @@ const _navItems = [
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
   _NavItem(
       BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
-  _NavItem(BranchAccountantSection.itemVoidApprovals, 'Item Void Approvals',
-      Icons.remove_circle_outline),
   _NavItem(
       BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
   // ── Finance & oversight ──
@@ -7017,37 +7012,115 @@ class _LogbookEvidenceTable extends StatelessWidget {
   }
 }
 
-class _PosVoidApprovalsSection extends ConsumerStatefulWidget {
-  const _PosVoidApprovalsSection();
+// ── Void Approvals (merged: whole-bill + item-level, tabbed) ──────────────
+
+class _VoidApprovalsSection extends ConsumerStatefulWidget {
+  const _VoidApprovalsSection();
 
   @override
-  ConsumerState<_PosVoidApprovalsSection> createState() =>
-      _PosVoidApprovalsSectionState();
+  ConsumerState<_VoidApprovalsSection> createState() =>
+      _VoidApprovalsSectionState();
 }
 
-class _PosVoidApprovalsSectionState
-    extends ConsumerState<_PosVoidApprovalsSection> {
-  late Future<List<Map<String, dynamic>>> _future = _load();
+class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController =
+      TabController(length: 2, vsync: this);
+  late Future<List<Map<String, dynamic>>> _wholeBillFuture = _loadWholeBill();
+  late Future<List<ItemVoidRequest>> _itemFuture = _loadItemVoids();
+  bool _actioning = false;
 
-  Future<List<Map<String, dynamic>>> _load() =>
+  Future<List<Map<String, dynamic>>> _loadWholeBill() =>
       ref.read(branchAccountantRepositoryProvider).getPendingPosVoidRequests();
 
-  void _refresh() => setState(() {
-        _future = _load();
-      });
+  Future<List<ItemVoidRequest>> _loadItemVoids() =>
+      ref.read(outletPosRepositoryProvider).getPendingVoidsManager();
+
+  void _refreshWholeBill() =>
+      setState(() => _wholeBillFuture = _loadWholeBill());
+
+  void _refreshItemVoids() => setState(() => _itemFuture = _loadItemVoids());
+
+  String _fmt(double v) => NumberFormat('#,##0.00', 'en_KE').format(v);
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              ScreenSize.p(context).horizontal / 2,
+              ScreenSize.p(context).vertical / 2,
+              ScreenSize.p(context).horizontal / 2,
+              0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Void Approvals',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Review whole-bill void requests and cashier-acknowledged item voids.',
+                      style: TextStyle(color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              _RefreshButton(
+                onPressed: () {
+                  _refreshWholeBill();
+                  _refreshItemVoids();
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabs: [
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: _wholeBillFuture,
+              builder: (context, snap) =>
+                  Tab(text: 'Whole Bill (${snap.data?.length ?? '…'})'),
+            ),
+            FutureBuilder<List<ItemVoidRequest>>(
+              future: _itemFuture,
+              builder: (context, snap) =>
+                  Tab(text: 'Item Voids (${snap.data?.length ?? '…'})'),
+            ),
+          ],
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [_wholeBillTab(), _itemVoidTab()],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _wholeBillTab() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
+      future: _wholeBillFuture,
       builder: (context, snap) => _FuturePage(
         snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Void Approvals',
-          subtitle:
-              'Review waiter void requests before POS bills are cancelled.',
-          actions: [_RefreshButton(onPressed: _refresh)],
+        onRefresh: _refreshWholeBill,
+        builder: (items) => ListView(
+          padding: ScreenSize.p(context),
           children: [
             _ResponsiveGrid(children: [
               _MetricCard('Pending Requests', '${items.length}', Icons.block,
@@ -7059,68 +7132,149 @@ class _PosVoidApprovalsSectionState
                 Colors.red,
               ),
             ]),
-            _SectionCard(
-              title: 'Pending POS Voids',
-              child: items.isEmpty
-                  ? Padding(
-                      padding: ScreenSize.p(context),
-                      child: Center(
-                        child: Text(
-                          'No pending void approvals',
-                          style: TextStyle(color: AppColors.kTextSecondary),
-                        ),
-                      ),
-                    )
-                  : Column(
-                      children: items
-                          .map((item) => _ActionCard(
-                                title:
-                                    _text(item, ['order_number', 'bill_number'])
-                                            .isEmpty
-                                        ? 'POS bill'
-                                        : _text(item,
-                                            ['order_number', 'bill_number']),
-                                subtitle:
-                                    _text(item, ['outlet_name', 'reason']),
-                                trailing: _StatusPill(
-                                    _text(item, ['status']).isEmpty
-                                        ? 'pending'
-                                        : _text(item, ['status'])),
-                                rows: {
-                                  'Amount': _money(_num(item['total_amount'])),
-                                  'Requested by': _text(item, [
-                                    'requested_by_name',
-                                    'requested_by_email'
-                                  ]),
-                                  'Branch': _text(item, ['branch_name']),
-                                  'Reason': _text(item, ['reason']),
-                                  'Requested at': _text(item, ['created_at']),
-                                },
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => _showRecord(context, item),
-                                    child: const Text('View'),
-                                  ),
-                                  FilledButton.tonal(
-                                    onPressed: () => _review(item, true),
-                                    child: const Text('Approve'),
-                                  ),
-                                  OutlinedButton(
-                                    onPressed: () => _review(item, false),
-                                    child: const Text('Reject'),
-                                  ),
-                                ],
-                              ))
-                          .toList(),
+            const SizedBox(height: 16),
+            if (items.isEmpty)
+              Padding(
+                padding: ScreenSize.p(context),
+                child: Center(
+                  child: Text(
+                    'No pending whole-bill void approvals',
+                    style: TextStyle(color: AppColors.kTextSecondary),
+                  ),
+                ),
+              )
+            else
+              ...items.map((item) => _ActionCard(
+                    title: _text(item, ['order_number', 'bill_number'])
+                            .isEmpty
+                        ? 'POS bill'
+                        : _text(item, ['order_number', 'bill_number']),
+                    subtitle: _text(item, ['outlet_name', 'reason']),
+                    trailing: Wrap(
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const _VoidTypeBadge(isWholeBill: true),
+                        _StatusPill(_text(item, ['status']).isEmpty
+                            ? 'pending'
+                            : _text(item, ['status'])),
+                      ],
                     ),
-            ),
+                    rows: {
+                      'Amount': _money(_num(item['total_amount'])),
+                      'Requested by': _text(
+                          item, ['requested_by_name', 'requested_by_email']),
+                      'Branch': _text(item, ['branch_name']),
+                      'Reason': _text(item, ['reason']),
+                      'Requested at': _text(item, ['created_at']),
+                    },
+                    actions: [
+                      TextButton(
+                        onPressed: () => _showRecord(context, item),
+                        child: const Text('View'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () => _reviewWholeBill(item, true),
+                        child: const Text('Approve'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () => _reviewWholeBill(item, false),
+                        child: const Text('Reject'),
+                      ),
+                    ],
+                  )),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _review(Map<String, dynamic> request, bool approve) async {
+  Widget _itemVoidTab() {
+    return FutureBuilder<List<ItemVoidRequest>>(
+      future: _itemFuture,
+      builder: (context, snap) => _FuturePage(
+        snapshot: snap,
+        onRefresh: _refreshItemVoids,
+        builder: (items) => ListView(
+          padding: ScreenSize.p(context),
+          children: [
+            _ResponsiveGrid(children: [
+              _MetricCard('Awaiting Approval', '${items.length}',
+                  Icons.remove_circle_outline, Colors.orange),
+              _MetricCard(
+                'Total Amount at Risk',
+                'KES ${_fmt(items.fold(0.0, (s, r) => s + r.amount))}',
+                Icons.payments,
+                Colors.red,
+              ),
+            ]),
+            const SizedBox(height: 16),
+            if (items.isEmpty)
+              Padding(
+                padding: ScreenSize.p(context),
+                child: Center(
+                  child: Text(
+                    'No item voids awaiting approval',
+                    style: TextStyle(color: AppColors.kTextSecondary),
+                  ),
+                ),
+              )
+            else
+              ...items.map((r) => _ActionCard(
+                    title: r.itemName,
+                    subtitle: [
+                      if ((r.orderNumber ?? '').isNotEmpty) r.orderNumber!,
+                      r.reason,
+                    ].join(' • '),
+                    trailing: Wrap(
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const _VoidTypeBadge(isWholeBill: false),
+                        _StatusPill('void_acknowledged'),
+                      ],
+                    ),
+                    rows: {
+                      'Bill': r.orderNumber ?? '—',
+                      'Qty to void': r.qtyToVoid.toStringAsFixed(
+                          r.qtyToVoid.truncateToDouble() == r.qtyToVoid
+                              ? 0
+                              : 2),
+                      'Amount': 'KES ${_fmt(r.amount)}',
+                      'Reason': r.reason,
+                      'Requested by':
+                          r.requestedByName ?? r.requestedBy ?? '—',
+                      'Cashier': r.cashierName ?? '—',
+                      'Acknowledged at': r.cashierAcknowledgedAt
+                              ?.toLocal()
+                              .toString()
+                              .substring(0, 16) ??
+                          '—',
+                      'Manager reviewed at': r.managerReviewedAt
+                              ?.toLocal()
+                              .toString()
+                              .substring(0, 16) ??
+                          '—',
+                    },
+                    actions: [
+                      FilledButton.tonal(
+                        onPressed: _actioning ? null : () => _approveItem(r),
+                        child: const Text('Approve'),
+                      ),
+                      OutlinedButton(
+                        onPressed: _actioning ? null : () => _rejectItem(r),
+                        child: const Text('Reject'),
+                      ),
+                    ],
+                  )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _reviewWholeBill(
+      Map<String, dynamic> request, bool approve) async {
     String reason = '';
     if (approve) {
       final confirmed = await _confirm(
@@ -7148,122 +7302,10 @@ class _PosVoidApprovalsSectionState
       context,
       approve ? 'Void request approved' : 'Void request rejected',
     );
-    _refresh();
-  }
-}
-
-// ── Item-level void approvals (Stage 2: manager/accountant queue) ─────────────
-
-class _ItemVoidApprovalsSection extends ConsumerStatefulWidget {
-  const _ItemVoidApprovalsSection();
-
-  @override
-  ConsumerState<_ItemVoidApprovalsSection> createState() =>
-      _ItemVoidApprovalsSectionState();
-}
-
-class _ItemVoidApprovalsSectionState
-    extends ConsumerState<_ItemVoidApprovalsSection> {
-  late Future<List<ItemVoidRequest>> _future = _load();
-  bool _actioning = false;
-
-  Future<List<ItemVoidRequest>> _load() =>
-      ref.read(outletPosRepositoryProvider).getPendingVoidsManager();
-
-  void _refresh() => setState(() => _future = _load());
-
-  String _fmt(double v) =>
-      NumberFormat('#,##0.00', 'en_KE').format(v);
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<ItemVoidRequest>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Item Void Approvals',
-          subtitle:
-              'Cashier-acknowledged item voids awaiting your approval or rejection.',
-          actions: [_RefreshButton(onPressed: _refresh)],
-          children: [
-            _ResponsiveGrid(children: [
-              _MetricCard('Awaiting Approval', '${items.length}',
-                  Icons.remove_circle_outline, Colors.orange),
-              _MetricCard(
-                'Total Amount at Risk',
-                'KES ${_fmt(items.fold(0.0, (s, r) => s + r.amount))}',
-                Icons.payments,
-                Colors.red,
-              ),
-            ]),
-            _SectionCard(
-              title: 'Pending Item Voids',
-              child: items.isEmpty
-                  ? Padding(
-                      padding: ScreenSize.p(context),
-                      child: Center(
-                        child: Text(
-                          'No item voids awaiting approval',
-                          style: TextStyle(color: AppColors.kTextSecondary),
-                        ),
-                      ),
-                    )
-                  : Column(
-                      children: items
-                          .map((r) => _ActionCard(
-                                title: r.itemName,
-                                subtitle: [
-                                  if ((r.orderNumber ?? '').isNotEmpty)
-                                    r.orderNumber!,
-                                  r.reason,
-                                ].join(' • '),
-                                trailing: _StatusPill('void_acknowledged'),
-                                rows: {
-                                  'Bill': r.orderNumber ?? '—',
-                                  'Qty to void':
-                                      r.qtyToVoid.toStringAsFixed(
-                                          r.qtyToVoid.truncateToDouble() ==
-                                                  r.qtyToVoid
-                                              ? 0
-                                              : 2),
-                                  'Amount': 'KES ${_fmt(r.amount)}',
-                                  'Reason': r.reason,
-                                  'Requested by':
-                                      r.requestedByName ?? r.requestedBy ?? '—',
-                                  'Cashier': r.cashierName ?? '—',
-                                  'Acknowledged at': r.cashierAcknowledgedAt
-                                          ?.toLocal()
-                                          .toString()
-                                          .substring(0, 16) ??
-                                      '—',
-                                },
-                                actions: [
-                                  FilledButton.tonal(
-                                    onPressed: _actioning
-                                        ? null
-                                        : () => _approve(r),
-                                    child: const Text('Approve'),
-                                  ),
-                                  OutlinedButton(
-                                    onPressed: _actioning
-                                        ? null
-                                        : () => _reject(r),
-                                    child: const Text('Reject'),
-                                  ),
-                                ],
-                              ))
-                          .toList(),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
+    _refreshWholeBill();
   }
 
-  Future<void> _approve(ItemVoidRequest request) async {
+  Future<void> _approveItem(ItemVoidRequest request) async {
     final confirmed = await _confirm(
       context,
       'Approve void of ${request.qtyToVoid.toStringAsFixed(0)}× "${request.itemName}" '
@@ -7273,16 +7315,16 @@ class _ItemVoidApprovalsSectionState
     setState(() => _actioning = true);
     try {
       await ref.read(outletPosRepositoryProvider).approveItemVoid(request.id);
-      _notify(context, 'Item void approved');
-      _refresh();
+      if (mounted) _notify(context, 'Item void approved');
+      _refreshItemVoids();
     } on StateError catch (e) {
-      _notify(context, e.message);
+      if (mounted) _notify(context, e.message);
     } finally {
       if (mounted) setState(() => _actioning = false);
     }
   }
 
-  Future<void> _reject(ItemVoidRequest request) async {
+  Future<void> _rejectItem(ItemVoidRequest request) async {
     final reason = await _textDialog(
       context,
       'Reject Item Void',
@@ -7296,13 +7338,36 @@ class _ItemVoidApprovalsSectionState
             request.id,
             rejectionReason: reason.trim(),
           );
-      _notify(context, 'Item void rejected');
-      _refresh();
+      if (mounted) _notify(context, 'Item void rejected');
+      _refreshItemVoids();
     } on StateError catch (e) {
-      _notify(context, e.message);
+      if (mounted) _notify(context, e.message);
     } finally {
       if (mounted) setState(() => _actioning = false);
     }
+  }
+}
+
+class _VoidTypeBadge extends StatelessWidget {
+  const _VoidTypeBadge({required this.isWholeBill});
+  final bool isWholeBill;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isWholeBill ? Colors.indigo : Colors.deepPurple;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        isWholeBill ? 'WHOLE BILL' : 'ITEM VOID',
+        style:
+            TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800),
+      ),
+    );
   }
 }
 
