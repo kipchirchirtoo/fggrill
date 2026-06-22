@@ -3308,6 +3308,399 @@ export const getVoidHistory = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+// ── Post-payment item exchange ──────────────────────────────────────────────
+// Distinct from both void flows above: the original pos_shift_orders row is
+// CLOSED and PAID, and is never mutated by this flow — it stays the
+// historical record of what was actually collected. An exchange creates a
+// new, linked pos_shift_orders row (is_exchange/exchange_parent_order_id/
+// exchange_request_id, same linking convention as is_split/is_merged)
+// carrying the new item(s). Approval is single-stage and cashier-only: per
+// product requirement, branch_manager/branch_accountant/accountant/auditor
+// get read-only visibility (getExchangeHistory) but cannot approve, reject,
+// or issue a refund — unlike the void flows above, REVIEW_ROLES is
+// deliberately NOT part of the approval gate here.
+const isExchangeApprover = (req: Request): boolean =>
+  isCashierStationRole(roleFor(req)) || roleFor(req) === 'super_admin';
+
+export const requestItemExchange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const shiftId = String(req.body.shift_id || '');
+    const orderId = String(req.body.order_id || '');
+    const oldItems = Array.isArray(req.body.old_items) ? req.body.old_items : [];
+    const newItems = Array.isArray(req.body.new_items) ? req.body.new_items : [];
+    const reason = nullableText(req.body.reason);
+
+    if (!shiftId || !orderId) throw new AppError('shift_id and order_id are required', 400);
+    if (!oldItems.length) throw new AppError('At least one item to return is required', 400);
+    if (!newItems.length) throw new AppError('At least one replacement item is required', 400);
+
+    const shift = await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
+
+    if (!['paid', 'credit_bill'].includes(String(order.payment_status || ''))) {
+      throw new AppError('Only a closed, paid bill can be exchanged', 400);
+    }
+
+    const billItems = Array.isArray(order.items) ? order.items : [];
+    const normalizedOldItems = oldItems.map((entry: Record<string, any>, index: number) => {
+      const itemIndex = Number(entry.item_index);
+      if (!Number.isInteger(itemIndex) || itemIndex < 0) {
+        throw new AppError(`A valid item_index is required for returned item ${index + 1}`, 400);
+      }
+      const billItem = billItems[itemIndex];
+      if (!billItem) throw new AppError(`Returned item ${index + 1} was not found on this bill`, 404);
+      const { activeQty } = activeQtyForItem(billItem);
+      const quantity = numberValue(entry.quantity ?? entry.qty);
+      if (!(quantity > 0)) throw new AppError(`Returned item ${index + 1} must have a quantity greater than zero`, 400);
+      if (quantity > activeQty) {
+        throw new AppError(`Returned quantity exceeds the active quantity for "${billItem.name}"`, 400);
+      }
+      const unitPrice = numberValue(billItem.unit_price ?? billItem.price);
+      return {
+        item_index: itemIndex,
+        outlet_item_id: billItem.outlet_item_id ?? null,
+        name: String(billItem.name || ''),
+        unit_price: unitPrice,
+        quantity
+      };
+    });
+
+    const normalizedNewItems = await normalizeOrderItems(shift.outlet_id, newItems);
+
+    const oldTotal = normalizedOldItems.reduce((sum: number, item: any) => sum + item.unit_price * item.quantity, 0);
+    const newTotal = normalizedNewItems.reduce((sum: number, item: any) => sum + item.line_total, 0);
+    const priceDifference = Math.round((newTotal - oldTotal) * 100) / 100;
+    const direction = priceDifference > 0.004 ? 'top_up' : priceDifference < -0.004 ? 'refund' : 'even';
+
+    const { data: existing, error: existingError } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('id')
+      .eq('order_id', orderId)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) throw new AppError('A pending exchange request already exists for this bill', 409);
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .insert({
+        shift_id: shiftId,
+        outlet_id: shift.outlet_id,
+        branch_id: shift.branch_id,
+        order_id: orderId,
+        order_number: order.order_number,
+        old_items: normalizedOldItems,
+        new_items: normalizedNewItems,
+        old_total: oldTotal,
+        new_total: newTotal,
+        price_difference: priceDifference,
+        direction,
+        reason,
+        requested_by: req.user.id,
+        status: 'pending'
+      })
+      .select('*')
+      .single();
+    if (error || !requestRow) throw error || new AppError('Failed to create exchange request', 500);
+
+    const shiftCashierId = (shift as any).cashier_id;
+    if (shiftCashierId) {
+      const directionLabel = direction === 'top_up'
+        ? `top-up KES ${priceDifference.toFixed(2)}`
+        : direction === 'refund'
+          ? `refund KES ${Math.abs(priceDifference).toFixed(2)}`
+          : 'even exchange';
+      await notificationService.notifyUser(
+        shiftCashierId,
+        'Item exchange request',
+        `Bill ${order.order_number || orderId} — exchange requested (${directionLabel}). Approve or reject.`,
+        {
+          type: 'warning',
+          category: 'pos_item_exchange_request',
+          priority: 'high',
+          metadata: { request_id: requestRow.id, order_id: orderId, shift_id: shiftId, direction, price_difference: priceDifference }
+        }
+      );
+    }
+
+    res.status(201).json({ success: true, data: requestRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPendingExchangesCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+
+    const { data: myShifts } = await supabase
+      .from('pos_outlet_shifts')
+      .select('id')
+      .eq('cashier_id', req.user.id)
+      .eq('status', 'open');
+
+    const myShiftIds = (myShifts || []).map((s: any) => s.id);
+    if (!myShiftIds.length) { res.json({ success: true, data: [] }); return; }
+
+    const { data, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .in('shift_id', myShiftIds)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(rows.map((r: any) => r.requested_by).filter(Boolean)));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const approveItemExchange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isExchangeApprover(req)) throw new AppError('Forbidden: cashier approval required', 403);
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Exchange request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Exchange request already processed', 409);
+
+    const { data: newOrder, error: rpcError } = await supabase.rpc('approve_item_exchange', {
+      p_request_id: id,
+      p_actioned_by: req.user.id
+    });
+    if (rpcError) {
+      if (String(rpcError.message || '').includes('already processed')) {
+        throw new AppError('Exchange request already processed', 409);
+      }
+      throw rpcError;
+    }
+
+    // Stock: return the old item(s), deduct the new item(s). Mirrors the
+    // two-call shape used for whole-bill void reversal (reviewPosVoidRequest)
+    // and original sale posting (payShiftOrder).
+    await postPosInventorySale({
+      branchId: Number(requestRow.branch_id),
+      outletId: requestRow.outlet_id,
+      shiftId: requestRow.shift_id,
+      orderId: requestRow.order_id,
+      items: requestRow.old_items,
+      actorId: req.user.id,
+      reverse: true
+    });
+    await postPosInventorySale({
+      branchId: Number(requestRow.branch_id),
+      outletId: requestRow.outlet_id,
+      shiftId: requestRow.shift_id,
+      orderId: newOrder.id,
+      items: requestRow.new_items,
+      actorId: req.user.id
+    });
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    const approveMeta = { request_id: id, order_id: requestRow.order_id, exchange_order_id: newOrder.id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item exchange APPROVED ✓',
+        `Exchange APPROVED by ${cashierName} on bill ${requestRow.order_number || ''}. New ticket ${newOrder.order_number || ''} sent to kitchen.`,
+        { type: 'success', category: 'pos_item_exchange_request', priority: 'medium', metadata: approveMeta }
+      ),
+      notificationService.notifyRole(
+        'branch_accountant',
+        'Item exchange approved',
+        `Exchange approved by ${cashierName} on bill ${requestRow.order_number || ''}.`,
+        { type: 'info', category: 'pos_item_exchange_request', priority: 'low', branchId: requestRow.branch_id, metadata: approveMeta }
+      )
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        request: { ...requestRow, status: 'approved', cashier_id: req.user.id, actioned_at: new Date().toISOString(), exchange_order_id: newOrder.id },
+        order: newOrder
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const rejectItemExchange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isExchangeApprover(req)) throw new AppError('Forbidden: cashier approval required', 403);
+    const { id } = req.params;
+    const rejectionReason = String(req.body.rejection_reason || req.body.reason || '').trim();
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Exchange request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Exchange request already processed', 409);
+
+    const now = new Date().toISOString();
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('pos_item_exchange_requests')
+      .update({
+        status: 'rejected',
+        cashier_id: req.user.id,
+        actioned_at: now,
+        rejection_reason: rejectionReason || null,
+        updated_at: now
+      })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select('*')
+      .single();
+    if (updateError || !updatedRow) {
+      throw updateError || new AppError('Exchange request already processed', 409);
+    }
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Item exchange REJECTED',
+        `Exchange on bill ${requestRow.order_number || ''} was REJECTED by ${cashierName}. Original bill remains as closed.`,
+        {
+          type: 'warning',
+          category: 'pos_item_exchange_request',
+          priority: 'medium',
+          metadata: { request_id: id, order_id: requestRow.order_id, rejection_reason: rejectionReason }
+        }
+      );
+    }
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const issueExchangeRefund = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isExchangeApprover(req)) throw new AppError('Forbidden: cashier action required', 403);
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Exchange request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'approved') throw new AppError('Exchange request must be approved before a refund can be issued', 400);
+    if (requestRow.direction !== 'refund') throw new AppError('This exchange does not owe a refund', 400);
+    if (requestRow.refund_issued_at) throw new AppError('Refund has already been issued for this exchange', 409);
+
+    const refundAmount = Math.abs(numberValue(requestRow.price_difference));
+    const now = new Date().toISOString();
+
+    const { data: updatedRow, error: updateError } = await supabase
+      .from('pos_item_exchange_requests')
+      .update({
+        refund_amount: refundAmount,
+        refund_issued_at: now,
+        refund_issued_by: req.user.id,
+        updated_at: now
+      })
+      .eq('id', id)
+      .is('refund_issued_at', null)
+      .select('*')
+      .single();
+    if (updateError || !updatedRow) {
+      throw updateError || new AppError('Refund has already been issued for this exchange', 409);
+    }
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Exchange refund issued',
+        `${cashierName} issued a KES ${refundAmount.toFixed(2)} cash refund for the exchange on bill ${requestRow.order_number || ''}.`,
+        {
+          type: 'success',
+          category: 'pos_item_exchange_request',
+          priority: 'low',
+          metadata: { request_id: id, order_id: requestRow.order_id, refund_amount: refundAmount }
+        }
+      );
+    }
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getExchangeHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req)) && !isCashierStationRole(roleFor(req))) {
+      throw new AppError('Forbidden', 403);
+    }
+
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const status = nullableText(String(req.query.status || ''));
+    const direction = nullableText(String(req.query.direction || ''));
+    const from = nullableText(String(req.query.from || ''));
+    const to = nullableText(String(req.query.to || ''));
+
+    let query = supabase
+      .from('pos_item_exchange_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (!isGlobalUser(req) && branchId) query = query.eq('branch_id', branchId);
+    else if (req.query.branch_id) query = query.eq('branch_id', Number(req.query.branch_id));
+    if (status) query = query.eq('status', status);
+    if (direction) query = query.eq('direction', direction);
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(
+      rows.flatMap((r: any) => [r.requested_by, r.cashier_id, r.refund_issued_by]).filter(Boolean)
+    ));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null,
+      cashier_name: r.cashier_id ? namesById.get(String(r.cashier_id)) || null : null,
+      refund_issued_by_name: r.refund_issued_by ? namesById.get(String(r.refund_issued_by)) || null : null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const payShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
