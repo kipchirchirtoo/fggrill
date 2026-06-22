@@ -625,7 +625,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       total: effectiveTotal,
       paymentMethod: 'PENDING',
       cashierName: order.waiterName ?? 'Waiter',
-      createdAt: order.createdAt,
+      createdAt: order.effectiveCreatedAt,
     );
 
     await printService.printCaptainOrder(
