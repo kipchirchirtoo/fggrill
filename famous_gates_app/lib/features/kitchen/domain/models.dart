@@ -18,6 +18,8 @@ class KitchenOrder {
   final bool captainOrderAlreadyPrinted;
   final String? shiftId;
   final String? outletType;
+  final bool isExchangeOrder;
+  final String? exchangeParentOrderId;
 
   const KitchenOrder({
     required this.id,
@@ -39,6 +41,8 @@ class KitchenOrder {
     this.captainOrderAlreadyPrinted = false,
     this.shiftId,
     this.outletType,
+    this.isExchangeOrder = false,
+    this.exchangeParentOrderId,
   });
 
   factory KitchenOrder.fromJson(Map<String, dynamic> json) {
@@ -73,6 +77,8 @@ class KitchenOrder {
       captainOrderAlreadyPrinted: json['captain_order_already_printed'] == true,
       shiftId: _optionalString(json['shift_id']),
       outletType: _optionalString(json['outlet_type']),
+      isExchangeOrder: json['is_exchange'] == true,
+      exchangeParentOrderId: _optionalString(json['exchange_parent_order_id']),
     );
   }
 

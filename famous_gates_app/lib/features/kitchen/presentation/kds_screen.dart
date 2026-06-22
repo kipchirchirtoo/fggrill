@@ -1049,6 +1049,12 @@ class _OrderTicket extends StatelessWidget {
                     if (order.isCaptainOrder)
                       const _MetaPill(
                           label: 'Captain', icon: Icons.point_of_sale),
+                    if (order.isExchangeOrder)
+                      const _MetaPill(
+                        label: 'Exchange',
+                        icon: Icons.swap_horiz,
+                        color: AppColors.kWarning,
+                      ),
                     if (hasRecalledTicket)
                       const _MetaPill(
                         label: 'Recalled items',
@@ -1370,29 +1376,31 @@ class _OrderList extends StatelessWidget {
 }
 
 class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label, required this.icon});
+  const _MetaPill({required this.label, required this.icon, this.color});
 
   final String label;
   final IconData icon;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final pillColor = color ?? AppColors.kPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.kPrimary.withValues(alpha: 0.08),
+        color: pillColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.kPrimary.withValues(alpha: 0.18)),
+        border: Border.all(color: pillColor.withValues(alpha: 0.18)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: AppColors.kPrimary),
+          Icon(icon, size: 12, color: pillColor),
           const SizedBox(width: 4),
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.kPrimary,
+            style: TextStyle(
+              color: pillColor,
               fontSize: 10,
               fontWeight: FontWeight.w800,
             ),
