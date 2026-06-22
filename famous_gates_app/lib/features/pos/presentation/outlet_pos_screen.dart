@@ -607,6 +607,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                             case 'void':
                               _showVoidOrderDialog(order);
                               break;
+                            case 'exchange':
+                              _showExchangeRequestSheet(order);
+                              break;
                           }
                         },
                         itemBuilder: (context) => [
@@ -637,6 +640,15 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                               dense: true,
                               leading: Icon(Icons.block),
                               title: Text('Request void'),
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'exchange',
+                            enabled: _canExchangeOrder(order),
+                            child: const ListTile(
+                              dense: true,
+                              leading: Icon(Icons.swap_horiz),
+                              title: Text('Request Exchange'),
                             ),
                           ),
                         ],
@@ -1082,6 +1094,13 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         order.status != 'voided';
   }
 
+  // Only a closed, paid bill can be exchanged — money has already changed
+  // hands, so this is a separate flow from voiding an unpaid item.
+  bool _canExchangeOrder(OutletShiftOrder order) {
+    return ['paid', 'credit_bill'].contains(order.paymentStatus) &&
+        !order.isExchange;
+  }
+
   void _recallOrder(OutletShiftOrder order) {
     setState(() {
       _section = OutletPosSection.station;
@@ -1218,6 +1237,26 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _showExchangeRequestSheet(OutletShiftOrder order) async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _ExchangeRequestSheet(
+        order: order,
+        shiftId: _shift!.id,
+        catalog: _items,
+      ),
+    );
+    if (result != true) return;
+    setState(() => _busy = true);
+    try {
+      final repo = ref.read(outletPosRepositoryProvider);
+      _orders = await repo.getOrders(_shift!.id);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -2384,6 +2423,319 @@ class _VoidItemSheetState extends State<_VoidItemSheet> {
                           'note': _noteController.text,
                         }),
                 child: const Text('SEND FOR APPROVAL'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Post-payment item exchange: waiter selects item(s) to return from a
+// closed/paid bill and item(s) the customer wants instead. The original bill
+// is never touched here — submitting just creates a pending
+// pos_item_exchange_requests row for the cashier to approve or reject.
+class _ExchangeRequestSheet extends ConsumerStatefulWidget {
+  const _ExchangeRequestSheet({
+    required this.order,
+    required this.shiftId,
+    required this.catalog,
+  });
+
+  final OutletShiftOrder order;
+  final String shiftId;
+  final List<OutletPosItem> catalog;
+
+  @override
+  ConsumerState<_ExchangeRequestSheet> createState() => _ExchangeRequestSheetState();
+}
+
+class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
+  final Map<int, double> _oldQty = {};
+  List<OutletCartItem> _newCart = [];
+  final _searchController = TextEditingController();
+  final _reasonController = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  double _activeQtyAt(int index, Map<String, dynamic> raw) {
+    final qty = (raw['quantity'] is num)
+        ? (raw['quantity'] as num).toDouble()
+        : double.tryParse('${raw['quantity']}') ?? 0;
+    final voidedQty = (raw['voided_qty'] is num)
+        ? (raw['voided_qty'] as num).toDouble()
+        : double.tryParse('${raw['voided_qty']}') ?? 0;
+    return qty - voidedQty;
+  }
+
+  double get _oldTotal {
+    var sum = 0.0;
+    for (final entry in _oldQty.entries) {
+      if (entry.value <= 0) continue;
+      final raw = Map<String, dynamic>.from(widget.order.items[entry.key] as Map);
+      final unitPrice = (raw['unit_price'] is num)
+          ? (raw['unit_price'] as num).toDouble()
+          : double.tryParse('${raw['unit_price']}') ?? 0;
+      sum += unitPrice * entry.value;
+    }
+    return sum;
+  }
+
+  double get _newTotal =>
+      _newCart.fold<double>(0, (sum, entry) => sum + entry.lineTotal);
+
+  double get _difference => _newTotal - _oldTotal;
+
+  void _addToNewCart(OutletPosItem item) {
+    final index = _newCart.indexWhere((entry) => entry.item.id == item.id);
+    setState(() {
+      if (index == -1) {
+        _newCart = [..._newCart, OutletCartItem(item: item, quantity: 1)];
+      } else {
+        _newCart = [..._newCart]
+          ..[index] = _newCart[index].copyWith(quantity: _newCart[index].quantity + 1);
+      }
+    });
+  }
+
+  void _setNewCartQty(String itemId, int qty) {
+    setState(() {
+      if (qty <= 0) {
+        _newCart = _newCart.where((entry) => entry.item.id != itemId).toList();
+      } else {
+        _newCart = _newCart
+            .map((entry) =>
+                entry.item.id == itemId ? entry.copyWith(quantity: qty) : entry)
+            .toList();
+      }
+    });
+  }
+
+  bool get _canSubmit =>
+      !_submitting &&
+      _oldQty.values.any((qty) => qty > 0) &&
+      _newCart.isNotEmpty;
+
+  Future<void> _submit() async {
+    setState(() => _submitting = true);
+    try {
+      final oldItems = _oldQty.entries
+          .where((entry) => entry.value > 0)
+          .map((entry) => {'item_index': entry.key, 'quantity': entry.value})
+          .toList();
+      await ref.read(outletPosRepositoryProvider).requestItemExchange(
+            shiftId: widget.shiftId,
+            orderId: widget.order.id,
+            oldItems: oldItems,
+            newItems: _newCart.map((entry) => entry.toJson()).toList(),
+            reason: _reasonController.text,
+          );
+      if (mounted) {
+        AppNotifier.showSnackBar(context,
+            const SnackBar(content: Text('Exchange request sent to cashier for approval')));
+        Navigator.of(context).pop(true);
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+      }
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text('Could not send exchange request: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = widget.order;
+    final search = _searchController.text.trim().toLowerCase();
+    final filteredCatalog = search.isEmpty
+        ? widget.catalog
+        : widget.catalog
+            .where((item) => item.name.toLowerCase().contains(search))
+            .toList();
+    final difference = _difference;
+    final String summaryLabel;
+    final Color summaryColor;
+    if (difference > 0.004) {
+      summaryLabel = 'Customer pays top-up of ${formatKes(difference)}';
+      summaryColor = Colors.orange.shade800;
+    } else if (difference < -0.004) {
+      summaryLabel = 'Cashier refunds ${formatKes(-difference)}';
+      summaryColor = Colors.red.shade700;
+    } else {
+      summaryLabel = 'Even exchange — no money movement';
+      summaryColor = Colors.green.shade700;
+    }
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Request Exchange — ${order.orderNumber}',
+                      style: Theme.of(context).textTheme.titleLarge),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Items to return', style: Theme.of(context).textTheme.titleSmall),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: order.items.length,
+                itemBuilder: (context, index) {
+                  final raw = Map<String, dynamic>.from(order.items[index] as Map);
+                  final activeQty = _activeQtyAt(index, raw);
+                  if (activeQty <= 0) return const SizedBox.shrink();
+                  final name = '${raw['name'] ?? ''}';
+                  final selectedQty = _oldQty[index] ?? 0;
+                  return CheckboxListTile(
+                    dense: true,
+                    value: selectedQty > 0,
+                    title: Text(name),
+                    subtitle: Text('Active qty: ${activeQty.toStringAsFixed(activeQty.truncateToDouble() == activeQty ? 0 : 1)}'),
+                    secondary: selectedQty > 0
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.remove),
+                                onPressed: selectedQty > 1
+                                    ? () => setState(() => _oldQty[index] = selectedQty - 1)
+                                    : null,
+                              ),
+                              Text(selectedQty.toStringAsFixed(0)),
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                onPressed: selectedQty < activeQty
+                                    ? () => setState(() => _oldQty[index] = selectedQty + 1)
+                                    : null,
+                              ),
+                            ],
+                          )
+                        : null,
+                    onChanged: (checked) => setState(() {
+                      _oldQty[index] = checked == true ? 1 : 0;
+                    }),
+                  );
+                },
+              ),
+            ),
+            const Divider(),
+            Text('Replacement items', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: 'Search menu items',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 160),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: filteredCatalog.length,
+                itemBuilder: (context, index) {
+                  final item = filteredCatalog[index];
+                  return ListTile(
+                    dense: true,
+                    title: Text(item.name),
+                    subtitle: Text(formatKes(item.sellingPrice)),
+                    trailing: const Icon(Icons.add_circle_outline),
+                    onTap: () => _addToNewCart(item),
+                  );
+                },
+              ),
+            ),
+            if (_newCart.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ..._newCart.map((entry) => ListTile(
+                    dense: true,
+                    title: Text(entry.item.name),
+                    subtitle: Text(formatKes(entry.item.sellingPrice)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove),
+                          onPressed: () =>
+                              _setNewCartQty(entry.item.id, entry.quantity - 1),
+                        ),
+                        Text('${entry.quantity}'),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () =>
+                              _setNewCartQty(entry.item.id, entry.quantity + 1),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+            const Divider(),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Returned items total'),
+                Text(formatKes(_oldTotal)),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Replacement items total'),
+                Text(formatKes(_newTotal)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(summaryLabel,
+                style: TextStyle(color: summaryColor, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _canSubmit ? _submit : null,
+                child: Text(_submitting ? 'Sending…' : 'SEND FOR CASHIER APPROVAL'),
               ),
             ),
           ],

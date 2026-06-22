@@ -339,6 +339,111 @@ class OutletPosRepository {
         .toList();
   }
 
+  // ── Post-payment item exchange ──────────────────────────────────────────────
+
+  /// Requests an exchange on a closed/paid bill — old items are returned,
+  /// new items take their place. [oldItems] entries are
+  /// `{'item_index': int, 'quantity': double}` referencing the original
+  /// order's items array; [newItems] reuse [OutletCartItem.toJson] so the
+  /// server's normalizeOrderItems can re-validate them against the catalog.
+  Future<ItemExchangeRequest> requestItemExchange({
+    required String shiftId,
+    required String orderId,
+    required List<Map<String, dynamic>> oldItems,
+    required List<Map<String, dynamic>> newItems,
+    String? reason,
+  }) async {
+    try {
+      final response = await _dio.post('/pos/exchanges/request', data: {
+        'shift_id': shiftId,
+        'order_id': orderId,
+        'old_items': oldItems,
+        'new_items': newItems,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      });
+      return ItemExchangeRequest.fromJson(
+          Map<String, dynamic>.from(_data(response.data) as Map));
+    } on DioException catch (error) {
+      throw StateError(
+          _errorMessage(error, 'This exchange request could not be sent.'));
+    }
+  }
+
+  /// Cashier queue — pending exchange requests for the caller's open shifts.
+  Future<List<ItemExchangeRequest>> getPendingExchangesCashier() async {
+    final response = await _dio.get('/pos/exchanges/pending/cashier');
+    return _list(response.data)
+        .map((item) =>
+            ItemExchangeRequest.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  /// Approves the exchange — creates the linked replacement order, posts the
+  /// stock movement, and notifies the waiter. Returns the new linked order.
+  Future<OutletShiftOrder> approveItemExchange(String requestId) async {
+    try {
+      final response = await _dio.patch('/pos/exchanges/$requestId/approve');
+      final data = Map<String, dynamic>.from(_data(response.data) as Map);
+      return OutletShiftOrder.fromJson(
+          Map<String, dynamic>.from(data['order'] as Map));
+    } on DioException catch (error) {
+      throw StateError(
+          _errorMessage(error, 'This exchange request could not be approved.'));
+    }
+  }
+
+  Future<ItemExchangeRequest> rejectItemExchange(
+    String requestId, {
+    String? rejectionReason,
+  }) async {
+    try {
+      final response =
+          await _dio.patch('/pos/exchanges/$requestId/reject', data: {
+        if (rejectionReason != null && rejectionReason.trim().isNotEmpty)
+          'rejection_reason': rejectionReason.trim(),
+      });
+      return ItemExchangeRequest.fromJson(
+          Map<String, dynamic>.from(_data(response.data) as Map));
+    } on DioException catch (error) {
+      throw StateError(
+          _errorMessage(error, 'This exchange request could not be rejected.'));
+    }
+  }
+
+  /// Marks the cash refund as issued for an approved, refund-direction
+  /// exchange. Throws if the exchange isn't approved, doesn't owe a refund,
+  /// or has already had one issued.
+  Future<ItemExchangeRequest> issueExchangeRefund(String requestId) async {
+    try {
+      final response =
+          await _dio.patch('/pos/exchanges/$requestId/issue-refund');
+      return ItemExchangeRequest.fromJson(
+          Map<String, dynamic>.from(_data(response.data) as Map));
+    } on DioException catch (error) {
+      throw StateError(
+          _errorMessage(error, 'Could not record the exchange refund.'));
+    }
+  }
+
+  /// Read-only history for the accountant/manager exchange screen.
+  Future<List<ItemExchangeRequest>> getExchangeHistory({
+    String? status,
+    String? direction,
+    String? from,
+    String? to,
+  }) async {
+    final response = await _dio.get('/pos/exchanges/history', queryParameters: {
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (direction != null && direction.isNotEmpty) 'direction': direction,
+      if (from != null && from.isNotEmpty) 'from': from,
+      if (to != null && to.isNotEmpty) 'to': to,
+    });
+    return _list(response.data)
+        .map((item) =>
+            ItemExchangeRequest.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
   String _errorMessage(DioException error, String fallback) {
     final data = error.response?.data;
     return data is Map && data['message'] is String
@@ -666,6 +771,8 @@ class OutletShiftOrder {
     this.waiterName,
     this.isSplit = false,
     this.isMerged = false,
+    this.isExchange = false,
+    this.exchangeParentOrderId,
     this.voidRequestStatus,
     this.createdAt,
     this.items = const [],
@@ -687,6 +794,8 @@ class OutletShiftOrder {
   final String? waiterName;
   final bool isSplit;
   final bool isMerged;
+  final bool isExchange;
+  final String? exchangeParentOrderId;
   final String? voidRequestStatus;
   final DateTime? createdAt;
   final List<dynamic> items;
@@ -742,6 +851,8 @@ class OutletShiftOrder {
       waiterName: json['waiter_name'] as String?,
       isSplit: json['is_split'] == true,
       isMerged: json['is_merged'] == true,
+      isExchange: json['is_exchange'] == true,
+      exchangeParentOrderId: json['exchange_parent_order_id'] as String?,
       voidRequestStatus: json['void_request_status'] as String?,
       createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
       items: items is List ? items : const [],
@@ -862,6 +973,105 @@ class ItemVoidRequest {
       managerName: json['manager_name'] as String?,
       managerReviewedAt: DateTime.tryParse('${json['manager_reviewed_at'] ?? ''}'),
       rejectionReason: json['rejection_reason'] as String?,
+      createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
+    );
+  }
+}
+
+class ItemExchangeRequest {
+  const ItemExchangeRequest({
+    required this.id,
+    required this.shiftId,
+    required this.orderId,
+    required this.oldItems,
+    required this.newItems,
+    required this.oldTotal,
+    required this.newTotal,
+    required this.priceDifference,
+    required this.direction,
+    required this.status,
+    this.orderNumber,
+    this.branchId,
+    this.reason,
+    this.requestedBy,
+    this.requestedByName,
+    this.cashierId,
+    this.cashierName,
+    this.actionedAt,
+    this.rejectionReason,
+    this.exchangeOrderId,
+    this.refundAmount,
+    this.refundIssuedAt,
+    this.refundIssuedBy,
+    this.refundIssuedByName,
+    this.createdAt,
+  });
+
+  final String id;
+  final String shiftId;
+  final String orderId;
+  final List<dynamic> oldItems;
+  final List<dynamic> newItems;
+  final double oldTotal;
+  final double newTotal;
+  final double priceDifference;
+  final String direction;
+  final String status;
+  final String? orderNumber;
+  final int? branchId;
+  final String? reason;
+  final String? requestedBy;
+  final String? requestedByName;
+  final String? cashierId;
+  final String? cashierName;
+  final DateTime? actionedAt;
+  final String? rejectionReason;
+  final String? exchangeOrderId;
+  final double? refundAmount;
+  final DateTime? refundIssuedAt;
+  final String? refundIssuedBy;
+  final String? refundIssuedByName;
+  final DateTime? createdAt;
+
+  bool get isPending => status == 'pending';
+  bool get isApproved => status == 'approved';
+  bool get isRejected => status == 'rejected';
+  bool get isTopUp => direction == 'top_up';
+  bool get isRefund => direction == 'refund';
+  bool get isEven => direction == 'even';
+  bool get refundIssued => refundIssuedAt != null;
+
+  factory ItemExchangeRequest.fromJson(Map<String, dynamic> json) {
+    final oldItems = json['old_items'];
+    final newItems = json['new_items'];
+    return ItemExchangeRequest(
+      id: '${json['id']}',
+      shiftId: '${json['shift_id'] ?? ''}',
+      orderId: '${json['order_id'] ?? ''}',
+      oldItems: oldItems is List ? oldItems : const [],
+      newItems: newItems is List ? newItems : const [],
+      oldTotal: _num(json['old_total']),
+      newTotal: _num(json['new_total']),
+      priceDifference: _num(json['price_difference']),
+      direction: '${json['direction'] ?? 'even'}',
+      status: '${json['status'] ?? 'pending'}',
+      orderNumber: json['order_number'] as String?,
+      branchId:
+          json['branch_id'] is num ? (json['branch_id'] as num).toInt() : null,
+      reason: json['reason'] as String?,
+      requestedBy: json['requested_by'] as String?,
+      requestedByName: json['requested_by_name'] as String?,
+      cashierId: json['cashier_id'] as String?,
+      cashierName: json['cashier_name'] as String?,
+      actionedAt: DateTime.tryParse('${json['actioned_at'] ?? ''}'),
+      rejectionReason: json['rejection_reason'] as String?,
+      exchangeOrderId: json['exchange_order_id'] as String?,
+      refundAmount: json['refund_amount'] == null
+          ? null
+          : _num(json['refund_amount']),
+      refundIssuedAt: DateTime.tryParse('${json['refund_issued_at'] ?? ''}'),
+      refundIssuedBy: json['refund_issued_by'] as String?,
+      refundIssuedByName: json['refund_issued_by_name'] as String?,
       createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
     );
   }
