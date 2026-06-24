@@ -1,0 +1,58 @@
+# PowerSync Sync Streams configuration for FamousGate.
+# Uses config edition 3 (Sync Streams). Deploy with:
+#   powersync deploy sync-config --directory backend/powersync
+#
+# The JWT issued by the backend /powersync/credentials endpoint contains:
+#   sub (user_id), role, branch_id, active_outlet_id, active_outlet_type
+
+config:
+  edition: 3
+
+streams:
+  # Global reference data
+  branches:
+    auto_subscribe: true
+    priority: 1
+    query: SELECT * FROM branches WHERE is_active = true
+
+  # User profile and notifications
+  users:
+    auto_subscribe: true
+    priority: 1
+    query: SELECT * FROM users WHERE id = auth.user_id()
+
+  notifications:
+    auto_subscribe: true
+    priority: 2
+    query: SELECT * FROM notifications WHERE user_id = auth.user_id()
+
+  # Branch-wide data (managers, storekeepers, accountants, all cashiers)
+  branch_data:
+    auto_subscribe: true
+    priority: 2
+    queries:
+      - SELECT * FROM pos_outlets WHERE branch_id = (auth.jwt() ->> 'branch_id')::int AND is_active = true
+      - SELECT * FROM pos_outlet_assignments WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
+      - SELECT * FROM pos_outlet_items WHERE branch_id = (auth.jwt() ->> 'branch_id')::int AND is_active = true
+      - SELECT * FROM branch_stock WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
+      - SELECT * FROM branch_stock_movements WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
+      - SELECT * FROM staff_credit_bills WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
+
+  # POS outlet data for the cashier's active outlet
+  outlet_data:
+    auto_subscribe: true
+    priority: 3
+    queries:
+      - SELECT * FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
+      - SELECT * FROM pos_shift_orders WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
+      - SELECT * FROM pos_shift_payments WHERE shift_id IN (
+          SELECT id FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
+        )
+      - SELECT * FROM pos_shift_stock_counts WHERE shift_id IN (
+          SELECT id FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
+        )
+      - SELECT * FROM pos_void_requests WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
+      - SELECT * FROM pos_item_void_requests WHERE shift_id IN (
+          SELECT id FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
+        )
+      - SELECT * FROM pos_item_exchange_requests WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
