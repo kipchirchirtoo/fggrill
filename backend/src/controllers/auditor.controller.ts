@@ -2549,7 +2549,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const days = Math.max(1, Math.ceil((new Date(endIso).getTime() - new Date(startIso).getTime()) / (24 * 60 * 60 * 1000)));
 
     let restQuery = supabase.from('restaurant_orders').select('id, branch_id, shift_id, created_at, order_type, room_number, department').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
-    let barQuery = supabase.from('bar_orders').select('id, branch_id, created_at').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
+    let barQuery = supabase.from('bar_orders').select('id, branch_id, outlet_id, created_at').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
     let outletOrderQuery = supabase
       .from('pos_shift_orders')
       .select('id, outlet_id, shift_id, order_number, order_type, room_number, customer_name, status, payment_status, total_amount, items, created_at, kitchen_status, kitchen_ready_at, updated_at')
@@ -2602,6 +2602,46 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     if (outletShiftsRes.error) throw outletShiftsRes.error;
     if (legacyShiftsRes.error) throw legacyShiftsRes.error;
 
+    // bar_orders has no shift_id column of its own — it only carries
+    // outlet_id. Recover which cashier shift each bar sale belongs to by
+    // overlapping the order's timestamp against that outlet's pos_outlet_shifts
+    // window, the same shifts already used for shift_revenue/by_shift elsewhere
+    // on this screen. Without this, every "Bar" item falls into 'no_shift' and
+    // disappears the instant a specific shift (rather than "All Shifts") is
+    // selected.
+    const barOutletIds = [...new Set(barOrders.map((order: any) => order.outlet_id).filter(Boolean))];
+    let barOutletShifts: any[] = [];
+    if (barOutletIds.length) {
+      const { data: barShiftData, error: barShiftError } = await supabase
+        .from('pos_outlet_shifts')
+        .select('id, outlet_id, cashier_id, branch_id, shift_number, opened_at, closed_at, status')
+        .in('outlet_id', barOutletIds)
+        .lte('opened_at', endIso)
+        .or(`closed_at.gte.${startIso},closed_at.is.null`);
+      if (barShiftError) throw barShiftError;
+      barOutletShifts = barShiftData || [];
+    }
+    const allOutletShifts = [
+      ...(outletShiftsRes.data || []),
+      ...barOutletShifts.filter((shift: any) =>
+        !(outletShiftsRes.data || []).some((existing: any) => String(existing.id) === String(shift.id)))
+    ];
+    const outletShiftsByOutletId: Record<string, any[]> = {};
+    allOutletShifts.forEach((shift: any) => {
+      const key = String(shift.outlet_id);
+      (outletShiftsByOutletId[key] ||= []).push(shift);
+    });
+    const findShiftForBarOrder = (order: any): string | undefined => {
+      if (!order.outlet_id || !order.created_at) return undefined;
+      const orderTime = new Date(order.created_at).getTime();
+      const match = (outletShiftsByOutletId[String(order.outlet_id)] || []).find((shift: any) => {
+        const openedAt = shift.opened_at ? new Date(shift.opened_at).getTime() : NaN;
+        const closedAt = shift.closed_at ? new Date(shift.closed_at).getTime() : Infinity;
+        return Number.isFinite(openedAt) && orderTime >= openedAt && orderTime <= closedAt;
+      });
+      return match ? String(match.id) : undefined;
+    };
+
     const outletMap = (outletsRes.data || []).reduce((acc: Record<string, any>, outlet: any) => {
       acc[String(outlet.id)] = outlet;
       return acc;
@@ -2646,7 +2686,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     };
 
     const shiftMetaMap: Record<string, any> = {};
-    (outletShiftsRes.data || []).forEach((shift: any) => {
+    allOutletShifts.forEach((shift: any) => {
       const outletName = outletMap[String(shift.outlet_id)]?.name || 'Outlet';
       const cashierName = shiftCashierNameMap[String(shift.cashier_id)] || 'Unknown Cashier';
       shiftMetaMap[String(shift.id)] = {
@@ -2910,6 +2950,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           source: 'bar',
           outletGroup: order.room_number ? 'rooms' : 'bar',
           soldAt: order.created_at,
+          shiftId: findShiftForBarOrder(order),
           orderId: String(order.id)
         });
       });
