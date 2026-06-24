@@ -75,7 +75,16 @@ export const getItems = async (
       .eq('is_active', true);
 
     if (category) query = query.eq('category', category);
-    if (store_type) query = query.eq('store_type', store_type);
+    if (store_type) {
+      query = query.eq('store_type', store_type);
+    } else {
+      // Exclude pure kitchen/restaurant menu items from every store view —
+      // these are prepared dishes tracked by the kitchen, not physical store stock.
+      query = query
+        .not('category', 'eq', 'KITCHEN MENU')
+        .not('sku', 'like', 'MENU-%')
+        .not('sku', 'like', 'FGH-%');
+    }
 
     if (search) {
       const s = String(search).trim();
