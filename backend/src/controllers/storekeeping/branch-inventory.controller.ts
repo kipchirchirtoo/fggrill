@@ -1200,6 +1200,9 @@ export const getMasterCatalog = async (
       .from('inventory_items')
       .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, is_active, store_type, metadata, created_at, updated_at')
       .eq('is_active', true)
+      .not('category', 'eq', 'KITCHEN MENU')
+      .not('sku', 'like', 'MENU-%')
+      .not('sku', 'like', 'FGH-%')
       .order('item_name');
 
     if (category) {
