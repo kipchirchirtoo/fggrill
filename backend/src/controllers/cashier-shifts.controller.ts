@@ -83,7 +83,12 @@ async function verifyStocktakesComplete(
         .eq('branch_id', branchId)
         .eq('count_date', date)
         .in('location', requiredLocations.map(l => l.key))
-        .not('status', 'in', ['draft', 'rejected'])
+        // supabase-js 2.84 does not wrap an array third-arg in parens when
+        // serializing .not(col, 'in', [...]) — PostgREST then rejects the
+        // filter outright ("failed to parse filter"), the error is swallowed
+        // below, and every location silently reads back as missing. Passing
+        // the pre-formatted Postgres list string avoids the serialization bug.
+        .not('status', 'in', '(draft,rejected)')
         .limit(requiredLocations.length);
 
     if (error) {

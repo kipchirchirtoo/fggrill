@@ -73,7 +73,11 @@ class BookingService {
       const { data: booked } = await supabase
         .from('reservations')
         .select('room_id')
-        .not('status', 'in', [BookingStatus.CANCELLED, BookingStatus.CHECKED_OUT])
+        // supabase-js does not parenthesize an array third-arg when serializing
+        // .not(col, 'in', [...]) — PostgREST rejects the filter, the error is
+        // swallowed by the destructure below, and every room reads back as
+        // available regardless of existing bookings. Use the pre-formatted list.
+        .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
         .lt('check_in_date', checkOutDate)
         .gt('check_out_date', checkInDate);
 
