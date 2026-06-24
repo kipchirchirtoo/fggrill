@@ -124,15 +124,33 @@ const ensureInventoryItems = async (
     const skus = drinks.map(d => d.sku).filter(Boolean);
     if (skus.length === 0) return drinkIdToInvId;
 
-    // Check which already exist
+    // FIRST: look up existing inventory_items by name (case-insensitive).
+    // This reuses the central catalog's FG-xxx rows (e.g. "4TH STREET SWEET RED")
+    // instead of creating duplicate FGB-xxx shadow rows for the same physical item.
+    const drinkIdToInvIdByName = new Map<string, string>();
+    const names = drinks.map(d => d.name).filter(Boolean);
+    if (names.length > 0) {
+        const { rows: nameRows } = await db.query(
+            `SELECT id, item_name FROM public.inventory_items
+             WHERE LOWER(TRIM(item_name)) = ANY($1) AND is_active = true`,
+            [names.map((n: string) => n.toLowerCase().trim())]
+        ).catch(() => ({ rows: [] }));
+        const nameToInvId = new Map((nameRows as any[]).map((r: any) => [r.item_name.toLowerCase().trim(), r.id]));
+        for (const d of drinks) {
+            const invId = nameToInvId.get(d.name.toLowerCase().trim());
+            if (invId) drinkIdToInvIdByName.set(d.id, invId);
+        }
+    }
+
+    // Check which already exist by SKU (original path)
     const { data: existing } = await supabase
         .from('inventory_items')
         .select('id, sku')
         .in('sku', skus);
     const existingBySku = new Map((existing || []).map((i: any) => [i.sku, i.id]));
 
-    // Identify missing ones
-    const toCreate = drinks.filter(d => d.sku && !existingBySku.has(d.sku));
+    // Only create new rows for drinks that have neither a name match nor a SKU match
+    const toCreate = drinks.filter(d => d.sku && !existingBySku.has(d.sku) && !drinkIdToInvIdByName.has(d.id));
     if (toCreate.length > 0) {
         const rows = toCreate.map(d => ({
             sku: d.sku,
@@ -152,11 +170,12 @@ const ensureInventoryItems = async (
         for (const c of (created || [])) existingBySku.set(c.sku, c.id);
     }
 
-    // Build the mapping
+    // Build the mapping — name match (FG-xxx central catalog) takes priority
     for (const d of drinks) {
-        if (d.sku && existingBySku.has(d.sku)) {
-            drinkIdToInvId.set(d.id, existingBySku.get(d.sku)!);
-        }
+        const nameMatchId = drinkIdToInvIdByName.get(d.id);
+        const skuMatchId = d.sku ? existingBySku.get(d.sku) : undefined;
+        const resolvedId = nameMatchId || skuMatchId;
+        if (resolvedId) drinkIdToInvId.set(d.id, resolvedId);
     }
 
     // Stamp inventory_item_id back onto bar_drinks rows that were missing it,
