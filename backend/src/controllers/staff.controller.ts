@@ -2376,15 +2376,17 @@ export const getStaffByIdentifier = async (
     const numericPart = normalizedId.replace(/[A-Z]/g, '');
     
     // Try exact match first (fast path)
-    // Staff numbers can live in id_number, employee_number, or employee_id
-    // depending on which flow created the record - check all of them, plus national_id.
+    // Staff numbers can live in id_number or employee_number depending on which
+    // flow created the record - check both, plus national_id.
+    // Note: employee_id is NOT a real column on this table - referencing it in
+    // a Postgres filter throws and silently fails the whole query.
     let { data: staff, error } = await supabase
       .from('staff_profiles')
       .select(`
         *,
         user: users!user_id(id, first_name, last_name, email, phone_number, role, department)
       `)
-      .or(`id_number.eq.${identifier},national_id.eq.${identifier},employee_number.eq.${identifier},employee_id.eq.${identifier}`)
+      .or(`id_number.eq.${identifier},national_id.eq.${identifier},employee_number.eq.${identifier}`)
       .eq('status', 'active')
       .maybeSingle();
 
@@ -2404,17 +2406,15 @@ export const getStaffByIdentifier = async (
           const staffIdNorm = (s.id_number || '').replace(/[-\s]/g, '').toUpperCase();
           const nationalIdNorm = (s.national_id || '').replace(/[-\s]/g, '').toUpperCase();
           const employeeNumberNorm = (s.employee_number || '').replace(/[-\s]/g, '').toUpperCase();
-          const employeeIdNorm = (s.employee_id || '').replace(/[-\s]/g, '').toUpperCase();
           return staffIdNorm === normalizedId ||
             nationalIdNorm === normalizedId ||
-            employeeNumberNorm === normalizedId ||
-            employeeIdNorm === normalizedId;
+            employeeNumberNorm === normalizedId;
         });
 
         // Priority 2: If numeric part exists, match by numeric suffix (FG-005 matches FGH005)
         if (!staff && numericPart && numericPart.length >= 2) {
           staff = staffList.find((s: any) => {
-            const candidates = [s.id_number, s.employee_number, s.employee_id];
+            const candidates = [s.id_number, s.employee_number];
             return candidates.some((value: any) => {
               const norm = (value || '').replace(/[-\s]/g, '').toUpperCase();
               const numeric = norm.replace(/[A-Z]/g, '');
