@@ -1558,7 +1558,6 @@ class BranchStorekeeperRepository {
   Future<Map<String, dynamic>> recordPastryProduction({
     required String itemId,
     required num quantityProduced,
-    String? shiftId,
   }) async {
     final branchId = await _branchId;
     final response = await _dio.post(
@@ -1567,20 +1566,23 @@ class BranchStorekeeperRepository {
         if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId),
         'item_id': itemId,
         'quantity_produced': quantityProduced,
-        if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
       },
       options: await _authOptions,
     );
     return _unwrapMap(response.data);
   }
 
+  /// shiftId must be a real, open kitchen_shifts.id — the batch is issued
+  /// into that shift's stock ledger.
   Future<Map<String, dynamic>> issuePastryToKitchen(
     String id, {
+    required String shiftId,
     num? issuedQuantity,
   }) async {
-    final response = await _dio.post(
+    final response = await _dio.put(
       '/storekeeping/pastry-production/$id/issue',
       data: {
+        'shift_id': shiftId,
         if (issuedQuantity != null) 'issued_quantity': issuedQuantity,
       },
       options: await _authOptions,

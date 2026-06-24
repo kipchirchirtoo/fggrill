@@ -70,7 +70,7 @@ class BookingService {
     try {
       // Find rooms that are already booked for the requested dates
       // Overlap condition: (BookedStart < RequestEnd) AND (BookedEnd > RequestStart)
-      const { data: booked } = await supabase
+      const { data: booked, error: bookedError } = await supabase
         .from('reservations')
         .select('room_id')
         // supabase-js does not parenthesize an array third-arg when serializing
@@ -80,6 +80,10 @@ class BookingService {
         .not('status', 'in', `(${BookingStatus.CANCELLED},${BookingStatus.CHECKED_OUT})`)
         .lt('check_in_date', checkOutDate)
         .gt('check_out_date', checkInDate);
+
+      // A failed query here must not silently read as "no bookings exist" —
+      // that's what double-books a room when this overlap check breaks.
+      if (bookedError) throw bookedError;
 
       const bookedIds = (booked || []).map(b => b.room_id);
 

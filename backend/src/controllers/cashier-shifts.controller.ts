@@ -49,56 +49,79 @@ function isShiftManager(role?: unknown): boolean {
     return SHIFT_MANAGER_ROLES.has(normalized) || isGlobalRole(normalized);
 }
 
+// All cashier shifts require ALL stocktakes to be completed before opening:
+// Store (branch_store), Bar (any bar location), and Kitchen (kitchen). This ensures
+// the branch has a complete inventory picture before any POS activity begins.
+function requiredStocktakeLocationsForRole(
+    role: unknown,
+    branchId: number
+): Array<{ key: string; label: string; isBarGroup?: boolean }> {
+    return [
+        { key: 'branch_store', label: 'Store stocktake' },
+        { key: 'bar', label: 'Bar stocktake', isBarGroup: true },
+        { key: 'kitchen', label: 'Kitchen stocktake' },
+    ];
+}
+
 /**
- * Ensure all required stocktake locations are submitted for a branch/date
- * before a cashier shift can be opened. Required stocktakes:
- *   1. Main Bar
- *   2. Executive Bar (Kyogong / branch 1 only — no other branch has one)
- *   3. Branch Store
- *   4. Kitchen
+ * Ensure ALL stocktakes (Store, Bar, Kitchen) are submitted for the branch/date
+ * before any cashier shift can be opened/approved. This guarantees a complete
+ * inventory snapshot before POS activity begins.
  *
- * All counts are now stored in the unified stock_counts table. A location is
+ * All counts are stored in the unified stock_counts table. A location is
  * considered complete if there is at least one non-draft, non-rejected count
  * for that branch/date/location.
+ *
+ * For Bar, ANY bar location (main_bar, executive_bar, etc.) counts as complete.
  *
  * Returns { ok: true } if all are complete, otherwise { ok: false, missing: [...] }.
  */
 async function verifyStocktakesComplete(
     branchId: number,
-    date: string
+    date: string,
+    cashierRole: unknown
 ): Promise<{ ok: boolean; missing: string[] }> {
-    // Only Kyogong (branch 1) has a separate Executive Bar outlet — every
-    // other branch has just one bar (main_bar), so the executive_bar
-    // stocktake can never be satisfied there and must not be required.
-    const requiredLocations = [
-        { key: 'main_bar', label: 'Main Bar stocktake' },
-        ...(branchId === 1 ? [{ key: 'executive_bar', label: 'Executive Bar stocktake' }] : []),
-        { key: 'branch_store', label: 'Branch Store stocktake' },
-        { key: 'kitchen', label: 'Kitchen stocktake' }
-    ];
-
-    const { data: completedCounts, error } = await supabase
-        .from('stock_counts')
-        .select('location')
-        .eq('branch_id', branchId)
-        .eq('count_date', date)
-        .in('location', requiredLocations.map(l => l.key))
-        // supabase-js 2.84 does not wrap an array third-arg in parens when
-        // serializing .not(col, 'in', [...]) — PostgREST then rejects the
-        // filter outright ("failed to parse filter"), the error is swallowed
-        // below, and every location silently reads back as missing. Passing
-        // the pre-formatted Postgres list string avoids the serialization bug.
-        .not('status', 'in', '(draft,rejected)')
-        .limit(requiredLocations.length);
-
-    if (error) {
-        logger.warn('verifyStocktakesComplete stock_counts query error:', error);
+    const requiredLocations = requiredStocktakeLocationsForRole(cashierRole, branchId);
+    if (requiredLocations.length === 0) {
+        return { ok: true, missing: [] };
     }
 
-    const completedLocations = new Set((completedCounts || []).map(c => c.location));
-    const missing = requiredLocations
-        .filter(l => !completedLocations.has(l.key))
-        .map(l => l.label);
+    // Check each required location separately
+    const missing: string[] = [];
+
+    for (const loc of requiredLocations) {
+        if (loc.isBarGroup) {
+            // Bar group: ANY bar location stocktake counts
+            const { data: barCounts, error: barError } = await supabase
+                .from('stock_counts')
+                .select('location')
+                .eq('branch_id', branchId)
+                .eq('count_date', date)
+                .eq('store_type', 'bar')
+                .not('status', 'in', '(draft,rejected)')
+                .limit(1);
+
+            if (barError) throw barError;
+            if (!barCounts || barCounts.length === 0) {
+                missing.push(loc.label);
+            }
+        } else {
+            // Exact location match
+            const { data: locCounts, error: locError } = await supabase
+                .from('stock_counts')
+                .select('location')
+                .eq('branch_id', branchId)
+                .eq('count_date', date)
+                .eq('location', loc.key)
+                .not('status', 'in', '(draft,rejected)')
+                .limit(1);
+
+            if (locError) throw locError;
+            if (!locCounts || locCounts.length === 0) {
+                missing.push(loc.label);
+            }
+        }
+    }
 
     return { ok: missing.length === 0, missing };
 }
@@ -1114,9 +1137,10 @@ export const startShift = async (
             targetUser.email ||
             'Cashier';
 
-        // All required stocktakes must be completed before a cashier shift can open.
+        // The stocktake(s) relevant to this cashier's own station must be
+        // completed before their shift can open.
         const today = todayInBranchTimezone();
-        const stocktakeGate = await verifyStocktakesComplete(targetBranchId, today);
+        const stocktakeGate = await verifyStocktakesComplete(targetBranchId, today, targetUser.role);
         if (!stocktakeGate.ok) {
             throw new AppError(
                 `Cannot open cashier shift until all stocktakes are completed: ${stocktakeGate.missing.join(', ')}`,
@@ -1268,9 +1292,21 @@ export const approveShiftOpening = async (
             throw new AppError('Only branch accountants or managers can approve cashier shift openings.', 403);
         }
 
-        // All required stocktakes must be completed before a cashier shift can be approved.
+        // The stocktake(s) relevant to this cashier's own station must be
+        // completed before their shift opening can be approved.
+        const { data: cashierUser, error: cashierRoleError } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', shift.cashier_id)
+            .maybeSingle();
+        if (cashierRoleError) throw cashierRoleError;
+
         const shiftDate = todayInBranchTimezone();
-        const stocktakeGate = await verifyStocktakesComplete(Number(shift.branch_id), shiftDate);
+        const stocktakeGate = await verifyStocktakesComplete(
+            Number(shift.branch_id),
+            shiftDate,
+            cashierUser?.role
+        );
         if (!stocktakeGate.ok) {
             throw new AppError(
                 `Cannot approve cashier shift until all stocktakes are completed: ${stocktakeGate.missing.join(', ')}`,
@@ -1555,20 +1591,24 @@ export const closeShift = async (
         }
 
         // Legacy restaurant / bar orders only count for cashiers who serve them.
+        // A failed query here must not silently read as "zero unpaid bills" —
+        // that would let a shift close with real unsettled bills outstanding.
         let unpaidRestCount = 0;
         if (canCloseRestaurant) {
-            const { data: unpaidRestOrders } = await supabase.from('restaurant_orders')
+            const { data: unpaidRestOrders, error: unpaidRestError } = await supabase.from('restaurant_orders')
                 .select('id')
                 .eq('branch_id', shift.branch_id)
                 .in('payment_status', UNSETTLED);
+            if (unpaidRestError) throw unpaidRestError;
             unpaidRestCount = unpaidRestOrders?.length || 0;
         }
         let unpaidBarCount = 0;
         if (canCloseBar) {
-            const { data: unpaidBarOrders } = await supabase.from('bar_orders')
+            const { data: unpaidBarOrders, error: unpaidBarError } = await supabase.from('bar_orders')
                 .select('id')
                 .eq('branch_id', shift.branch_id)
                 .in('payment_status', UNSETTLED);
+            if (unpaidBarError) throw unpaidBarError;
             unpaidBarCount = unpaidBarOrders?.length || 0;
         }
 

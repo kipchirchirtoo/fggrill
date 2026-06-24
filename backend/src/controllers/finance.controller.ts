@@ -851,7 +851,10 @@ export const getProfitLossStatement = async (
       .eq('status', 'posted')
       .neq('transaction_type', 'refund');
 
-    if (cashierErr) logger.error('Error fetching cashier transactions for P&L:', cashierErr);
+    // A failed query here must not silently read as "zero cashier revenue" —
+    // that understates revenue and overstates how good/bad the P&L looks
+    // with no visible error to whoever's reading the report.
+    if (cashierErr) throw cashierErr;
 
     let roomRevenue = 0;
     let restaurantRevenue = 0;
@@ -878,12 +881,24 @@ export const getProfitLossStatement = async (
     // ============================================================
     // 2. REVENUE — fallback to order tables (ensures completeness)
     // ============================================================
-    const [{ data: restOrders }, { data: barOrders }, { data: bookingsData }, { data: posOrders }] = await Promise.all([
+    const [
+      { data: restOrders, error: restOrdersErr },
+      { data: barOrders, error: barOrdersErr },
+      { data: bookingsData, error: bookingsErr },
+      { data: posOrders, error: posOrdersErr },
+    ] = await Promise.all([
       supabase.from('restaurant_orders').select('id, total_amount, grand_total, status').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
       supabase.from('bar_orders').select('id, total, subtotal, status').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
       supabase.from('bookings').select('total_amount, status').eq('branch_id', branchId).gte('check_in_date', start).lte('check_in_date', end).in('status', ['confirmed', 'checked_in', 'checked_out']),
       supabase.from('pos_shift_orders').select('id, total_amount, status, outlet_id').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
     ]);
+    // These feed the "fallback to order tables" revenue path below — a failed
+    // query must not silently read as "no orders," or it'll just suppress
+    // the very fallback meant to catch missing cashier_transactions rows.
+    if (restOrdersErr) throw restOrdersErr;
+    if (barOrdersErr) throw barOrdersErr;
+    if (bookingsErr) throw bookingsErr;
+    if (posOrdersErr) throw posOrdersErr;
 
     const orderRoomRevenue = (bookingsData || []).reduce((s: number, b: any) => s + n(b.total_amount), 0);
     const orderRestaurantRevenue = (restOrders || []).reduce((s: number, o: any) => s + (n(o.grand_total) || n(o.total_amount)), 0);
@@ -904,20 +919,26 @@ export const getProfitLossStatement = async (
     let cogs = 0;
 
     // POS stock counts (direct cost tracking)
-    const { data: stockCounts } = await supabase
+    const { data: stockCounts, error: stockCountsErr } = await supabase
       .from('pos_shift_stock_counts')
       .select('sold_quantity, cost_price')
       .eq('branch_id', branchId)
       .gte('created_at', startTs)
       .lte('created_at', endTs);
+    if (stockCountsErr) throw stockCountsErr;
     (stockCounts || []).forEach((c: any) => { cogs += n(c.sold_quantity) * n(c.cost_price); });
 
     // Restaurant items COGS
     if ((restOrders || []).length) {
-      const [{ data: menuItems }, { data: restItems }] = await Promise.all([
+      const [
+        { data: menuItems, error: menuItemsErr },
+        { data: restItems, error: restItemsErr },
+      ] = await Promise.all([
         supabase.from('restaurant_menu_items').select('id, cost_price').or(`branch_id.is.null,branch_id.eq.${branchId}`),
         supabase.from('restaurant_order_items').select('order_id, menu_item_id, quantity').in('order_id', restOrders!.map((o: any) => o.id)),
       ]);
+      if (menuItemsErr) throw menuItemsErr;
+      if (restItemsErr) throw restItemsErr;
       const costMap = new Map<string, number>();
       (menuItems || []).forEach((m: any) => costMap.set(String(m.id), n(m.cost_price)));
       (restItems || []).forEach((it: any) => { cogs += n(it.quantity) * (costMap.get(String(it.menu_item_id)) || 0); });
@@ -925,34 +946,49 @@ export const getProfitLossStatement = async (
 
     // Bar items COGS
     if ((barOrders || []).length) {
-      const [{ data: barDrinks }, { data: barItems }] = await Promise.all([
+      const [
+        { data: barDrinks, error: barDrinksErr },
+        { data: barItems, error: barItemsErr },
+      ] = await Promise.all([
         supabase.from('bar_drinks').select('id, cost_price').or(`branch_id.is.null,branch_id.eq.${branchId}`),
         supabase.from('bar_order_items').select('order_id, drink_id, quantity').in('order_id', barOrders!.map((o: any) => o.id)),
       ]);
+      if (barDrinksErr) throw barDrinksErr;
+      if (barItemsErr) throw barItemsErr;
       const costMap = new Map<string, number>();
       (barDrinks || []).forEach((d: any) => costMap.set(String(d.id), n(d.cost_price)));
       (barItems || []).forEach((it: any) => { cogs += n(it.quantity) * (costMap.get(String(it.drink_id)) || 0); });
     }
 
     // Purchases as COGS fallback
-    const { data: purchases } = await supabase
+    const { data: purchases, error: purchasesErr } = await supabase
       .from('purchases')
       .select('total_amount')
       .eq('branch_id', branchId)
       .gte('purchase_date', start)
       .lte('purchase_date', end)
       .in('status', ['approved', 'completed']);
+    if (purchasesErr) throw purchasesErr;
     const purchaseCogs = (purchases || []).reduce((s: number, p: any) => s + n(p.total_amount), 0);
     cogs += purchaseCogs;
 
     // ============================================================
     // 4. EXPENSES — all branch expense sources
     // ============================================================
-    const [{ data: expenses }, { data: financeExpenses }, { data: pettyCash }] = await Promise.all([
+    const [
+      { data: expenses, error: expensesErr },
+      { data: financeExpenses, error: financeExpensesErr },
+      { data: pettyCash, error: pettyCashErr },
+    ] = await Promise.all([
       supabase.from('expenses').select('amount, category, status, approval_status').eq('branch_id', branchId).gte('expense_date', start).lte('expense_date', end),
       supabase.from('finance_transactions').select('amount, category, transaction_type').eq('branch_id', branchId).eq('transaction_type', 'expense').gte('created_at', startTs).lte('created_at', endTs),
       supabase.from('petty_cash_transactions').select('amount, status').eq('branch_id', branchId).gte('date', start).lte('date', end),
     ]);
+    // A failed query here must not silently read as "zero expenses" — that
+    // understates costs and overstates net profit with no visible error.
+    if (expensesErr) throw expensesErr;
+    if (financeExpensesErr) throw financeExpensesErr;
+    if (pettyCashErr) throw pettyCashErr;
 
     const expensesByCategory: Record<string, number> = {};
     let totalExpenses = 0;

@@ -158,70 +158,115 @@ async function buildRecipeInputsFromOutputs(outputs: JsonRecord[]): Promise<Json
 
     const sourceTable = textValue(outletItem.source_table);
     const sourceItemId = textValue(outletItem.source_item_id);
-    if (sourceTable !== 'restaurant_menu_items' || !sourceItemId) {
-      // No menu item link — record production output only, no ingredient deduction
-      continue;
-    }
+    let matchedBomRecipe = false;
 
-    const recipeResult = await db.query(
-      `
-        SELECT
-          r.id AS recipe_id,
-          r.name AS recipe_name,
-          ri.item_sku,
-          ri.item_name,
-          ri.quantity_required,
-          ri.unit,
-          COALESCE(ii.default_unit_cost, 0) AS unit_cost
-        FROM recipes r
-        JOIN recipe_items ri ON ri.recipe_id = r.id
-        LEFT JOIN public.inventory_items ii ON ii.sku = ri.item_sku
-        WHERE r.menu_item_id = $1::uuid
-          AND COALESCE(r.status, 'active') = 'active'
-        ORDER BY ri.item_name
-      `,
-      [sourceItemId]
-    );
+    if (sourceTable === 'restaurant_menu_items' && sourceItemId) {
+      const recipeResult = await db.query(
+        `
+          SELECT
+            r.id AS recipe_id,
+            r.name AS recipe_name,
+            ri.item_sku,
+            ri.item_name,
+            ri.quantity_required,
+            ri.unit,
+            COALESCE(ii.default_unit_cost, 0) AS unit_cost
+          FROM recipes r
+          JOIN recipe_items ri ON ri.recipe_id = r.id
+          LEFT JOIN public.inventory_items ii ON ii.sku = ri.item_sku
+          WHERE r.menu_item_id = $1::uuid
+            AND COALESCE(r.status, 'active') = 'active'
+          ORDER BY ri.item_name
+        `,
+        [sourceItemId]
+      );
 
-    if (!recipeResult.rows.length) {
-      // No recipe configured — record production output only, no ingredient deduction
-      output.metadata = { ...(output.metadata || {}), menu_item_id: sourceItemId, recipe_id: null };
-      continue;
-    }
+      if (recipeResult.rows.length) {
+        matchedBomRecipe = true;
+        output.metadata = {
+          ...(output.metadata || {}),
+          recipe_id: recipeResult.rows[0].recipe_id,
+          menu_item_id: sourceItemId,
+          recipe_name: recipeResult.rows[0].recipe_name
+        };
 
-    output.metadata = {
-      ...(output.metadata || {}),
-      recipe_id: recipeResult.rows[0].recipe_id,
-      menu_item_id: sourceItemId,
-      recipe_name: recipeResult.rows[0].recipe_name
-    };
+        for (const ingredient of recipeResult.rows) {
+          const sku = textValue(ingredient.item_sku);
+          const quantity = outputQuantity * numberValue(ingredient.quantity_required);
+          if (!sku || quantity <= 0) continue;
 
-    for (const ingredient of recipeResult.rows) {
-      const sku = textValue(ingredient.item_sku);
-      const quantity = outputQuantity * numberValue(ingredient.quantity_required);
-      if (!sku || quantity <= 0) continue;
+          const existing = inputsBySku.get(sku);
+          if (existing) {
+            existing.quantity = numberValue(existing.quantity) + quantity;
+            continue;
+          }
 
-      const existing = inputsBySku.get(sku);
-      if (existing) {
-        existing.quantity = numberValue(existing.quantity) + quantity;
-        continue;
-      }
-
-      inputsBySku.set(sku, {
-        item_sku: sku,
-        item_name: ingredient.item_name || sku,
-        quantity,
-        unit: ingredient.unit_of_measure || 'units',
-        unit_cost: numberValue(ingredient.unit_cost),
-        metadata: {
-          source: 'recipe_auto_deduction',
-          recipe_id: ingredient.recipe_id,
-          output_item_id: outletItem.id,
-          output_item_name: outletItem.name || outletItem.sku,
-          output_quantity: outputQuantity
+          inputsBySku.set(sku, {
+            item_sku: sku,
+            item_name: ingredient.item_name || sku,
+            quantity,
+            unit: ingredient.unit_of_measure || 'units',
+            unit_cost: numberValue(ingredient.unit_cost),
+            metadata: {
+              source: 'recipe_auto_deduction',
+              recipe_id: ingredient.recipe_id,
+              output_item_id: outletItem.id,
+              output_item_name: outletItem.name || outletItem.sku,
+              output_quantity: outputQuantity
+            }
+          });
         }
-      });
+      } else {
+        output.metadata = { ...(output.metadata || {}), menu_item_id: sourceItemId, recipe_id: null };
+      }
     }
+
+    if (matchedBomRecipe) continue;
+
+    // No menu-item BOM — fall back to a single-ingredient yield recipe
+    // configured in Food Control (e.g. raw potatoes -> chips). Without this,
+    // a Food Control recipe has no effect on Outlet Production's deduction.
+    const yieldRecipeResult = await db.query(
+      `
+        SELECT id, raw_item_sku, raw_item_name, raw_quantity, raw_unit, produced_quantity
+        FROM kitchen_production_recipes
+        WHERE is_active = true
+          AND (pos_outlet_item_id = $1::uuid OR produced_item_sku = $2)
+        ORDER BY (pos_outlet_item_id = $1::uuid) DESC
+        LIMIT 1
+      `,
+      [outletItem.id, outletItem.sku || null]
+    );
+    const yieldRecipe = yieldRecipeResult.rows[0];
+    if (!yieldRecipe || numberValue(yieldRecipe.produced_quantity) <= 0 || !textValue(yieldRecipe.raw_item_sku)) {
+      continue;
+    }
+
+    const sku = textValue(yieldRecipe.raw_item_sku);
+    const quantity = outputQuantity * (numberValue(yieldRecipe.raw_quantity) / numberValue(yieldRecipe.produced_quantity));
+    if (quantity <= 0) continue;
+
+    output.metadata = { ...(output.metadata || {}), kitchen_production_recipe_id: yieldRecipe.id };
+    const existing = inputsBySku.get(sku);
+    if (existing) {
+      existing.quantity = numberValue(existing.quantity) + quantity;
+      continue;
+    }
+
+    inputsBySku.set(sku, {
+      item_sku: sku,
+      item_name: yieldRecipe.raw_item_name || sku,
+      quantity,
+      unit: yieldRecipe.raw_unit || 'units',
+      unit_cost: 0,
+      metadata: {
+        source: 'kitchen_production_recipe_auto_deduction',
+        kitchen_production_recipe_id: yieldRecipe.id,
+        output_item_id: outletItem.id,
+        output_item_name: outletItem.name || outletItem.sku,
+        output_quantity: outputQuantity
+      }
+    });
   }
 
   return Array.from(inputsBySku.values());
@@ -650,14 +695,17 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
       await db.query(
         `
           UPDATE pos_outlet_items
-          SET current_stock = COALESCE(current_stock, 0) + $2,
-              cost_price = CASE WHEN $3 > 0 THEN $3 ELSE cost_price END,
+          SET cost_price = CASE WHEN $2 > 0 THEN $2 ELSE cost_price END,
               track_stock = true,
               updated_at = NOW()
           WHERE id = $1
         `,
-        [outletItem.id, quantity, unitCost]
+        [outletItem.id, unitCost]
       );
+      // Pool-aware + bar-ledger-aware credit (shared with Kitchen Shift
+      // production posting) instead of a raw current_stock increment, so
+      // pooled portions and bar-sourced items credit correctly here too.
+      await BranchInventoryService.creditOutletItemStock(outletItem.id, quantity);
       if (input.shift_id || input.shiftId) {
         const countColumns = await tableColumns('pos_shift_stock_counts');
         const setClauses = [

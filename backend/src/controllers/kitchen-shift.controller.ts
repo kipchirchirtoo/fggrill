@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
-import { recordBarStockMovement } from '../services/unified-bar-stock.service';
+import { creditOutletItemStock, updateBranchStock } from '../services/branch-inventory.service';
 
 const asyncWrap = (fn: (req: Request, res: Response) => Promise<void>) =>
     (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
@@ -111,6 +111,21 @@ export const openKitchenShift = asyncWrap(async (req: Request, res: Response) =>
     }).select().single();
     if (e1) throw new AppError(e1.message, 500);
 
+    // Opening a shift with stock is a real issue from branch store to the
+    // kitchen line — debit branch-wide stock the same way Outlet Production
+    // already does for raw consumption, so the two systems stay consistent
+    // instead of the shift's opening_stock being an arbitrary self-reported
+    // number with no link to actual branch stock.
+    for (const it of opening_items) {
+        if (n(it.quantity) > 0) {
+            await updateBranchStock(
+                Number(branch_id), it.sku, -n(it.quantity), 'KITCHEN_SHIFT_OPEN', userId,
+                'kitchen_shift', shift.id, shift.shift_number,
+                `Kitchen shift ${shift.shift_number} opened with ${it.name || it.sku}`
+            );
+        }
+    }
+
     const items = opening_items.map((it: any) => ({
         shift_id: shift.id, branch_id, item_sku: it.sku, item_name: it.name,
         unit_of_measure: it.unit, cost_price: n(it.cost_price), opening_stock: n(it.quantity), additions: 0, sold_quantity: 0, spoilage_quantity: 0
@@ -131,6 +146,13 @@ export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
 
     const results: any[] = [];
     for (const it of items || []) {
+        if (n(it.quantity) > 0) {
+            await updateBranchStock(
+                Number(shift.branch_id), it.sku, -n(it.quantity), 'KITCHEN_SHIFT_ADD_STOCK', userId,
+                'kitchen_shift', shift_id, undefined,
+                `Added to kitchen shift ${shift_id} mid-shift: ${it.name || it.sku}`
+            );
+        }
         const { data: ex } = await supabase.from('kitchen_shift_items').select('*').eq('shift_id', shift_id).eq('item_sku', it.sku).maybeSingle();
         if (ex) {
             const { data: upd } = await supabase.from('kitchen_shift_items').update({
@@ -227,56 +249,10 @@ export const recordProduction = asyncWrap(async (req: Request, res: Response) =>
         }
 
         await supabase.from('kitchen_shift_items').update({ sold_quantity: n(raw.sold_quantity) + n(p.raw_quantity_used) }).eq('id', raw.id);
-        if (p.pos_outlet_item_id) await addToPos(p.pos_outlet_item_id, n(p.produced_quantity));
+        if (p.pos_outlet_item_id) await creditOutletItemStock(p.pos_outlet_item_id, n(p.produced_quantity));
     }
     res.json({ success: true, data: results });
 });
-
-// Pool-aware POS stock increment: if the produced item shares stock with a
-// pool item (e.g. Half/Quarter Chicken sharing the Full Chicken pool), push
-// the pool-equivalent quantity into the pool instead of the item itself.
-async function addToPos(outletItemId: string, qty: number) {
-    const { data: oi } = await supabase.from('pos_outlet_items').select('current_stock,stock_pool_item_id,pool_fraction,outlet_id,source_table,source_item_id,sku').eq('id', outletItemId).single();
-    if (!oi) return;
-
-    // ── Unified bar stock sync ────────────────────────────────────
-    // When kitchen production adds stock to a bar POS outlet, flow it
-    // through the unified ledger so inventory_balances stays in sync.
-    if (oi.source_table === 'bar_drinks' && oi.source_item_id && oi.outlet_id) {
-        try {
-            const { data: outlet } = await supabase
-                .from('pos_outlets')
-                .select('branch_id, outlet_type')
-                .eq('id', oi.outlet_id)
-                .maybeSingle();
-            if (outlet?.branch_id && ['main_bar','executive_bar','kyogong_executive_bar','kyogong_sports_bar'].includes(outlet.outlet_type)) {
-                await recordBarStockMovement({
-                    branchId: outlet.branch_id,
-                    outletId: oi.outlet_id,
-                    drinkId: oi.source_item_id,
-                    sku: oi.sku || undefined,
-                    quantityDelta: qty,
-                    movementType: 'production',
-                    notes: 'Kitchen production added to bar POS'
-                });
-            }
-        } catch (syncErr: any) {
-            logger.warn('Unified bar stock sync failed for kitchen production (non-critical):', syncErr.message);
-        }
-    }
-
-    if (oi.stock_pool_item_id) {
-        const { data: pool } = await supabase.from('pos_outlet_items').select('current_stock').eq('id', oi.stock_pool_item_id).single();
-        if (pool) {
-            await supabase.from('pos_outlet_items').update({
-                current_stock: n(pool.current_stock) + qty * n(oi.pool_fraction || 1),
-                updated_at: new Date().toISOString()
-            }).eq('id', oi.stock_pool_item_id);
-        }
-        return;
-    }
-    await supabase.from('pos_outlet_items').update({ current_stock: n(oi.current_stock) + qty, updated_at: new Date().toISOString() }).eq('id', outletItemId);
-}
 
 // ── CONFIRM ACTUAL PRODUCTION YIELD ──────────────────────────
 // For yield-uncertain (baking) Food Controls: the expected quantity was

@@ -27,28 +27,59 @@ class _PastryProductionScreenState
   void _refresh() => setState(() => _future = _load());
 
   Future<void> _issue(Map<String, dynamic> record) async {
+    final openShifts = await ref
+        .read(branchStorekeeperRepositoryProvider)
+        .getKitchenShifts(status: 'open');
+    if (!mounted) return;
+    if (openShifts.isEmpty) {
+      _notify(context, 'No open Kitchen Shift — open one in Kitchen Sessions first');
+      return;
+    }
+
+    String? shiftId = openShifts.length == 1 ? '${openShifts.first['id']}' : null;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Issue to Kitchen'),
-        content: Text(
-            'Issue ${record['quantity_produced']} of "${record['item_name'] ?? 'this item'}" to the kitchen ledger? This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Issue')),
-        ],
-      ),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) {
+        return AlertDialog(
+          title: const Text('Issue to Kitchen'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  'Issue ${record['quantity_produced']} of "${record['item_name'] ?? 'this item'}" into an open Kitchen Shift. This cannot be undone.'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: shiftId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Kitchen Shift'),
+                items: openShifts
+                    .map((s) => DropdownMenuItem(
+                          value: '${s['id']}',
+                          child: Text('${s['shift_number'] ?? s['id']}'),
+                        ))
+                    .toList(),
+                onChanged: (v) => setDialogState(() => shiftId = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: shiftId == null ? null : () => Navigator.pop(ctx, true),
+                child: const Text('Issue')),
+          ],
+        );
+      }),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || shiftId == null) return;
     setState(() => _issuing = true);
     try {
       await ref
           .read(branchStorekeeperRepositoryProvider)
-          .issuePastryToKitchen('${record['id']}');
+          .issuePastryToKitchen('${record['id']}', shiftId: shiftId!);
       if (mounted) {
         _notify(context, 'Issued to kitchen');
         _refresh();
@@ -149,7 +180,6 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
       .storeItems(storeType: 'pastry', limit: 500);
   String? _itemId;
   final _quantityCtrl = TextEditingController();
-  String _shift = 'day';
   bool _saving = false;
 
   @override
@@ -171,7 +201,6 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
           .recordPastryProduction(
             itemId: _itemId!,
             quantityProduced: quantity,
-            shiftId: _shift,
           );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -229,17 +258,6 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(labelText: 'Quantity'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _shift,
-                decoration: const InputDecoration(labelText: 'Shift'),
-                items: const [
-                  DropdownMenuItem(value: 'day', child: Text('Day Shift')),
-                  DropdownMenuItem(
-                      value: 'night', child: Text('Night Shift')),
-                ],
-                onChanged: (v) => setState(() => _shift = v!),
               ),
               const SizedBox(height: 20),
               SizedBox(

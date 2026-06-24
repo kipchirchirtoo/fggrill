@@ -1,8 +1,6 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth.middleware';
 import {
-    getProfitLossStatement,
-    getExpenseBreakdown,
     getPosProfitLoss,
     exportPosProfitLossPDF,
     getBranchProfitLossRpc
@@ -26,11 +24,8 @@ const FINANCE_ROLES = [
   'general_manager',
 ];
 
-// Get profit & loss statement
-router.get('/profit-loss', authorize(...FINANCE_ROLES), getProfitLossStatement);
-
-// Get expense breakdown
-router.get('/expense-breakdown', authorize(...FINANCE_ROLES), getExpenseBreakdown);
+// NOTE: /profit-loss and /expense-breakdown are handled by finance.routes.ts,
+// which is mounted before this router at the same /finance prefix.
 
 // Per-POS-outlet P&L (cashier transactions + sold items) + branded PDF export
 router.get('/pos-profit-loss', authorize(...FINANCE_ROLES), getPosProfitLoss);

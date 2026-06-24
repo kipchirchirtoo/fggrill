@@ -31,7 +31,7 @@ export const listPastryProduction = async (req: Request, res: Response, next: Ne
 
         let query = supabase
             .from('pastry_production_log')
-            .select('*, item:inventory_items(id, item_name, unit)')
+            .select('*, item:inventory_items(id, sku, item_name, unit)')
             .eq('branch_id', branchId)
             .order('created_at', { ascending: false });
 
@@ -52,14 +52,16 @@ export const listPastryProduction = async (req: Request, res: Response, next: Ne
 };
 
 /**
- * @desc    Record a pastry production batch.
+ * @desc    Record a pastry production batch. Logging production doesn't need
+ *          a shift — that's only chosen when the batch is later issued to a
+ *          specific open Kitchen Shift.
  * @route   POST /api/storekeeping/pastry-production
- *          body: { branch_id, shift_id?, item_id, quantity_produced }
+ *          body: { branch_id, item_id, quantity_produced }
  * @access  Branch Storekeeper, Central Storekeeper, Super Admin
  */
 export const recordPastryProduction = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { branch_id, shift_id, item_id, quantity_produced } = req.body || {};
+        const { branch_id, item_id, quantity_produced } = req.body || {};
         const branchId = Number(branch_id);
         if (!Number.isInteger(branchId)) {
             res.status(400).json({ success: false, message: 'branch_id must be an integer' });
@@ -79,12 +81,11 @@ export const recordPastryProduction = async (req: Request, res: Response, next: 
             .from('pastry_production_log')
             .insert({
                 branch_id: branchId,
-                shift_id: shift_id || null,
                 item_id: String(item_id),
                 quantity_produced: qty,
                 produced_by: req.user?.id || null,
             })
-            .select('*, item:inventory_items(id, item_name, unit)')
+            .select('*, item:inventory_items(id, sku, item_name, unit)')
             .single();
         if (error) throw error;
 
@@ -96,16 +97,20 @@ export const recordPastryProduction = async (req: Request, res: Response, next: 
 };
 
 /**
- * @desc    Issue a previously produced pastry batch to the kitchen.
+ * @desc    Issue a previously produced pastry batch to an open Kitchen
+ *          Shift. This is the point where the batch becomes real, visible
+ *          stock — it's added into that shift's kitchen_shift_items ledger
+ *          (as an "additions" entry), the same ledger Kitchen Sessions
+ *          already tracks raw/produced stock in.
  * @route   PUT /api/storekeeping/pastry-production/:id/issue
- *          body: { issued_quantity }
+ *          body: { shift_id, issued_quantity }
  * @access  Branch Storekeeper, Central Storekeeper, Super Admin
  */
 export const issuePastryToKitchen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { data: existing, error: loadError } = await supabase
             .from('pastry_production_log')
-            .select('*')
+            .select('*, item:inventory_items(id, sku, item_name, unit)')
             .eq('id', req.params.id)
             .maybeSingle();
         if (loadError) throw loadError;
@@ -118,21 +123,81 @@ export const issuePastryToKitchen = async (req: Request, res: Response, next: Ne
             return;
         }
 
+        const shiftId = req.body?.shift_id;
+        if (!shiftId) {
+            res.status(400).json({ success: false, message: 'shift_id is required — pick the open Kitchen Shift receiving this batch' });
+            return;
+        }
+
+        const { data: shift, error: shiftError } = await supabase
+            .from('kitchen_shifts')
+            .select('id, branch_id, status')
+            .eq('id', shiftId)
+            .maybeSingle();
+        if (shiftError) throw shiftError;
+        if (!shift) {
+            res.status(404).json({ success: false, message: 'Kitchen shift not found' });
+            return;
+        }
+        if (Number(shift.branch_id) !== Number(existing.branch_id)) {
+            res.status(400).json({ success: false, message: 'Kitchen shift belongs to a different branch' });
+            return;
+        }
+        if (shift.status !== 'open') {
+            res.status(400).json({ success: false, message: 'Kitchen shift is not open' });
+            return;
+        }
+
         const issuedQuantity = num(req.body?.issued_quantity ?? existing.quantity_produced);
         if (issuedQuantity <= 0 || issuedQuantity > num(existing.quantity_produced)) {
             res.status(400).json({ success: false, message: 'issued_quantity must be between 0 and quantity_produced' });
             return;
         }
 
+        const itemSku = String(existing.item?.sku ?? existing.item_id);
+        const itemName = existing.item?.item_name || itemSku;
+        const { data: shiftItem, error: shiftItemError } = await supabase
+            .from('kitchen_shift_items')
+            .select('*')
+            .eq('shift_id', shiftId)
+            .eq('item_sku', itemSku)
+            .maybeSingle();
+        if (shiftItemError) throw shiftItemError;
+
+        if (shiftItem) {
+            const { error: updateError } = await supabase
+                .from('kitchen_shift_items')
+                .update({ additions: num(shiftItem.additions) + issuedQuantity, updated_at: new Date().toISOString() })
+                .eq('id', shiftItem.id);
+            if (updateError) throw updateError;
+        } else {
+            const { error: insertError } = await supabase
+                .from('kitchen_shift_items')
+                .insert({
+                    shift_id: shiftId,
+                    branch_id: shift.branch_id,
+                    item_sku: itemSku,
+                    item_name: itemName,
+                    unit_of_measure: existing.item?.unit || 'units',
+                    cost_price: 0,
+                    opening_stock: 0,
+                    additions: issuedQuantity,
+                    sold_quantity: 0,
+                    spoilage_quantity: 0,
+                });
+            if (insertError) throw insertError;
+        }
+
         const { data, error } = await supabase
             .from('pastry_production_log')
             .update({
+                shift_id: shiftId,
                 issued_to_kitchen: true,
                 issued_quantity: issuedQuantity,
                 issued_at: new Date().toISOString(),
             })
             .eq('id', req.params.id)
-            .select('*, item:inventory_items(id, item_name, unit)')
+            .select('*, item:inventory_items(id, sku, item_name, unit)')
             .single();
         if (error) throw error;
 

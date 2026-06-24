@@ -682,9 +682,9 @@ router.get(
       res.json(response.data);
     } catch (error: any) {
       console.error("Expense breakdown error:", error.message);
-      res.json({
-        success: true,
-        data: { total: 0, categories: [], by_status: {} },
+      res.status(502).json({
+        success: false,
+        message: "Failed to fetch expense breakdown from finance service",
       });
     }
   },
