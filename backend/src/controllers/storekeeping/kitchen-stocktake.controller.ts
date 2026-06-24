@@ -481,6 +481,32 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
     }));
     await syncKitchenStocktakeToStockCounts(branchId, stocktakeDate, shiftRow.status, itemsForSync);
 
+    // Closing count = reconciled kitchen portion count → write into the
+    // restaurant POS outlet so waiters see the actual available stock.
+    // Match pos_outlet_items to kitchen items by name (case-insensitive).
+    if (savedItems && savedItems.length > 0) {
+      try {
+        await db.query(
+          `UPDATE public.pos_outlet_items poi
+           SET current_stock = kti.closing_qty::numeric,
+               updated_at    = NOW()
+           FROM (VALUES ${savedItems.map((_: any, i: number) => `($${i * 2 + 1}::text, $${i * 2 + 2}::numeric)`).join(', ')})
+                AS kti(item_name, closing_qty)
+           JOIN public.pos_outlets po
+             ON po.branch_id  = $${savedItems.length * 2 + 1}
+            AND po.outlet_type = 'restaurant'
+           WHERE poi.outlet_id = po.id
+             AND LOWER(TRIM(poi.name)) = LOWER(TRIM(kti.item_name))`,
+          [
+            ...savedItems.flatMap((it: any) => [it.item_name, num(it.closing_qty)]),
+            branchId,
+          ]
+        );
+      } catch (err) {
+        logger.warn('kitchen stocktake: failed to sync closing counts to restaurant pos_outlet_items:', (err as Error).message);
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: { ...shiftRow, items: savedItems },

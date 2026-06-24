@@ -23,61 +23,66 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
     const branchId = branchIdFor(req);
     const search = req.query.search as string | undefined;
 
-    let query = supabase
-      .from('bar_stock')
+    // Source from bar_drinks (full catalog) so every active item appears
+    // regardless of whether it has been formally received into bar_stock yet.
+    // A separate bar_stock query provides current quantities (left-joined by
+    // drink_id, defaulting to 0 for items not yet restocked).
+    let drinksQuery = supabase
+      .from('bar_drinks')
       .select(`
-        *,
-        bar_drinks (
-          name,
-          price,
-          selling_price,
-          cost_price,
-          unit,
-          category_id,
-          bar_drink_categories (
-            name
-          )
+        id,
+        name,
+        selling_price,
+        cost_price,
+        unit,
+        bar_drink_categories (
+          name
         )
       `)
-      .order('item_name', { ascending: true });
+      .eq('is_active', true)
+      .order('name', { ascending: true });
 
-    if (branchId !== null) query = query.eq('branch_id', branchId);
+    if (branchId !== null) drinksQuery = drinksQuery.eq('branch_id', branchId);
 
-    const { data, error } = await query;
-    if (error) throw error;
+    const [{ data: drinks, error: drinksErr }, { data: stockRows, error: stockErr }] = await Promise.all([
+      drinksQuery,
+      branchId !== null
+        ? supabase.from('bar_stock').select('drink_id, current_stock, par_level, last_updated, cost_per_unit').eq('branch_id', branchId)
+        : supabase.from('bar_stock').select('drink_id, current_stock, par_level, last_updated, cost_per_unit'),
+    ]);
+    if (drinksErr) throw drinksErr;
+    if (stockErr) throw stockErr;
 
-    let rows = data || [];
+    const stockByDrinkId = new Map<string, any>(
+      (stockRows || []).map((r: any) => [String(r.drink_id), r])
+    );
 
-    // Server-side search fallback (client also filters, but this reduces payload)
-    if (search && search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter((row) => {
-        const itemName = row.item_name || '';
-        const drinkName = row.bar_drinks?.name || '';
-        const categoryName = row.bar_drinks?.bar_drink_categories?.name || '';
-        return itemName.toLowerCase().includes(q) ||
-               drinkName.toLowerCase().includes(q) ||
-               categoryName.toLowerCase().includes(q);
-      });
-    }
-
-    const mapped = rows.map((row) => {
-      const drink = row.bar_drinks;
-      const category = drink?.bar_drink_categories;
+    let rows: any[] = (drinks || []).map((d: any) => {
+      const stock = stockByDrinkId.get(String(d.id));
+      const category = Array.isArray(d.bar_drink_categories)
+        ? d.bar_drink_categories[0]
+        : d.bar_drink_categories;
       return {
-        id: row.id,
-        name: drink?.name || row.item_name || '',
+        id: d.id,
+        name: d.name || '',
         category: category?.name || '',
-        unit: row.unit || drink?.unit || '—',
-        price: drink?.price ?? drink?.selling_price ?? 0,
-        cost_price: drink?.cost_price ?? row.cost_per_unit ?? 0,
-        quantity: row.current_stock,
-        min_stock: row.par_level,
-        last_restocked: row.last_updated
+        unit: d.unit || '—',
+        price: d.selling_price ?? 0,
+        cost_price: d.cost_price ?? stock?.cost_per_unit ?? 0,
+        quantity: stock?.current_stock ?? 0,
+        min_stock: stock?.par_level ?? 0,
+        last_restocked: stock?.last_updated ?? null,
       };
     });
 
-    res.status(200).json({ success: true, data: mapped });
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter((r) =>
+        r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)
+      );
+    }
+
+    res.status(200).json({ success: true, data: rows });
   } catch (error) {
     next(error);
   }

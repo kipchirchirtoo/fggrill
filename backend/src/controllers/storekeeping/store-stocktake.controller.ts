@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
+import db from '../../db';
 import { logger } from '../../utils/logger';
 
 // Store stocktake — storekeeper records physical counts for general store
@@ -361,17 +362,34 @@ export const approveStoreStocktake = async (req: Request, res: Response, next: N
             .eq('item_id', existing.item_id)
             .eq('ledger_date', existing.stocktake_date);
 
-        // Close the loop: approved physical count becomes the live branch_stock quantity.
-        const sku = existing.item?.sku;
-        if (sku) {
-            await supabase
-                .from('branch_stock')
-                .update({ quantity: num(existing.physical_quantity), updated_at: now })
-                .eq('branch_id', existing.branch_id)
-                .eq('item_sku', sku);
-        } else {
-            logger.warn(`approveStoreStocktake: no SKU for inventory item ${existing.item_id}, skipping branch_stock update`);
-        }
+        // Batch-approve all remaining reviewed/pending records for the same
+        // branch + date so approving any one record approves the whole session.
+        await supabase
+            .from('store_stocktake_records')
+            .update({
+                status: 'approved',
+                reviewed_by: existing.reviewed_by || req.user?.id || null,
+                reviewed_at: existing.reviewed_at || now,
+            })
+            .eq('branch_id', existing.branch_id)
+            .eq('stocktake_date', existing.stocktake_date)
+            .in('status', ['pending', 'reviewed']);
+
+        // Bulk-update branch_stock for ALL approved records in this session —
+        // physical count becomes the live store quantity for the branch.
+        await db.query(
+            `UPDATE public.branch_stock bs
+             SET quantity   = ssr.physical_quantity::numeric,
+                 updated_at = NOW()
+             FROM public.store_stocktake_records ssr
+             JOIN public.inventory_items ii ON ii.id = ssr.item_id
+             WHERE bs.branch_id   = ssr.branch_id
+               AND bs.item_sku    = ii.sku
+               AND ssr.branch_id  = $1
+               AND ssr.stocktake_date = $2
+               AND ssr.status     = 'approved'`,
+            [existing.branch_id, existing.stocktake_date]
+        );
 
         await syncStoreStocktakeToStockCounts(
             existing.branch_id,

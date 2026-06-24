@@ -127,17 +127,30 @@ class _StoreStocktakeScreenState extends ConsumerState<StoreStocktakeScreen> {
     final negativeVariance = items
         .where((i) => _num(i['variance']) < 0)
         .fold<num>(0, (sum, i) => sum + _num(i['variance']).abs());
+    final statuses = items.map((i) => '${i['status'] ?? ''}').toSet();
+    final allApproved = statuses.every((s) => s == 'approved');
+    final anyRejected = statuses.contains('rejected');
+    final statusLabel = allApproved
+        ? '✓ Approved by Accountant'
+        : anyRejected
+            ? '✗ Rejected by Accountant'
+            : '⏳ Pending Accountant Review';
+    final statusColor = allApproved
+        ? Colors.green
+        : anyRejected
+            ? Colors.red
+            : Colors.amber;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.amber.shade50,
+            color: statusColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Text('⏳ Pending Accountant Review',
-              style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w800)),
+          child: Text(statusLabel,
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w800)),
         ),
         const SizedBox(height: 12),
         Text(

@@ -553,6 +553,73 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
             [num(existing.physical_quantity), existing.item_id, existing.branch_id]
         );
 
+        // Also sync into pos_outlet_items so the Bar POS outlet reflects the
+        // approved count — bar_stock and pos_outlet_items track the same physical
+        // goods but are queried by different screens.
+        await db.query(
+            `UPDATE public.pos_outlet_items poi
+             SET current_stock = GREATEST(0, $1),
+                 updated_at = NOW()
+             FROM public.bar_drinks bd
+             JOIN public.pos_outlets po ON po.branch_id = $3
+                                       AND po.outlet_type = $4
+             WHERE bd.inventory_item_id = $2::uuid
+               AND poi.outlet_id = po.id
+               AND poi.source_item_id = bd.id::text`,
+            [num(existing.physical_quantity), existing.item_id, existing.branch_id, existing.bar_location]
+        );
+
+        // Batch-approve all remaining reviewed/pending records for the same
+        // session (same branch + location + date) in one shot, so the accountant
+        // approving any one record approves the whole submission automatically.
+        // The Flutter app already loops through all IDs but 116 sequential calls
+        // are unreliable — this makes a single call sufficient.
+        await supabase
+            .from('bar_stocktake_records')
+            .update({
+                status: 'approved',
+                reviewed_by: existing.reviewed_by || req.user?.id || null,
+                reviewed_at: existing.reviewed_at || now
+            })
+            .eq('branch_id', existing.branch_id)
+            .eq('bar_location', existing.bar_location)
+            .eq('stocktake_date', existing.stocktake_date)
+            .in('status', ['pending', 'reviewed']);
+
+        // Bulk-update bar_stock and pos_outlet_items for ALL approved records in
+        // this session (covers both the record just approved and the batch above).
+        await db.query(
+            `UPDATE public.bar_stock bs
+             SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
+                 updated_at    = NOW()
+             FROM public.bar_stocktake_records btr
+             JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
+             WHERE bs.drink_id        = bd.id
+               AND bs.branch_id       = btr.branch_id
+               AND btr.branch_id      = $1
+               AND btr.bar_location   = $2
+               AND btr.stocktake_date = $3
+               AND btr.status         = 'approved'`,
+            [existing.branch_id, existing.bar_location, existing.stocktake_date]
+        );
+
+        await db.query(
+            `UPDATE public.pos_outlet_items poi
+             SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
+                 updated_at    = NOW()
+             FROM public.bar_stocktake_records btr
+             JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
+             JOIN public.pos_outlets po ON po.branch_id  = btr.branch_id
+                                       AND po.outlet_type = btr.bar_location
+             WHERE poi.outlet_id      = po.id
+               AND poi.source_item_id = bd.id::text
+               AND btr.branch_id      = $1
+               AND btr.bar_location   = $2
+               AND btr.stocktake_date = $3
+               AND btr.status         = 'approved'`,
+            [existing.branch_id, existing.bar_location, existing.stocktake_date]
+        );
+
         // Sync into the unified stock_counts table.
         await syncBarStocktakeToStockCounts(
             existing.branch_id,

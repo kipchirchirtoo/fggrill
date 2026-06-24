@@ -3039,7 +3039,6 @@ class _SoldItemsSection extends ConsumerStatefulWidget {
 class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   late String _from = _date(DateTime.now().subtract(const Duration(days: 30)));
   late String _to = _today();
-  String _period = 'last_30_days';
   String _search = '';
   String _outletGroup = 'all';
   String _shiftFilter = 'all';
@@ -3131,56 +3130,6 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
             subtitle:
                 'Restaurant, bar, rooms, and non-consumables revenue, COGS, gross profit, movement velocity, and KDS timing.',
             actions: [
-              _SoldItemsDropdown(
-                value: _period,
-                values: const [
-                  'today',
-                  'yesterday',
-                  'last_7_days',
-                  'this_week',
-                  'last_week',
-                  'this_month',
-                  'last_month',
-                  'this_quarter',
-                  'this_year',
-                  'last_30_days',
-                  'custom',
-                ],
-                labels: const {
-                  'today': 'Today',
-                  'yesterday': 'Yesterday',
-                  'last_7_days': 'Last 7 Days',
-                  'this_week': 'This Week',
-                  'last_week': 'Last Week',
-                  'this_month': 'This Month',
-                  'last_month': 'Last Month',
-                  'this_quarter': 'This Quarter',
-                  'this_year': 'This Year',
-                  'last_30_days': 'Last 30 Days',
-                  'custom': 'Custom Range',
-                },
-                onChanged: _applyPeriod,
-              ),
-              _SoldItemsDatePicker(
-                value: _from,
-                tooltip: 'Start date',
-                onChanged: (v) => setState(() {
-                  _period = 'custom';
-                  _from = v;
-                  _shiftFilter = 'all';
-                  _future = _load();
-                }),
-              ),
-              _SoldItemsDatePicker(
-                value: _to,
-                tooltip: 'End date',
-                onChanged: (v) => setState(() {
-                  _period = 'custom';
-                  _to = v;
-                  _shiftFilter = 'all';
-                  _future = _load();
-                }),
-              ),
               _SoldItemsDropdown(
                 value: selectedOutlet,
                 values: outletValues,
@@ -3763,62 +3712,6 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
     );
   }
 
-  void _applyPeriod(String value) {
-    final now = DateTime.now();
-    DateTime start;
-    DateTime end = now;
-    switch (value) {
-      case 'today':
-        start = now;
-        break;
-      case 'yesterday':
-        start = now.subtract(const Duration(days: 1));
-        end = start;
-        break;
-      case 'last_7_days':
-        start = now.subtract(const Duration(days: 6));
-        break;
-      case 'this_week':
-        start = now.subtract(Duration(days: now.weekday - DateTime.monday));
-        break;
-      case 'last_week':
-        final thisWeek =
-            now.subtract(Duration(days: now.weekday - DateTime.monday));
-        start = thisWeek.subtract(const Duration(days: 7));
-        end = thisWeek.subtract(const Duration(days: 1));
-        break;
-      case 'this_month':
-        start = DateTime(now.year, now.month, 1);
-        break;
-      case 'last_month':
-        final thisMonth = DateTime(now.year, now.month, 1);
-        start = DateTime(thisMonth.year, thisMonth.month - 1, 1);
-        end = thisMonth.subtract(const Duration(days: 1));
-        break;
-      case 'this_quarter':
-        final quarterMonth = ((now.month - 1) ~/ 3) * 3 + 1;
-        start = DateTime(now.year, quarterMonth, 1);
-        break;
-      case 'this_year':
-        start = DateTime(now.year, 1, 1);
-        break;
-      case 'custom':
-        setState(() => _period = value);
-        return;
-      case 'last_30_days':
-      default:
-        start = now.subtract(const Duration(days: 30));
-        break;
-    }
-    setState(() {
-      _period = value;
-      _from = _date(start);
-      _to = _date(end);
-      _shiftFilter = 'all';
-      _future = _load();
-    });
-  }
-
   Map<String, String> _outletLabels(List<Map<String, dynamic>> rows) {
     return {
       'all': 'All Outlets',
@@ -4291,43 +4184,6 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
-  }
-}
-
-class _SoldItemsDatePicker extends StatelessWidget {
-  const _SoldItemsDatePicker({
-    required this.value,
-    required this.tooltip,
-    required this.onChanged,
-  });
-
-  final String value;
-  final String tooltip;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: OutlinedButton.icon(
-        onPressed: () async {
-          final initial = DateTime.tryParse(value) ?? DateTime.now();
-          final selected = await showDatePicker(
-            context: context,
-            initialDate: initial,
-            firstDate: DateTime(2020),
-            lastDate: DateTime.now().add(const Duration(days: 366)),
-          );
-          if (selected != null) onChanged(_date(selected));
-        },
-        icon: const Icon(Icons.calendar_today, size: 18),
-        label: Text(value),
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(150, 44),
-          alignment: Alignment.centerLeft,
-        ),
-      ),
-    );
   }
 }
 

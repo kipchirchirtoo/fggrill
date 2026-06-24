@@ -323,7 +323,9 @@ class _KitchenShiftStocktakeState
             flex: 2,
             child: Builder(builder: (context) {
               final c = double.tryParse(closing.text.trim()) ?? 0;
-              final variance = open + add - c;
+              // variance = physical − system (positive = surplus, negative = shortage)
+              // matches bar stocktake convention
+              final variance = c - open - add;
               return Center(
                 child: Text(
                   variance.toStringAsFixed(variance == variance.roundToDouble() ? 0 : 1),
