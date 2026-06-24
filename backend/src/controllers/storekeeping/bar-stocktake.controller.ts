@@ -181,38 +181,79 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             res.status(400).json({ success: false, message: 'branch_id must be an integer' });
             return;
         }
+
+        // A status filter with no explicit bar_location/date (the Branch
+        // Accountant review queue: GET ?branch_id=&status=pending) means the
+        // caller wants real submitted records across every location/date,
+        // not a single day's count sheet. Answer it directly from
+        // bar_stocktake_records and never fall through to the synthesized
+        // "candidates" branch below — that branch returns un-submitted bar
+        // catalog rows with no bar_location/stocktake_date/item_name/
+        // system_quantity/variance, which is what rendered as "null"
+        // everywhere on the review screen.
+        if (status && !bar_location && !date && !stocktake_date) {
+            const { data: reviewRecords, error: reviewErr } = await supabase
+                .from('bar_stocktake_records')
+                .select('*, item:inventory_items(id, item_name, unit)')
+                .eq('branch_id', branchId)
+                .eq('status', String(status))
+                .order('stocktake_date', { ascending: false });
+            if (reviewErr) throw reviewErr;
+
+            const result = (reviewRecords || []).map((r: any) => ({
+                ...r,
+                item_name: r.item?.item_name || r.item_name || null,
+            }));
+            res.status(200).json({ success: true, data: result });
+            return;
+        }
+
         // Accept both "date" and "stocktake_date" query params (Flutter sends stocktake_date)
         const rawDate = (stocktake_date as string) || (date as string) || new Date().toISOString().split('T')[0];
         const locationFilter = bar_location ? String(bar_location) : 'main_bar';
 
-        // 1. Load the same bar catalog the Bar Stock screen uses.
-        // The live bar stock is held in bar_stock (decremented by POS sales and
-        // restocked by the storekeeper). Join bar_drinks for the unified item identity.
-        const { data: barStock, error: stockErr } = await supabase
-            .from('bar_stock')
-            .select('id, current_stock, unit, item_name, drink_id, bar_drinks(id, name, unit, inventory_item_id)')
-            .eq('branch_id', branchId)
-            .order('item_name');
+        // 1. Use bar_drinks as the authoritative catalog — bar_stock only has rows
+        //    for items the storekeeper has formally received, so using it as the
+        //    source silently drops every item not yet restocked.  bar_drinks holds
+        //    ALL items for the branch regardless of stock movement history.
+        const [{ data: allDrinks, error: drinksErr }, { data: barStockRows, error: stockErr }] = await Promise.all([
+            supabase
+                .from('bar_drinks')
+                .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id')
+                .eq('branch_id', branchId)
+                .eq('is_active', true)
+                .order('name'),
+            supabase
+                .from('bar_stock')
+                .select('drink_id, current_stock')
+                .eq('branch_id', branchId),
+        ]);
+        if (drinksErr) throw drinksErr;
         if (stockErr) throw stockErr;
-        const stockRows = (barStock || []) as Array<Record<string, any>>;
+
+        const drinkRows = (allDrinks || []) as Array<Record<string, any>>;
+        // Build a quick lookup: drink_id → current_stock (0 if no bar_stock row yet)
+        const stockByDrinkId = new Map<string, number>(
+            (barStockRows || []).map((r: any) => [String(r.drink_id), num(r.current_stock)])
+        );
 
         // inventory_item_id is populated by the unification migration.
-        // If any drink is missing the link, fall back to the generated-SKU bridge.
-        const drinksNeedingLink = stockRows
-            .filter((it) => !it.bar_drinks?.inventory_item_id)
-            .map((it) => ({
-                id: String(it.drink_id || it.id),
-                name: String(it.bar_drinks?.name || it.item_name),
-                sku: `bard-${it.drink_id || it.id}`,
-                unit: String(it.bar_drinks?.unit || it.unit || 'bottle'),
-                cost_price: 0,
-                selling_price: 0,
+        // If any drink is missing the link, fall back to the SKU-based bridge.
+        const drinksNeedingLink = drinkRows
+            .filter((d) => !d.inventory_item_id)
+            .map((d) => ({
+                id: String(d.id),
+                name: String(d.name),
+                sku: d.sku ? String(d.sku) : `bard-${d.id}`,
+                unit: String(d.unit || 'bottle'),
+                cost_price: num(d.cost_price),
+                selling_price: num(d.selling_price),
             }));
         const fallbackInvIdByDrinkId = drinksNeedingLink.length > 0
             ? await ensureInventoryItems(drinksNeedingLink)
             : new Map<string, string>();
-        const invItemIds = stockRows
-            .map((it) => it.bar_drinks?.inventory_item_id || fallbackInvIdByDrinkId.get(String(it.drink_id || it.id)))
+        const invItemIds = drinkRows
+            .map((d) => d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id)))
             .filter(Boolean) as string[];
 
         // 2. Check for existing bar_stocktake_records for this branch/date/location
@@ -238,23 +279,22 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             return;
         }
 
-        // 3. No stocktake submitted yet — return candidates from the live bar_stock
-        //    catalog. The storekeeper only enters the physical (closing) count.
-        const candidates = stockRows.map((it: any) => {
-            const drinkId = it.drink_id || it.id;
-            const invId = it.bar_drinks?.inventory_item_id || fallbackInvIdByDrinkId.get(String(drinkId));
+        // 3. No stocktake submitted yet — return ALL catalog items as candidates.
+        //    current_stock comes from bar_stock if a row exists, otherwise 0
+        //    (the item exists in the catalog but hasn't been formally received yet).
+        const candidates = drinkRows.map((d: any) => {
+            const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
             if (!invId) return null;
-            const currentStock = num(it.current_stock);
-
+            const currentStock = stockByDrinkId.get(String(d.id)) ?? 0;
             return {
-                id: invId,                          // inventory_items.id (sent back as item_id)
-                name: it.bar_drinks?.name || it.item_name,
-                quantity: currentStock,             // system = live Bar Stock value
+                id: invId,
+                name: d.name,
+                quantity: currentStock,
                 opening_stock: currentStock,
                 additions: 0,
                 sales: 0,
-                unit: it.bar_drinks?.unit || it.unit || 'bottle',
-                sku: `bard-${drinkId}`,
+                unit: d.unit || 'bottle',
+                sku: d.sku || `bard-${d.id}`,
                 category: null,
             };
         }).filter(Boolean);
