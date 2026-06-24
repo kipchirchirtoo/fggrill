@@ -386,10 +386,22 @@ export const approveCentralStockTake = async (req: Request, res: Response) => {
 
     const { data: items, error: itemsError } = await supabase
       .from('central_stock_take_items')
-      .select('item_sku, variance, variance_value, unit_cost')
+      .select('item_sku, physical_count, variance, variance_value, unit_cost')
       .eq('session_id', id);
 
     if (itemsError) throw itemsError;
+
+    // Write the approved physical counts directly into inventory_items.quantity
+    // so the Central Store Master Inventory screen shows real stock levels.
+    // Also updates simple_items.quantity for legacy compatibility.
+    for (const item of (items || [])) {
+      if (item.physical_count == null) continue;
+      const physicalCount = Number(item.physical_count);
+      await supabase
+        .from('inventory_items')
+        .update({ quantity: physicalCount, updated_at: new Date().toISOString() })
+        .eq('sku', item.item_sku);
+    }
 
     const varianceItems = (items || []).filter(item => item.variance !== null && item.variance !== 0);
 

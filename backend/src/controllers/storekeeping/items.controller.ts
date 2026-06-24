@@ -100,20 +100,46 @@ export const getItems = async (
     const { data: rawItems, error } = await query;
     if (error) throw error;
 
-    // Merge quantities from inventory_balances
+    // Merge quantities — primary source is inventory_balances (location-scoped),
+    // fallback is inventory_items.quantity (the column updated by central
+    // stocktake approval and direct item edits) so central storekeeper users
+    // (who have no branch_id → no locationId) always see real quantities.
     let data: any[] = rawItems || [];
-    if (locationId && data.length > 0) {
+    if (data.length > 0) {
       const itemIds = data.map((i: any) => i.id);
-      // Fetch all balances for this location (no IN filter — avoids URL length limit with 400+ items)
-      const { data: balances, error: balErr } = await supabase
-        .from('inventory_balances')
-        .select('item_id, current_quantity')
-        .eq('location_id', locationId);
-      if (balErr) logger.warn(`getItems: balances query error: ${balErr.message}`);
-      const balMap = new Map((balances || []).map((b: any) => [b.item_id, Number(b.current_quantity)]));
-      data = data.map((item: any) => ({ ...item, unit_of_measure: item.unit, cost_price: item.default_unit_cost, retail_price: item.default_selling_price, quantity: balMap.get(item.id) ?? 0, last_updated: item.updated_at }));
-    } else {
-      data = data.map((item: any) => ({ ...item, unit_of_measure: item.unit, cost_price: item.default_unit_cost, retail_price: item.default_selling_price, quantity: 0, last_updated: item.updated_at }));
+
+      // 1. Location-scoped balances (branch storekeepers)
+      const balMap = new Map<string, number>();
+      if (locationId) {
+        const { data: balances, error: balErr } = await supabase
+          .from('inventory_balances')
+          .select('item_id, current_quantity')
+          .eq('location_id', locationId);
+        if (balErr) logger.warn(`getItems: balances query error: ${balErr.message}`);
+        for (const b of (balances || [])) balMap.set(b.item_id, Number(b.current_quantity));
+      }
+
+      // 2. Fallback: inventory_items.quantity column (central store / no location)
+      const itemQtyMap = new Map<string, number>();
+      if (!locationId || balMap.size === 0) {
+        const { data: qtyRows, error: qtyErr } = await supabase
+          .from('inventory_items')
+          .select('id, quantity')
+          .in('id', itemIds);
+        if (qtyErr) logger.warn(`getItems: quantity fallback error: ${qtyErr.message}`);
+        for (const r of (qtyRows || [])) {
+          if (r.quantity != null) itemQtyMap.set(r.id, Number(r.quantity));
+        }
+      }
+
+      data = data.map((item: any) => ({
+        ...item,
+        unit_of_measure: item.unit,
+        cost_price: item.default_unit_cost,
+        retail_price: item.default_selling_price,
+        quantity: balMap.get(item.id) ?? itemQtyMap.get(item.id) ?? 0,
+        last_updated: item.updated_at,
+      }));
     }
 
     const total = data.length;
