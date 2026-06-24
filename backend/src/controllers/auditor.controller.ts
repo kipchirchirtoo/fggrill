@@ -2651,9 +2651,12 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     }
 
     // ── Shift metadata (for grouping sold items by cashier shift instead of day) ──
+    // Pull cashier ids from allOutletShifts (not just outletShiftsRes) so the
+    // bar-matched shifts recovered above also resolve a real cashier name
+    // instead of falling back to "Unknown Cashier".
     const shiftCashierIds = [
       ...new Set([
-        ...(outletShiftsRes.data || []).map((s: any) => s.cashier_id).filter(Boolean),
+        ...allOutletShifts.map((s: any) => s.cashier_id).filter(Boolean),
         ...(legacyShiftsRes.data || []).map((s: any) => s.opened_by).filter(Boolean)
       ])
     ];
@@ -2666,13 +2669,19 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       acc[String(user.id)] = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown Cashier';
       return acc;
     }, {});
+    const shiftCashierFirstNameMap = (shiftCashierUsers || []).reduce((acc: Record<string, string>, user: any) => {
+      acc[String(user.id)] = user.first_name || 'Unknown';
+      return acc;
+    }, {});
 
-    const formatShiftOpenedAt = (iso: string | null) => {
+    const formatShiftTime = (iso: string | null) => {
       if (!iso) return '';
       const d = new Date(iso);
       if (Number.isNaN(d.getTime())) return '';
-      return d.toLocaleString('en-GB', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     };
+    const formatShiftTimeRange = (openedAt: string | null, closedAt: string | null) =>
+      `${formatShiftTime(openedAt)} - ${closedAt ? formatShiftTime(closedAt) : 'Ongoing'}`;
 
     const NO_SHIFT_META = {
       shift_id: 'no_shift',
@@ -2689,6 +2698,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     allOutletShifts.forEach((shift: any) => {
       const outletName = outletMap[String(shift.outlet_id)]?.name || 'Outlet';
       const cashierName = shiftCashierNameMap[String(shift.cashier_id)] || 'Unknown Cashier';
+      const firstName = shiftCashierFirstNameMap[String(shift.cashier_id)] || 'Unknown';
       shiftMetaMap[String(shift.id)] = {
         shift_id: String(shift.id),
         shift_number: shift.shift_number || null,
@@ -2697,11 +2707,12 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         opened_at: shift.opened_at,
         closed_at: shift.closed_at,
         status: shift.status,
-        label: `${cashierName} · ${outletName} · ${formatShiftOpenedAt(shift.opened_at)}`
+        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at)}`
       };
     });
     (legacyShiftsRes.data || []).forEach((shift: any) => {
       const cashierName = shiftCashierNameMap[String(shift.opened_by)] || 'Unknown Cashier';
+      const firstName = shiftCashierFirstNameMap[String(shift.opened_by)] || 'Unknown';
       shiftMetaMap[String(shift.id)] = {
         shift_id: String(shift.id),
         shift_number: shift.shift_number || null,
@@ -2710,7 +2721,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         opened_at: shift.opened_at,
         closed_at: shift.closed_at,
         status: shift.status,
-        label: `${cashierName} · Restaurant · ${formatShiftOpenedAt(shift.opened_at)}`
+        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at)}`
       };
     });
 
