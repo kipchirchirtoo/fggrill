@@ -47,8 +47,8 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
     const [{ data: drinks, error: drinksErr }, { data: stockRows, error: stockErr }] = await Promise.all([
       drinksQuery,
       branchId !== null
-        ? supabase.from('bar_stock').select('drink_id, current_stock, par_level, last_updated, cost_per_unit').eq('branch_id', branchId)
-        : supabase.from('bar_stock').select('drink_id, current_stock, par_level, last_updated, cost_per_unit'),
+        ? supabase.from('bar_stock').select('*').eq('branch_id', branchId)
+        : supabase.from('bar_stock').select('*'),
     ]);
     if (drinksErr) throw drinksErr;
     if (stockErr) throw stockErr;
