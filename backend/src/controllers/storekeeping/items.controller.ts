@@ -132,12 +132,30 @@ export const getItems = async (
         }
       }
 
+      // 3. Fallback: branch_stock quantities (branch storekeeper context).
+      // branch_stock is updated by stocktake approvals, GRN receipts and
+      // store stocktake approvals — it is the authoritative live stock for
+      // branch-level items even when inventory_balances hasn't been seeded.
+      const branchStockMap = new Map<string, number>();
+      if (branchId) {
+        const skus = data.map((i: any) => i.sku).filter(Boolean);
+        if (skus.length > 0) {
+          const { data: bsRows, error: bsErr } = await supabase
+            .from('branch_stock')
+            .select('item_sku, quantity')
+            .eq('branch_id', branchId)
+            .in('item_sku', skus);
+          if (bsErr) logger.warn(`getItems: branch_stock fallback error: ${bsErr.message}`);
+          for (const r of (bsRows || [])) branchStockMap.set(r.item_sku, Number(r.quantity));
+        }
+      }
+
       data = data.map((item: any) => ({
         ...item,
         unit_of_measure: item.unit,
         cost_price: item.default_unit_cost,
         retail_price: item.default_selling_price,
-        quantity: balMap.get(item.id) ?? itemQtyMap.get(item.id) ?? 0,
+        quantity: balMap.get(item.id) ?? itemQtyMap.get(item.id) ?? branchStockMap.get(item.sku) ?? 0,
         last_updated: item.updated_at,
       }));
     }
