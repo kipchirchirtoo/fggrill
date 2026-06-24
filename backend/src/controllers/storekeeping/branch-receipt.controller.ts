@@ -3,6 +3,7 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { updateBranchStock } from '../../services/branch-inventory.service';
+import { recordBarStockMovement } from '../../services/unified-bar-stock.service';
 
 const toNumber = (value: any): number => {
     const parsed = Number(value);
@@ -552,6 +553,13 @@ export const receiveFromSupplier = async (
         }
 
         const stockResults = [];
+        const receivedSkus = (savedItems || grnItems).map((it: any) => String(it.item_id)).filter(Boolean);
+        // Check which received items are bar drinks so we can sync bar_stock + pos_outlet_items
+        const { data: barDrinksForSkus } = receivedSkus.length
+            ? await supabase.from('bar_drinks').select('id, sku').eq('branch_id', branchId).in('sku', receivedSkus)
+            : { data: [] };
+        const barDrinkSkuSet = new Set((barDrinksForSkus || []).map((d: any) => String(d.sku)));
+
         for (const item of savedItems || grnItems) {
             const qty = toNumber(item.quantity_accepted || item.quantity_received);
             if (qty <= 0) continue;
@@ -572,6 +580,25 @@ export const receiveFromSupplier = async (
                 previous_stock: stockUpdate.previousStock,
                 new_stock: stockUpdate.newStock
             });
+
+            // If this is a bar item, also sync bar_stock + pos_outlet_items
+            if (barDrinkSkuSet.has(String(item.item_id))) {
+                try {
+                    await recordBarStockMovement({
+                        branchId,
+                        sku: String(item.item_id),
+                        quantityDelta: qty,
+                        movementType: 'restock',
+                        referenceNumber: grnNumber,
+                        referenceId: grn.id,
+                        performedBy: userId || undefined,
+                        notes: `Supplier receipt from ${supplier.name} — GRN ${grnNumber}`,
+                        costPerUnit: toNumber(item.unit_price) || undefined,
+                    });
+                } catch (barSyncErr: any) {
+                    logger.warn(`Bar stock sync failed for ${item.item_id} on GRN ${grnNumber}:`, barSyncErr?.message);
+                }
+            }
         }
 
         const purchaseOrder = await updatePurchaseOrderReceipt(po_id, savedItems || grnItems, userId);

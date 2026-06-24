@@ -296,19 +296,48 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         }
 
         // 3. No stocktake submitted yet — return ALL catalog items as candidates.
-        //    current_stock comes from bar_stock if a row exists, otherwise 0
-        //    (the item exists in the catalog but hasn't been formally received yet).
+        //    opening_stock  = bar_stock.current_stock (set by the last approved stocktake)
+        //    additions      = today's restock movements from bar_stock_ledger
+        //    sales          = today's sale movements from bar_stock_ledger
+        //    quantity       = opening + additions − sales  (system/expected closing)
+        const drinkIds = drinkRows.map((d: any) => String(d.id)).filter(Boolean);
+        const additionsByDrinkId = new Map<string, number>();
+        const salesByDrinkId = new Map<string, number>();
+        if (drinkIds.length > 0) {
+            const nextDay = new Date(new Date(rawDate + 'T00:00:00.000Z').getTime() + 86400000)
+                .toISOString().split('T')[0];
+            const { data: ledgerRows } = await supabase
+                .from('bar_stock_ledger')
+                .select('drink_id, transaction_type, quantity')
+                .eq('branch_id', branchId)
+                .in('drink_id', drinkIds)
+                .gte('created_at', `${rawDate}T00:00:00.000Z`)
+                .lt('created_at', `${nextDay}T00:00:00.000Z`);
+            for (const row of (ledgerRows || [])) {
+                const did = String(row.drink_id);
+                if (row.transaction_type === 'restock') {
+                    additionsByDrinkId.set(did, (additionsByDrinkId.get(did) ?? 0) + num(row.quantity));
+                } else if (row.transaction_type === 'sale') {
+                    salesByDrinkId.set(did, (salesByDrinkId.get(did) ?? 0) + num(row.quantity));
+                }
+            }
+        }
+
         const candidates = drinkRows.map((d: any) => {
             const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
             if (!invId) return null;
-            const currentStock = stockByDrinkId.get(String(d.id)) ?? 0;
+            const did = String(d.id);
+            const opening = stockByDrinkId.get(did) ?? 0;
+            const additions = additionsByDrinkId.get(did) ?? 0;
+            const sales = salesByDrinkId.get(did) ?? 0;
+            const system = opening + additions - sales;
             return {
                 id: invId,
                 name: d.name,
-                quantity: currentStock,
-                opening_stock: currentStock,
-                additions: 0,
-                sales: 0,
+                quantity: system,
+                opening_stock: opening,
+                additions,
+                sales,
                 unit: d.unit || 'bottle',
                 sku: d.sku || `bard-${d.id}`,
                 category: null,
@@ -370,11 +399,35 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             .in('inventory_item_id', invIds);
         const drinkIds = (drinkRows || []).map((d: any) => d.id);
 
-        const { data: stockRows } = await supabase
-            .from('bar_stock')
-            .select('drink_id, current_stock')
-            .eq('branch_id', branchId)
-            .in('drink_id', drinkIds);
+        const [{ data: stockRows }, { data: ledgerRows }] = await Promise.all([
+            supabase.from('bar_stock').select('drink_id, current_stock').eq('branch_id', branchId).in('drink_id', drinkIds),
+            drinkIds.length > 0
+                ? supabase.from('bar_stock_ledger')
+                    .select('drink_id, transaction_type, quantity')
+                    .eq('branch_id', branchId)
+                    .in('drink_id', drinkIds)
+                    .gte('created_at', `${stocktakeDate}T00:00:00.000Z`)
+                    .lt('created_at', `${new Date(new Date(stocktakeDate + 'T00:00:00.000Z').getTime() + 86400000).toISOString().split('T')[0]}T00:00:00.000Z`)
+                : Promise.resolve({ data: [] }),
+        ]);
+
+        // Map drink_id → inventory_item_id for ledger lookups
+        const invIdByDrinkId = new Map<string, string>(
+            (drinkRows || []).filter((d: any) => d.inventory_item_id)
+                .map((d: any) => [String(d.id), String(d.inventory_item_id)])
+        );
+        const additionsByInvId = new Map<string, number>();
+        const salesByInvId = new Map<string, number>();
+        for (const row of (ledgerRows || [])) {
+            const invId = invIdByDrinkId.get(String(row.drink_id));
+            if (!invId) continue;
+            if (row.transaction_type === 'restock') {
+                additionsByInvId.set(invId, (additionsByInvId.get(invId) ?? 0) + num(row.quantity));
+            } else if (row.transaction_type === 'sale') {
+                salesByInvId.set(invId, (salesByInvId.get(invId) ?? 0) + num(row.quantity));
+            }
+        }
+
         const stockByInvId = new Map<string, number>(
             (stockRows || [])
                 .map((r: any) => {
@@ -418,8 +471,8 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                 shift_id: req.body?.shift_id || null,
                 item_id: invId,  // inventory_items UUID (satisfies FK)
                 opening_stock: opening,
-                additions: 0,
-                sales: 0,
+                additions: additionsByInvId.get(invId) ?? 0,
+                sales: salesByInvId.get(invId) ?? 0,
                 system_quantity: sysQty,
                 physical_quantity: physQty,
                 // variance is a GENERATED column — do NOT include it
