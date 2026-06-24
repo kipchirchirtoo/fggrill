@@ -10689,7 +10689,7 @@ class _StockAutocomplete extends StatelessWidget {
 
 // ─────────────────────── BRANCH INVENTORY TAB ───────────────────────────────
 
-class _BranchInventoryTab extends StatelessWidget {
+class _BranchInventoryTab extends StatefulWidget {
   const _BranchInventoryTab({
     required this.stock,
     required this.search,
@@ -10709,18 +10709,27 @@ class _BranchInventoryTab extends StatelessWidget {
   final void Function(Map<String, dynamic>) onRequest;
 
   @override
+  State<_BranchInventoryTab> createState() => _BranchInventoryTabState();
+}
+
+class _BranchInventoryTabState extends State<_BranchInventoryTab> {
+  String _storeTypeFilter = 'all';
+
+  @override
   Widget build(BuildContext context) {
-    final q = search.toLowerCase();
-    final filtered = stock.where((item) {
+    final q = widget.search.toLowerCase();
+    final filtered = widget.stock.where((item) {
+      final st = '${item['store_type'] ?? ''}';
+      if (_storeTypeFilter != 'all' && st != _storeTypeFilter) return false;
       return q.isEmpty ||
-          itemName(item).toLowerCase().contains(q) ||
+          widget.itemName(item).toLowerCase().contains(q) ||
           '${item['item_sku'] ?? item['sku']}'.toLowerCase().contains(q) ||
           '${item['category'] ?? ''}'.toLowerCase().contains(q);
     }).toList();
     final lowStock = filtered
         .where((i) =>
-            toNum(i['quantity']) <=
-            toNum(i['reorder_level'] ?? i['min_quantity'] ?? 0))
+            widget.toNum(i['quantity']) <=
+            widget.toNum(i['reorder_level'] ?? i['min_quantity'] ?? 0))
         .length;
 
     return SingleChildScrollView(
@@ -10731,7 +10740,7 @@ class _BranchInventoryTab extends StatelessWidget {
             children: [
               _InventoryStat(
                   label: 'Branch Stock Items',
-                  value: '${stock.length}',
+                  value: '${widget.stock.length}',
                   icon: Icons.inventory_2_outlined,
                   color: AppColors.kPrimary),
               const SizedBox(width: 8),
@@ -10787,8 +10796,43 @@ class _BranchInventoryTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
+          // Store-type filter chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final entry in [
+                  ('all', 'All Items', Colors.grey),
+                  ('foodstuffs', 'Foodstuffs', Colors.green),
+                  ('bar_store', 'Bar', Colors.purple),
+                  ('dry_goods', 'Dry Goods', Colors.brown),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(entry.$2),
+                      selected: _storeTypeFilter == entry.$1,
+                      onSelected: (_) =>
+                          setState(() => _storeTypeFilter = entry.$1),
+                      selectedColor: entry.$3.withValues(alpha: 0.15),
+                      checkmarkColor: entry.$3,
+                      labelStyle: TextStyle(
+                        color: _storeTypeFilter == entry.$1
+                            ? entry.$3
+                            : Colors.grey.shade700,
+                        fontWeight: _storeTypeFilter == entry.$1
+                            ? FontWeight.w700
+                            : FontWeight.normal,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
           TextField(
-            onChanged: onSearchChanged,
+            onChanged: widget.onSearchChanged,
             decoration: const InputDecoration(
               hintText: 'Search branch stock by name, SKU or category…',
               prefixIcon: Icon(Icons.search),
@@ -10877,8 +10921,8 @@ class _BranchInventoryTab extends StatelessWidget {
                         Divider(height: 1, color: Colors.grey.shade100),
                     itemBuilder: (ctx, i) {
                       final item = filtered[i];
-                      final q2 = toNum(item['quantity']);
-                      final reorder = toNum(
+                      final q2 = widget.toNum(item['quantity']);
+                      final reorder = widget.toNum(
                           item['reorder_level'] ?? item['min_quantity'] ?? 0);
                       final isLow = q2 <= reorder;
                       final isZero = q2 <= 0;
@@ -10890,7 +10934,7 @@ class _BranchInventoryTab extends StatelessWidget {
                           children: [
                             Expanded(
                               flex: 3,
-                              child: Text(itemName(item),
+                              child: Text(widget.itemName(item),
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13)),
@@ -10913,28 +10957,42 @@ class _BranchInventoryTab extends StatelessWidget {
                                   final st =
                                       '${item['store_type'] ?? item['item']?['store_type'] ?? 'foodstuffs'}';
                                   final isBar = st == 'bar_store';
+                                  final isDry = st == 'dry_goods';
+                                  final bgColor = isBar
+                                      ? Colors.purple.shade50
+                                      : isDry
+                                          ? Colors.brown.shade50
+                                          : Colors.green.shade50;
+                                  final borderColor = isBar
+                                      ? Colors.purple.shade200
+                                      : isDry
+                                          ? Colors.brown.shade200
+                                          : Colors.green.shade200;
+                                  final textColor = isBar
+                                      ? Colors.purple.shade700
+                                      : isDry
+                                          ? Colors.brown.shade700
+                                          : Colors.green.shade700;
+                                  final label = isBar
+                                      ? 'Bar'
+                                      : isDry
+                                          ? 'Dry'
+                                          : 'Food';
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 5, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: isBar
-                                          ? Colors.purple.shade50
-                                          : Colors.green.shade50,
+                                      color: bgColor,
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: isBar
-                                              ? Colors.purple.shade200
-                                              : Colors.green.shade200),
+                                      border: Border.all(color: borderColor),
                                     ),
                                     child: Text(
-                                      isBar ? 'Bar' : 'Food',
+                                      label,
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
-                                        color: isBar
-                                            ? Colors.purple.shade700
-                                            : Colors.green.shade700,
+                                        color: textColor,
                                       ),
                                     ),
                                   );
@@ -10944,7 +11002,7 @@ class _BranchInventoryTab extends StatelessWidget {
                             SizedBox(
                               width: 100,
                               child: Text(
-                                qty(item),
+                                widget.qty(item),
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
@@ -11003,7 +11061,7 @@ class _BranchInventoryTab extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   TextButton(
-                                    onPressed: () => onRequest(item),
+                                    onPressed: () => widget.onRequest(item),
                                     child: const Text('Request',
                                         style: TextStyle(fontSize: 12)),
                                   ),

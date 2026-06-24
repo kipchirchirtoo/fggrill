@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import notificationService from './notification.service';
 import { AppError } from '../middleware/errorHandler';
 import * as InventoryFoundationService from './inventory-foundation.service';
+import { recordBarStockMovement } from './unified-bar-stock.service';
 
 const KYOGONG_CENTRAL_BRANCH_ID = 1;
 const KYOGONG_BRANCH_CODE = 'KYO';
@@ -296,15 +297,117 @@ export async function getBranchStock(branchId: number) {
 
   const dispatchedSkus = new Set((dispatchMovements || []).map((m: any) => m.item_sku));
 
+  // For bar items, branch_stock.quantity stays 0 because bar stock is managed
+  // separately via bar_stock.current_stock. Build a sku → current_stock map
+  // using TWO join paths so we handle both old (NULL item_sku) and new rows:
+  //   Path A: bar_stock.item_sku matches branch_stock.item_sku directly
+  //   Path B: bar_drinks.sku matches branch_stock.item_sku → join bar_stock via drink_id
+  const barSkus = (items || [])
+    .filter(i => i.store_type === 'bar_store')
+    .map(i => i.sku);
+
+  const barStockMap = new Map<string, number>();
+  if (barSkus.length > 0) {
+    // Path A — direct item_sku match
+    const { data: barRowsA } = await supabase
+      .from('bar_stock')
+      .select('item_sku, current_stock')
+      .eq('branch_id', branchId)
+      .in('item_sku', barSkus);
+
+    (barRowsA || []).forEach((r: any) => {
+      if (r.item_sku) barStockMap.set(String(r.item_sku), Number(r.current_stock ?? 0));
+    });
+
+    // Path B — via bar_drinks.sku for rows where bar_stock.item_sku is NULL/unset
+    const { data: drinkRows } = await supabase
+      .from('bar_drinks')
+      .select('id, sku, name')
+      .in('sku', barSkus);
+
+    const drinkIds = (drinkRows || []).map((d: any) => String(d.id));
+    if (drinkIds.length > 0) {
+      const { data: barRowsB } = await supabase
+        .from('bar_stock')
+        .select('drink_id, current_stock')
+        .eq('branch_id', branchId)
+        .in('drink_id', drinkIds);
+
+      const drinkIdToSku = new Map<string, string>(
+        (drinkRows || []).map((d: any) => [String(d.id), String(d.sku)])
+      );
+      (barRowsB || []).forEach((r: any) => {
+        const sku = drinkIdToSku.get(String(r.drink_id));
+        if (sku && !barStockMap.has(sku)) {
+          barStockMap.set(sku, Number(r.current_stock ?? 0));
+        }
+      });
+    }
+
+    // Path C — name-based fallback for older bar_drinks rows that have no SKU set.
+    // The stocktake controller itself uses name-matching as the primary link.
+    // For any bar SKU not yet in the map, try: LOWER(bar_drinks.name) = LOWER(simple_items.item_name)
+    const unmappedSkus = barSkus.filter(s => !barStockMap.has(s));
+    if (unmappedSkus.length > 0) {
+      // Fetch ALL bar_drinks for the branch — include rows where branch_id IS NULL
+      // (seeded global drinks) since the original seed data didn't set branch_id.
+      const { data: allDrinkRows } = await supabase
+        .from('bar_drinks')
+        .select('id, name, sku, branch_id')
+        .or(`branch_id.eq.${branchId},branch_id.is.null`);
+
+      // Build name → drink_id map (normalised lower-case, trimmed)
+      const drinkByName = new Map<string, string>();
+      (allDrinkRows || []).forEach((d: any) => {
+        drinkByName.set(String(d.name || '').toLowerCase().trim(), String(d.id));
+      });
+
+      // Resolve each unmapped bar SKU via item_name → bar_drinks.name
+      const nameDrinkIds: string[] = [];
+      const skuForNameDrink = new Map<string, string>(); // drinkId → sku
+      for (const sku of unmappedSkus) {
+        const si = items?.find(i => i.sku === sku);
+        if (!si) continue;
+        const normName = String(si.item_name || '').toLowerCase().trim();
+        const drinkId = drinkByName.get(normName);
+        if (drinkId) {
+          nameDrinkIds.push(drinkId);
+          skuForNameDrink.set(drinkId, sku);
+        }
+      }
+
+      if (nameDrinkIds.length > 0) {
+        const { data: barRowsC } = await supabase
+          .from('bar_stock')
+          .select('drink_id, current_stock')
+          .eq('branch_id', branchId)
+          .in('drink_id', nameDrinkIds);
+
+        (barRowsC || []).forEach((r: any) => {
+          const sku = skuForNameDrink.get(String(r.drink_id));
+          if (sku && !barStockMap.has(sku)) {
+            barStockMap.set(sku, Number(r.current_stock ?? 0));
+          }
+        });
+      }
+    }
+  }
+
   return stock.map(s => {
     const item = items?.find(i => i.sku === s.item_sku);
+    const storeType = item?.store_type || 'foodstuffs';
+    // Use bar_stock.current_stock as the live quantity for bar items
+    const quantity = storeType === 'bar_store' && barStockMap.has(s.item_sku)
+      ? barStockMap.get(s.item_sku)!
+      : s.quantity;
     return {
       ...s,
+      quantity,
       item,
       item_name: item?.item_name || item?.description || s.item_sku,
       description: item?.description || item?.item_name || s.item_sku,
       unit_of_measure: item?.unit_of_measure,
-      store_type: item?.store_type || 'foodstuffs',
+      store_type: storeType,
       source: dispatchedSkus.has(s.item_sku) ? 'dispatch' : 'catalog'
     };
   });
@@ -465,6 +568,74 @@ export async function updateBranchStock(
   }
 
   return { previousStock, newStock };
+}
+
+/**
+ * Credit produced/issued quantity onto a pos_outlet_items row, honoring
+ * stock-pool sharing (e.g. Half/Quarter Chicken sharing the Full Chicken
+ * pool) and the unified bar-stock ledger sync for bar-sourced items.
+ * Shared by Kitchen Shift production and Outlet Production posting so both
+ * paths credit POS stock identically instead of each reimplementing it.
+ */
+export async function creditOutletItemStock(outletItemId: string, qty: number): Promise<void> {
+  const { data: oi } = await supabase
+    .from('pos_outlet_items')
+    .select('current_stock,stock_pool_item_id,pool_fraction,outlet_id,source_table,source_item_id,sku')
+    .eq('id', outletItemId)
+    .single();
+  if (!oi) return;
+
+  if (oi.source_table === 'bar_drinks' && oi.source_item_id && oi.outlet_id) {
+    try {
+      const { data: outlet } = await supabase
+        .from('pos_outlets')
+        .select('branch_id, outlet_type')
+        .eq('id', oi.outlet_id)
+        .maybeSingle();
+      if (
+        outlet?.branch_id &&
+        ['main_bar', 'executive_bar', 'kyogong_executive_bar', 'kyogong_sports_bar'].includes(outlet.outlet_type)
+      ) {
+        await recordBarStockMovement({
+          branchId: outlet.branch_id,
+          outletId: oi.outlet_id,
+          drinkId: oi.source_item_id,
+          sku: oi.sku || undefined,
+          quantityDelta: qty,
+          movementType: 'production',
+          notes: 'Kitchen production added to bar POS'
+        });
+      }
+    } catch (syncErr: any) {
+      logger.warn('Unified bar stock sync failed for kitchen production (non-critical):', syncErr.message);
+    }
+  }
+
+  if (oi.stock_pool_item_id) {
+    const { data: pool } = await supabase
+      .from('pos_outlet_items')
+      .select('current_stock')
+      .eq('id', oi.stock_pool_item_id)
+      .single();
+    if (pool) {
+      await supabase
+        .from('pos_outlet_items')
+        .update({
+          current_stock: Number(pool.current_stock || 0) + qty * Number(oi.pool_fraction || 1),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', oi.stock_pool_item_id);
+    }
+    return;
+  }
+
+  await supabase
+    .from('pos_outlet_items')
+    .update({
+      current_stock: Number(oi.current_stock || 0) + qty,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', outletItemId);
 }
 
 // ============================================================
