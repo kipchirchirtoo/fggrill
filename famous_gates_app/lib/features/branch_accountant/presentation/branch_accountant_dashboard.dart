@@ -4841,26 +4841,13 @@ class _ShiftOpeningApprovalsSectionState
     final id = '${shift['id'] ?? ''}';
     if (id.isEmpty || _busyIds.contains(id)) return;
     final repo = ref.read(branchAccountantRepositoryProvider);
-    setState(() => _busyIds.add(id));
-    try {
-      final gate = await repo.getOpeningStockStatus(id);
-      final gateData = _map(gate['data']).isNotEmpty ? _map(gate['data']) : gate;
-      if (gateData['gate_open'] != true) {
-        if (mounted) {
-          final branchId = int.tryParse('${gateData['branch_id'] ?? shift['branch_id'] ?? ''}');
-          await _showOpeningStockGateDialog(_map(gateData['status']), branchId);
-        }
-        return;
-      }
-    } catch (_) {
-      // If the gate status itself can't be loaded, fail safe by blocking.
-      if (mounted) {
-        _notify(context, 'Could not verify opening stock status. Try again.');
-      }
-      return;
-    } finally {
-      if (mounted) setState(() => _busyIds.remove(id));
-    }
+    // approveShiftOpening already re-runs the real stocktake gate
+    // (verifyStocktakesComplete, keyed off cashier_shift_logs/stock_counts)
+    // server-side. The old pre-flight check here queried the
+    // cashier_shifts/shift_opening_stock tables from an abandoned migration
+    // that never got populated, so it 404'd on every single shift and
+    // permanently blocked this button — removed rather than fixed, since the
+    // server-side gate makes it redundant even if that table were live.
     setState(() => _busyIds.add(id));
     try {
       await repo.approveShiftOpening(
@@ -4905,56 +4892,6 @@ class _ShiftOpeningApprovalsSectionState
     } finally {
       if (mounted) setState(() => _busyIds.remove(id));
     }
-  }
-
-  Future<void> _showOpeningStockGateDialog(
-      Map<String, dynamic> status, int? branchId) async {
-    // Only Kyogong (branch 1) has a separate Executive Bar outlet — every
-    // other branch has just one bar, so don't show that row for them.
-    final locations = [
-      ('Branch Store', 'branch_store_complete'),
-      ('Main Bar', 'main_bar_complete'),
-      if (branchId == 1) ('Executive Bar', 'executive_bar_complete'),
-    ];
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Opening Stock Incomplete'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-                'The shift cannot be opened until all stock counts are submitted.'),
-            const SizedBox(height: 14),
-            for (final (label, key) in locations)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      status[key] == true
-                          ? Icons.check_circle
-                          : Icons.cancel,
-                      color: status[key] == true ? Colors.green : Colors.red,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(label),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Dismiss'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<String?> _askForRejectionNote() async {

@@ -50,12 +50,6 @@ class BranchAccountantRepository {
     });
   }
 
-  /// Gate check before opening a cashier shift: branch store / main bar /
-  /// executive bar opening stock counts must all be submitted first.
-  Future<Map<String, dynamic>> getOpeningStockStatus(String shiftId) async {
-    return _getMap('/storekeeping/opening-stock/$shiftId');
-  }
-
   /// Bar stocktake records pending accountant review (approve/reject is
   /// accountant-only; submission is storekeeper-only).
   Future<List<Map<String, dynamic>>> getBarStocktakeRecords({
