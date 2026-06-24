@@ -158,6 +158,22 @@ const ensureInventoryItems = async (
             drinkIdToInvId.set(d.id, existingBySku.get(d.sku)!);
         }
     }
+
+    // Stamp inventory_item_id back onto bar_drinks rows that were missing it,
+    // so future approvals can sync via the direct inventory_item_id JOIN.
+    const toStamp = drinks.filter(d => d.sku && existingBySku.has(d.sku));
+    if (toStamp.length > 0) {
+        for (const d of toStamp) {
+            const invId = existingBySku.get(d.sku);
+            if (!invId) continue;
+            await supabase
+                .from('bar_drinks')
+                .update({ inventory_item_id: invId })
+                .eq('id', d.id)
+                .is('inventory_item_id', null);
+        }
+    }
+
     return drinkIdToInvId;
 };
 
