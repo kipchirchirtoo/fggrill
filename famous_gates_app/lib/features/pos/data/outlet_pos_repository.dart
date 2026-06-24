@@ -727,15 +727,23 @@ class OutletCartItem {
   const OutletCartItem({
     required this.item,
     required this.quantity,
+    this.notes,
   });
 
   final OutletPosItem item;
   final int quantity;
+  /// Free-form per-line instruction (e.g. "Warm" / "Cold" for drinks) that
+  /// rides through to the captain order ticket.
+  final String? notes;
 
   double get lineTotal => item.sellingPrice * quantity;
 
-  OutletCartItem copyWith({int? quantity}) {
-    return OutletCartItem(item: item, quantity: quantity ?? this.quantity);
+  OutletCartItem copyWith({int? quantity, String? notes}) {
+    return OutletCartItem(
+      item: item,
+      quantity: quantity ?? this.quantity,
+      notes: notes ?? this.notes,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -750,6 +758,7 @@ class OutletCartItem {
       'quantity': quantity,
       'unit_price': item.sellingPrice,
       'line_total': lineTotal,
+      if (notes != null && notes!.trim().isNotEmpty) 'notes': notes,
     };
   }
 }

@@ -213,7 +213,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
 
   @override
   Widget build(BuildContext context) {
-    _PosPalette.isDark = !_isRestaurant;
+    _PosPalette.isDark = !_usesLightPalette;
     return MasterDashboardShell<OutletPosSection>(
       title: widget.title,
       subtitle: 'Outlet POS',
@@ -486,8 +486,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             cart: _cart,
             subtotal: subtotal,
             busy: _busy,
-            onIncrement: (item) => _setQty(item.item.id, item.quantity + 1),
-            onDecrement: (item) => _setQty(item.item.id, item.quantity - 1),
+            onIncrement: (item) => _setQty(item, item.quantity + 1),
+            onDecrement: (item) => _setQty(item, item.quantity - 1),
             onClear: () => setState(() {
               _cart = [];
               _recalledOrder = null;
@@ -704,7 +704,36 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     }
   }
 
-  void _addToCart(OutletPosItem item) {
+  // Drinks in these categories can be served warm or cold - the waiter picks
+  // one when adding to cart, and it rides through to the bar captain order.
+  static const _temperatureCategories = {
+    'soft drinks',
+    'beers',
+    'canned beers',
+  };
+
+  Future<String?> _pickDrinkTemperature(String itemName) {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(itemName),
+        content: const Text('Serve warm or cold?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel')),
+          OutlinedButton(
+              onPressed: () => Navigator.of(context).pop('Warm'),
+              child: const Text('Warm')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop('Cold'),
+              child: const Text('Cold')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addToCart(OutletPosItem item) async {
     if (_shift == null) {
       AppNotifier.showSnackBar(
         context,
@@ -714,10 +743,18 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       );
       return;
     }
-    final index = _cart.indexWhere((entry) => entry.item.id == item.id);
+
+    String? notes;
+    if (_temperatureCategories.contains(item.category.trim().toLowerCase())) {
+      notes = await _pickDrinkTemperature(item.name);
+      if (notes == null) return; // cancelled
+    }
+
+    final index = _cart.indexWhere(
+        (entry) => entry.item.id == item.id && entry.notes == notes);
     setState(() {
       if (index == -1) {
-        _cart = [..._cart, OutletCartItem(item: item, quantity: 1)];
+        _cart = [..._cart, OutletCartItem(item: item, quantity: 1, notes: notes)];
       } else {
         final updated = [..._cart];
         updated[index] =
@@ -727,15 +764,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     });
   }
 
-  void _setQty(String itemId, int qty) {
+  void _setQty(OutletCartItem entry, int qty) {
     setState(() {
+      final index = _cart.indexOf(entry);
+      if (index == -1) return;
       if (qty <= 0) {
-        _cart = _cart.where((entry) => entry.item.id != itemId).toList();
+        _cart = [..._cart]..removeAt(index);
       } else {
-        _cart = _cart
-            .map((entry) =>
-                entry.item.id == itemId ? entry.copyWith(quantity: qty) : entry)
-            .toList();
+        _cart = [..._cart]..[index] = entry.copyWith(quantity: qty);
       }
     });
   }
@@ -1045,6 +1081,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
 
   bool get _isRestaurant =>
       (_outlet?.outletType ?? widget.outletType).toLowerCase() == 'restaurant';
+
+  bool get _usesLightPalette {
+    final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();
+    return type == 'restaurant' || type == 'main_bar';
+  }
 
   String _stationLabel(PosOutlet outlet) {
     final type = outlet.outletType.toLowerCase();
@@ -1809,7 +1850,11 @@ class _CartPanel extends StatelessWidget {
                   for (final item in cart)
                     ListTile(
                       title: Text(item.item.name),
-                      subtitle: Text(formatKes(item.lineTotal)),
+                      subtitle: Text(
+                        item.notes == null || item.notes!.trim().isEmpty
+                            ? formatKes(item.lineTotal)
+                            : '${formatKes(item.lineTotal)} - ${item.notes}',
+                      ),
                       trailing: Wrap(
                         spacing: 4,
                         crossAxisAlignment: WrapCrossAlignment.center,

@@ -459,7 +459,8 @@ const normalizeOrderItems = async (
       outlet_type: item.outlet_type ?? null,
       quantity,
       unit_price: unitPrice,
-      line_total: quantity * unitPrice
+      line_total: quantity * unitPrice,
+      notes: item.notes ? String(item.notes).trim() || null : null
     };
   });
 };

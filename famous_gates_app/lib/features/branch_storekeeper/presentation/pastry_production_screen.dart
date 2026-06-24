@@ -103,7 +103,8 @@ class _PastryProductionScreenState
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
-                    title: Text('${item['item_name'] ?? 'Pastry Item'}'),
+                    title: Text(
+                        '${item['item']?['item_name'] ?? item['item_name'] ?? 'Pastry Item'}'),
                     subtitle: Text(
                       'Qty: ${item['quantity_produced']} · Shift: ${item['shift_id'] ?? '—'}',
                       style: const TextStyle(fontSize: 12),
@@ -139,9 +140,13 @@ class _LogProductionSheet extends ConsumerStatefulWidget {
 }
 
 class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
+  // Pastry items are a dedicated catalog slice (inventory_items.store_type
+  // = 'pastry'), not branch_stock - most pastry SKUs never get a
+  // branch_stock row since they're baked in-house, not received from a
+  // supplier. Storekeeper/admin adds pastry items via inventory_items.
   late Future<List<Map<String, dynamic>>> _itemsFuture = ref
       .read(branchStorekeeperRepositoryProvider)
-      .branchStock(category: 'pastry');
+      .storeItems(storeType: 'pastry', limit: 500);
   String? _itemId;
   final _quantityCtrl = TextEditingController();
   String _shift = 'day';
@@ -198,6 +203,12 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
               const SizedBox(height: 16),
               if (snap.connectionState == ConnectionState.waiting)
                 const Center(child: CircularProgressIndicator())
+              else if (items.isEmpty)
+                const Text(
+                  'No pastry items configured yet. Add items with '
+                  "store_type = 'pastry' to inventory_items first.",
+                  style: TextStyle(color: Colors.grey),
+                )
               else
                 DropdownButtonFormField<String>(
                   initialValue: _itemId,
@@ -206,7 +217,8 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
                   items: items
                       .map((i) => DropdownMenuItem(
                             value: '${i['id']}',
-                            child: Text('${i['name'] ?? 'Item'}'),
+                            child:
+                                Text('${i['item_name'] ?? i['name'] ?? 'Item'}'),
                           ))
                       .toList(),
                   onChanged: (v) => setState(() => _itemId = v),

@@ -236,7 +236,47 @@ String _locationLabel(dynamic key) {
   }
 }
 
+String _itemLabel(Map<String, dynamic> row) {
+  final item = row['item'];
+  final nestedName =
+      item is Map ? item['name'] : item is Map<dynamic, dynamic> ? item['name'] : null;
+  final value = row['item_name'] ?? row['name'] ?? nestedName ?? row['item_id'];
+  return '${value ?? 'Unknown item'}';
+}
+
+num? _systemQuantity(Map<String, dynamic> row) {
+  return _nullableNum(
+    row['system_quantity'] ?? row['system_closing_stock'] ?? row['closing_balance'],
+  );
+}
+
+num? _physicalQuantity(Map<String, dynamic> row) {
+  return _nullableNum(
+    row['physical_quantity'] ?? row['counted_quantity'] ?? row['actual_quantity'],
+  );
+}
+
+num _variance(Map<String, dynamic> row) {
+  final stored = _nullableNum(row['variance']);
+  if (stored != null) return stored;
+  final system = _systemQuantity(row);
+  final physical = _physicalQuantity(row);
+  if (system != null && physical != null) return physical - system;
+  return 0;
+}
+
 num _num(dynamic v) => v is num ? v : num.tryParse('${v ?? 0}') ?? 0;
+
+num? _nullableNum(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v;
+  return num.tryParse('$v');
+}
+
+String _displayQty(num? value) {
+  if (value == null) return '-';
+  return value == value.roundToDouble() ? value.toInt().toString() : '$value';
+}
 
 void _notify(BuildContext context, String message) {
   AppNotifier.showSnackBar(context, SnackBar(content: Text(message)));

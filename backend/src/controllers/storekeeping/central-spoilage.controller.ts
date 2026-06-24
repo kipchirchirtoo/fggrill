@@ -17,6 +17,23 @@ const SPOILAGE_REASONS = [
 
 type SpoilageReason = typeof SPOILAGE_REASONS[number];
 
+const barOutletTypeFor = (value: unknown): 'main_bar' | 'executive_bar' => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw.includes('executive')) return 'executive_bar';
+  return 'main_bar';
+};
+
+const branchIdForRequest = (req: Request): number | null => {
+  const raw = req.query.branch_id ?? (req as any).user?.branch_id ?? null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const isBarSpoilageRequest = (value: unknown): boolean => {
+  const raw = String(value || '').trim().toLowerCase();
+  return ['bar_store', 'bar', 'main_bar', 'executive_bar'].includes(raw);
+};
+
 // ============================================================
 // GET SPOILAGE RECORDS
 // ============================================================
@@ -168,7 +185,62 @@ export const getSpoilageSummary = async (req: Request, res: Response) => {
 
 export const getSpoilageItems = async (req: Request, res: Response) => {
   try {
-    const { search, store_type } = req.query;
+    const { search, store_type, bar_location, outlet_type } = req.query;
+
+    if (isBarSpoilageRequest(store_type)) {
+      const branchId = branchIdForRequest(req);
+      if (!branchId) {
+        return res.json({ success: true, count: 0, data: [] });
+      }
+
+      const outletType = barOutletTypeFor(bar_location || outlet_type || store_type);
+      const { data: outlet, error: outletError } = await supabase
+        .from('pos_outlets')
+        .select('id, branch_id, name, outlet_type')
+        .eq('branch_id', branchId)
+        .eq('outlet_type', outletType)
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (outletError) throw outletError;
+      if (!outlet) {
+        return res.json({ success: true, count: 0, data: [] });
+      }
+
+      let query = supabase
+        .from('pos_outlet_items')
+        .select('id, name, sku, category, unit, cost_price, selling_price, current_stock')
+        .eq('outlet_id', outlet.id)
+        .eq('is_active', true);
+
+      if (search) {
+        const searchTerm = String(search).trim();
+        query = query.or(`name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error } = await query.order('name').limit(300);
+      if (error) throw error;
+
+      const items = (data || []).map((item) => ({
+        id: item.id,
+        name: item.name || item.sku || 'POS Item',
+        sku: item.sku || item.id,
+        category: item.category || 'Bar',
+        store_type: 'bar_store',
+        unit: item.unit || 'each',
+        cost: item.cost_price || item.selling_price || 0,
+        stock: item.current_stock || 0,
+        outlet_type: outlet.outlet_type,
+        outlet_name: outlet.name,
+      }));
+
+      return res.json({
+        success: true,
+        count: items.length,
+        data: items
+      });
+    }
 
     let query = supabase
       .from('simple_items')
@@ -231,6 +303,7 @@ export const createSpoilageRecord = async (req: Request, res: Response) => {
       notes,
       spoilage_date
     } = req.body;
+    const barLocation = req.body?.bar_location || req.body?.outlet_type || req.body?.store_type;
 
     // Validation
     if (!item_sku || !quantity || !unit || !reason) {
@@ -254,26 +327,88 @@ export const createSpoilageRecord = async (req: Request, res: Response) => {
       });
     }
 
-    // Get item details
-    const { data: item, error: itemError } = await supabase
-      .from('simple_items')
-      .select('*')
-      .eq('sku', item_sku)
-      .single();
+    const barSpoilage = isBarSpoilageRequest(req.body?.store_type);
+    let item: any = null;
+    let previousQuantity = 0;
+    let newQuantity = 0;
+    let unitCost = 0;
 
-    if (itemError || !item) {
-      return res.status(404).json({
-        success: false,
-        message: 'Item not found'
-      });
-    }
+    if (barSpoilage) {
+      const branchId = branchIdForRequest(req);
+      if (!branchId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Branch is required for bar spoilage'
+        });
+      }
 
-    // Check sufficient stock
-    if (item.quantity < quantity) {
-      return res.status(400).json({
-        success: false,
-        message: `Insufficient stock. Available: ${item.quantity}, Requested: ${quantity}`
-      });
+      const outletType = barOutletTypeFor(barLocation);
+      const { data: outlet, error: outletError } = await supabase
+        .from('pos_outlets')
+        .select('id, branch_id, name, outlet_type')
+        .eq('branch_id', branchId)
+        .eq('outlet_type', outletType)
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (outletError) throw outletError;
+      if (!outlet) {
+        return res.status(404).json({
+          success: false,
+          message: 'Main bar POS outlet not found for this branch'
+        });
+      }
+
+      const { data: outletItem, error: outletItemError } = await supabase
+        .from('pos_outlet_items')
+        .select('*')
+        .eq('outlet_id', outlet.id)
+        .or(`sku.eq.${item_sku},id.eq.${item_sku}`)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (outletItemError || !outletItem) {
+        return res.status(404).json({
+          success: false,
+          message: 'Bar POS item not found'
+        });
+      }
+
+      item = outletItem;
+      previousQuantity = Number(item.current_stock || 0);
+      if (previousQuantity < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock. Available: ${previousQuantity}, Requested: ${quantity}`
+        });
+      }
+      newQuantity = previousQuantity - quantity;
+      unitCost = Number(item.cost_price || item.selling_price || 0);
+    } else {
+      const { data: simpleItem, error: itemError } = await supabase
+        .from('simple_items')
+        .select('*')
+        .eq('sku', item_sku)
+        .single();
+
+      if (itemError || !simpleItem) {
+        return res.status(404).json({
+          success: false,
+          message: 'Item not found'
+        });
+      }
+
+      item = simpleItem;
+      previousQuantity = Number(item.quantity || 0);
+      if (previousQuantity < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock. Available: ${previousQuantity}, Requested: ${quantity}`
+        });
+      }
+      newQuantity = previousQuantity - quantity;
+      unitCost = item.cost_price || 0;
     }
 
     // Generate spoilage number
@@ -282,22 +417,17 @@ export const createSpoilageRecord = async (req: Request, res: Response) => {
 
     if (seqError) throw seqError;
 
-    // Start transaction: create spoilage record and deduct stock atomically
-    const previousQuantity = item.quantity;
-    const newQuantity = previousQuantity - quantity;
-    const unitCost = item.cost_price || 0;
-
     // 1. Create spoilage record
     const { data: spoilage, error: spoilageError } = await supabase
       .from('central_spoilage_log')
       .insert({
         spoilage_number: spoilageNumber,
         item_sku,
-        item_name: item.item_name || item.description,
-        store_type: item.store_type || 'foodstuffs',
-        category: item.category,
+        item_name: item.item_name || item.description || item.name,
+        store_type: barSpoilage ? 'bar_store' : (item.store_type || 'foodstuffs'),
+        category: item.category || 'Bar',
         quantity,
-        unit,
+        unit: unit || item.unit_of_measure || item.unit || 'each',
         unit_cost: unitCost,
         reason,
         reason_details,
@@ -312,14 +442,22 @@ export const createSpoilageRecord = async (req: Request, res: Response) => {
 
     if (spoilageError) throw spoilageError;
 
-    // 2. Deduct stock from simple_items
-    const { error: updateError } = await supabase
-      .from('simple_items')
-      .update({
-        quantity: newQuantity,
-        last_updated: new Date().toISOString()
-      })
-      .eq('sku', item_sku);
+    // 2. Deduct stock from the correct inventory source
+    const updateError = barSpoilage
+      ? (await supabase
+          .from('pos_outlet_items')
+          .update({
+            current_stock: newQuantity,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', item.id)).error
+      : (await supabase
+          .from('simple_items')
+          .update({
+            quantity: newQuantity,
+            last_updated: new Date().toISOString()
+          })
+          .eq('sku', item_sku)).error;
 
     if (updateError) throw updateError;
 

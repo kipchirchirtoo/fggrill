@@ -134,12 +134,14 @@ class BranchStorekeeperRepository {
 
   Future<List<Map<String, dynamic>>> storeItems({
     String? search,
+    String? storeType,
     int limit = 500,
   }) async {
     final response = await _dio.get(
       '/store/items',
       queryParameters: {
         if (search != null && search.isNotEmpty) 'search': search,
+        if (storeType != null && storeType.isNotEmpty) 'store_type': storeType,
         'limit': limit,
       },
       options: await _authOptions,
@@ -414,6 +416,14 @@ class BranchStorekeeperRepository {
       options: await _authOptions,
     );
     return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> posOutletItemsByType(
+    String outletType,
+  ) async {
+    final outlets = await posOutlets(outletType: outletType);
+    if (outlets.isEmpty) return const [];
+    return posOutletItems('${outlets.first['id']}');
   }
 
   Future<Map<String, dynamic>> createProductionRun(
