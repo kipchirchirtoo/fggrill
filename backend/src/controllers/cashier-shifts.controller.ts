@@ -29,6 +29,16 @@ const SHIFT_MANAGER_ROLES = new Set([
     'it_manager'
 ]);
 
+// The server runs on UTC, but branches operate on Africa/Nairobi (UTC+3)
+// local time. Between 00:00 and 03:00 EAT, new Date().toISOString() still
+// reports the previous day, so the stocktake gate below must compare against
+// today's date in branch-local time, not server UTC, or a stocktake genuinely
+// submitted "today" in Nairobi looks like it belongs to "yesterday" and the
+// gate never clears for overnight/early-morning shift opens.
+function todayInBranchTimezone(): string {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
+}
+
 function parsePositiveInt(value: unknown): number | null {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -1100,7 +1110,7 @@ export const startShift = async (
             'Cashier';
 
         // All required stocktakes must be completed before a cashier shift can open.
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayInBranchTimezone();
         const stocktakeGate = await verifyStocktakesComplete(targetBranchId, today);
         if (!stocktakeGate.ok) {
             throw new AppError(
@@ -1254,7 +1264,7 @@ export const approveShiftOpening = async (
         }
 
         // All required stocktakes must be completed before a cashier shift can be approved.
-        const shiftDate = new Date().toISOString().split('T')[0];
+        const shiftDate = todayInBranchTimezone();
         const stocktakeGate = await verifyStocktakesComplete(Number(shift.branch_id), shiftDate);
         if (!stocktakeGate.ok) {
             throw new AppError(
