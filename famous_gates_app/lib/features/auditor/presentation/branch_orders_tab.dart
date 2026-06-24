@@ -45,7 +45,7 @@ class BranchOrdersTab extends ConsumerWidget {
                         style: Theme.of(context).textTheme.headlineMedium),
                     const SizedBox(height: 2),
                     const Text(
-                      'Verify and approve stock requisitions from branches.',
+                      'View branch stock requisitions. Approval is now handled by the branch accountant.',
                       style: TextStyle(
                           color: AppColors.kTextSecondary, fontSize: 13),
                     ),
@@ -390,7 +390,7 @@ class _StatusFilterRow extends ConsumerWidget {
 
   static const _filters = [
     (null, 'All'),
-    ('pending', 'Pending Audit'),
+    ('pending', 'Pending Branch Accountant'),
     ('approved', 'Approved'),
     ('dispatched', 'Dispatched'),
     ('delivered', 'Delivered'),
@@ -560,7 +560,8 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
     final statusLabel = _statusLabel(r.status);
     final isUrgent = r.priority.toLowerCase() == 'urgent' ||
         r.priority.toLowerCase() == 'high';
-    final canAct = r.isPendingAudit;
+    // Branch stock requests are now approved by the branch accountant, not the auditor.
+    final canAct = false;
 
     return Card(
       margin: EdgeInsets.zero,

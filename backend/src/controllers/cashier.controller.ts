@@ -6196,11 +6196,14 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
             throw new AppError('Only open logbooks can be submitted for audit', 400);
         }
 
-        // Update status to pending_audit
+        // Logbooks first land with the branch accountant for review; the
+        // auditor only sees them once the accountant approves (see
+        // auditLogbook below), so the initial status must be
+        // pending_accountant_review, not pending_audit.
         const { data: updated, error: updateError } = await supabase
             .from('cashier_logbooks')
             .update({
-                status: 'pending_audit',
+                status: 'pending_accountant_review',
                 submitted_at: new Date(),
                 updated_at: new Date()
             })
@@ -6210,7 +6213,7 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
 
         if (updateError) throw updateError;
 
-        // Notify Auditor and Accountant — scoped to the cashier's branch
+        // Notify Accountant — scoped to the cashier's branch
         const cashierBranchId = req.user?.branch_id;
         const notificationData = {
             type: 'warning' as const,
@@ -6221,11 +6224,6 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
             metadata: { logbook_id: id, type: 'cashier_logbook', cashier_id }
         };
 
-        // 1. Notify Auditor
-        notificationService.notifyRole('auditor', 'Cashier Logbook Submission', `Cashier logbook for ${logbook.type} has been submitted for audit.`, notificationData)
-            .catch(e => logger.error('Failed to notify auditor of logbook submission', e));
-
-        // 2. Notify Accountant
         notificationService.notifyRole('branch_accountant', 'Cashier Logbook Submission', `Cashier logbook for ${logbook.type} has been submitted for review.`, notificationData)
             .catch(e => logger.error('Failed to notify accountant of logbook submission', e));
 

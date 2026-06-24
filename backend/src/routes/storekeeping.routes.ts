@@ -224,6 +224,7 @@ const stockTakeOwnerRoles = [
 ];
 
 const auditorRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR];
+const branchAccountantRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_ACCOUNTANT];
 
 // =====================================================
 // ITEMS ROUTES
@@ -332,14 +333,14 @@ router.put('/pos-inventory-mappings', authorize(managerRoles), upsertPosInventor
 // IMPORTANT: Specific routes MUST come before parameterized routes
 router.get('/stock-requests/approved', authorize(centralRoles), getApprovedRequests);
 router.get('/stock-requests/pending', authorize(managerRoles), getPendingRequests); // Allow branch managers to see pending requests
-router.get('/stock-requests/branch-performance/:branchId', authorize(auditorRoles), getBranchPerformance);
+router.get('/stock-requests/branch-performance/:branchId', authorize(branchAccountantRoles), getBranchPerformance);
 router.post('/stock-requests', authorize(branchRoles), createStockRequest);
 router.get('/stock-requests', authorize(branchRoles), getStockRequests);
 router.get('/stock-requests/:id/:document(request|approval).pdf', authorize(branchRoles), printStockRequestDocument);
 router.get('/stock-requests/:id', authorize(branchRoles), getStockRequest);
-router.put('/stock-requests/:id/review', authorize(auditorRoles), reviewStockRequest);
-router.put('/stock-requests/:id/approve', authorize(auditorRoles), approveStockRequest);
-router.put('/stock-requests/:id/reject', authorize(auditorRoles), rejectStockRequest);
+router.put('/stock-requests/:id/review', authorize(branchAccountantRoles), reviewStockRequest);
+router.put('/stock-requests/:id/approve', authorize(branchAccountantRoles), approveStockRequest);
+router.put('/stock-requests/:id/reject', authorize(branchAccountantRoles), rejectStockRequest);
 
 // Dispatch notes (Central → Branch)
 router.post('/dispatch-notes', authorize(centralRoles), createDispatch);

@@ -49,7 +49,7 @@ export default function CentralRequestsPage() {
         setIsLoading(true);
         try {
             // If status is 'all', we want active/unfulfilled requests
-            const activeStatuses = ['PENDING', 'UNDER_REVIEW', 'APPROVED', 'PARTIALLY_APPROVED', 'DISPATCHED'];
+            const activeStatuses = ['PENDING', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL', 'UNDER_REVIEW', 'APPROVED', 'PARTIALLY_APPROVED', 'DISPATCHED'];
             const historyStatuses = ['DELIVERED', 'REJECTED', 'CANCELLED'];
 
             const isHistory = statusFilter === 'HISTORY';
@@ -141,7 +141,8 @@ export default function CentralRequestsPage() {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'PENDING': return 'warning';
+            case 'PENDING':
+            case 'PENDING_BRANCH_ACCOUNTANT_APPROVAL': return 'warning';
             case 'UNDER_REVIEW': return 'info';
             case 'APPROVED': return 'success';
             case 'PARTIALLY_APPROVED': return 'success';
@@ -154,7 +155,8 @@ export default function CentralRequestsPage() {
 
     const getStatusIcon = (status: string) => {
         switch (status) {
-            case 'PENDING': return <Clock className="h-4 w-4" />;
+            case 'PENDING':
+            case 'PENDING_BRANCH_ACCOUNTANT_APPROVAL': return <Clock className="h-4 w-4" />;
             case 'APPROVED': return <CheckCircle2 className="h-4 w-4" />;
             case 'DISPATCHED': return <Truck className="h-4 w-4" />;
             case 'REJECTED': return <AlertTriangle className="h-4 w-4" />;
@@ -168,6 +170,7 @@ export default function CentralRequestsPage() {
             UserRole.CENTRAL_OPERATIONS_MANAGER,
             UserRole.SUPER_ADMIN,
             UserRole.GENERAL_MANAGER,
+            UserRole.BRANCH_ACCOUNTANT,
             UserRole.AUDITOR
         ]}>
             <DashboardLayout>
@@ -180,7 +183,7 @@ export default function CentralRequestsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="flex p-1 bg-stone-100 rounded-lg overflow-x-auto max-w-[calc(100vw-40px)] no-scrollbar">
-                                {['all', 'PENDING', 'APPROVED', 'DISPATCHED', 'HISTORY'].map((filter) => (
+                                {['all', 'PENDING', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL', 'APPROVED', 'DISPATCHED', 'HISTORY'].map((filter) => (
                                     <button
                                         key={filter}
                                         onClick={() => setStatusFilter(filter)}
@@ -189,7 +192,7 @@ export default function CentralRequestsPage() {
                                             : 'text-stone-400 hover:text-stone-600'
                                             }`}
                                     >
-                                        {filter}
+                                        {filter === 'PENDING_BRANCH_ACCOUNTANT_APPROVAL' ? 'Pending Accountant' : filter}
                                     </button>
                                 ))}
                             </div>
@@ -376,7 +379,7 @@ export default function CentralRequestsPage() {
                                                             {item.requested_quantity} {item.unit}
                                                         </td>
                                                         <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                                                            {selectedRequest.status === 'PENDING' && user?.role !== UserRole.CENTRAL_STOREKEEPER ? (
+                                                            {(selectedRequest.status === 'PENDING' || selectedRequest.status === 'PENDING_BRANCH_ACCOUNTANT_APPROVAL') && user?.role !== UserRole.CENTRAL_STOREKEEPER ? (
                                                                 <input
                                                                     type="number"
                                                                     min="0"
@@ -400,7 +403,7 @@ export default function CentralRequestsPage() {
                                     </div>
                                 </div>
 
-                                {selectedRequest.status === 'PENDING' && user?.role !== UserRole.CENTRAL_STOREKEEPER && (
+                                {(selectedRequest.status === 'PENDING' || selectedRequest.status === 'PENDING_BRANCH_ACCOUNTANT_APPROVAL') && user?.role !== UserRole.CENTRAL_STOREKEEPER && (
                                     <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200">
                                         <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Review Notes (Optional)</label>
                                         <textarea
@@ -414,11 +417,11 @@ export default function CentralRequestsPage() {
                             </div>
 
                             <div className="bg-stone-50/80 px-6 py-4 border-t border-stone-100 flex justify-end gap-3 font-medium">
-                                {selectedRequest.status === 'PENDING' && (
+                                {(selectedRequest.status === 'PENDING' || selectedRequest.status === 'PENDING_BRANCH_ACCOUNTANT_APPROVAL') && (
                                     user?.role === UserRole.CENTRAL_STOREKEEPER ? (
                                         <div className="flex items-center gap-2 text-amber-600 text-[13px] bg-amber-50 px-4 py-2 rounded-xl border border-amber-100">
                                             <Clock className="h-4 w-4" />
-                                            <span>Awaiting Auditor Approval</span>
+                                            <span>Awaiting Branch Accountant Approval</span>
                                         </div>
                                     ) : (
                                         <>

@@ -5,7 +5,6 @@ import path from 'path';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
-import * as BranchInventoryService from '../services/branch-inventory.service';
 
 const FG_PRIMARY = '#1a1a1a';
 const FG_SECONDARY = '#555555';
@@ -643,40 +642,12 @@ export const verifyAnomaly = async (req: Request, res: Response, next: NextFunct
         break;
 
       case 'stock_request':
-        const { data: stockRequestItems, error: stockItemsError } = await supabase
-          .from('stock_request_items')
-          .select('*')
-          .eq('request_id', id);
-
-        if (stockItemsError) {
-          error = stockItemsError;
-          break;
-        }
-
-        if (!stockRequestItems?.length) {
-          res.status(400).json({ success: false, message: 'No items found on this stock request to approve' });
-          return;
-        }
-
-        await BranchInventoryService.approveStockRequest(
-          id,
-          auditorId!,
-          stockRequestItems.map((item: any) => ({
-            id: item.id,
-            approved_quantity: Number(item.requested_quantity ?? item.quantity_requested ?? item.quantity ?? 0),
-            status: 'APPROVED'
-          })),
-          notes || 'Verified from Branch Orders audit'
-        );
-
-        const { data: reqData, error: reqError } = await supabase
-          .from('stock_requests')
-          .select('*')
-          .eq('id', id)
-          .single();
-        result = reqData;
-        error = reqError;
-        break;
+        // Branch stock requests must be approved by the branch accountant, not the auditor.
+        res.status(403).json({
+          success: false,
+          message: 'Stock requests must be approved by the branch accountant. Use the branch accountant dashboard.'
+        });
+        return;
 
       case 'dispatch_note':
         const { data: dispatchData, error: dispatchError } = await supabase
@@ -2252,7 +2223,7 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
           branch_id: b.id,
           branch_name: b.name,
           total_requests: branchReqs.length,
-          pending: branchReqs.filter(r => ['PENDING_AUDIT', 'PENDING', 'UNDER_REVIEW'].includes(r.status)).length,
+          pending: branchReqs.filter(r => ['PENDING_AUDIT', 'PENDING', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL'].includes(r.status)).length,
           approved: branchReqs.filter(r => ['APPROVED', 'PARTIALLY_APPROVED', 'READY', 'VERIFIED'].includes(r.status)).length,
           rejected: branchReqs.filter(r => r.status === 'REJECTED').length,
           dispatched: branchReqs.filter(r => ['DISPATCHED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED', 'CONFIRMED'].includes(r.status)).length,
@@ -2264,7 +2235,7 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
     // Calculate overall summary statistics
     const summary = {
       total_requests: requests?.length || 0,
-      pending: requests?.filter(r => ['PENDING_AUDIT', 'PENDING', 'UNDER_REVIEW'].includes(r.status)).length || 0,
+      pending: requests?.filter(r => ['PENDING_AUDIT', 'PENDING', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL'].includes(r.status)).length || 0,
       approved: requests?.filter(r => ['APPROVED', 'PARTIALLY_APPROVED', 'READY', 'VERIFIED'].includes(r.status)).length || 0,
       rejected: requests?.filter(r => r.status === 'REJECTED').length || 0,
       dispatched: requests?.filter(r => ['DISPATCHED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'RECEIVED', 'CONFIRMED'].includes(r.status)).length || 0,
@@ -2577,7 +2548,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const { startRaw, endRaw, startIso, endIso } = normalizeDateWindow(start_date, end_date);
     const days = Math.max(1, Math.ceil((new Date(endIso).getTime() - new Date(startIso).getTime()) / (24 * 60 * 60 * 1000)));
 
-    let restQuery = supabase.from('restaurant_orders').select('id, branch_id, created_at, order_type, room_number, department').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
+    let restQuery = supabase.from('restaurant_orders').select('id, branch_id, shift_id, created_at, order_type, room_number, department').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
     let barQuery = supabase.from('bar_orders').select('id, branch_id, created_at').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
     let outletOrderQuery = supabase
       .from('pos_shift_orders')
@@ -2610,17 +2581,26 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const barStockRequests = rawBarStock.data || [];
 
     const outletIds = [...new Set(outletOrders.map((order: any) => order.outlet_id).filter(Boolean))];
-    const shiftIds = [...new Set(outletOrders.map((order: any) => order.shift_id).filter(Boolean))];
-    const [outletsRes, outletItemsRes] = await Promise.all([
+    const outletShiftIds = [...new Set(outletOrders.map((order: any) => order.shift_id).filter(Boolean))];
+    const legacyShiftIds = [...new Set(restOrders.map((order: any) => order.shift_id).filter(Boolean))];
+    const [outletsRes, outletItemsRes, outletShiftsRes, legacyShiftsRes] = await Promise.all([
       outletIds.length
         ? supabase.from('pos_outlets').select('id, branch_id, name, outlet_type').in('id', outletIds)
         : Promise.resolve({ data: [], error: null } as any),
       outletIds.length
         ? supabase.from('pos_outlet_items').select('id, name, sku, cost_price, selling_price').in('outlet_id', outletIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      outletShiftIds.length
+        ? supabase.from('pos_outlet_shifts').select('id, outlet_id, cashier_id, branch_id, shift_number, opened_at, closed_at, status').in('id', outletShiftIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      legacyShiftIds.length
+        ? supabase.from('pos_shifts').select('id, outlet_id, branch_id, shift_number, opened_at, closed_at, status, opened_by').in('id', legacyShiftIds)
         : Promise.resolve({ data: [], error: null } as any)
     ]);
     if (outletsRes.error) throw outletsRes.error;
     if (outletItemsRes.error) throw outletItemsRes.error;
+    if (outletShiftsRes.error) throw outletShiftsRes.error;
+    if (legacyShiftsRes.error) throw legacyShiftsRes.error;
 
     const outletMap = (outletsRes.data || []).reduce((acc: Record<string, any>, outlet: any) => {
       acc[String(outlet.id)] = outlet;
@@ -2629,6 +2609,70 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     if (effectiveBranchId) {
       outletOrders = outletOrders.filter((order: any) => Number(outletMap[String(order.outlet_id)]?.branch_id) === Number(effectiveBranchId));
     }
+
+    // ── Shift metadata (for grouping sold items by cashier shift instead of day) ──
+    const shiftCashierIds = [
+      ...new Set([
+        ...(outletShiftsRes.data || []).map((s: any) => s.cashier_id).filter(Boolean),
+        ...(legacyShiftsRes.data || []).map((s: any) => s.opened_by).filter(Boolean)
+      ])
+    ];
+    const { data: shiftCashierUsers, error: shiftCashierUsersError } = shiftCashierIds.length
+      ? await supabase.from('users').select('id, first_name, last_name').in('id', shiftCashierIds)
+      : { data: [], error: null } as any;
+    if (shiftCashierUsersError) throw shiftCashierUsersError;
+
+    const shiftCashierNameMap = (shiftCashierUsers || []).reduce((acc: Record<string, string>, user: any) => {
+      acc[String(user.id)] = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown Cashier';
+      return acc;
+    }, {});
+
+    const formatShiftOpenedAt = (iso: string | null) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString('en-GB', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    };
+
+    const NO_SHIFT_META = {
+      shift_id: 'no_shift',
+      shift_number: null,
+      cashier_name: null,
+      outlet_name: null,
+      opened_at: null,
+      closed_at: null,
+      status: null,
+      label: 'No shift recorded'
+    };
+
+    const shiftMetaMap: Record<string, any> = {};
+    (outletShiftsRes.data || []).forEach((shift: any) => {
+      const outletName = outletMap[String(shift.outlet_id)]?.name || 'Outlet';
+      const cashierName = shiftCashierNameMap[String(shift.cashier_id)] || 'Unknown Cashier';
+      shiftMetaMap[String(shift.id)] = {
+        shift_id: String(shift.id),
+        shift_number: shift.shift_number || null,
+        cashier_name: cashierName,
+        outlet_name: outletName,
+        opened_at: shift.opened_at,
+        closed_at: shift.closed_at,
+        status: shift.status,
+        label: `${cashierName} · ${outletName} · ${formatShiftOpenedAt(shift.opened_at)}`
+      };
+    });
+    (legacyShiftsRes.data || []).forEach((shift: any) => {
+      const cashierName = shiftCashierNameMap[String(shift.opened_by)] || 'Unknown Cashier';
+      shiftMetaMap[String(shift.id)] = {
+        shift_id: String(shift.id),
+        shift_number: shift.shift_number || null,
+        cashier_name: cashierName,
+        outlet_name: 'Restaurant',
+        opened_at: shift.opened_at,
+        closed_at: shift.closed_at,
+        status: shift.status,
+        label: `${cashierName} · Restaurant · ${formatShiftOpenedAt(shift.opened_at)}`
+      };
+    });
 
     // Build cost price map from outlet items (same pattern as P&L fix)
     const outletItemCostMap = (outletItemsRes.data || []).reduce((acc: Record<string, any>, item: any) => {
@@ -2755,6 +2799,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       source: string;
       outletGroup?: string;
       soldAt?: string;
+      shiftId?: string;
       orderId?: string;
       receiptNumber?: string;
       kdsMinutes?: number | null;
@@ -2773,7 +2818,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           category: payload.category,
           source: payload.source,
           outlet_group: payload.outletGroup || outletGroupFor(payload.source, payload.category),
-          daily: {},
+          by_shift: {},
           transaction_ids: new Set<string>(),
           references: new Set<string>(),
           last_sold_at: null,
@@ -2785,12 +2830,16 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       soldItemsMap[key].quantity += payload.quantity;
       soldItemsMap[key].revenue += payload.revenue;
       soldItemsMap[key].cost_of_goods_sold += Number(payload.cost || 0);
+
+      const shiftKey = payload.shiftId || 'no_shift';
+      if (!soldItemsMap[key].by_shift[shiftKey]) {
+        soldItemsMap[key].by_shift[shiftKey] = { shift_id: shiftKey, quantity: 0, revenue: 0, cost_of_goods_sold: 0 };
+      }
+      soldItemsMap[key].by_shift[shiftKey].quantity += payload.quantity;
+      soldItemsMap[key].by_shift[shiftKey].revenue += payload.revenue;
+      soldItemsMap[key].by_shift[shiftKey].cost_of_goods_sold += Number(payload.cost || 0);
+
       if (payload.soldAt) {
-        const day = String(payload.soldAt).slice(0, 10);
-        if (!soldItemsMap[key].daily[day]) soldItemsMap[key].daily[day] = { date: day, quantity: 0, revenue: 0, cost_of_goods_sold: 0 };
-        soldItemsMap[key].daily[day].quantity += payload.quantity;
-        soldItemsMap[key].daily[day].revenue += payload.revenue;
-        soldItemsMap[key].daily[day].cost_of_goods_sold += Number(payload.cost || 0);
         if (!soldItemsMap[key].last_sold_at || new Date(payload.soldAt).getTime() > new Date(soldItemsMap[key].last_sold_at).getTime()) {
           soldItemsMap[key].last_sold_at = payload.soldAt;
         }
@@ -2834,6 +2883,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           source: 'restaurant',
           outletGroup: outletGroupFor('restaurant', order.department, order.order_type),
           soldAt: order.created_at,
+          shiftId: order.shift_id ? String(order.shift_id) : undefined,
           orderId: String(order.id),
           kdsMinutes
         });
@@ -2899,6 +2949,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
           source: String(outlet.outlet_type || 'pos_outlet'),
           outletGroup,
           soldAt: order.created_at,
+          shiftId: order.shift_id ? String(order.shift_id) : undefined,
           orderId: String(order.id),
           receiptNumber: order.order_number ? String(order.order_number) : undefined,
           kdsMinutes
@@ -3018,7 +3069,14 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         stock_requested: stockRequested,
         consumption_ratio: stockRequested > 0 ? sold.quantity / stockRequested : 0,
         average_kds_minutes: sold.kds_count > 0 ? sold.kds_total_minutes / sold.kds_count : null,
-        daily: Object.values(sold.daily)
+        by_shift: Object.values(sold.by_shift).map((row: any) => ({
+          ...(shiftMetaMap[row.shift_id] || NO_SHIFT_META),
+          shift_id: row.shift_id,
+          quantity: row.quantity,
+          revenue: row.revenue,
+          cost_of_goods_sold: row.cost_of_goods_sold,
+          gross_profit: row.revenue - row.cost_of_goods_sold
+        }))
       };
     });
 
@@ -3046,17 +3104,35 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       };
     });
 
-    const dailyMap: Record<string, any> = {};
+    const shiftMap: Record<string, any> = {};
     enrichedAnalysis.forEach((item: any) => {
-      (item.daily || []).forEach((day: any) => {
-        if (!dailyMap[day.date]) dailyMap[day.date] = { date: day.date, revenue: 0, cost_of_goods_sold: 0, gross_profit: 0, quantity: 0 };
-        dailyMap[day.date].revenue += Number(day.revenue || 0);
-        dailyMap[day.date].cost_of_goods_sold += Number(day.cost_of_goods_sold || 0);
-        dailyMap[day.date].gross_profit += Number(day.revenue || 0) - Number(day.cost_of_goods_sold || 0);
-        dailyMap[day.date].quantity += Number(day.quantity || 0);
+      (item.by_shift || []).forEach((row: any) => {
+        if (!shiftMap[row.shift_id]) {
+          shiftMap[row.shift_id] = {
+            shift_id: row.shift_id,
+            shift_number: row.shift_number,
+            cashier_name: row.cashier_name,
+            outlet_name: row.outlet_name,
+            opened_at: row.opened_at,
+            closed_at: row.closed_at,
+            label: row.label,
+            revenue: 0,
+            cost_of_goods_sold: 0,
+            gross_profit: 0,
+            quantity: 0
+          };
+        }
+        shiftMap[row.shift_id].revenue += Number(row.revenue || 0);
+        shiftMap[row.shift_id].cost_of_goods_sold += Number(row.cost_of_goods_sold || 0);
+        shiftMap[row.shift_id].gross_profit += Number(row.revenue || 0) - Number(row.cost_of_goods_sold || 0);
+        shiftMap[row.shift_id].quantity += Number(row.quantity || 0);
       });
     });
-    const dailyRevenue = Object.values(dailyMap).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+    const shiftRevenue = Object.values(shiftMap).sort((a: any, b: any) => {
+      if (a.shift_id === 'no_shift') return 1;
+      if (b.shift_id === 'no_shift') return -1;
+      return String(a.opened_at || '').localeCompare(String(b.opened_at || ''));
+    });
 
     const kdsItems = enrichedAnalysis.filter((item: any) => item.average_kds_minutes !== null && item.average_kds_minutes !== undefined);
     const kdsIntelligence = {
@@ -3081,7 +3157,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       slow_moving_count: enrichedAnalysis.filter((item: any) => item.movement_tier === 'slow').length,
       branch_summaries: Object.values(branchSummaries),
       outlet_breakdown: outletBreakdown,
-      daily_revenue: dailyRevenue,
+      shift_revenue: shiftRevenue,
       kds_intelligence: kdsIntelligence,
       period: { start_date: startRaw, end_date: endRaw, days }
     };

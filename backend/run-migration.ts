@@ -1,25 +1,55 @@
-import { supabase } from './src/config/supabase';
 import fs from 'fs';
 import path from 'path';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
 
-async function runMigration() {
-    const sqlPath = path.join(__dirname, 'migrations', '20260101_add_cashier_role.sql');
-    const sql = fs.readFileSync(sqlPath, 'utf8');
+dotenv.config();
 
-    console.log('Running migration:', sql);
+const MIGRATIONS_DIR = path.join(__dirname, '..', 'database', 'migrations');
+const MIGRATION_FILES = [
+  '20260625_unify_inventory_item_links.sql',
+  '20260626_fix_bar_sales_stock_decrement.sql',
+];
 
-    // Supabase JS client doesn't have a direct 'rpc' for raw SQL unless we create one.
-    // Usually, we'd use a migration tool or the dashboard.
-    // Since I can't use the dashboard, I'll try to use a script that might have access if there's an 'exec_sql' function.
+const DATABASE_URL = process.env.DATABASE_URL?.replace(':6543/', ':5432/');
 
-    const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql });
+const run = async () => {
+  if (!DATABASE_URL) {
+    console.error('DATABASE_URL not set');
+    process.exit(1);
+  }
+  console.log('Using database:', DATABASE_URL.replace(/:\/\/[^:]+:([^@]+)@/, '://***:***@'));
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 30000,
+  });
 
-    if (error) {
-        console.error('Migration failed:', error);
-        console.log('Note: If "exec_sql" RPC is missing, this migration must be run manually in Supabase SQL Editor.');
-    } else {
-        console.log('Migration successful:', data);
+  for (const file of MIGRATION_FILES) {
+    const filePath = path.join(MIGRATIONS_DIR, file);
+    const sql = fs.readFileSync(filePath, 'utf8');
+    console.log(`\nRunning migration: ${file}`);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query('COMMIT');
+      console.log(`✓ ${file} completed.`);
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error(`✗ ${file} failed:`, (err as Error).message);
+      client.release();
+      await pool.end();
+      process.exit(1);
+    } finally {
+      client.release();
     }
-}
+  }
 
-runMigration();
+  await pool.end();
+  console.log('\nAll migrations completed successfully.');
+  process.exit(0);
+};
+
+run();
+

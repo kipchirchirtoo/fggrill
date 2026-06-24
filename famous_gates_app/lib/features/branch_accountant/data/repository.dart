@@ -82,6 +82,69 @@ class BranchAccountantRepository {
         data: {'notes': notes});
   }
 
+  Future<void> reviewBarStocktake(String id, {String? notes}) async {
+    await _dio.patch('/storekeeping/bar-stocktake/$id/review', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  // ----------------------------------------------------------------------
+  // Branch spoilage log (bar/kitchen/store) — approve/reject is
+  // accountant-only; submission is storekeeper-only.
+  // ----------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getSpoilageRecords({
+    String? status,
+    String? area,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/storekeeping/spoilage', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (area != null && area.isNotEmpty) 'area': area,
+    });
+  }
+
+  Future<void> approveSpoilage(String id) async {
+    await _dio.patch('/storekeeping/spoilage/$id/approve');
+  }
+
+  Future<void> rejectSpoilage(String id, {required String notes}) async {
+    await _dio.patch('/storekeeping/spoilage/$id/reject', data: {'notes': notes});
+  }
+
+  // ----------------------------------------------------------------------
+  // Branch stock request review (Branch Accountant → Central Store)
+  // ----------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getStockRequests({String? status}) async {
+    return _getList('/storekeeping/stock-requests', query: {
+      if (status != null && status.isNotEmpty) 'status': status,
+    });
+  }
+
+  Future<Map<String, dynamic>> getStockRequest(String id) async {
+    return _getMap('/storekeeping/stock-requests/$id');
+  }
+
+  Future<void> approveStockRequest(
+    String id, {
+    List<Map<String, dynamic>>? itemApprovals,
+    String? notes,
+  }) async {
+    await _dio.put('/storekeeping/stock-requests/$id/approve', data: {
+      if (itemApprovals != null && itemApprovals.isNotEmpty)
+        'item_approvals': itemApprovals,
+      if (notes != null && notes.trim().isNotEmpty)
+        'approved_quantity_notes': notes.trim(),
+    });
+  }
+
+  Future<void> rejectStockRequest(String id, {required String notes}) async {
+    await _dio.put('/storekeeping/stock-requests/$id/reject',
+        data: {'review_notes': notes});
+  }
+
   Future<void> approveClearance(String id, {String? notes}) async {
     await _dio.post('/cashier/clearances/$id/approve', data: {
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),

@@ -973,7 +973,7 @@ export const getKitchenLedgerItems = async (req: Request, res: Response): Promis
 
     const { data, error } = await supabase
       .from('kitchen_ledger_items')
-      .select('*, item:inventory_items(id, name, unit)')
+      .select('*, item:inventory_items(id, item_name, unit)')
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -1002,7 +1002,7 @@ export const addKitchenLedgerItem = async (req: Request, res: Response): Promise
         { branch_id: branchId, item_id: String(item_id), enabled_by: (req as any).user?.id || null },
         { onConflict: 'branch_id,item_id' }
       )
-      .select('*, item:inventory_items(id, name, unit)')
+      .select('*, item:inventory_items(id, item_name, unit)')
       .single();
     if (error) throw error;
     res.status(201).json({ success: true, data });

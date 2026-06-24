@@ -220,8 +220,8 @@ export const createStockRequest = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        let {
-            requesting_branch_id,
+        let requesting_branch_id = req.body?.requesting_branch_id;
+        const {
             request_type,
             priority,
             reason,
@@ -263,8 +263,8 @@ export const createStockRequest = async (
                 priority: (priority || 'normal').toLowerCase(),
                 reason,
                 needed_by_date,
-                status: 'PENDING_AUDIT',
-                workflow_status: 'submitted_to_auditor',
+                status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
+                workflow_status: 'submitted_to_branch_accountant',
                 submitted_to_auditor_at: new Date().toISOString(),
                 document_number: request_number,
                 barcode_value: request_number
@@ -299,8 +299,8 @@ export const createStockRequest = async (
                     unit: itemResult.data?.unit || 'units',
                     requested_quantity: item.requested_quantity,
                     current_branch_stock: stockResult.data?.quantity || 0,
-                    status: 'PENDING_AUDIT',
-                    workflow_status: 'submitted_to_auditor',
+                    status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
+                    workflow_status: 'submitted_to_branch_accountant',
                     reason: item.reason || reason || null
                 };
             })
@@ -324,19 +324,20 @@ export const createStockRequest = async (
             ? (await attachRequestItems([completeRequest]))[0]
             : { ...newRequest, items: [] };
 
-        // Notify Auditor/Central Storekeeper
+        // Notify Branch Accountant for approval before central store.
         notificationService.notifyRole(
-            'auditor',
+            'branch_accountant',
             'New Stock Request',
             `Branch ${requesting_branch_id} has submitted a new stock request (${request_number}).`,
             {
                 type: 'info',
                 category: 'stock_request',
                 priority: priority === 'URGENT' ? 'high' : 'medium',
-                actionUrl: `/dashboard/central-store/requests/${newRequest.id}`,
+                actionUrl: `/dashboard/branch-accounting/stock-requests/${newRequest.id}`,
+                branchId: requesting_branch_id,
                 metadata: { request_id: newRequest.id, branch_id: requesting_branch_id }
             }
-        ).catch(e => logger.error('Failed to notify auditor of stock request', e));
+        ).catch(e => logger.error('Failed to notify branch accountant of stock request', e));
 
         res.status(201).json({
             success: true,
@@ -384,11 +385,17 @@ export const reviewStockRequest = async (
                 return;
             }
 
+            const allRejected = finalApprovals.every((i: any) => i.status === 'REJECTED');
             const result = await BranchInventoryService.approveStockRequest(
                 id,
                 userId!,
                 finalApprovals,
-                review_notes
+                review_notes,
+                {
+                    workflowStatus: allRejected ? 'branch_accountant_rejected' : 'branch_accountant_approved',
+                    itemWorkflowStatus: allRejected ? 'branch_accountant_rejected' : 'branch_accountant_approved',
+                    reviewerRole: 'Branch Accountant'
+                }
             );
 
             // Fetch request details for notification
@@ -409,7 +416,7 @@ export const reviewStockRequest = async (
                 notificationService.notifyUser(
                     request.requested_by,
                     'Stock Request Approved',
-                    `Your stock request ${request.request_number} has been approved by the auditor. It is now queued for packing and dispatch from central store.`,
+                    `Your stock request ${request.request_number} has been approved by the branch accountant. It is now queued for packing and dispatch from central store.`,
                     {
                         type: 'success',
                         category: 'stock_request',
@@ -424,7 +431,7 @@ export const reviewStockRequest = async (
             notificationService.notifyRole(
                 'central_storekeeper',
                 'New Request Ready to Pack',
-                `Stock request ${request?.request_number ?? id} has been auditor-approved and is waiting for packing and dispatch. Open the Packing Station to proceed.`,
+                `Stock request ${request?.request_number ?? id} has been branch-accountant-approved and is waiting for packing and dispatch. Open the Packing Station to proceed.`,
                 {
                     type: 'info',
                     category: 'stock_request',
@@ -454,7 +461,12 @@ export const reviewStockRequest = async (
                 id,
                 userId!,
                 rejectedItems,
-                review_notes
+                review_notes,
+                {
+                    workflowStatus: 'branch_accountant_rejected',
+                    itemWorkflowStatus: 'branch_accountant_rejected',
+                    reviewerRole: 'Branch Accountant'
+                }
             );
 
             // Fetch request details for notification
@@ -527,11 +539,17 @@ export const approveStockRequest = async (
         const { approved_quantity_notes, item_approvals } = req.body;
         const userId = req.user?.id;
 
+        const allRejected = (item_approvals || []).length > 0 && (item_approvals || []).every((i: any) => i.status === 'REJECTED');
         const result = await BranchInventoryService.approveStockRequest(
             id,
             userId!,
             item_approvals || [],
-            approved_quantity_notes
+            approved_quantity_notes,
+            {
+                workflowStatus: allRejected ? 'branch_accountant_rejected' : 'branch_accountant_approved',
+                itemWorkflowStatus: allRejected ? 'branch_accountant_rejected' : 'branch_accountant_approved',
+                reviewerRole: 'Branch Accountant'
+            }
         );
 
         // Fetch request details for notification
@@ -552,7 +570,7 @@ export const approveStockRequest = async (
             notificationService.notifyUser(
                 request.requested_by,
                 'Stock Request Approved',
-                `Your stock request ${request.request_number} has been approved by the auditor. It is now queued for packing and dispatch from central store.`,
+                `Your stock request ${request.request_number} has been approved by the branch accountant. It is now queued for packing and dispatch from central store.`,
                 {
                     type: 'success',
                     category: 'stock_request',
@@ -567,7 +585,7 @@ export const approveStockRequest = async (
         notificationService.notifyRole(
             'central_storekeeper',
             'New Request Ready to Pack',
-            `Stock request ${request?.request_number ?? id} has been auditor-approved and is waiting for packing and dispatch. Open the Packing Station to proceed.`,
+            `Stock request ${request?.request_number ?? id} has been branch-accountant-approved and is waiting for packing and dispatch. Open the Packing Station to proceed.`,
             {
                 type: 'info',
                 category: 'stock_request',
@@ -631,11 +649,16 @@ export const bulkApproveStockRequests = async (
                     status: 'approved' as const
                 }));
 
-                const result = await BranchInventoryService.approveStockRequest(
+                await BranchInventoryService.approveStockRequest(
                     requestId,
                     userId!,
                     item_approvals,
-                    approved_quantity_notes || 'Bulk approved by auditor'
+                    approved_quantity_notes || 'Bulk approved by branch accountant',
+                    {
+                        workflowStatus: 'branch_accountant_approved',
+                        itemWorkflowStatus: 'branch_accountant_approved',
+                        reviewerRole: 'Branch Accountant'
+                    }
                 );
 
                 // Fetch request details for notification
@@ -719,7 +742,12 @@ export const rejectStockRequest = async (
             id,
             userId!,
             rejectedItems,
-            review_notes
+            review_notes,
+            {
+                workflowStatus: 'branch_accountant_rejected',
+                itemWorkflowStatus: 'branch_accountant_rejected',
+                reviewerRole: 'Branch Accountant'
+            }
         );
 
         // Fetch request details for notification

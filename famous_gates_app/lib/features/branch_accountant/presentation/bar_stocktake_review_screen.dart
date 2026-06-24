@@ -5,8 +5,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
 import '../data/repository.dart';
 
-/// Bar Stocktake Review — Branch Accountant. Approve/reject is
-/// accountant-only; submission happens on the storekeeper side.
+/// Bar Stocktake Review — Branch Accountant.
+/// Lists pending bar stocktake submissions grouped by location/date and
+/// provides Review / Approve / Reject actions for each group.
 class BarStocktakeReviewScreen extends ConsumerStatefulWidget {
   const BarStocktakeReviewScreen({super.key});
 
@@ -26,58 +27,73 @@ class _BarStocktakeReviewScreenState
 
   void _refresh() => setState(() => _future = _load());
 
+  Future<void> _review(List<String> ids) async {
+    final notes = await _askNotes('Review Stocktake', 'Add review notes (optional)');
+    if (notes == null) return;
+    await _runAction(ids, (repo) async {
+      for (final id in ids) await repo.reviewBarStocktake(id, notes: notes);
+    }, 'Stocktake reviewed');
+  }
+
   Future<void> _approve(List<String> ids) async {
-    setState(() => _busyIds.addAll(ids));
-    try {
-      final repo = ref.read(branchAccountantRepositoryProvider);
-      for (final id in ids) {
-        await repo.approveBarStocktake(id);
-      }
-      if (mounted) {
-        _notify(context, 'Bar stocktake approved');
-        _refresh();
-      }
-    } catch (e) {
-      if (mounted) _notify(context, 'Approve failed: $e');
-    } finally {
-      if (mounted) setState(() => _busyIds.removeAll(ids));
-    }
+    final notes = await _askNotes('Approve Stocktake', 'Add approval notes (optional)');
+    if (notes == null) return;
+    await _runAction(ids, (repo) async {
+      for (final id in ids) await repo.approveBarStocktake(id, notes: notes);
+    }, 'Stocktake approved');
   }
 
   Future<void> _reject(List<String> ids) async {
+    final notes = await _askNotes('Reject Stocktake', 'Reason for rejection (required)', required: true);
+    if (notes == null || notes.isEmpty) return;
+    await _runAction(ids, (repo) async {
+      for (final id in ids) await repo.rejectBarStocktake(id, notes: notes);
+    }, 'Stocktake rejected');
+  }
+
+  Future<String?> _askNotes(String title, String hint, {bool required = false}) async {
     final ctrl = TextEditingController();
-    final notes = await showDialog<String>(
+    return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reject Bar Stocktake'),
+        title: Text(title),
         content: TextField(
           controller: ctrl,
           minLines: 2,
           maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Reason (required)'),
+          decoration: InputDecoration(labelText: hint),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-              child: const Text('Reject')),
+            onPressed: () {
+              final text = ctrl.text.trim();
+              if (required && text.isEmpty) return;
+              Navigator.pop(ctx, text);
+            },
+            child: const Text('Confirm'),
+          ),
         ],
       ),
     );
-    if (notes == null || notes.isEmpty) return;
+  }
+
+  Future<void> _runAction(
+    List<String> ids,
+    Future<void> Function(BranchAccountantRepository repo) action,
+    String successMessage,
+  ) async {
     setState(() => _busyIds.addAll(ids));
     try {
       final repo = ref.read(branchAccountantRepositoryProvider);
-      for (final id in ids) {
-        await repo.rejectBarStocktake(id, notes: notes);
-      }
+      await action(repo);
       if (mounted) {
-        _notify(context, 'Bar stocktake rejected');
+        _notify(context, successMessage);
         _refresh();
       }
     } catch (e) {
-      if (mounted) _notify(context, 'Reject failed: $e');
+      if (mounted) _notify(context, 'Action failed: $e');
     } finally {
       if (mounted) setState(() => _busyIds.removeAll(ids));
     }
@@ -139,29 +155,42 @@ class _BarStocktakeReviewScreenState
                       const SizedBox(height: 10),
                       for (final r in rows)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                  child: Text('${r['item_name'] ?? r['item_id']}')),
-                              Text('Sys: ${r['system_quantity']}',
+                              Row(
+                                children: [
+                                  Expanded(
+                                      child: Text('${r['item_name'] ?? r['item_id']}',
+                                          style: const TextStyle(fontWeight: FontWeight.w600))),
+                                  Text(
+                                    '${_num(r['variance']) >= 0 ? '+' : ''}${r['variance']}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: _num(r['variance']) < 0
+                                          ? Colors.red
+                                          : Colors.green,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                'Open: ${r['opening_stock'] ?? 0} · Add: ${r['additions'] ?? 0} · '
+                                'Sales: ${r['sales'] ?? 0} · Sys: ${r['system_quantity']} · Phys: ${r['physical_quantity']}',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.kTextSecondary),
+                              ),
+                              if ((r['reason_for_variance'] ?? '').toString().isNotEmpty)
+                                Text(
+                                  'Reason: ${r['reason_for_variance']}',
                                   style: const TextStyle(
                                       fontSize: 12,
-                                      color: AppColors.kTextSecondary)),
-                              const SizedBox(width: 10),
-                              Text('Phys: ${r['physical_quantity']}',
-                                  style: const TextStyle(fontSize: 12)),
-                              const SizedBox(width: 10),
-                              Text(
-                                '${_num(r['variance']) >= 0 ? '+' : ''}${r['variance']}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: _num(r['variance']) < 0
-                                      ? Colors.red
-                                      : Colors.green,
+                                      fontStyle: FontStyle.italic,
+                                      color: AppColors.kTextSecondary),
                                 ),
-                              ),
                             ],
                           ),
                         ),
@@ -171,6 +200,11 @@ class _BarStocktakeReviewScreenState
                           OutlinedButton(
                             onPressed: busy ? null : () => _reject(ids),
                             child: const Text('Reject'),
+                          ),
+                          const SizedBox(width: 10),
+                          OutlinedButton(
+                            onPressed: busy ? null : () => _review(ids),
+                            child: const Text('Review'),
                           ),
                           const SizedBox(width: 10),
                           FilledButton(

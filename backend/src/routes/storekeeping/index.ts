@@ -10,6 +10,9 @@ import stockLedgerRoutes from './stock-ledger.routes';
 import pastryProductionRoutes from './pastry-production.routes';
 import nonSaleStockOutRoutes from './non-sale-stock-out.routes';
 import barStocktakeRoutes from './bar-stocktake.routes';
+import kitchenStocktakeRoutes from './kitchen-stocktake.routes';
+import storeStocktakeRoutes from './store-stocktake.routes';
+import branchSpoilageRoutes from './branch-spoilage.routes';
 import { getWarehouseDashboard } from '../../controllers/storekeeping/dashboard.controller';
 import {
   getBranchStock,
@@ -29,6 +32,9 @@ router.use('/stock-ledger', stockLedgerRoutes);
 router.use('/pastry-production', pastryProductionRoutes);
 router.use('/non-sale-stock-out', nonSaleStockOutRoutes);
 router.use('/bar-stocktake', barStocktakeRoutes);
+router.use('/kitchen-stocktake', kitchenStocktakeRoutes);
+router.use('/store-stocktake', storeStocktakeRoutes);
+router.use('/spoilage', branchSpoilageRoutes);
 router.use('/', resourcesRoutes);
 router.get('/dashboard', protect, getWarehouseDashboard);
 router.get('/dashboard/central', protect, getCentralDashboard);

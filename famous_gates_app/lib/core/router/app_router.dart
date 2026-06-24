@@ -711,20 +711,6 @@ List<GoRoute> get _branchStorekeeperSectionRoutes => [
         ),
       ),
       GoRoute(
-        path: '/branch-store/stock-takes/:id',
-        builder: (context, state) => BranchStorekeeperDashboard(
-          initialSection: BranchStorekeeperSection.stockTakes,
-          stockTakeId: state.pathParameters['id'],
-        ),
-      ),
-      GoRoute(
-        path: '/store/stock-takes/:id',
-        builder: (context, state) => BranchStorekeeperDashboard(
-          initialSection: BranchStorekeeperSection.stockTakes,
-          stockTakeId: state.pathParameters['id'],
-        ),
-      ),
-      GoRoute(
         path: '/branch-store/requests/:id',
         builder: (context, state) => BranchStorekeeperDashboard(
           initialSection: BranchStorekeeperSection.requests,
@@ -1424,8 +1410,6 @@ const _branchStorekeeperSectionRouteSpecs =
   MapEntry('/store/receive-goods', BranchStorekeeperSection.receive),
   MapEntry('/branch-store/suppliers', BranchStorekeeperSection.suppliers),
   MapEntry('/store/branch-suppliers', BranchStorekeeperSection.suppliers),
-  MapEntry('/branch-store/stock-takes', BranchStorekeeperSection.stockTakes),
-  MapEntry('/store/stock-takes', BranchStorekeeperSection.stockTakes),
   MapEntry(
       '/branch-store/purchase-orders', BranchStorekeeperSection.purchaseOrders),
   MapEntry('/store/purchase-orders', BranchStorekeeperSection.purchaseOrders),

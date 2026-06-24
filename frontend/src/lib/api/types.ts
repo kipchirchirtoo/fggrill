@@ -240,6 +240,7 @@ export interface StockRequest {
   requesting_branch_id: number;
   status:
     | "PENDING"
+    | "PENDING_BRANCH_ACCOUNTANT_APPROVAL"
     | "APPROVED"
     | "PARTIALLY_APPROVED"
     | "REJECTED"

@@ -25,6 +25,8 @@ import '../data/repository.dart';
 import '../domain/providers.dart';
 import 'daily_close_screen.dart';
 import 'bar_stocktake_review_screen.dart';
+import 'spoilage_review_screen.dart';
+import 'branch_stock_request_review_screen.dart';
 import 'branch_payroll_screen.dart';
 import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
@@ -69,6 +71,8 @@ enum BranchAccountantSection {
   budgets,
   kitchenVariance,
   barStocktakeReview,
+  spoilageReview,
+  branchStockRequestReview,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -221,6 +225,10 @@ class _BranchAccountantDashboardState
         return const _KitchenVarianceSection();
       case BranchAccountantSection.barStocktakeReview:
         return const BarStocktakeReviewScreen();
+      case BranchAccountantSection.spoilageReview:
+        return const SpoilageReviewScreen();
+      case BranchAccountantSection.branchStockRequestReview:
+        return const BranchStockRequestReviewScreen();
     }
   }
 
@@ -303,6 +311,10 @@ const _navItems = [
       Icons.soup_kitchen),
   _NavItem(BranchAccountantSection.barStocktakeReview, 'Bar Stocktake Review',
       Icons.liquor),
+  _NavItem(BranchAccountantSection.spoilageReview, 'Spoilage Review',
+      Icons.report_problem_outlined),
+  _NavItem(BranchAccountantSection.branchStockRequestReview,
+      'Branch Stock Requests', Icons.inventory_2),
 ];
 
 class _BranchAccountantSideNav extends ConsumerWidget {
@@ -3030,6 +3042,7 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   String _period = 'last_30_days';
   String _search = '';
   String _outletGroup = 'all';
+  String _shiftFilter = 'all';
   String _movementMetric = 'quantity';
   int _topLimit = 10;
   bool _downloading = false;
@@ -3053,13 +3066,27 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
               _map(data['data']).isNotEmpty ? _map(data['data']) : data;
           final summary = _map(payload['summary']);
           final outletBreakdown = _list(summary['outlet_breakdown']);
-          final dailyRevenue = _list(summary['daily_revenue']);
+          final shiftRevenue = _list(summary['shift_revenue']);
           final kds = _map(summary['kds_intelligence']);
           final allItems = _list(payload['analysis']);
           final cashierClearance = _map(payload['cashier_clearance']);
           final cashierShifts = _list(cashierClearance['shifts']);
           final cashierSummary = _map(cashierClearance['summary']);
-          final items = allItems.where((item) {
+          final shiftOptions = [
+            'all',
+            for (final row in shiftRevenue) _text(row, ['shift_id']),
+          ];
+          final shiftLabels = {
+            'all': 'All Shifts',
+            for (final row in shiftRevenue)
+              _text(row, ['shift_id']): _text(row, ['label']).isEmpty
+                  ? _text(row, ['shift_id'])
+                  : _text(row, ['label']),
+          };
+          final selectedShift =
+              shiftOptions.contains(_shiftFilter) ? _shiftFilter : 'all';
+          final shiftScopedItems = _itemsScopedToShift(allItems, selectedShift);
+          final items = shiftScopedItems.where((item) {
             final q = _search.toLowerCase();
             final matchesSearch = q.isEmpty ||
                 _text(item, ['name', 'item_name']).toLowerCase().contains(q) ||
@@ -3070,12 +3097,13 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
           }).toList();
           final filteredOutletBreakdown =
               _outletBreakdownFromItems(items, outletBreakdown);
-          final filteredDailyRevenue = _dailyRevenueFromItems(items);
-          final chartDailyRevenue = filteredDailyRevenue.isNotEmpty ||
+          final filteredShiftRevenue = _shiftRevenueFromItems(items);
+          final chartShiftRevenue = filteredShiftRevenue.isNotEmpty ||
                   _search.isNotEmpty ||
-                  _outletGroup != 'all'
-              ? filteredDailyRevenue
-              : dailyRevenue;
+                  _outletGroup != 'all' ||
+                  selectedShift != 'all'
+              ? filteredShiftRevenue
+              : shiftRevenue;
           final categoryBreakdown = _categoryBreakdown(items);
           final fastMoving = _rankedItems(items, metric: _movementMetric)
               .take(_topLimit)
@@ -3139,6 +3167,7 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 onChanged: (v) => setState(() {
                   _period = 'custom';
                   _from = v;
+                  _shiftFilter = 'all';
                   _future = _load();
                 }),
               ),
@@ -3148,6 +3177,7 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 onChanged: (v) => setState(() {
                   _period = 'custom';
                   _to = v;
+                  _shiftFilter = 'all';
                   _future = _load();
                 }),
               ),
@@ -3156,6 +3186,12 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 values: outletValues,
                 labels: outletLabels,
                 onChanged: (v) => setState(() => _outletGroup = v),
+              ),
+              _SoldItemsDropdown(
+                value: selectedShift,
+                values: shiftOptions,
+                labels: shiftLabels,
+                onChanged: (v) => setState(() => _shiftFilter = v),
               ),
               _SoldItemsDropdown(
                 value: _movementMetric,
@@ -3271,7 +3307,7 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 title: 'Revenue, Profit & Mix Analysis',
                 child: _SoldItemsCharts(
                   outletBreakdown: filteredOutletBreakdown,
-                  dailyRevenue: chartDailyRevenue,
+                  shiftRevenue: chartShiftRevenue,
                 ),
               ),
               _SectionCard(
@@ -3778,6 +3814,7 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
       _period = value;
       _from = _date(start);
       _to = _date(end);
+      _shiftFilter = 'all';
       _future = _load();
     });
   }
@@ -3845,16 +3882,55 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
     }).toList();
   }
 
-  List<Map<String, dynamic>> _dailyRevenueFromItems(
-      List<Map<String, dynamic>> items) {
-    final daily = <String, Map<String, dynamic>>{};
+  /// Re-scopes every item's totals (quantity/revenue/COGS/profit) down to a
+  /// single cashier shift's contribution, sourced from that item's
+  /// [by_shift] breakdown. With 'all' the items pass through unchanged.
+  List<Map<String, dynamic>> _itemsScopedToShift(
+      List<Map<String, dynamic>> items, String shiftId) {
+    if (shiftId == 'all') return items;
+    final scoped = <Map<String, dynamic>>[];
     for (final item in items) {
-      for (final row in _list(item['daily'])) {
-        final date = _text(row, ['date']);
-        if (date.isEmpty) continue;
-        final target = daily.putIfAbsent(date, () {
+      final row = _list(item['by_shift']).firstWhere(
+        (r) => _text(r, ['shift_id']) == shiftId,
+        orElse: () => const <String, dynamic>{},
+      );
+      if (row.isEmpty) continue;
+      final quantity = _num(row['quantity']);
+      final revenue = _num(row['revenue']);
+      if (quantity <= 0 && revenue <= 0) continue;
+      final cogs = _num(row['cost_of_goods_sold']);
+      final profit = revenue - cogs;
+      scoped.add({
+        ...item,
+        'quantity': quantity,
+        'revenue': revenue,
+        'gross_revenue': revenue,
+        'net_revenue': revenue,
+        'cost_of_goods_sold': cogs,
+        'gross_profit': profit,
+        'profit_margin': revenue > 0 ? (profit / revenue) * 100 : 0,
+        'average_selling_price': quantity > 0 ? revenue / quantity : 0,
+        'by_shift': [row],
+      });
+    }
+    return scoped;
+  }
+
+  List<Map<String, dynamic>> _shiftRevenueFromItems(
+      List<Map<String, dynamic>> items) {
+    final shifts = <String, Map<String, dynamic>>{};
+    for (final item in items) {
+      for (final row in _list(item['by_shift'])) {
+        final shiftId = _text(row, ['shift_id']);
+        if (shiftId.isEmpty) continue;
+        final target = shifts.putIfAbsent(shiftId, () {
           return {
-            'date': date,
+            'shift_id': shiftId,
+            'label': _text(row, ['label']),
+            'cashier_name': row['cashier_name'],
+            'outlet_name': row['outlet_name'],
+            'opened_at': row['opened_at'],
+            'closed_at': row['closed_at'],
             'revenue': 0,
             'cost_of_goods_sold': 0,
             'gross_profit': 0,
@@ -3869,8 +3945,12 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
         target['quantity'] = _num(target['quantity']) + _num(row['quantity']);
       }
     }
-    final rows = daily.values.toList();
-    rows.sort((a, b) => _text(a, ['date']).compareTo(_text(b, ['date'])));
+    final rows = shifts.values.toList();
+    rows.sort((a, b) {
+      if (_text(a, ['shift_id']) == 'no_shift') return 1;
+      if (_text(b, ['shift_id']) == 'no_shift') return -1;
+      return _text(a, ['opened_at']).compareTo(_text(b, ['opened_at']));
+    });
     return rows;
   }
 
@@ -3977,8 +4057,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   String _lastSoldDate(Map<String, dynamic> item) {
     final direct = _text(item, ['last_sold_at', 'last_sold_date']);
     if (direct.isNotEmpty) return direct;
-    final dates = _list(item['daily'])
-        .map((row) => _text(row, ['date']))
+    final dates = _list(item['by_shift'])
+        .map((row) => _text(row, ['opened_at']))
         .where((date) => date.isNotEmpty)
         .toList();
     if (dates.isEmpty) return '';
@@ -4365,19 +4445,30 @@ class _OutletSummaryTile extends StatelessWidget {
 class _SoldItemsCharts extends StatelessWidget {
   const _SoldItemsCharts({
     required this.outletBreakdown,
-    required this.dailyRevenue,
+    required this.shiftRevenue,
   });
 
   final List<Map<String, dynamic>> outletBreakdown;
-  final List<Map<String, dynamic>> dailyRevenue;
+  final List<Map<String, dynamic>> shiftRevenue;
+
+  static String _shiftAxisLabel(Map<String, dynamic> row) {
+    if (_text(row, ['shift_id']) == 'no_shift') return 'No shift';
+    final cashier = _text(row, ['cashier_name']);
+    final firstName = cashier.isEmpty ? 'Shift' : cashier.split(' ').first;
+    final opened = _text(row, ['opened_at']);
+    if (opened.length >= 16) {
+      return '$firstName ${opened.substring(5, 10)} ${opened.substring(11, 16)}';
+    }
+    return firstName;
+  }
 
   @override
   Widget build(BuildContext context) {
     final outletRows =
         outletBreakdown.where((row) => _num(row['revenue']) > 0).toList();
-    final dailyRows = dailyRevenue.length > 14
-        ? dailyRevenue.sublist(dailyRevenue.length - 14)
-        : dailyRevenue;
+    final shiftRows = shiftRevenue.length > 14
+        ? shiftRevenue.sublist(shiftRevenue.length - 14)
+        : shiftRevenue;
     return LayoutBuilder(
       builder: (context, constraints) {
         final pie = _chartPanel(
@@ -4406,9 +4497,9 @@ class _SoldItemsCharts extends StatelessWidget {
                 ),
         );
         final bars = _chartPanel(
-          title: 'Daily Revenue vs Profit',
-          child: dailyRows.isEmpty
-              ? const Center(child: Text('No daily trend yet'))
+          title: 'Revenue vs Profit by Shift',
+          child: shiftRows.isEmpty
+              ? const Center(child: Text('No shift trend yet'))
               : BarChart(
                   BarChartData(
                     gridData: const FlGridData(show: true),
@@ -4426,22 +4517,22 @@ class _SoldItemsCharts extends StatelessWidget {
                           reservedSize: 28,
                           getTitlesWidget: (value, meta) {
                             final index = value.toInt();
-                            if (index < 0 || index >= dailyRows.length) {
+                            if (index < 0 || index >= shiftRows.length) {
                               return const SizedBox.shrink();
                             }
-                            final date = _text(dailyRows[index], ['date']);
+                            final label = _shiftAxisLabel(shiftRows[index]);
                             return Padding(
                               padding: const EdgeInsets.only(top: 6),
                               child: Text(
-                                date.length >= 10 ? date.substring(5) : date,
-                                style: const TextStyle(fontSize: 10),
+                                label,
+                                style: const TextStyle(fontSize: 9),
                               ),
                             );
                           },
                         ),
                       ),
                     ),
-                    barGroups: dailyRows.asMap().entries.map((entry) {
+                    barGroups: shiftRows.asMap().entries.map((entry) {
                       final row = entry.value;
                       return BarChartGroupData(
                         x: entry.key,
@@ -4888,7 +4979,8 @@ class _ShiftOpeningApprovalsSectionState
       final gateData = _map(gate['data']).isNotEmpty ? _map(gate['data']) : gate;
       if (gateData['gate_open'] != true) {
         if (mounted) {
-          await _showOpeningStockGateDialog(_map(gateData['status']));
+          final branchId = int.tryParse('${gateData['branch_id'] ?? shift['branch_id'] ?? ''}');
+          await _showOpeningStockGateDialog(_map(gateData['status']), branchId);
         }
         return;
       }
@@ -4947,11 +5039,14 @@ class _ShiftOpeningApprovalsSectionState
     }
   }
 
-  Future<void> _showOpeningStockGateDialog(Map<String, dynamic> status) async {
-    final locations = const [
+  Future<void> _showOpeningStockGateDialog(
+      Map<String, dynamic> status, int? branchId) async {
+    // Only Kyogong (branch 1) has a separate Executive Bar outlet — every
+    // other branch has just one bar, so don't show that row for them.
+    final locations = [
       ('Branch Store', 'branch_store_complete'),
       ('Main Bar', 'main_bar_complete'),
-      ('Executive Bar', 'executive_bar_complete'),
+      if (branchId == 1) ('Executive Bar', 'executive_bar_complete'),
     ];
     await showDialog<void>(
       context: context,

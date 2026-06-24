@@ -181,7 +181,7 @@ export async function getExceptionQueue(input: {
       `
         SELECT id, branch_id, request_number, status, workflow_status, reason, notes, created_at
         FROM stock_requests
-        WHERE COALESCE(workflow_status, status) IN ('auditor_rejected', 'returned_for_correction', 'rejected')
+        WHERE COALESCE(workflow_status, status) IN ('branch_accountant_rejected', 'auditor_rejected', 'returned_for_correction', 'rejected')
           ${branch.clause}
         ORDER BY created_at DESC
         LIMIT ${limit}
@@ -341,7 +341,7 @@ export async function getRoleDashboard(input: {
     countFrom('inventory_alerts', ` AND status = 'open'`),
     countFrom('inventory_alerts', ` AND status = 'open' AND severity = 'critical'`),
     countFrom('inventory_adjustment_requests', ` AND status IN ('requested', 'approved')`),
-    countFrom('stock_requests', ` AND COALESCE(workflow_status, status) IN ('submitted_to_auditor', 'auditor_approved', 'packing')`),
+    countFrom('stock_requests', ` AND COALESCE(workflow_status, status) IN ('submitted_to_branch_accountant', 'branch_accountant_approved', 'submitted_to_auditor', 'auditor_approved', 'packing')`),
     countFrom('dispatch_notes', ` AND COALESCE(receipt_status, status) IN ('dispatched', 'in_transit', 'partial', 'partially_received')`),
     countFrom('inventory_production_runs', ` AND created_at >= NOW() - INTERVAL '7 days'`),
     countFrom('stock_counts', ` AND status NOT IN ('closed', 'posted')`)

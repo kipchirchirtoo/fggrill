@@ -86,7 +86,11 @@ router.use((req: any, res, next) => {
         'kyogong_spa_cashier',
         'kyogong_executive_bar_cashier',
         'kyogong_sports_bar_cashier',
-        'kyogong_reception_cashier'
+        'kyogong_reception_cashier',
+        // Storekeepers need read access to shifts for the opening-stock gate
+        'branch_storekeeper',
+        'central_storekeeper',
+        'storekeeper'
     ];
     const userRole = req.user?.role?.toString().toLowerCase();
     if (userRole && allowedRoles.includes(userRole)) {

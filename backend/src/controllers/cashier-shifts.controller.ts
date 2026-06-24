@@ -39,6 +39,55 @@ function isShiftManager(role?: unknown): boolean {
     return SHIFT_MANAGER_ROLES.has(normalized) || isGlobalRole(normalized);
 }
 
+/**
+ * Ensure all required stocktake locations are submitted for a branch/date
+ * before a cashier shift can be opened. Required stocktakes:
+ *   1. Main Bar
+ *   2. Executive Bar (Kyogong / branch 1 only — no other branch has one)
+ *   3. Branch Store
+ *   4. Kitchen
+ *
+ * All counts are now stored in the unified stock_counts table. A location is
+ * considered complete if there is at least one non-draft, non-rejected count
+ * for that branch/date/location.
+ *
+ * Returns { ok: true } if all are complete, otherwise { ok: false, missing: [...] }.
+ */
+async function verifyStocktakesComplete(
+    branchId: number,
+    date: string
+): Promise<{ ok: boolean; missing: string[] }> {
+    // Only Kyogong (branch 1) has a separate Executive Bar outlet — every
+    // other branch has just one bar (main_bar), so the executive_bar
+    // stocktake can never be satisfied there and must not be required.
+    const requiredLocations = [
+        { key: 'main_bar', label: 'Main Bar stocktake' },
+        ...(branchId === 1 ? [{ key: 'executive_bar', label: 'Executive Bar stocktake' }] : []),
+        { key: 'branch_store', label: 'Branch Store stocktake' },
+        { key: 'kitchen', label: 'Kitchen stocktake' }
+    ];
+
+    const { data: completedCounts, error } = await supabase
+        .from('stock_counts')
+        .select('location')
+        .eq('branch_id', branchId)
+        .eq('count_date', date)
+        .in('location', requiredLocations.map(l => l.key))
+        .not('status', 'in', ['draft', 'rejected'])
+        .limit(requiredLocations.length);
+
+    if (error) {
+        logger.warn('verifyStocktakesComplete stock_counts query error:', error);
+    }
+
+    const completedLocations = new Set((completedCounts || []).map(c => c.location));
+    const missing = requiredLocations
+        .filter(l => !completedLocations.has(l.key))
+        .map(l => l.label);
+
+    return { ok: missing.length === 0, missing };
+}
+
 function isLegacyUnapprovedOpenShift(shift: any): boolean {
     return String(shift?.status || '').toLowerCase() === 'open'
         && !shift?.opening_requested_by
@@ -110,7 +159,7 @@ function summarizeShiftTransactions(transactions: any[]): {
     return summary;
 }
 
-async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Promise<any> {
+export async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Promise<any> {
     const logDate = String(shift.shift_start || new Date().toISOString()).slice(0, 10);
     const creditBills = toArray(shift.credit_bills_details);
     const paidBills = toArray(shift.paid_bills_details);
@@ -230,6 +279,7 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
     const lines = [
         ...shiftTransactions.map((transaction: any, index: number) => ({
             logbook_id: logbook.id,
+            line_type: 'cleared_transaction',
             section: 'cleared_transaction',
             customer_name: transaction.customer_name
                 || transaction.description
@@ -245,6 +295,7 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
         })),
         ...creditBills.map((bill: any, index: number) => ({
             logbook_id: logbook.id,
+            line_type: 'credit_bill',
             section: 'credit_bill',
             customer_name: bill.name || bill.staff_name || bill.customer_name || 'Credit bill',
             amount: toNumber(bill.amount),
@@ -255,6 +306,7 @@ async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Pro
         })),
         ...paidBills.map((bill: any, index: number) => ({
             logbook_id: logbook.id,
+            line_type: 'paid_bill',
             section: 'paid_bill',
             customer_name: bill.name || bill.staff_name || bill.customer_name || 'Paid bill',
             amount: toNumber(bill.amount),
@@ -321,7 +373,7 @@ export const getShiftLogs = async (
             }
         }
         
-        // Cashiers can only see their own shifts unless they're admin/accountant/auditor
+        // Cashiers can only see their own shifts unless they're admin/accountant/auditor/storekeeper
         const managerRoles = [
             'super_admin',
             'general_manager', 
@@ -329,7 +381,11 @@ export const getShiftLogs = async (
             'accountant',
             'branch_accountant',
             'auditor',
-            'it_manager'
+            'it_manager',
+            // Storekeepers need read access to all branch shifts for the opening-stock gate
+            'branch_storekeeper',
+            'central_storekeeper',
+            'storekeeper'
         ];
         
         const isManager = managerRoles.includes((userRole || '').toString().toLowerCase()) || isGlobalRole(userRole?.toString());
@@ -342,15 +398,19 @@ export const getShiftLogs = async (
             query = query.eq('cashier_id', cashier_id);
         }
 
+        // Handle comma-separated statuses (e.g. "pending_open,open")
         const requestedStatus = status ? String(status).trim() : '';
-        const normalizedStatus = requestedStatus === 'pending_approval'
-            ? 'pending_open'
-            : requestedStatus;
+        const statusList = requestedStatus.split(',').map(s => s.trim()).filter(Boolean);
+        const normalizedStatuses = statusList.map(s => s === 'pending_approval' ? 'pending_open' : s);
+        const specialStatuses = ['pending_open', 'open'];
 
-        // pending_open/open are normalized after fetch so legacy unapproved
-        // open rows can still be routed to branch-accountant approval.
-        if (normalizedStatus && !['pending_open', 'open'].includes(normalizedStatus)) {
-            query = query.eq('status', normalizedStatus);
+        // If ALL requested statuses are "special" (handled by post-fetch filter), skip DB filter.
+        // Otherwise, apply a DB-level filter for non-special statuses.
+        const nonSpecial = normalizedStatuses.filter(s => !specialStatuses.includes(s));
+        if (nonSpecial.length === 1) {
+            query = query.eq('status', nonSpecial[0]);
+        } else if (nonSpecial.length > 1) {
+            query = query.in('status', nonSpecial);
         }
 
         // Filter by date range
@@ -366,9 +426,17 @@ export const getShiftLogs = async (
         if (error) throw error;
 
         let shifts = (data || []).map(normalizeShiftOpeningStatus);
-        if (normalizedStatus === 'pending_open') {
+        // Post-fetch filter for special statuses
+        if (normalizedStatuses.length > 0 && normalizedStatuses.every(s => specialStatuses.includes(s))) {
+            shifts = shifts.filter((shift: any) => {
+                const s = String(shift.status || '').toLowerCase();
+                if (normalizedStatuses.includes('pending_open') && s === 'pending_open') return true;
+                if (normalizedStatuses.includes('open') && s === 'open' && !shift.opening_requires_approval) return true;
+                return false;
+            });
+        } else if (normalizedStatuses.includes('pending_open') && !normalizedStatuses.includes('open')) {
             shifts = shifts.filter((shift: any) => String(shift.status || '').toLowerCase() === 'pending_open');
-        } else if (normalizedStatus === 'open') {
+        } else if (normalizedStatuses.includes('open') && !normalizedStatuses.includes('pending_open')) {
             shifts = shifts.filter((shift: any) =>
                 String(shift.status || '').toLowerCase() === 'open' && !shift.opening_requires_approval
             );
@@ -1031,6 +1099,16 @@ export const startShift = async (
             targetUser.email ||
             'Cashier';
 
+        // All required stocktakes must be completed before a cashier shift can open.
+        const today = new Date().toISOString().split('T')[0];
+        const stocktakeGate = await verifyStocktakesComplete(targetBranchId, today);
+        if (!stocktakeGate.ok) {
+            throw new AppError(
+                `Cannot open cashier shift until all stocktakes are completed: ${stocktakeGate.missing.join(', ')}`,
+                400
+            );
+        }
+
         // Check if cashier already has an open shift or a pending opening request.
         const { data: openShift, error: openShiftError } = await supabase
             .from('cashier_shift_logs')
@@ -1173,6 +1251,16 @@ export const approveShiftOpening = async (
 
         if (!isShiftManager(userRole)) {
             throw new AppError('Only branch accountants or managers can approve cashier shift openings.', 403);
+        }
+
+        // All required stocktakes must be completed before a cashier shift can be approved.
+        const shiftDate = new Date().toISOString().split('T')[0];
+        const stocktakeGate = await verifyStocktakesComplete(Number(shift.branch_id), shiftDate);
+        if (!stocktakeGate.ok) {
+            throw new AppError(
+                `Cannot approve cashier shift until all stocktakes are completed: ${stocktakeGate.missing.join(', ')}`,
+                400
+            );
         }
 
         const now = new Date().toISOString();

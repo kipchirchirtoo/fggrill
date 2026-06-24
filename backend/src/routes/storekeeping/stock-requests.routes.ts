@@ -22,19 +22,19 @@ router.route('/')
     .get(getStockRequests)
     .post(createStockRequest);
 
-router.get('/branch-performance/:branchId', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), getBranchPerformance);
+router.get('/branch-performance/:branchId', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN]), getBranchPerformance);
 
 // Bulk approve route (must come before /:id routes)
-router.post('/bulk-approve', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), bulkApproveStockRequests);
+router.post('/bulk-approve', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), bulkApproveStockRequests);
 
 router.route('/:id')
     .get(getStockRequest);
 
-router.put('/:id/review', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), reviewStockRequest);
+router.put('/:id/review', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), reviewStockRequest);
 
-// Strict Auditor Approval Workflow
-router.put('/:id/approve', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), approveStockRequest);
-router.put('/:id/reject', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), rejectStockRequest);
+// Branch Accountant Approval Workflow (branch store requests go to branch accountant, then central store)
+router.put('/:id/approve', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), approveStockRequest);
+router.put('/:id/reject', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), rejectStockRequest);
 
 router.put('/:id/cancel', cancelStockRequest);
 

@@ -31,7 +31,7 @@ export const listPastryProduction = async (req: Request, res: Response, next: Ne
 
         let query = supabase
             .from('pastry_production_log')
-            .select('*, item:inventory_items(id, name, unit)')
+            .select('*, item:inventory_items(id, item_name, unit)')
             .eq('branch_id', branchId)
             .order('created_at', { ascending: false });
 
@@ -84,7 +84,7 @@ export const recordPastryProduction = async (req: Request, res: Response, next: 
                 quantity_produced: qty,
                 produced_by: req.user?.id || null,
             })
-            .select('*, item:inventory_items(id, name, unit)')
+            .select('*, item:inventory_items(id, item_name, unit)')
             .single();
         if (error) throw error;
 
@@ -132,7 +132,7 @@ export const issuePastryToKitchen = async (req: Request, res: Response, next: Ne
                 issued_at: new Date().toISOString(),
             })
             .eq('id', req.params.id)
-            .select('*, item:inventory_items(id, name, unit)')
+            .select('*, item:inventory_items(id, item_name, unit)')
             .single();
         if (error) throw error;
 

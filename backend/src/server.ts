@@ -46,9 +46,9 @@ process.on('uncaughtException', (err: Error) => {
 });
 
 // ── DNS RESILIENCE PATCH ──────────────────────────────────────────────────────
-// Guards against intermittent local DNS (127.0.0.53) failures for *.supabase.co.
-// Intercepts dns.lookup for supabase hostnames: tries Google DNS first, then
-// falls through to the system resolver as a safety net.
+// Guards against intermittent local DNS (127.0.0.53) failures for external hosts.
+// Intercepts dns.lookup for supabase/upstash hostnames: tries Google DNS first,
+// then falls through to the system resolver as a safety net.
 import dns from 'dns';
 {
   const _resolver = new dns.Resolver();
@@ -60,7 +60,9 @@ import dns from 'dns';
     optsOrCb: any,
     cb?: any
   ) => {
-    if (typeof hostname !== 'string' || !hostname.includes('supabase')) {
+    const needsGoogleDns = typeof hostname === 'string' &&
+      (hostname.includes('supabase') || hostname.includes('upstash'));
+    if (!needsGoogleDns) {
       return _orig(hostname, optsOrCb, cb);
     }
 
@@ -100,16 +102,17 @@ import { initializeApp } from './init';
 import { errorHandler } from './middleware/errorHandler';
 import { logRequest } from './middleware/auth';
 import { securityMiddleware, rootPathLimiter } from './middleware/security';
+import { globalLimiter, authLimiter, posLimiter } from './middleware/rateLimiter';
 import { logger } from './utils/logger';
 import routes from './routes';
+import healthRouter from './routes/health';
 import startupService from './services/startup.service';
 
 // Initialize app with Socket.IO
 initializeApp().then(({ app, httpServer }) => {
   // Health check endpoint - MUST be first to respond even during cold starts
-  app.get('/health', (req, res) => {
-    res.status(200).json({ ok: true, timestamp: new Date().toISOString() });
-  });
+  // Enhanced with cache stats and uptime (see src/routes/health.ts)
+  app.use('/health', healthRouter);
 
   app.head('/', (_req, res) => {
     res.status(200).end();
@@ -205,15 +208,8 @@ initializeApp().then(({ app, httpServer }) => {
   // Static files
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-  // Rate limiting - aggressive for auth and financial endpoints
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // 20 requests per 15 minutes
-    message: 'Too many authentication attempts, please try again later',
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-
+  // Rate limiting — Redis-backed Upstash sliding window (see src/middleware/rateLimiter.ts)
+  // All limiters fail-open if Redis is down.
   const financialLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
     max: 30, // 30 requests per minute
@@ -222,21 +218,16 @@ initializeApp().then(({ app, httpServer }) => {
     legacyHeaders: false,
   });
 
-  const generalLimiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: process.env.NODE_ENV === 'production' ? 100 : 1000,
-    message: 'Too many requests, please slow down',
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-
-  // Apply rate limiters to specific routes
-  app.use('/api/auth', authLimiter);
+  // Route-specific limiters (tightest first)
+  app.use('/api/auth', authLimiter);       // 20 req / 5 min per IP
+  app.use('/api/pos', posLimiter);         // 300 req / 5 min per branch
+  app.use('/api/orders', posLimiter);      // POS orders share the same limit
   app.use('/api/payment', financialLimiter);
   app.use('/api/accounting', financialLimiter);
   app.use('/api/finance', financialLimiter);
   app.use('/api/cashier', financialLimiter);
-  app.use(generalLimiter);
+  // Global limiter applied last — catches all other routes
+  app.use(globalLimiter);                  // 500 req / 15 min per IP
 
   // API routes
   app.use('/api', routes);

@@ -46,7 +46,7 @@ export default function BranchRequestsPage() {
             toast.loading(`Generating ${activeTab === 'history' ? 'history' : 'current requests'} report...`);
             await auditorReportsAPI.exportBrandedPdf(reportType, {
                 branch_id: user?.branch_id,
-                status: activeTab === 'history' ? 'DELIVERED,RECEIVED,CANCELLED' : 'PENDING,APPROVED,PARTIALLY_APPROVED,REJECTED,IN_TRANSIT'
+                status: activeTab === 'history' ? 'DELIVERED,RECEIVED,CANCELLED' : 'PENDING,PENDING_BRANCH_ACCOUNTANT_APPROVAL,APPROVED,PARTIALLY_APPROVED,REJECTED,IN_TRANSIT'
             });
             toast.dismiss();
             toast.success("Report generated successfully");
@@ -58,7 +58,7 @@ export default function BranchRequestsPage() {
     };
 
     const stats = useMemo(() => {
-        const pending = requests.filter(r => r.status === 'PENDING').length;
+        const pending = requests.filter(r => r.status === 'PENDING' || r.status === 'PENDING_BRANCH_ACCOUNTANT_APPROVAL').length;
         const totalItems = requests.reduce((acc, r) => acc + (r.items?.length || 0), 0);
         const hasRejections = requests.filter(r => r.items?.some((i: any) => i.status === 'REJECTED')).length;
         return { pending, totalItems, hasRejections };
@@ -68,7 +68,7 @@ export default function BranchRequestsPage() {
     const filteredRequests = useMemo(() => {
         if (activeTab === 'current') {
             return requests.filter(r => 
-                ['PENDING', 'APPROVED', 'PARTIALLY_APPROVED', 'REJECTED', 'IN_TRANSIT'].includes(r.status)
+                ['PENDING', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL', 'APPROVED', 'PARTIALLY_APPROVED', 'REJECTED', 'IN_TRANSIT'].includes(r.status)
             );
         } else {
             return requests.filter(r => 
@@ -153,7 +153,8 @@ export default function BranchRequestsPage() {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'PENDING': return 'warning';
+            case 'PENDING':
+            case 'PENDING_BRANCH_ACCOUNTANT_APPROVAL': return 'warning';
             case 'REVIEWED': return 'blue';
             case 'APPROVED': return 'success';
             case 'PARTIALLY_APPROVED': return 'success';

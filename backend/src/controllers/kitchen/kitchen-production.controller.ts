@@ -265,6 +265,18 @@ export const createProductionSession = async (req: Request, res: Response) => {
 
     // Create planned production entries
     if (planned_items?.length) {
+      const menuIds = (planned_items as any[])
+        .map((pi) => pi.menu_item_id)
+        .filter(Boolean);
+      let invIdByMenuId = new Map<string, string>();
+      if (menuIds.length > 0) {
+        const { data: menuItems } = await supabase
+          .from('restaurant_menu_items')
+          .select('id, inventory_item_id')
+          .in('id', menuIds);
+        invIdByMenuId = new Map((menuItems || []).map((m: any) => [m.id, m.inventory_item_id]));
+      }
+
       const entryRows: any[] = [];
       for (const pi of planned_items as any[]) {
         // Use pre-calculated expected_quantity from client (yield preview) if provided,
@@ -283,6 +295,7 @@ export const createProductionSession = async (req: Request, res: Response) => {
           session_id: session.id,
           menu_item_id: pi.menu_item_id,
           menu_item_name: pi.menu_item_name,
+          inventory_item_id: invIdByMenuId.get(pi.menu_item_id) || null,
           expected_quantity: expectedQty,
           actual_quantity: 0,
           variance: 0,

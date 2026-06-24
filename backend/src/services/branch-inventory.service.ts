@@ -516,8 +516,8 @@ export async function createStockRequest(
       priority,
       reason,
       needed_by_date: neededByDate,
-      status: 'PENDING_AUDIT',
-      workflow_status: 'submitted_to_auditor',
+      status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
+      workflow_status: 'submitted_to_branch_accountant',
       submitted_to_auditor_at: new Date().toISOString(),
       document_number: requestNumber,
       barcode_value: requestNumber
@@ -538,8 +538,8 @@ export async function createStockRequest(
     item_sku: item.item_sku,
     requested_quantity: item.requested_quantity,
     current_branch_stock: item.current_branch_stock || 0,
-    status: 'PENDING_AUDIT',
-    workflow_status: 'submitted_to_auditor'
+    status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
+    workflow_status: 'submitted_to_branch_accountant'
   }));
 
   const { error: itemsError } = await supabase
@@ -562,7 +562,7 @@ export async function createStockRequest(
     const branchName = branchData?.name || branchCode;
 
     await notificationService.notifyRole(
-      'auditor',
+      'branch_accountant',
       'New Stock Request for Review',
       `${branchName} branch has submitted a new stock request (${requestNumber}). Approval required.`,
       {
@@ -570,7 +570,7 @@ export async function createStockRequest(
         category: 'stock',
         priority: priority === 'URGENT' ? 'urgent' : 'medium',
         branchId: branchId,
-        actionUrl: '/dashboard/auditor/approvals',
+        actionUrl: '/dashboard/branch-accounting/stock-requests',
         metadata: {
           request_id: createdRequest.id,
           branch_code: branchCode,
@@ -691,7 +691,7 @@ export async function getPendingRequests() {
   const { data: requests, error } = await supabase
     .from('stock_requests')
     .select('*')
-    .in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW'])
+    .in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL'])
     .order('created_at', { ascending: true });
 
   if (error) throw error;
@@ -738,20 +738,32 @@ export async function getPendingRequests() {
 }
 
 /**
- * Approve stock request (by central)
+ * Approve stock request (by central, auditor, or branch accountant).
  */
 export async function approveStockRequest(
   requestId: string,
   reviewerId: string,
   approvedItems: { id: string; approved_quantity: number; status: string; rejection_reason?: string }[],
-  reviewNotes?: string
+  reviewNotes?: string,
+  options?: {
+    workflowStatus?: string;
+    itemWorkflowStatus?: string;
+    reviewerRole?: string;
+  }
 ) {
+  const reviewerRole = options?.reviewerRole || 'Auditor';
+
   // Update request
   const allApproved = approvedItems.every(i => i.status === 'APPROVED');
   const allRejected = approvedItems.every(i => i.status === 'REJECTED');
 
   const newStatus = allRejected ? 'REJECTED' : allApproved ? 'APPROVED' : 'PARTIALLY_APPROVED';
-  const workflowStatus = allRejected ? 'auditor_rejected' : 'auditor_approved';
+  const workflowStatus = options?.workflowStatus
+    || (allRejected ? 'auditor_rejected' : 'auditor_approved');
+  const itemWorkflowStatus = options?.itemWorkflowStatus
+    || (allRejected ? 'auditor_rejected' : 'auditor_approved');
+
+  const isBranchAccountant = reviewerRole === 'Branch Accountant';
 
   const { error: requestError } = await supabase
     .from('stock_requests')
@@ -760,7 +772,7 @@ export async function approveStockRequest(
       workflow_status: workflowStatus,
       reviewed_by: reviewerId,
       reviewed_at: new Date().toISOString(),
-      auditor_decision_at: new Date().toISOString(),
+      auditor_decision_at: isBranchAccountant ? null : new Date().toISOString(),
       sent_to_central_store_at: allRejected ? null : new Date().toISOString(),
       review_notes: reviewNotes,
       updated_at: new Date().toISOString()
@@ -776,7 +788,7 @@ export async function approveStockRequest(
       .update({
         approved_quantity: item.approved_quantity,
         status: item.status,
-        workflow_status: item.status === 'REJECTED' ? 'auditor_rejected' : 'auditor_approved',
+        workflow_status: item.status === 'REJECTED' ? itemWorkflowStatus : itemWorkflowStatus,
         unavailable_quantity: item.status === 'REJECTED' ? item.approved_quantity || 0 : 0,
         rejection_reason: item.rejection_reason
       })
@@ -814,7 +826,7 @@ export async function approveStockRequest(
         await notificationService.notifyRole(
           'general_manager',
           'Stock Request Approved',
-          `Stock Request ${requestDetails.request_number} approved by Auditor. Ready for fulfillment.`,
+          `Stock Request ${requestDetails.request_number} approved by ${reviewerRole}. Ready for fulfillment.`,
           {
             type: 'info',
             category: 'stock',
@@ -828,7 +840,7 @@ export async function approveStockRequest(
         await notificationService.notifyRole(
           'BRANCH_STOREKEEPER',
           `Stock Request ${newStatus}`,
-          `Your stock request ${requestDetails.request_number} has been ${newStatus.toLowerCase()} by the Auditor.`,
+          `Your stock request ${requestDetails.request_number} has been ${newStatus.toLowerCase()} by the ${reviewerRole}.`,
           {
             type: 'success',
             category: 'stock',
@@ -1802,7 +1814,7 @@ export async function getAllBranches() {
 export async function getCentralDashboardStats() {
   try {
     const [pendingRequests, inTransit, lowStock, recentDispatches, totalMaster] = await Promise.all([
-      supabase.from('stock_requests').select('*', { count: 'exact', head: true }).in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW']),
+      supabase.from('stock_requests').select('*', { count: 'exact', head: true }).in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL']),
       supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).in('status', ['READY', 'DISPATCHED', 'IN_TRANSIT']),
       supabase.from('branch_stock').select('*', { count: 'exact', head: true }).lte('quantity', 10), // Threshold default
       supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
@@ -1848,7 +1860,7 @@ export async function getBranchDashboardStats(branchId: number) {
   const [totalItemsRes, allStockRes, pendingRequestsRes, incomingDispatchesRes] = await Promise.all([
     supabase.from('branch_stock').select('id', { count: 'exact', head: true }).eq('branch_id', branchId),
     supabase.from('branch_stock').select('id, quantity, reorder_level').eq('branch_id', branchId),
-    supabase.from('stock_requests').select('id', { count: 'exact', head: true }).eq('requesting_branch_id', branchId).in('status', ['PENDING', 'PENDING_AUDIT', 'APPROVED', 'UNDER_REVIEW']),
+    supabase.from('stock_requests').select('id', { count: 'exact', head: true }).eq('requesting_branch_id', branchId).in('status', ['PENDING', 'PENDING_AUDIT', 'APPROVED', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL']),
     supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).eq('to_branch_id', branchId).eq('status', 'IN_TRANSIT')
   ]);
 

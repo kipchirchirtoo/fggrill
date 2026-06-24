@@ -124,7 +124,13 @@ export const submitOpeningStock = async (req: Request, res: Response, next: Next
             executive_bar_complete: existingStatus?.executive_bar_complete || false,
             [completeColumn]: true,
         } as Record<string, any>;
-        const allComplete = nextStatus.branch_store_complete && nextStatus.main_bar_complete && nextStatus.executive_bar_complete;
+        // Only Kyogong (branch 1) has a separate Executive Bar outlet — every
+        // other branch has just one bar, so it can never submit an
+        // executive_bar count and must not be required to.
+        const requiresExecutiveBar = Number(shift.branch_id) === 1;
+        const allComplete = nextStatus.branch_store_complete
+            && nextStatus.main_bar_complete
+            && (!requiresExecutiveBar || nextStatus.executive_bar_complete);
         if (allComplete) nextStatus.completed_at = now;
 
         const { data: statusRow, error: statusErr } = await supabase

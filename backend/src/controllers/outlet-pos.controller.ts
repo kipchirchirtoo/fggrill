@@ -163,6 +163,9 @@ const isGenericOutletCategory = (category: string, group: 'restaurant' | 'bar' |
   return lower === 'uncategorised' || lower === 'uncategorized' || lower === 'other';
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUUID = (v: string): boolean => UUID_REGEX.test(v);
+
 const sourceIdForOutletItem = (item: Record<string, any>, prefix: string): string | null => {
   const explicitId = categoryText(item.source_item_id);
   if (explicitId) return explicitId;
@@ -839,11 +842,11 @@ const hydrateOutletItemCategories = async (
   for (const item of withOutlet) {
     if (item.source_table === 'restaurant_menu_items' || group === 'restaurant') {
       const id = sourceIdForOutletItem(item, 'R-');
-      if (id) restaurantIds.add(id);
+      if (id && isValidUUID(id)) restaurantIds.add(id);
     }
     if (item.source_table === 'bar_drinks') {
       const id = sourceIdForOutletItem(item, '');
-      if (id) barDrinkIds.add(id);
+      if (id && isValidUUID(id)) barDrinkIds.add(id);
     }
   }
 

@@ -34,7 +34,7 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
 
         let query = supabase
             .from('stock_balance_ledger')
-            .select('*, item:inventory_items(id, name, unit)')
+            .select('*, item:inventory_items(id, item_name, unit)')
             .eq('branch_id', branchId)
             .order('ledger_date', { ascending: false });
 
@@ -80,7 +80,7 @@ export const recordActualClosing = async (req: Request, res: Response, next: Nex
             .from('stock_balance_ledger')
             .update({ actual_closing: actualClosing, variance })
             .eq('id', req.params.id)
-            .select('*, item:inventory_items(id, name, unit)')
+            .select('*, item:inventory_items(id, item_name, unit)')
             .single();
         if (error) throw error;
 
