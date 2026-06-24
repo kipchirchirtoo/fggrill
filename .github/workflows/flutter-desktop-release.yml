@@ -50,6 +50,8 @@ jobs:
             VERSION="${VERSION}.0.0"
           elif [ "${#VERSION_PARTS[@]}" -eq 2 ]; then
             VERSION="${VERSION}.0"
+          elif [ "${#VERSION_PARTS[@]}" -ge 4 ]; then
+            VERSION="${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.${VERSION_PARTS[2]}"
           fi
           BUILD_NUMBER="${{ github.run_number }}"
           perl -0pi -e "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/m" pubspec.yaml
@@ -128,6 +130,8 @@ jobs:
             $version = "$version.0.0"
           } elseif ($parts.Length -eq 2) {
             $version = "$version.0"
+          } elseif ($parts.Length -ge 4) {
+            $version = "$($parts[0]).$($parts[1]).$($parts[2])"
           }
           $buildNumber = "${{ github.run_number }}"
           (Get-Content pubspec.yaml) -replace '^version: .+$', "version: $version+$buildNumber" | Set-Content pubspec.yaml
@@ -154,6 +158,8 @@ jobs:
             $version = "$version.0.0"
           } elseif ($parts.Length -eq 2) {
             $version = "$version.0"
+          } elseif ($parts.Length -ge 4) {
+            $version = "$($parts[0]).$($parts[1]).$($parts[2])"
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
             "/DMyAppVersion=$version" `
@@ -200,6 +206,8 @@ jobs:
             VERSION="${VERSION}.0.0"
           elif [ "${#VERSION_PARTS[@]}" -eq 2 ]; then
             VERSION="${VERSION}.0"
+          elif [ "${#VERSION_PARTS[@]}" -ge 4 ]; then
+            VERSION="${VERSION_PARTS[0]}.${VERSION_PARTS[1]}.${VERSION_PARTS[2]}"
           fi
           BUILD_NUMBER="${{ github.run_number }}"
           perl -0pi -e "s/^version: .*/version: ${VERSION}+${BUILD_NUMBER}/m" pubspec.yaml
