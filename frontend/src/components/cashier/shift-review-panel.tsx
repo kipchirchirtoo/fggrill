@@ -63,15 +63,17 @@ interface ShiftLog {
 export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
     const { activeBranchId } = useBranch();
     const [shifts, setShifts] = useState<ShiftLog[]>([]);
+    const [openingRequests, setOpeningRequests] = useState<ShiftLog[]>([]);
     const [selectedShift, setSelectedShift] = useState<ShiftLog | null>(null);
     const [notes, setNotes] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [openingActionId, setOpeningActionId] = useState<string | null>(null);
 
     const fetchShifts = async () => {
         if (!activeBranchId) return;
         try {
             const statusFilter = role === 'accountant' ? 'closed' : 'reconciled';
-            
+
             // Fetch from both systems
             const [stdRes, kyoRes] = await Promise.all([
                 fetchAPI(`/cashier/shifts?branch_id=${activeBranchId}&status=${statusFilter}`),
@@ -105,9 +107,56 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
         }
     };
 
+    // Cashiers requesting a shift opening land in their own status
+    // ('pending_open'), separate from the closed/reconciled queue above.
+    // Without this, an accountant's notification ("Shift opening approval
+    // needed") leads to a screen that never shows the request that triggered it.
+    const fetchOpeningRequests = async () => {
+        if (!activeBranchId || role !== 'accountant') {
+            setOpeningRequests([]);
+            return;
+        }
+        try {
+            const res = await fetchAPI(`/cashier/shifts?branch_id=${activeBranchId}&status=pending_open`);
+            if (res.success) {
+                const mapped = (res.data || []).map((s: any) => ({
+                    ...s,
+                    status: (s.status || '').toLowerCase() as any,
+                    shift_start: s.shift_start || s.requested_at,
+                }));
+                mapped.sort((a: any, b: any) => new Date(b.shift_start).getTime() - new Date(a.shift_start).getTime());
+                setOpeningRequests(mapped);
+            }
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to load shift opening requests');
+        }
+    };
+
     useEffect(() => {
         fetchShifts();
+        fetchOpeningRequests();
     }, [activeBranchId, role]);
+
+    const handleOpeningDecision = async (shift: ShiftLog, decision: 'approve' | 'reject') => {
+        setOpeningActionId(shift.id);
+        try {
+            const endpoint = decision === 'approve' ? 'approve-open' : 'reject-open';
+            const response = await fetchAPI(`/cashier/shifts/${shift.id}/${endpoint}`, {
+                method: 'PUT',
+                body: JSON.stringify({ notes: '' })
+            });
+            if (response.success) {
+                toast.success(decision === 'approve' ? 'Shift opening approved' : 'Shift opening rejected');
+                fetchOpeningRequests();
+            } else {
+                toast.error(response.message || `Failed to ${decision} shift opening`);
+            }
+        } catch (error: any) {
+            toast.error(error.message || `Failed to ${decision} shift opening`);
+        } finally {
+            setOpeningActionId(null);
+        }
+    };
 
     const handleAction = async () => {
         if (!selectedShift) return;
@@ -166,6 +215,46 @@ export function ShiftReviewPanel({ role }: { role: 'accountant' | 'auditor' }) {
                         : 'Verify reconciled shifts for audit compliance'}
                 </p>
             </div>
+
+            {role === 'accountant' && openingRequests.length > 0 && (
+                <div className="space-y-3">
+                    <h3 className="font-bold text-stone-900">Shift Opening Requests</h3>
+                    {openingRequests.map((req) => (
+                        <IOSCard key={req.id} className="p-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-stone-900">{req.shift_number}</span>
+                                        <span className="px-2 py-0.5 text-[9px] font-black rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                                            AWAITING APPROVAL
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-stone-600 mt-1">
+                                        {req.cashier_name || 'Cashier'} requested opening float{' '}
+                                        <span className="font-bold">KES {(req.opening_float || 0).toLocaleString()}</span>
+                                    </p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <IOSButton
+                                        onClick={() => handleOpeningDecision(req, 'reject')}
+                                        disabled={openingActionId === req.id}
+                                        className="bg-rose-600 px-4"
+                                    >
+                                        Reject
+                                    </IOSButton>
+                                    <IOSButton
+                                        onClick={() => handleOpeningDecision(req, 'approve')}
+                                        disabled={openingActionId === req.id}
+                                        className="bg-emerald-600 px-4"
+                                    >
+                                        {openingActionId === req.id ? <Loader2 className="animate-spin h-4 w-4" /> : 'Approve'}
+                                    </IOSButton>
+                                </div>
+                            </div>
+                        </IOSCard>
+                    ))}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Shift List */}
