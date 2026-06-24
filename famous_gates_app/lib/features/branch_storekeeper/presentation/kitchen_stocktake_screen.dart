@@ -12,9 +12,10 @@ import 'record_spoilage_screen.dart';
 /// VAR per item, two shifts (A/B) per day, with dispenser/cheps-on-duty and
 /// a confirmation name to stand in for the handwritten sign-off.
 ///
-/// The storekeeper only fills the CLOSING count. OPEN is yesterday's closing
-/// stock and ADD is the production output for the shift, both pulled from the
-/// system.
+/// OPEN is the previous shift's closing stock, pulled from the system and
+/// read-only. ADD defaults to the system's production output for the shift
+/// but is editable — kitchen staff often prepare extra items without a
+/// separate logged production session. CLOSING is always entered by hand.
 class KitchenStocktakeScreen extends ConsumerStatefulWidget {
   const KitchenStocktakeScreen({super.key});
 
@@ -121,9 +122,9 @@ class _KitchenShiftStocktakeState
     extends ConsumerState<_KitchenShiftStocktake> {
   late Future<Map<String, dynamic>> _future = _load();
   final Map<String, TextEditingController> _closingCtrl = {};
+  final Map<String, TextEditingController> _addedCtrl = {};
   final Map<String, String> _itemIdByName = {};
   final Map<String, num> _opening = {};
-  final Map<String, num> _added = {};
   final List<TextEditingController> _chepsCtrl =
       List.generate(5, (_) => TextEditingController());
   final TextEditingController _dispenserCtrl = TextEditingController();
@@ -148,8 +149,8 @@ class _KitchenShiftStocktakeState
       final itemId = item['item_id'];
       if (itemId != null) _itemIdByName[name] = '$itemId';
       _opening[name] = _num(item['opening_qty']);
-      _added[name] = _num(item['added_qty']);
       _ctrlFor(name).text = _fmt(item['closing_qty']);
+      _addedCtrlFor(name).text = _fmt(item['added_qty']);
     }
     return data;
   }
@@ -162,9 +163,12 @@ class _KitchenShiftStocktakeState
   TextEditingController _ctrlFor(String name) =>
       _closingCtrl.putIfAbsent(name, () => TextEditingController());
 
+  TextEditingController _addedCtrlFor(String name) =>
+      _addedCtrl.putIfAbsent(name, () => TextEditingController());
+
   @override
   void dispose() {
-    for (final c in [..._closingCtrl.values, ..._chepsCtrl]) {
+    for (final c in [..._closingCtrl.values, ..._addedCtrl.values, ..._chepsCtrl]) {
       c.dispose();
     }
     _dispenserCtrl.dispose();
@@ -177,6 +181,7 @@ class _KitchenShiftStocktakeState
       return {
         'item_id': _itemIdByName[name],
         'item_name': name,
+        'added_qty': double.tryParse(_addedCtrlFor(name).text.trim()) ?? 0,
         'closing_qty': double.tryParse(_ctrlFor(name).text.trim()) ?? 0,
       };
     }).toList();
@@ -309,20 +314,21 @@ class _KitchenShiftStocktakeState
 
   Widget _itemRow(String name) {
     final open = _opening[name] ?? 0;
-    final add = _added[name] ?? 0;
     final closing = _ctrlFor(name);
+    final added = _addedCtrlFor(name);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
           Expanded(flex: 3, child: Text(name, style: const TextStyle(fontSize: 13))),
           Expanded(flex: 2, child: Center(child: Text(_fmt(open)))),
-          Expanded(flex: 2, child: Center(child: Text(_fmt(add)))),
+          Expanded(flex: 2, child: _qtyField(added)),
           Expanded(flex: 2, child: _qtyField(closing)),
           Expanded(
             flex: 2,
             child: Builder(builder: (context) {
               final c = double.tryParse(closing.text.trim()) ?? 0;
+              final add = double.tryParse(added.text.trim()) ?? 0;
               // variance = physical − system (positive = surplus, negative = shortage)
               // matches bar stocktake convention
               final variance = c - open - add;

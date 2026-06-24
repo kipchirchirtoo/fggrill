@@ -88,6 +88,56 @@ class BranchAccountantRepository {
     });
   }
 
+  // ── Store stocktake ──────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getStoreStocktakeRecords({String? status}) async {
+    final branchId = await getBranchId();
+    return _getList('/storekeeping/store-stocktake', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty) 'status': status,
+    });
+  }
+
+  Future<void> reviewStoreStocktake(String id, {String? notes}) async {
+    await _dio.patch('/storekeeping/store-stocktake/$id/review', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> approveStoreStocktake(String id, {String? notes}) async {
+    await _dio.patch('/storekeeping/store-stocktake/$id/approve', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> rejectStoreStocktake(String id, {required String notes}) async {
+    await _dio.patch('/storekeeping/store-stocktake/$id/reject', data: {'notes': notes});
+  }
+
+  // ── Kitchen stocktake ────────────────────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getKitchenStocktakeShifts({String? status}) async {
+    final branchId = await getBranchId();
+    return _getList('/storekeeping/kitchen-stocktake/list', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty) 'status': status,
+    });
+  }
+
+  Future<void> reviewKitchenStocktake(String id, {String? notes}) async {
+    await _dio.patch('/storekeeping/kitchen-stocktake/$id/review', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> approveKitchenStocktake(String id, {String? notes}) async {
+    await _dio.patch('/storekeeping/kitchen-stocktake/$id/approve', data: {
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> rejectKitchenStocktake(String id, {required String notes}) async {
+    await _dio.patch('/storekeeping/kitchen-stocktake/$id/reject', data: {'notes': notes});
+  }
+
   // ----------------------------------------------------------------------
   // Branch spoilage log (bar/kitchen/store) — approve/reject is
   // accountant-only; submission is storekeeper-only.

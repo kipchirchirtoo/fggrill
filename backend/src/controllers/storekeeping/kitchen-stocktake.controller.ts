@@ -85,13 +85,17 @@ const ensureKitchenInventoryItems = async (): Promise<Map<string, string>> => {
 
 /**
  * Bulk-fetch the most recent previous kitchen stocktake closing quantity for
- * every fixed item by inventory_item_id. Opening stock for today's count =
- * yesterday's (or last recorded) closing stock.
+ * every fixed item by inventory_item_id. Opening stock for a shift = the
+ * closing stock of whichever shift immediately precedes it — Shift B's
+ * opening is Shift A's closing on the SAME day, and Shift A's opening is the
+ * previous day's last shift's closing. Shift letters sort A < B, so the
+ * (date, shift) tuple comparison below captures both cases in one query.
  */
 const getPreviousKitchenClosingByInvId = async (
   branchId: number,
   invIds: string[],
-  stocktakeDate: string
+  stocktakeDate: string,
+  shift: string
 ): Promise<Map<string, number>> => {
   if (invIds.length === 0) return new Map();
   try {
@@ -100,10 +104,10 @@ const getPreviousKitchenClosingByInvId = async (
        FROM public.kitchen_stocktake_items ki
        JOIN public.kitchen_stocktake_shifts ks ON ks.id = ki.shift_id
        WHERE ks.branch_id = $1
-         AND ks.stocktake_date < $2
-         AND ki.inventory_item_id = ANY($3)
+         AND ki.inventory_item_id = ANY($2)
+         AND (ks.stocktake_date < $3 OR (ks.stocktake_date = $3 AND ks.shift < $4))
        ORDER BY ki.inventory_item_id, ks.stocktake_date DESC, ks.shift DESC`,
-      [branchId, stocktakeDate, invIds]
+      [branchId, invIds, stocktakeDate, shift]
     );
     return new Map((rows || []).map((r: any) => [r.inventory_item_id, num(r.closing_qty)]));
   } catch (err) {
@@ -290,6 +294,170 @@ const syncKitchenStocktakeToStockCounts = async (
 };
 
 /**
+ * @desc    List submitted/reviewed kitchen stocktake shifts for the accountant
+ *          review queue. Returns shifts with their item rows.
+ * @route   GET /api/storekeeping/kitchen-stocktake/list?branch_id=&status=
+ * @access  Branch Accountant, Branch Manager, Auditor, Super Admin
+ */
+export const listKitchenStocktakes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'branch_id is required' });
+      return;
+    }
+    const statusFilter = req.query.status ? String(req.query.status) : null;
+    let query = supabase
+      .from('kitchen_stocktake_shifts')
+      .select('*, items:kitchen_stocktake_items(*)')
+      .eq('branch_id', branchId)
+      .not('status', 'eq', 'draft')
+      .order('stocktake_date', { ascending: false })
+      .order('shift', { ascending: true });
+    if (statusFilter) query = query.eq('status', statusFilter);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.status(200).json({ success: true, data: data || [] });
+  } catch (error) {
+    logger.error('listKitchenStocktakes failed:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Accountant reviews a kitchen stocktake shift.
+ * @route   PATCH /api/storekeeping/kitchen-stocktake/:id/review
+ * @access  Branch Accountant, Super Admin
+ */
+export const reviewKitchenStocktake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { data: existing, error: fetchErr } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+    if (fetchErr || !existing) {
+      res.status(404).json({ success: false, message: 'Stocktake shift not found' });
+      return;
+    }
+    if (existing.status !== 'submitted') {
+      res.status(400).json({ success: false, message: `Cannot review a shift that is ${existing.status}` });
+      return;
+    }
+    const { data, error } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .update({ status: 'reviewed', reviewed_by: req.user?.id || null, reviewed_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    logger.error('reviewKitchenStocktake failed:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Accountant approves a kitchen stocktake shift. Re-syncs closing
+ *          counts to pos_outlet_items so approval is the authoritative trigger.
+ * @route   PATCH /api/storekeeping/kitchen-stocktake/:id/approve
+ * @access  Branch Accountant, Super Admin
+ */
+export const approveKitchenStocktake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { data: existing, error: fetchErr } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .select('*, items:kitchen_stocktake_items(*)')
+      .eq('id', req.params.id)
+      .single();
+    if (fetchErr || !existing) {
+      res.status(404).json({ success: false, message: 'Stocktake shift not found' });
+      return;
+    }
+    if (!['submitted', 'reviewed'].includes(existing.status)) {
+      res.status(400).json({ success: false, message: `Cannot approve a shift that is ${existing.status}` });
+      return;
+    }
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .update({ status: 'approved', reviewed_by: req.user?.id || null, reviewed_at: existing.reviewed_at || now })
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    // Re-apply closing counts to pos_outlet_items so approval is the
+    // authoritative stock-update trigger (submit already does this too,
+    // but approval confirms the accountant has verified the counts).
+    const savedItems = (existing.items || []) as Array<{ item_name: string; closing_qty: any }>;
+    if (savedItems.length > 0) {
+      try {
+        await db.query(
+          `UPDATE public.pos_outlet_items poi
+           SET current_stock = kti.closing_qty::numeric,
+               updated_at    = NOW()
+           FROM (VALUES ${savedItems.map((_: any, i: number) => `($${i * 2 + 1}::text, $${i * 2 + 2}::numeric)`).join(', ')})
+                AS kti(item_name, closing_qty)
+           JOIN public.pos_outlets po ON po.branch_id = $${savedItems.length * 2 + 1}
+                                     AND po.outlet_type = 'restaurant'
+           WHERE poi.outlet_id = po.id
+             AND LOWER(TRIM(poi.name)) = LOWER(TRIM(kti.item_name))`,
+          [...savedItems.flatMap((it: any) => [it.item_name, num(it.closing_qty)]), existing.branch_id]
+        );
+      } catch (err) {
+        logger.warn('approveKitchenStocktake: pos_outlet_items sync failed:', (err as Error).message);
+      }
+    }
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    logger.error('approveKitchenStocktake failed:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Accountant rejects a kitchen stocktake shift.
+ * @route   PATCH /api/storekeeping/kitchen-stocktake/:id/reject
+ * @access  Branch Accountant, Super Admin
+ */
+export const rejectKitchenStocktake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const notes = String(req.body?.notes || '').trim();
+    if (!notes) {
+      res.status(400).json({ success: false, message: 'notes are required when rejecting' });
+      return;
+    }
+    const { data: existing, error: fetchErr } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .select('id, status')
+      .eq('id', req.params.id)
+      .single();
+    if (fetchErr || !existing) {
+      res.status(404).json({ success: false, message: 'Stocktake shift not found' });
+      return;
+    }
+    if (['approved', 'rejected'].includes(existing.status)) {
+      res.status(400).json({ success: false, message: `Cannot reject a shift that is ${existing.status}` });
+      return;
+    }
+    const { data, error } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .update({ status: 'rejected', rejection_notes: notes, reviewed_by: req.user?.id || null, reviewed_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    logger.error('rejectKitchenStocktake failed:', error);
+    next(error);
+  }
+};
+
+/**
  * @desc    Get the kitchen stocktake for a branch/date/shift. If no shift
  *          row exists yet, returns a draft scaffold pre-filled with the
  *          fixed 19-item catalog at zero counts.
@@ -323,7 +491,7 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
     const invIds = Array.from(kitchenItemMap.values());
 
     const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName] = await Promise.all([
-      getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate),
+      getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate, shift),
       getKitchenProductionAddedByInvId(branchId, invIds, stocktakeDate, shift),
       getPastryAddedByInvId(branchId, invIds, stocktakeDate),
       getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
@@ -333,9 +501,14 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
       const invId = kitchenItemMap.get(name);
       const spoilageQty = spoilageByName.get(name) ?? 0;
       const opening = invId ? previousClosingByInvId.get(invId) ?? 0 : 0;
-      const added = invId
+      const computedAdded = invId
         ? (productionAddedByInvId.get(invId) ?? 0) + (pastryAddedByInvId.get(invId) ?? 0)
         : 0;
+      // added_qty is editable by the storekeeper (kitchen staff prepare extra
+      // items that never go through the separate production-logging flow),
+      // so once a draft row has been saved, its stored value wins over a
+      // fresh system recompute — same precedence as closing_qty below.
+      const added = existing?.added_qty != null ? num(existing.added_qty) : computedAdded;
       return {
         item_id: invId || null,
         item_name: name,
@@ -439,7 +612,7 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
     const invIds = Array.from(kitchenItemMap.values());
 
     const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName] = await Promise.all([
-      getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate),
+      getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate, shift),
       getKitchenProductionAddedByInvId(branchId, invIds, stocktakeDate, shift),
       getPastryAddedByInvId(branchId, invIds, stocktakeDate),
       getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
@@ -453,9 +626,15 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
       );
       const closing = num(submitted?.closing_qty);
       const opening = invId ? previousClosingByInvId.get(invId) ?? 0 : 0;
-      const added = invId
+      const computedAdded = invId
         ? (productionAddedByInvId.get(invId) ?? 0) + (pastryAddedByInvId.get(invId) ?? 0)
         : 0;
+      // added_qty is storekeeper-editable: if the client sends a value, it
+      // overrides the system-computed production/pastry total (kitchen
+      // staff often prepare extras that never get logged as a separate
+      // production session). Falls back to the computed total when omitted
+      // so older app builds that don't send added_qty keep working.
+      const added = submitted?.added_qty != null ? num(submitted.added_qty) : computedAdded;
       return {
         shift_id: shiftRow.id,
         item_name: name,

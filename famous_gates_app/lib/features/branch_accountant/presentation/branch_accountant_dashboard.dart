@@ -25,6 +25,8 @@ import '../data/repository.dart';
 import '../domain/providers.dart';
 import 'daily_close_screen.dart';
 import 'bar_stocktake_review_screen.dart';
+import 'store_stocktake_review_screen.dart';
+import 'kitchen_stocktake_review_screen.dart';
 import 'spoilage_review_screen.dart';
 import 'branch_stock_request_review_screen.dart';
 import 'branch_payroll_screen.dart';
@@ -71,6 +73,8 @@ enum BranchAccountantSection {
   budgets,
   kitchenVariance,
   barStocktakeReview,
+  storeStocktakeReview,
+  kitchenStocktakeReview,
   spoilageReview,
   branchStockRequestReview,
 }
@@ -225,6 +229,10 @@ class _BranchAccountantDashboardState
         return const _KitchenVarianceSection();
       case BranchAccountantSection.barStocktakeReview:
         return const BarStocktakeReviewScreen();
+      case BranchAccountantSection.storeStocktakeReview:
+        return const StoreStocktakeReviewScreen();
+      case BranchAccountantSection.kitchenStocktakeReview:
+        return const KitchenStocktakeReviewScreen();
       case BranchAccountantSection.spoilageReview:
         return const SpoilageReviewScreen();
       case BranchAccountantSection.branchStockRequestReview:
@@ -311,6 +319,10 @@ const _navItems = [
       Icons.soup_kitchen),
   _NavItem(BranchAccountantSection.barStocktakeReview, 'Bar Stocktake Review',
       Icons.liquor),
+  _NavItem(BranchAccountantSection.storeStocktakeReview, 'Store Stocktake Review',
+      Icons.warehouse),
+  _NavItem(BranchAccountantSection.kitchenStocktakeReview, 'Kitchen Stocktake Review',
+      Icons.soup_kitchen_outlined),
   _NavItem(BranchAccountantSection.spoilageReview, 'Spoilage Review',
       Icons.report_problem_outlined),
   _NavItem(BranchAccountantSection.branchStockRequestReview,
