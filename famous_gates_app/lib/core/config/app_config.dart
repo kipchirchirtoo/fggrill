@@ -1,11 +1,11 @@
 class AppConfig {
   static const bool powerSyncEnabled = bool.fromEnvironment(
     'POWERSYNC_ENABLED',
-    defaultValue: true,
+    defaultValue: false,
   );
   static const bool powerSyncHotReadsEnabled = bool.fromEnvironment(
     'POWERSYNC_HOT_READS_ENABLED',
-    defaultValue: true,
+    defaultValue: false,
   );
   static const String powerSyncUrl = String.fromEnvironment(
     'POWERSYNC_URL',
