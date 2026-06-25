@@ -2674,11 +2674,18 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       return acc;
     }, {});
 
+    const formatShiftDate = (iso: string | null) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Africa/Nairobi' });
+    };
+
     const formatShiftTime = (iso: string | null) => {
       if (!iso) return '';
       const d = new Date(iso);
       if (Number.isNaN(d.getTime())) return '';
-      return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Nairobi' });
     };
     // A shift can be status 'closed' with no closed_at on old rows from
     // before the pos_outlet_shifts bridge update started stamping closed_at
@@ -2704,7 +2711,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     allOutletShifts.forEach((shift: any) => {
       const outletName = outletMap[String(shift.outlet_id)]?.name || 'Outlet';
       const cashierName = shiftCashierNameMap[String(shift.cashier_id)] || 'Unknown Cashier';
-      const firstName = shiftCashierFirstNameMap[String(shift.cashier_id)] || 'Unknown';
+      const shiftDate = formatShiftDate(shift.opened_at);
       shiftMetaMap[String(shift.id)] = {
         shift_id: String(shift.id),
         shift_number: shift.shift_number || null,
@@ -2713,12 +2720,12 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         opened_at: shift.opened_at,
         closed_at: shift.closed_at,
         status: shift.status,
-        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at, shift.status)}`
+        label: `${cashierName} · ${shiftDate} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at, shift.status)}`
       };
     });
     (legacyShiftsRes.data || []).forEach((shift: any) => {
       const cashierName = shiftCashierNameMap[String(shift.opened_by)] || 'Unknown Cashier';
-      const firstName = shiftCashierFirstNameMap[String(shift.opened_by)] || 'Unknown';
+      const shiftDate = formatShiftDate(shift.opened_at);
       shiftMetaMap[String(shift.id)] = {
         shift_id: String(shift.id),
         shift_number: shift.shift_number || null,
@@ -2727,7 +2734,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         opened_at: shift.opened_at,
         closed_at: shift.closed_at,
         status: shift.status,
-        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at, shift.status)}`
+        label: `${cashierName} · ${shiftDate} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at, shift.status)}`
       };
     });
 
@@ -3225,11 +3232,11 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     let cashierClearance: any = { shifts: [], summary: {} };
     try {
       let shiftsQuery = supabase
-        .from('cashier_shifts')
-        .select('id, branch_id, cashier_id, approved_by, start_time, end_time, status, expected_cash, actual_cash, opening_float, notes')
-        .gte('start_time', startIso)
-        .lte('start_time', endIso)
-        .order('start_time', { ascending: false });
+        .from('cashier_shift_logs')
+        .select('id, branch_id, cashier_id, reconciled_by, shift_start, shift_end, status, expected_closing_float, closing_float, opening_float, reconciliation_notes, variance')
+        .gte('shift_start', startIso)
+        .lte('shift_start', endIso)
+        .order('shift_start', { ascending: false });
 
       if (effectiveBranchId) {
         shiftsQuery = shiftsQuery.eq('branch_id', effectiveBranchId);
@@ -3238,7 +3245,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       const { data: shifts, error: shiftsError } = await shiftsQuery;
       if (!shiftsError && shifts && shifts.length > 0) {
         const cashierIds = [...new Set(shifts.map((s: any) => s.cashier_id).filter(Boolean))];
-        const approverIds = [...new Set(shifts.map((s: any) => s.approved_by).filter(Boolean))];
+        const approverIds = [...new Set(shifts.map((s: any) => s.reconciled_by).filter(Boolean))];
         const allIds = [...new Set([...cashierIds, ...approverIds])];
 
         let usersMap: Record<string, any> = {};
@@ -3254,13 +3261,17 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         }
 
         const enrichedShifts = shifts.map((shift: any) => {
-          const expected = Number(shift.expected_cash || 0);
-          const actual = Number(shift.actual_cash || 0);
-          const variance = actual - expected;
+          const expected = Number(shift.expected_closing_float || 0);
+          const actual = Number(shift.closing_float || 0);
+          const variance = Number(shift.variance ?? (actual - expected));
           return {
             ...shift,
+            start_time: shift.shift_start,
+            end_time: shift.shift_end,
+            approved_by: shift.reconciled_by,
+            notes: shift.reconciliation_notes,
             cashier_name: usersMap[shift.cashier_id] || 'Unknown',
-            approved_by_name: shift.approved_by ? (usersMap[shift.approved_by] || 'Unknown') : null,
+            approved_by_name: shift.reconciled_by ? (usersMap[shift.reconciled_by] || 'Unknown') : null,
             expected_cash: expected,
             actual_cash: actual,
             variance,
@@ -3286,6 +3297,126 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       // Non-fatal: sold items analysis can still return without clearance data
       console.warn('[SoldItems] Could not load cashier clearance:', clearanceErr?.message);
     }
+
+    // ── Detailed Transactions Compilation ──────────────────────────────────────
+    const transactions: any[] = [];
+    let payments: any[] = [];
+    try {
+      if (outletShiftIds.length) {
+        const { data: paymentData, error: paymentError } = await supabase
+          .from('pos_shift_payments')
+          .select('id, shift_id, outlet_id, order_id, payment_method, amount')
+          .in('shift_id', outletShiftIds);
+        if (!paymentError && paymentData) {
+          payments = paymentData;
+        }
+      }
+    } catch (payErr) {
+      console.warn('[SoldItems] Could not load POS payments:', payErr);
+    }
+
+    const paymentsByOrderId: Record<string, any[]> = {};
+    payments.forEach((payment: any) => {
+      const key = String(payment.order_id);
+      (paymentsByOrderId[key] ||= []).push(payment);
+    });
+
+    outletOrders.forEach((order: any) => {
+      const orderPayments = paymentsByOrderId[String(order.id)] || [];
+      let paymentMethods = orderPayments.map((p: any) => String(p.payment_method || '').toUpperCase());
+      if (paymentMethods.length === 0) {
+        if (order.payment_method) {
+          paymentMethods = [String(order.payment_method).toUpperCase()];
+        } else if (order.payment_status === 'credit_bill' || order.status === 'credit_bill') {
+          paymentMethods = ['CREDIT BILL'];
+        } else {
+          paymentMethods = ['CASH'];
+        }
+      }
+      paymentMethods = [...new Set(paymentMethods)];
+
+      const itemSummary = (Array.isArray(order.items) ? order.items : [])
+        .map((item: any) => `${item.name || item.item_name || 'Item'} x${item.quantity ?? item.qty ?? 1}`)
+        .join(', ');
+
+      const shiftMeta = shiftMetaMap[String(order.shift_id)] || {};
+      const cashierName = shiftMeta.cashier_name || order.waiter_name || 'Unknown Cashier';
+      const outletName = outletMap[String(order.outlet_id)]?.name || 'Outlet';
+      const outletGroup = order.room_number ? 'rooms' : outletGroupFor(String(outletMap[String(order.outlet_id)]?.outlet_type || ''), '', order.order_type);
+
+      transactions.push({
+        id: String(order.id),
+        order_number: order.order_number,
+        created_at: order.created_at,
+        cashier_name: cashierName,
+        outlet_name: outletName,
+        total_amount: Number(order.total_amount || 0),
+        payment_status: order.payment_status || order.status,
+        payment_methods: paymentMethods,
+        item_summary: itemSummary,
+        shift_id: order.shift_id ? String(order.shift_id) : 'no_shift',
+        source: String(outletMap[String(order.outlet_id)]?.outlet_type || 'pos_outlet'),
+        outlet_group: outletGroup
+      });
+    });
+
+    restOrders.forEach((order: any) => {
+      const shiftMeta = shiftMetaMap[String(order.shift_id)] || {};
+      const cashierName = shiftMeta.cashier_name || 'Restaurant Cashier';
+      const orderItems = restItemsByOrderId[String(order.id)] || [];
+      const itemSummary = orderItems
+        .map((item: any) => `${menuItemNameMap[String(item.menu_item_id)] || item.item_name || 'Item'} x${item.quantity || 1}`)
+        .join(', ');
+      
+      const paymentMethods = order.payment_method ? [String(order.payment_method).toUpperCase()] : ['CASH'];
+
+      transactions.push({
+        id: String(order.id),
+        order_number: order.order_number || `REST-${order.id.slice(0, 8)}`,
+        created_at: order.created_at,
+        cashier_name: cashierName,
+        outlet_name: 'Restaurant',
+        total_amount: Number(order.total_amount || 0),
+        payment_status: order.payment_status || 'completed',
+        payment_methods: paymentMethods,
+        item_summary: itemSummary,
+        shift_id: order.shift_id ? String(order.shift_id) : 'no_shift',
+        source: 'restaurant',
+        outlet_group: 'restaurant'
+      });
+    });
+
+    barOrders.forEach((order: any) => {
+      const shiftId = findShiftForBarOrder(order);
+      const shiftMeta = shiftMetaMap[String(shiftId)] || {};
+      const cashierName = shiftMeta.cashier_name || 'Bar Cashier';
+      const orderItems = barItemsByOrderId[String(order.id)] || [];
+      const itemSummary = orderItems
+        .map((item: any) => {
+          const barItem = item.drink_id ? barItemMap[String(item.drink_id)] : null;
+          return `${barItem?.name || item.drink_name || item.item_name || 'Drink'} x${item.quantity || 1}`;
+        })
+        .join(', ');
+
+      const paymentMethods = order.payment_method ? [String(order.payment_method).toUpperCase()] : ['CASH'];
+
+      transactions.push({
+        id: String(order.id),
+        order_number: order.order_number || `BAR-${order.id.slice(0, 8)}`,
+        created_at: order.created_at,
+        cashier_name: cashierName,
+        outlet_name: outletMap[String(order.outlet_id)]?.name || 'Bar',
+        total_amount: Number(order.total_amount || 0),
+        payment_status: order.payment_status || 'completed',
+        payment_methods: paymentMethods,
+        item_summary: itemSummary,
+        shift_id: shiftId || 'no_shift',
+        source: 'bar',
+        outlet_group: 'bar'
+      });
+    });
+
+    transactions.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     // ─────────────────────────────────────────────────────────────────────────
 
     return {
@@ -3293,7 +3424,8 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       analysis: enrichedAnalysis,
       fast_moving_items: enrichedAnalysis.filter((item: any) => item.movement_tier === 'fast').slice(0, 15),
       slow_moving_items: [...enrichedAnalysis].filter((item: any) => item.movement_tier === 'slow').sort((a: any, b: any) => Number(a.quantity || 0) - Number(b.quantity || 0)).slice(0, 15),
-      cashier_clearance: cashierClearance
+      cashier_clearance: cashierClearance,
+      transactions
     };
 };
 

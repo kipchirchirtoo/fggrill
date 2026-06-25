@@ -300,14 +300,18 @@ export const flagCashierClearance = async (
 
         console.log('🔍 [Cashier Clearance] Flagging clearance:', id, 'by user:', userId);
 
-        // Update shift in cashier_shift_logs (canonical table)
-        // Note: cashier_shift_logs uses shift_status enum ('open', 'closed', 'reconciled', 'verified')
-        // There's no 'flagged' status, so we keep it 'closed' and add flag info to notes
+        const { data: existingShift, error: fetchError } = await supabase
+            .from('cashier_shift_logs')
+            .select('notes')
+            .eq('id', id)
+            .maybeSingle();
+        if (fetchError) throw fetchError;
+
         const { data: shift, error: updateError } = await supabase
             .from('cashier_shift_logs')
             .update({
                 status: 'closed',
-                notes: `FLAGGED: ${reason}${notes ? `. ${notes}` : ''}${shift?.notes ? `. Original: ${shift.notes}` : ''}`,
+                notes: `FLAGGED: ${reason}${notes ? `. ${notes}` : ''}${existingShift?.notes ? `. Original: ${existingShift.notes}` : ''}`,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)

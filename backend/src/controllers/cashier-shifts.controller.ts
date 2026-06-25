@@ -602,7 +602,7 @@ export const getShiftLogs = async (
                         .gte('created_at', shift.shift_start)
                         .lte('created_at', shiftEnd),
                     supabase.from('bar_orders')
-                        .select('total_amount, payment_method')
+                        .select('total_amount:total, payment_method')
                         .eq('branch_id', branchId)
                         .eq('created_by', shift.cashier_id)
                         .gte('created_at', shift.shift_start)
@@ -755,7 +755,7 @@ export const getShiftLog = async (
                             .gte('created_at', shift.shift_start)
                             .lte('created_at', shiftEnd),
                         supabase.from('bar_orders')
-                            .select('total_amount, payment_method')
+                            .select('total_amount:total, payment_method')
                             .eq('branch_id', branchId)
                             .eq('created_by', shift.cashier_id)
                             .gte('created_at', shift.shift_start)
@@ -882,19 +882,19 @@ export const getShiftLog = async (
                 { data: creditBillRecords },
             ] = await Promise.all([
                 supabase.from('restaurant_orders')
-                    .select('id, total_amount, payment_method, customer_name, guest_name, order_type, created_at')
+                    .select('id, total_amount, payment_method, guest_name, order_type, created_at')
                     .eq('branch_id', branchId)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd),
                 supabase.from('bar_orders')
-                    .select('id, total, subtotal, payment_method, customer_name, guest_name, order_type, created_at')
+                    .select('id, total, subtotal, payment_method, guest_name, order_type, created_at')
                     .eq('branch_id', branchId)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd),
                 supabase.from('credit_bills')
-                    .select('id, credit_number, staff_name, customer_name, employee_name, employee_id, department, total_amount, balance_amount, balance, status, approval_status, created_at')
+                    .select('id, credit_number, staff_name, employee_id, department, total_amount, balance_amount, status, approval_status, created_at')
                     .eq('branch_id', branchId)
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd)

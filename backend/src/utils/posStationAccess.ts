@@ -89,6 +89,52 @@ export const loadAssignedPosOutlets = async (
 export const assignedOutletIds = (assignedOutlets: PosOutlet[]): string[] =>
   assignedOutlets.map((item) => String(item.id || '')).filter(Boolean);
 
+/**
+ * "What was sold" on a stocktake (kitchen, bar, etc.) must be scoped to the
+ * most recently CLOSED cashier shift (cashier_shift_logs — the real, gated
+ * shift system) for whichever cashier role mans that station, not the
+ * calendar day. A storekeeper often counts stock before today's shift has
+ * even closed, so scoping to "today so far" reads as zero sales even when a
+ * full shift's worth was sold yesterday and never reconciled. Falls back to
+ * the calendar day only if no closed shift exists yet at all.
+ */
+export const getLastClosedCashierShiftWindow = async (
+  supabase: SupabaseLike,
+  branchId: number,
+  cashierRoles: string[],
+  stocktakeDate: string
+): Promise<{ from: string; to: string; shiftId: string | null }> => {
+  const dayStart = `${stocktakeDate}T00:00:00.000Z`;
+  const dayEnd = new Date(new Date(dayStart).getTime() + 86400000).toISOString();
+  try {
+    if (cashierRoles.length === 0) return { from: dayStart, to: dayEnd, shiftId: null };
+
+    const { data: cashiers } = await supabase
+      .from('users')
+      .select('id')
+      .eq('branch_id', branchId)
+      .in('role', cashierRoles);
+    const cashierIds = ((cashiers || []) as Array<{ id: string }>).map((c) => c.id);
+    if (cashierIds.length === 0) return { from: dayStart, to: dayEnd, shiftId: null };
+
+    const { data: shift } = await supabase
+      .from('cashier_shift_logs')
+      .select('id, shift_start, shift_end')
+      .eq('branch_id', branchId)
+      .in('cashier_id', cashierIds)
+      .eq('status', 'closed')
+      .lt('shift_end', dayEnd)
+      .order('shift_end', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!shift) return { from: dayStart, to: dayEnd, shiftId: null };
+
+    return { from: shift.shift_start, to: shift.shift_end, shiftId: shift.id };
+  } catch {
+    return { from: dayStart, to: dayEnd, shiftId: null };
+  }
+};
+
 export const stationDisplayName = (outletType: unknown): string => {
   switch (String(outletType || '').toLowerCase()) {
     case 'restaurant':

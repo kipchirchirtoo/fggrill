@@ -2,10 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import path from 'path';
 import jwt from 'jsonwebtoken';
+import { exportJWK, importSPKI } from 'jose';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
 const credentialTtlSeconds = 55 * 60;
+
+// Tables a PowerSync client may write back via the upload queue. Every other
+// synced table (branches, users, notifications, pos_outlets, pos_outlet_items,
+// branch_stock, etc.) is reference/master data owned by the existing REST
+// endpoints, which carry business logic (shift totals, stock-count sync,
+// audit logging) that a raw upsert here would bypass. Until that logic is
+// reproduced per-table, those writes are rejected rather than silently
+// dropped or blindly applied.
+const POWERSYNC_WRITABLE_TABLES = new Set<string>([]);
 
 const powerSyncSecret = (): string | null => {
   return (
@@ -17,10 +27,7 @@ const powerSyncSecret = (): string | null => {
 };
 
 const powerSyncEndpoint = (): string => {
-  const endpoint = String(
-    process.env.POWERSYNC_URL ||
-    'https://6a3baa5435ca576ca0df47ea.powersync.journeyapps.com'
-  ).trim();
+  const endpoint = String(process.env.POWERSYNC_URL || '').trim();
   if (!endpoint) {
     throw new AppError('PowerSync endpoint is not configured', 503);
   }
@@ -68,7 +75,7 @@ export const getPowerSyncCredentials = async (
     let token: string;
 
     if (privateKey) {
-      // Production RS256 with JWKS
+      // Production RS256, verified by PowerSync via the JWKS endpoint below.
       token = jwt.sign(payload, privateKey, {
         algorithm: 'RS256',
         keyid: powerSyncKeyId(),
@@ -77,7 +84,7 @@ export const getPowerSyncCredentials = async (
         expiresIn: credentialTtlSeconds,
       });
     } else {
-      // Development HS256 with shared secret
+      // Development HS256 with a shared secret (no key pair configured yet).
       const secret = powerSyncSecret();
       if (!secret) {
         throw new AppError('PowerSync credentials are not configured', 503);
@@ -108,39 +115,15 @@ export const getPowerSyncCredentials = async (
 };
 
 /**
- * Serve the PowerSync sync config YAML (Sync Streams edition 3).
- * This endpoint is used by the PowerSync service or deployment tooling
- * to load the active sync configuration for the project.
- */
-export const getPowerSyncRules = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const syncConfigPath = path.resolve(process.cwd(), 'powersync', 'sync-config.yaml');
-    const legacyPath = path.resolve(process.cwd(), 'powersync.yaml');
-    const rulesPath = fs.existsSync(syncConfigPath) ? syncConfigPath : legacyPath;
-    if (!fs.existsSync(rulesPath)) {
-      throw new AppError('PowerSync sync config not found', 404);
-    }
-    const rules = fs.readFileSync(rulesPath, 'utf8');
-    res.setHeader('Content-Type', 'text/yaml');
-    res.send(rules);
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * JWKS endpoint for RS256 production auth.
+ * JWKS endpoint for RS256 auth. Must stay unauthenticated — the PowerSync
+ * service polls this on its own schedule, with no user session of its own.
  *
- * To use RS256 instead of HS256:
+ * To enable RS256 (replacing the HS256 dev fallback):
  *   1. Generate a key pair: node scripts/generate-powersync-keys.js
- *   2. Set POWERSYNC_PRIVATE_KEY_PATH and POWERSYNC_PUBLIC_KEY_PATH in .env
- *   3. Configure the PowerSync service with this JWKS URI.
- *
- * If no public key is configured, this endpoint returns an empty key set.
+ *   2. Set POWERSYNC_PRIVATE_KEY_PATH / POWERSYNC_PUBLIC_KEY_PATH in .env
+ *   3. Point the PowerSync instance's Client Auth at this JWKS URI
+ *      (manual JWKS — "Use Supabase Auth" must stay OFF, since auth here is
+ *      this app's own JWT, not a Supabase Auth session).
  */
 export const getPowerSyncJWKS = async (
   req: Request,
@@ -158,17 +141,17 @@ export const getPowerSyncJWKS = async (
     }
 
     const publicKeyPem = fs.readFileSync(publicKeyPath, 'utf8');
-    // Minimal JWKS for an RSA public key in PEM format. For a full JWK conversion
-    // install `jose`; this stub exposes the PEM and metadata so operators can
-    // complete the JWK conversion during PowerSync dashboard setup.
+    const keyLike = await importSPKI(publicKeyPem, 'RS256');
+    const jwk = await exportJWK(keyLike);
+
     res.json({
       keys: [
         {
+          ...jwk,
           kty: 'RSA',
           alg: 'RS256',
-          kid: process.env.POWERSYNC_KEY_ID || 'powersync-key-1',
+          kid: powerSyncKeyId(),
           use: 'sig',
-          pem: publicKeyPem,
         },
       ],
     });
@@ -180,10 +163,13 @@ export const getPowerSyncJWKS = async (
 /**
  * Receive pending writes from the PowerSync client upload queue.
  *
- * The current rollout is read-only: the endpoint acknowledges every transaction
- * so the queue does not stall, but it does not yet persist mutations to the
- * source database. Implement per-table CRUD handling here to enable full
- * offline-first writes.
+ * No client write path is wired up yet (the Flutter app only uses PowerSync
+ * for read-side "hot cache" lookups — see powersync_service.dart), so this
+ * never actually runs in production today. It still must never lie about
+ * success: a 2xx with no persistence means the client discards the change
+ * forever, believing it was saved. Per-table CRUD support belongs in
+ * POWERSYNC_WRITABLE_TABLES above once a table's business logic (shift
+ * totals, stock-count sync, audit trail) has an offline-safe equivalent.
  */
 export const uploadPowerSyncData = async (
   req: Request,
@@ -193,24 +179,23 @@ export const uploadPowerSyncData = async (
   try {
     const batch = req.body;
     if (!batch || !Array.isArray(batch)) {
-      res.status(400).json({ success: false, message: 'Expected an array of CRUD operations' });
+      // Must stay 2xx — a 4xx here blocks the client's upload queue forever.
+      res.json({ success: false, message: 'Expected an array of CRUD operations' });
       return;
     }
 
+    const results = batch.map((op: any) => {
+      const { op: operation, table, id } = op || {};
+      if (!POWERSYNC_WRITABLE_TABLES.has(table)) {
+        logger.warn('PowerSync upload rejected: table not writable via sync', { operation, table, id });
+        return { id, table, applied: false, error: `Writes to "${table}" are not supported via PowerSync yet` };
+      }
+      // No writable tables are configured yet; per-table apply logic goes here.
+      return { id, table, applied: false, error: 'Not implemented' };
+    });
+
     logger.info('PowerSync upload batch received', { count: batch.length });
-
-    for (const op of batch) {
-      const { op: operation, table, id, opData } = op || {};
-      logger.debug('PowerSync upload op', { operation, table, id });
-      // TODO: apply the mutation to the source database based on operation:
-      //   PUT    -> INSERT/UPSERT
-      //   PATCH  -> UPDATE
-      //   DELETE -> DELETE
-    }
-
-    // Returning 2xx advances the client's upload queue. Validation errors
-    // must also return 2xx; only transient/server failures should be 5xx.
-    res.json({ success: true, processed: batch.length });
+    res.json({ success: true, results });
   } catch (error) {
     next(error);
   }

@@ -250,132 +250,158 @@ export async function recordBarStockMovement(
   let source = 'none';
 
   if (itemId && locationId) {
-    const { data: balance } = await supabase
-      .from('inventory_balances')
-      .select('id, current_quantity')
-      .eq('item_id', itemId)
-      .eq('location_id', locationId)
-      .is('batch_id', null)
-      .maybeSingle();
-
-    previousStock = toNumber(balance?.current_quantity);
-    newStock = Math.max(0, previousStock + quantityDelta);
-
-    if (balance?.id) {
-      const { error: balError } = await supabase
+    try {
+      const { data: balance } = await supabase
         .from('inventory_balances')
-        .update({
-          current_quantity: newStock,
-          unit_cost: costPerUnit !== undefined && costPerUnit !== null ? costPerUnit : undefined,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', balance.id);
-      if (balError) throw balError;
-    } else {
-      const { error: insertBalError } = await supabase
-        .from('inventory_balances')
-        .insert({
-          item_id: itemId,
-          location_id: locationId,
-          current_quantity: newStock,
-          unit_cost: costPerUnit || 0,
-          reserved_quantity: 0,
-          damaged_quantity: 0,
-          expired_quantity: 0
-        });
-      if (insertBalError) throw insertBalError;
+        .select('id, current_quantity')
+        .eq('item_id', itemId)
+        .eq('location_id', locationId)
+        .is('batch_id', null)
+        .maybeSingle();
+
+      previousStock = toNumber(balance?.current_quantity);
+      newStock = Math.max(0, previousStock + quantityDelta);
+
+      if (balance?.id) {
+        const { error: balError } = await supabase
+          .from('inventory_balances')
+          .update({
+            current_quantity: newStock,
+            unit_cost: costPerUnit !== undefined && costPerUnit !== null ? costPerUnit : undefined,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', balance.id);
+        if (balError) throw balError;
+      } else {
+        const { error: insertBalError } = await supabase
+          .from('inventory_balances')
+          .insert({
+            item_id: itemId,
+            location_id: locationId,
+            current_quantity: newStock,
+            unit_cost: costPerUnit || 0,
+            reserved_quantity: 0,
+            damaged_quantity: 0,
+            expired_quantity: 0
+          });
+        if (insertBalError) throw insertBalError;
+      }
+      source = 'inventory_balances';
+    } catch (balErr: any) {
+      previousStock = 0;
+      newStock = 0;
+      source = 'none';
+      logger.warn(`Bar stock movement: inventory_balances update failed for item ${itemId}:`, balErr?.message || balErr);
     }
-    source = 'inventory_balances';
   }
 
   // ── Step 2: Update bar_stock (legacy) ──────────────────────────────
+  // Isolated in its own try/catch — this is the screen the storekeeper
+  // actually looks at, so it must not be skipped just because an earlier
+  // or later step (inventory_balances, audit log, ledger) has a problem.
   if (drinkId) {
-    const { data: barStock } = await supabase
-      .from('bar_stock')
-      .select('id, current_stock')
-      .eq('branch_id', branchId)
-      .eq('drink_id', drinkId)
-      .maybeSingle();
+    try {
+      const { data: barStock } = await supabase
+        .from('bar_stock')
+        .select('id, current_stock')
+        .eq('branch_id', branchId)
+        .eq('drink_id', drinkId)
+        .maybeSingle();
 
-    if (barStock?.id) {
-      const barNewStock = Math.max(0, toNumber(barStock.current_stock) + quantityDelta);
-      await supabase
-        .from('bar_stock')
-        .update({
-          current_stock: barNewStock,
-          last_updated: new Date().toISOString()
-        })
-        .eq('id', barStock.id);
-    } else {
-      // Create bar_stock row if missing
-      await supabase
-        .from('bar_stock')
-        .insert({
-          branch_id: branchId,
-          drink_id: drinkId,
-          item_sku: sku,
-          item_name: sku,
-          current_stock: Math.max(0, quantityDelta),
-          unit: 'bottle',
-          par_level: 5
-        });
+      if (barStock?.id) {
+        const barNewStock = Math.max(0, toNumber(barStock.current_stock) + quantityDelta);
+        const { error: barUpdateError } = await supabase
+          .from('bar_stock')
+          .update({
+            current_stock: barNewStock,
+            last_updated: new Date().toISOString()
+          })
+          .eq('id', barStock.id);
+        if (barUpdateError) throw barUpdateError;
+      } else {
+        // Create bar_stock row if missing
+        const { error: barInsertError } = await supabase
+          .from('bar_stock')
+          .insert({
+            branch_id: branchId,
+            drink_id: drinkId,
+            item_sku: sku,
+            item_name: sku,
+            current_stock: Math.max(0, quantityDelta),
+            unit: 'bottle',
+            par_level: 5
+          });
+        if (barInsertError) throw barInsertError;
+      }
+    } catch (barErr: any) {
+      logger.warn(`Bar stock movement: bar_stock update failed for drink ${drinkId}:`, barErr?.message || barErr, barErr?.details || '');
     }
   }
 
   // ── Step 3: Update pos_outlet_items (legacy POS) ───────────────────
   if (outletId) {
-    const { data: posItem } = await supabase
-      .from('pos_outlet_items')
-      .select('id, current_stock')
-      .eq('outlet_id', outletId)
-      .or(`sku.eq.${sku},source_item_id.eq.${drinkId || ''}`)
-      .maybeSingle();
-
-    if (posItem?.id) {
-      const posNewStock = Math.max(0, toNumber(posItem.current_stock) + quantityDelta);
-      await supabase
+    try {
+      const { data: posItem } = await supabase
         .from('pos_outlet_items')
-        .update({
-          current_stock: posNewStock,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', posItem.id);
+        .select('id, current_stock')
+        .eq('outlet_id', outletId)
+        .or(`sku.eq.${sku},source_item_id.eq.${drinkId || ''}`)
+        .maybeSingle();
+
+      if (posItem?.id) {
+        const posNewStock = Math.max(0, toNumber(posItem.current_stock) + quantityDelta);
+        const { error: posUpdateError } = await supabase
+          .from('pos_outlet_items')
+          .update({
+            current_stock: posNewStock,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', posItem.id);
+        if (posUpdateError) throw posUpdateError;
+      }
+    } catch (posErr: any) {
+      logger.warn(`Bar stock movement: pos_outlet_items update failed for sku ${sku}:`, posErr?.message || posErr);
     }
   }
 
   // ── Step 4: Update pos_shift_stock_counts ─────────────────────────
   if (shiftId && outletId) {
-    const { data: countRow } = await supabase
-      .from('pos_shift_stock_counts')
-      .select('id, opening_stock, additions, sold_quantity, system_closing_stock, physical_count')
-      .eq('shift_id', shiftId)
-      .or(`sku.eq.${sku},outlet_item_id.in.(SELECT id FROM pos_outlet_items WHERE outlet_id = '${outletId}' AND sku = '${sku}')`)
-      .maybeSingle();
-
-    if (countRow?.id) {
-      let newSold = toNumber(countRow.sold_quantity);
-      let newAdditions = toNumber(countRow.additions);
-
-      if (quantityDelta < 0) {
-        newSold = Math.max(0, newSold + Math.abs(quantityDelta));
-      } else if (quantityDelta > 0) {
-        newAdditions = newAdditions + quantityDelta;
-      }
-
-      const newSysClosing = toNumber(countRow.opening_stock) + newAdditions - newSold;
-
-      await supabase
+    try {
+      const { data: countRow } = await supabase
         .from('pos_shift_stock_counts')
-        .update({
-          sold_quantity: newSold,
-          additions: newAdditions,
-          system_closing_stock: newSysClosing,
-          variance: countRow.physical_count === null || countRow.physical_count === undefined
-            ? 0
-            : toNumber(countRow.physical_count) - newSysClosing,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', countRow.id);
+        .select('id, opening_stock, additions, sold_quantity, system_closing_stock, physical_count')
+        .eq('shift_id', shiftId)
+        .eq('sku', sku)
+        .maybeSingle();
+
+      if (countRow?.id) {
+        let newSold = toNumber(countRow.sold_quantity);
+        let newAdditions = toNumber(countRow.additions);
+
+        if (quantityDelta < 0) {
+          newSold = Math.max(0, newSold + Math.abs(quantityDelta));
+        } else if (quantityDelta > 0) {
+          newAdditions = newAdditions + quantityDelta;
+        }
+
+        const newSysClosing = toNumber(countRow.opening_stock) + newAdditions - newSold;
+
+        const { error: countUpdateError } = await supabase
+          .from('pos_shift_stock_counts')
+          .update({
+            sold_quantity: newSold,
+            additions: newAdditions,
+            system_closing_stock: newSysClosing,
+            variance: countRow.physical_count === null || countRow.physical_count === undefined
+              ? 0
+              : toNumber(countRow.physical_count) - newSysClosing,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', countRow.id);
+        if (countUpdateError) throw countUpdateError;
+      }
+    } catch (countErr: any) {
+      logger.warn(`Bar stock movement: pos_shift_stock_counts update failed for sku ${sku}:`, countErr?.message || countErr);
     }
   }
 
@@ -408,7 +434,6 @@ export async function recordBarStockMovement(
       .insert({
         branch_id: branchId,
         drink_id: drinkId,
-        item_sku: sku,
         transaction_type: movementType === 'sale' ? 'sale' :
                           movementType === 'sale_reversal' ? 'sale_reversal' :
                           movementType === 'restock' ? 'restock' :

@@ -746,7 +746,11 @@ const updateStockForItems = async (
           notes: direction === 1 ? 'POS bar sale' : 'POS bar sale reversal'
         });
       } catch (syncErr: any) {
-        logger.warn('Unified bar stock sync failed (non-critical):', syncErr.message);
+        logger.warn(
+          `Unified bar stock sync failed for outlet item ${outletItemId} (sku ${outletItem.sku}):`,
+          syncErr?.message || syncErr,
+          syncErr?.details || ''
+        );
       }
     }
   }
