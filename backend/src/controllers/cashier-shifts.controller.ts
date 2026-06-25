@@ -49,35 +49,48 @@ function isShiftManager(role?: unknown): boolean {
     return SHIFT_MANAGER_ROLES.has(normalized) || isGlobalRole(normalized);
 }
 
-// All cashier shifts require ALL stocktakes to be completed before opening:
-// Store (branch_store), Bar (any bar location), and Kitchen (kitchen). This ensures
-// the branch has a complete inventory picture before any POS activity begins.
+// A cashier only needs the stocktake for the station they actually serve —
+// a restaurant cashier never touches bar stock, and a bar cashier never
+// touches the kitchen, so gating either one on the other's stocktake just
+// blocks shifts on irrelevant data. Executive Bar only exists at Kyogong
+// (branch 1); every other branch's bar cashier is gated on main_bar instead.
 function requiredStocktakeLocationsForRole(
     role: unknown,
     branchId: number
 ): Array<{ key: string; label: string; groupStoreType?: string }> {
-    return [
-        { key: 'branch_store', label: 'Store stocktake' },
-        { key: 'bar', label: 'Bar stocktake', groupStoreType: 'bar' },
-        // Kitchen syncs one stock_counts row PER SHIFT (location: kitchen_a,
-        // kitchen_b, ...) so an A-shift count can't overwrite a B-shift count
-        // in the same day — group-match on store_type like Bar does, rather
-        // than an exact 'kitchen' location that no row ever has anymore.
-        { key: 'kitchen', label: 'Kitchen stocktake', groupStoreType: 'kitchen' },
-    ];
+    const normalized = String(role || '').trim().toLowerCase();
+    switch (normalized) {
+        case 'restaurant_cashier':
+            // Kitchen syncs one stock_counts row PER SHIFT (location: kitchen_a,
+            // kitchen_b, ...) so an A-shift count can't overwrite a B-shift count
+            // in the same day — group-match on store_type, rather than an exact
+            // 'kitchen' location that no row ever has anymore.
+            return [{ key: 'kitchen', label: 'Kitchen stocktake', groupStoreType: 'kitchen' }];
+        case 'main_bar_cashier':
+        case 'kyogong_sports_bar_cashier':
+            return [{ key: 'main_bar', label: 'Bar stocktake', groupStoreType: 'bar' }];
+        case 'executive_bar_cashier':
+        case 'kyogong_executive_bar_cashier':
+            return branchId === 1
+                ? [{ key: 'executive_bar', label: 'Executive Bar stocktake', groupStoreType: 'bar' }]
+                : [{ key: 'main_bar', label: 'Bar stocktake', groupStoreType: 'bar' }];
+        default:
+            // No station-specific stocktake applies to this role (e.g.
+            // non-consumables, reception, spa) — nothing to gate on.
+            return [];
+    }
 }
 
 /**
- * Ensure ALL stocktakes (Store, Bar, Kitchen) are submitted for the branch/date
- * before any cashier shift can be opened/approved. This guarantees a complete
- * inventory snapshot before POS activity begins.
+ * Ensure the stocktake(s) relevant to this cashier's own station are
+ * submitted for the branch/date before their shift can be opened/approved.
  *
  * All counts are stored in the unified stock_counts table. A location is
  * considered complete if there is at least one non-draft, non-rejected count
  * for that branch/date/location.
  *
- * For Bar, ANY bar location (main_bar, executive_bar, etc.) counts as complete.
- * For Kitchen, ANY shift's count (kitchen_a, kitchen_b, etc.) counts as complete.
+ * For Bar/Kitchen groups, ANY matching store_type counts as complete (e.g.
+ * main_bar or executive_bar for Bar; kitchen_a or kitchen_b for Kitchen).
  *
  * Returns { ok: true } if all are complete, otherwise { ok: false, missing: [...] }.
  */
