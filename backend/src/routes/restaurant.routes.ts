@@ -413,6 +413,7 @@ router.get('/kitchen/orders',
             .from('pos_shift_orders')
             .select('*')
             .in('shift_id', restaurantShiftIds)
+            .gte('created_at', stopSignalSince)
             .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready,recalled)')
             .order('created_at', { ascending: true });
 
@@ -527,11 +528,14 @@ router.get('/kitchen/orders/history',
     try {
       const branchId = resolveKitchenBranchId(req);
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 250);
+      // Only look back 7 days for kitchen history; the limit still caps the result set.
+      const historySince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       let ordersQuery = supabase
         .from('restaurant_orders')
         .select('*')
         .in('status', ['served', 'delivered', 'completed', 'paid', 'cancelled', 'voided'])
+        .gte('created_at', historySince)
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -586,8 +590,9 @@ router.get('/kitchen/orders/history',
         let shiftQuery = supabase
           .from('pos_outlet_shifts')
           .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
+          .gte('opened_at', historySince)
           .order('opened_at', { ascending: false })
-          .limit(250);
+          .limit(50);
 
         if (branchId) {
           shiftQuery = shiftQuery.eq('branch_id', branchId);
@@ -609,6 +614,7 @@ router.get('/kitchen/orders/history',
             .from('pos_shift_orders')
             .select('*')
             .in('shift_id', restaurantShiftIds)
+            .gte('created_at', historySince)
             .or('kitchen_status.in.(served,cancelled,voided),status.in.(paid,credit_bill,voided,cancelled),payment_status.in.(paid,credit_bill,voided)')
             .order('updated_at', { ascending: false })
             .limit(limit);
