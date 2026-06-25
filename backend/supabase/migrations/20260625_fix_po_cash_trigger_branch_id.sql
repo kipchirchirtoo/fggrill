@@ -1,6 +1,7 @@
 -- Fix fn_po_cash_create_outbound to:
 -- 1. Handle NULL branch_id (central store POs have no branch → use main branch)
 -- 2. Generate payment_number to satisfy NOT NULL UNIQUE constraint on branch_payments
+-- 3. Skip insertion into branch_payments if total_amount is zero
 
 CREATE OR REPLACE FUNCTION fn_po_cash_create_outbound()
 RETURNS TRIGGER AS $$
@@ -12,6 +13,11 @@ DECLARE
 BEGIN
   IF NEW.payment_terms = 'cash' THEN
     NEW.is_daily_expense := true;
+
+    -- Skip branch_payments insert if amount is zero (prices filled at GRN time)
+    IF COALESCE(NEW.total_amount, 0) <= 0 THEN
+      RETURN NEW;
+    END IF;
 
     -- Resolve supplier name
     SELECT name INTO v_payee_name FROM suppliers WHERE id = NEW.supplier_id;
