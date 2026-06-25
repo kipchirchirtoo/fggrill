@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 dotenv.config();
 import { supabase } from '../config/database';
+import db from '../db';
 import { User, UserRole } from '../models/User';
 import { logger } from '../utils/logger';
 import jwt from 'jsonwebtoken';
@@ -19,6 +20,56 @@ declare global {
     interface Request {
       user?: any;
     }
+  }
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const TRANSIENT_SCHEMA_ERRORS = ['schema cache', 'Retrying', 'PGRST002', 'timeout', 'canceling statement'];
+
+function isTransientSchemaError(err: any): boolean {
+  const message = String(err?.message || err || '').toLowerCase();
+  const code = String(err?.code || '').toLowerCase();
+  return TRANSIENT_SCHEMA_ERRORS.some(keyword => message.includes(keyword) || code.includes(keyword.toLowerCase()));
+}
+
+async function lookupUserWithRetry(userId: string, retries = 2): Promise<any> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (err: any) {
+      if (i < retries && isTransientSchemaError(err)) {
+        logger.warn('Auth Middleware - Supabase schema/cache transient error, retrying', {
+          userId,
+          attempt: i + 1,
+          error: err.message,
+          code: err.code
+        });
+        await sleep(250 * (i + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return null;
+}
+
+async function lookupUserFallback(userId: string): Promise<any | null> {
+  try {
+    const result = await db.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [userId]);
+    return result.rows[0] || null;
+  } catch (err: any) {
+    logger.error('Auth Middleware - Direct SQL fallback failed', {
+      userId,
+      error: err.message
+    });
+    return null;
   }
 }
 
@@ -86,17 +137,21 @@ export const protect = async (
       if (decoded?.sub) {
         logger.debug('Auth Middleware - JWT verified for sub:', decoded.sub);
 
-        // Valid JWT - get user from database
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', decoded.sub)
-          .single();
+        // Valid JWT - get user from database (with retry + direct SQL fallback)
+        let user: any = null;
+        let userLookupError: any = null;
+        try {
+          user = await lookupUserWithRetry(decoded.sub);
+        } catch (err: any) {
+          userLookupError = err;
+          // If Supabase schema cache is failing, bypass PostgREST with direct SQL
+          user = await lookupUserFallback(decoded.sub);
+        }
 
-        if (userError || !user) {
+        if (!user) {
           logger.error('Auth Middleware - User lookup failed for valid JWT', {
             userId: decoded.sub,
-            error: userError?.message || 'User not found'
+            error: userLookupError?.message || 'User not found'
           });
           // Fallback to Supabase auth in case they used a Supabase token
         } else {
@@ -184,14 +239,15 @@ export const protect = async (
         return;
       }
 
-      // Get user from database
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single();
+      // Get user from database (with retry + direct SQL fallback)
+      let user: any = null;
+      try {
+        user = await lookupUserWithRetry(supabaseUser.id);
+      } catch (err: any) {
+        user = await lookupUserFallback(supabaseUser.id);
+      }
 
-      if (!user || userError) {
+      if (!user) {
         res.status(401).json({
           success: false,
           message: 'User not found'
