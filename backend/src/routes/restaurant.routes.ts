@@ -31,6 +31,7 @@ import {
   deleteWastageRecord
 } from '../controllers/restaurant/wastage.controller';
 import { protect, authorize } from '../middleware/auth';
+import { optionalIdempotency } from '../middleware/idempotency';
 import { UserRole } from '../models/User';
 import notificationService from '../services/notification.service';
 
@@ -229,6 +230,13 @@ router.get('/orders/:id',
 // Staff routes
 router.post('/orders',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN]),
+  optionalIdempotency({
+    scope: 'restaurant.create-order',
+    resourceResolver: (body) => ({
+      resourceId: body?.data?.id || null,
+      resourceType: body?.data?.order_number ? 'restaurant_order' : null
+    })
+  }),
   createOrder
 );
 

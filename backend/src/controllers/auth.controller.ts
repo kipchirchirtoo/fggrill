@@ -4,9 +4,14 @@ dotenv.config();
 import { supabase } from '../config/supabase';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import db from '../db';
 import { logAuthAttempt, logSecurityEvent } from '../utils/audit';
+import {
+  registerManagedSession,
+  revokeManagedSession
+} from '../services/session-registry.service';
 
 const getJwtSecrets = (): string[] => {
   const candidateSecrets = [
@@ -171,34 +176,49 @@ const issueLocalSession = (
   email: string,
   role: string,
   activeRole?: string,
-  activeBranchId?: number | null
+  activeBranchId?: number | null,
+  options?: {
+    activeOutletId?: string | null;
+    activeOutletPrefix?: string | null;
+    activeOutletType?: string | null;
+    isPosLogin?: boolean;
+    ttlHours?: number;
+  }
 ) => {
   const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
+  const sessionId = crypto.randomUUID();
+  const ttlHours = options?.ttlHours ?? 24;
 
   const payload: any = {
     sub: userId,
     email,
     role,
-    aud: 'authenticated'
+    aud: 'authenticated',
+    sid: sessionId
   };
 
   if (activeRole) payload.active_role = activeRole;
   if (activeBranchId !== undefined && activeBranchId !== null) payload.active_branch_id = activeBranchId;
+  if (options?.activeOutletId) payload.active_outlet_id = options.activeOutletId;
+  if (options?.activeOutletType) payload.active_outlet_type = options.activeOutletType;
+  if (options?.activeOutletPrefix) payload.active_outlet_prefix = options.activeOutletPrefix;
+  if (options?.isPosLogin) payload.isPosLogin = true;
 
-  const accessToken = jwt.sign(payload, jwtSecret, { expiresIn: '24h' });
+  const accessToken = jwt.sign(payload, jwtSecret, { expiresIn: `${ttlHours}h` });
 
   const refreshToken = jwt.sign(
-    { sub: userId, type: 'refresh' },
+    { sub: userId, type: 'refresh', sid: sessionId },
     jwtSecret,
     { expiresIn: '7d' }
   );
 
   return {
     secretSource: process.env.JWT_SECRET ? 'JWT_SECRET' : (process.env.SUPABASE_JWT_SECRET ? 'SUPABASE_JWT_SECRET' : 'fallback'),
+    sessionId,
     session: {
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString(),
       user: { id: userId, email }
     }
   };
@@ -446,7 +466,15 @@ export const login = async (
       logger.warn('Failed to update last login:', updateError);
     }
 
-    const { secretSource, session } = issueLocalSession(userId, userProfile.email, userProfile.role);
+    const { secretSource, sessionId, session } = issueLocalSession(userId, userProfile.email, userProfile.role);
+
+    await registerManagedSession({
+      userId,
+      sessionId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') || null,
+      expiresAt: session.expires_at
+    });
 
     logger.info('Generating local JWT token for user login', {
       userId,
@@ -542,7 +570,19 @@ export const refreshToken = async (
             return;
           }
 
-          const { session } = issueLocalSession(user.id, user.email, user.role);
+          if (decoded.sid) {
+            await revokeManagedSession(decoded.sid);
+          }
+
+          const { sessionId, session } = issueLocalSession(user.id, user.email, user.role);
+
+          await registerManagedSession({
+            userId: user.id,
+            sessionId,
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent') || null,
+            expiresAt: session.expires_at
+          });
 
           res.status(200).json({
             success: true,
@@ -643,13 +683,21 @@ export const switchContext = async (
       return;
     }
 
-    const { session } = issueLocalSession(
+    const { sessionId, session } = issueLocalSession(
       userId,
       userProfile.email,
       userProfile.role,   // primary role (unchanged in DB)
       role,              // active_role in JWT
       branch_id ?? null  // active_branch_id in JWT
     );
+
+    await registerManagedSession({
+      userId,
+      sessionId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') || null,
+      expiresAt: session.expires_at
+    });
 
     res.status(200).json({
       success: true,
@@ -675,6 +723,8 @@ export const logout = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    await revokeManagedSession(req.user?.session_id || null);
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -1232,25 +1282,19 @@ export const posLogin = async (
       secretLength: jwtSecret.length
     });
 
-    const accessToken = jwt.sign(
+    const { sessionId, session } = issueLocalSession(
+      user.id,
+      user.email,
+      user.role,
+      undefined,
+      user.branch_id ?? null,
       {
-        sub: user.id,
-        email: user.email,
-        role: user.role,
-        aud: 'authenticated',
+        activeOutletId: outlet?.id || null,
+        activeOutletPrefix: prefix,
+        activeOutletType: resolvedOutletType,
         isPosLogin: true,
-        active_outlet_id: outlet?.id || null,
-        active_outlet_type: resolvedOutletType,
-        active_outlet_prefix: prefix
-      },
-      jwtSecret,
-      { expiresIn: '12h' }
-    );
-
-    const refreshToken = jwt.sign(
-      { sub: user.id, type: 'refresh' },
-      jwtSecret,
-      { expiresIn: '7d' }
+        ttlHours: 12
+      }
     );
 
     // Auto Clock-in for Staff Attendance
@@ -1278,6 +1322,20 @@ export const posLogin = async (
       logger.error('Failed to auto clock-in during POS login:', attendanceError);
     }
 
+    await registerManagedSession({
+      userId: user.id,
+      sessionId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') || null,
+      expiresAt: session.expires_at,
+      deviceInfo: {
+        login_type: 'pos_pin',
+        outlet_id: outlet?.id || null,
+        outlet_type: resolvedOutletType,
+        pin_prefix: prefix
+      }
+    });
+
     const enrichedPosUser = await enrichUserBranch({
       ...user,
       outlet,
@@ -1293,12 +1351,7 @@ export const posLogin = async (
         user: enrichedPosUser,
         outlet,
         active_shift_id: activeShiftId,
-        session: {
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
-          user: { id: user.id, email: user.email }
-        }
+        session
       }
     });
 

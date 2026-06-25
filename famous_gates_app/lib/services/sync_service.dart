@@ -48,10 +48,19 @@ class SyncService {
           };
         }).toList();
 
-        await _dio.post('/cashier/pos/transactions', data: {
-          'items': items,
-          'total_amount': sale.total,
-        });
+        await _dio.post(
+          '/cashier/pos/transactions',
+          data: {
+            'items': items,
+            'total_amount': sale.total,
+          },
+          options: Options(
+            headers: {
+              'Idempotency-Key': 'pos-sale-${sale.localId}',
+              'X-Client-Id': sale.cashierId,
+            },
+          ),
+        );
         await _offlineSalesDao.markSynced([sale.localId]);
       } catch (_) {
         // The timer retries on the next connectivity cycle.

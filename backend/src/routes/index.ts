@@ -113,6 +113,7 @@ import branchSearchRoutes from './branch-search.routes';
 import branchPaymentRoutes from './branch-payments.routes';
 import restaurantBillsRoutes from './restaurant-bills.routes';
 import kitchenWastageRoutes from './kitchen-wastage.routes';
+import powerSyncRoutes from './powersync.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
@@ -240,6 +241,7 @@ router.use('/document-templates', documentTemplateRoutes);
 router.use('/menu-pricing', menuPricingRoutes);
 router.use('/branch-search', branchSearchRoutes);
 router.use('/branch-payments', branchPaymentRoutes);
+router.use('/powersync', powerSyncRoutes);
 
 // Food Control System routes
 router.use('/buffet', buffetRoutes);

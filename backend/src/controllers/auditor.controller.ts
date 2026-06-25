@@ -2680,8 +2680,14 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       if (Number.isNaN(d.getTime())) return '';
       return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     };
-    const formatShiftTimeRange = (openedAt: string | null, closedAt: string | null) =>
-      `${formatShiftTime(openedAt)} - ${closedAt ? formatShiftTime(closedAt) : 'Ongoing'}`;
+    // A shift can be status 'closed' with no closed_at on old rows from
+    // before the pos_outlet_shifts bridge update started stamping closed_at
+    // (see cashier-shifts.controller.ts close handler). Those are genuinely
+    // closed, not ongoing — label them honestly instead of claiming "Ongoing".
+    const formatShiftTimeRange = (openedAt: string | null, closedAt: string | null, status?: string | null) =>
+      `${formatShiftTime(openedAt)} - ${
+        closedAt ? formatShiftTime(closedAt) : status === 'closed' ? 'Closed' : 'Ongoing'
+      }`;
 
     const NO_SHIFT_META = {
       shift_id: 'no_shift',
@@ -2707,7 +2713,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         opened_at: shift.opened_at,
         closed_at: shift.closed_at,
         status: shift.status,
-        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at)}`
+        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at, shift.status)}`
       };
     });
     (legacyShiftsRes.data || []).forEach((shift: any) => {
@@ -2721,7 +2727,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         opened_at: shift.opened_at,
         closed_at: shift.closed_at,
         status: shift.status,
-        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at)}`
+        label: `${firstName} · ${formatShiftTimeRange(shift.opened_at, shift.closed_at, shift.status)}`
       };
     });
 

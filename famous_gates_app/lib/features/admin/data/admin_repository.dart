@@ -443,6 +443,10 @@ class AdminRepository {
     return AdminUser.fromJson(_unwrap(response.data));
   }
 
+  Future<void> deleteStaff(String id) async {
+    await _dio.delete('/staff/$id');
+  }
+
   Map<String, dynamic> _normalizeRoom(Map<String, dynamic> json) {
     String typeName = '';
     final typeData = json['type'];

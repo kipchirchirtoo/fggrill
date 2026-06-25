@@ -125,6 +125,8 @@ class _KitchenShiftStocktakeState
   final Map<String, TextEditingController> _addedCtrl = {};
   final Map<String, String> _itemIdByName = {};
   final Map<String, num> _opening = {};
+  final Map<String, num> _sold = {};
+  final Map<String, num> _spoilage = {};
   final List<TextEditingController> _chepsCtrl =
       List.generate(5, (_) => TextEditingController());
   final TextEditingController _dispenserCtrl = TextEditingController();
@@ -149,6 +151,8 @@ class _KitchenShiftStocktakeState
       final itemId = item['item_id'];
       if (itemId != null) _itemIdByName[name] = '$itemId';
       _opening[name] = _num(item['opening_qty']);
+      _sold[name] = _num(item['sold_qty']);
+      _spoilage[name] = _num(item['spoilage_qty']);
       _ctrlFor(name).text = _fmt(item['closing_qty']);
       _addedCtrlFor(name).text = _fmt(item['added_qty']);
     }
@@ -305,6 +309,7 @@ class _KitchenShiftStocktakeState
           Expanded(flex: 3, child: Text('ITEM', style: style)),
           Expanded(flex: 2, child: Text('OPEN', style: style, textAlign: TextAlign.center)),
           Expanded(flex: 2, child: Text('ADD', style: style, textAlign: TextAlign.center)),
+          Expanded(flex: 2, child: Text('SOLD', style: style, textAlign: TextAlign.center)),
           Expanded(flex: 2, child: Text('CLOSING', style: style, textAlign: TextAlign.center)),
           Expanded(flex: 2, child: Text('VAR', style: style, textAlign: TextAlign.center)),
         ],
@@ -314,6 +319,8 @@ class _KitchenShiftStocktakeState
 
   Widget _itemRow(String name) {
     final open = _opening[name] ?? 0;
+    final sold = _sold[name] ?? 0;
+    final spoilage = _spoilage[name] ?? 0;
     final closing = _ctrlFor(name);
     final added = _addedCtrlFor(name);
     return Padding(
@@ -323,15 +330,19 @@ class _KitchenShiftStocktakeState
           Expanded(flex: 3, child: Text(name, style: const TextStyle(fontSize: 13))),
           Expanded(flex: 2, child: Center(child: Text(_fmt(open)))),
           Expanded(flex: 2, child: _qtyField(added)),
+          Expanded(flex: 2, child: Center(child: Text(_fmt(sold)))),
           Expanded(flex: 2, child: _qtyField(closing)),
           Expanded(
             flex: 2,
             child: Builder(builder: (context) {
               final c = double.tryParse(closing.text.trim()) ?? 0;
               final add = double.tryParse(added.text.trim()) ?? 0;
-              // variance = physical − system (positive = surplus, negative = shortage)
-              // matches bar stocktake convention
-              final variance = c - open - add;
+              // variance = physical − system expected (positive = surplus,
+              // negative = shortage). System expected = what came in (open +
+              // added) minus what legitimately left (sold to customers,
+              // approved spoilage) — selling food normally must not show up
+              // as a "shortage" just because stock went down.
+              final variance = c - (open + add - sold - spoilage);
               return Center(
                 child: Text(
                   variance.toStringAsFixed(variance == variance.roundToDouble() ? 0 : 1),

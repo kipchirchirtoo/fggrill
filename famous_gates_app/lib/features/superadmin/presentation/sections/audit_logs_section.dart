@@ -85,7 +85,7 @@ class SuperAdminAuditLogsSection extends ConsumerWidget {
                         backgroundColor:
                             AppColors.kPrimary.withValues(alpha: 0.1),
                         child: Text(
-                          (log['user_name']?.toString() ?? '')[0].toUpperCase(),
+                          _initialFor(log['user_name']?.toString()),
                           style: const TextStyle(
                             fontSize: 10,
                             color: AppColors.kPrimary,
@@ -135,6 +135,11 @@ class SuperAdminAuditLogsSection extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String _initialFor(String? userName) {
+    final trimmed = userName?.trim() ?? '';
+    return trimmed.isEmpty ? '?' : trimmed[0].toUpperCase();
   }
 
   String _formatTimestamp(String? timestamp) {

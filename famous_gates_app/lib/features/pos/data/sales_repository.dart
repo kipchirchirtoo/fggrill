@@ -37,8 +37,16 @@ class SalesRepository {
     final online = await checkIsOnline();
     if (online) {
       try {
-        final response = await _dio.post('/cashier/pos/transactions',
-            data: request.toJson());
+        final response = await _dio.post(
+          '/cashier/pos/transactions',
+          data: request.toJson(),
+          options: Options(
+            headers: {
+              'Idempotency-Key': 'pos-sale-$localId',
+              'X-Client-Id': cashierId,
+            },
+          ),
+        );
         final payload = Map<String, dynamic>.from(response.data as Map);
         final data = (payload['data'] as Map<String, dynamic>?) ?? payload;
         return SaleResult(
@@ -93,14 +101,21 @@ class SalesRepository {
                 'unit_price': item.unitPrice,
               })
           .toList(),
-    });
+    }, options: Options(headers: {
+      'Idempotency-Key': 'restaurant-order-${_uuid.v4()}',
+    }));
     final payload = Map<String, dynamic>.from(response.data as Map);
     return Map<String, dynamic>.from((payload['data'] as Map?) ?? payload);
   }
 
   Future<MpesaStatus> initiateMpesa(MpesaInitiateRequest request) async {
-    final response =
-        await _dio.post('/payments/mpesa/initiate', data: request.toJson());
+    final response = await _dio.post(
+      '/payments/mpesa/initiate',
+      data: request.toJson(),
+      options: Options(headers: {
+        'Idempotency-Key': 'mpesa-initiate-${request.accountReference}',
+      }),
+    );
     final payload = Map<String, dynamic>.from(response.data as Map);
     final data = (payload['data'] as Map<String, dynamic>?) ?? payload;
     return MpesaStatus(
@@ -110,11 +125,17 @@ class SalesRepository {
 
   Future<String> initiateMpesaSTK(
       String phone, double amount, String reference) async {
-    final response = await _dio.post('/payments/mpesa/initiate', data: {
-      'phoneNumber': phone,
-      'amount': amount,
-      'accountReference': reference,
-    });
+    final response = await _dio.post(
+      '/payments/mpesa/initiate',
+      data: {
+        'phoneNumber': phone,
+        'amount': amount,
+        'accountReference': reference,
+      },
+      options: Options(headers: {
+        'Idempotency-Key': 'mpesa-stk-$reference',
+      }),
+    );
     final payload = Map<String, dynamic>.from(response.data as Map);
     final data = (payload['data'] as Map<String, dynamic>?) ?? payload;
     return '${data['checkout_request_id'] ?? data['checkoutRequestId']}';

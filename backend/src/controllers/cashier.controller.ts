@@ -1875,6 +1875,23 @@ async function fetchHotelBillResponse(booking: any, res: Response): Promise<void
     });
 }
 
+// cashier_shift_transactions has a CHECK constraint
+// (cashier_shift_transactions_payment_method_check, added in
+// migrations/20260622_famousgate_major_redesign.sql) restricting
+// payment_method to exactly {'mpesa','cash','card','credit'} lowercase.
+// Inserting anything else (e.g. the .toUpperCase()'d values this file used
+// to send, or the literal 'credit_bill' used elsewhere in this controller)
+// violates the constraint and fails — silently, since both insert sites
+// below are fire-and-forget. That silent failure is why real POS sales
+// never made it into the shift's recorded cash/mpesa/card totals.
+function toShiftTransactionPaymentMethod(raw: unknown): string {
+    const m = String(raw || 'cash').toLowerCase();
+    if (m.includes('mpesa') || m.includes('m-pesa')) return 'mpesa';
+    if (m.includes('card') || m.includes('visa') || m.includes('swipe')) return 'card';
+    if (m.includes('credit')) return 'credit';
+    return 'cash';
+}
+
 /**
  * Links a completed payment to the cashier's active shift log (fire-and-forget)
  */
@@ -1914,7 +1931,7 @@ async function linkPaymentToActiveShift(
             shift_id: shift.id,
             transaction_id: paymentId,
             transaction_ref: paymentRef,
-            payment_method: paymentMethod?.toUpperCase(),
+            payment_method: toShiftTransactionPaymentMethod(paymentMethod),
             amount,
             transaction_time: new Date().toISOString(),
             // Dedup (migration 20260622_famousgate_major_redesign.sql, section 7)
@@ -1994,7 +2011,7 @@ async function recordActiveShiftSale(params: {
 }): Promise<void> {
     const shiftId = await activeCashierShiftLogId(params.cashierId, params.branchId);
     if (!shiftId) return;
-    const method = String(params.paymentMethod || 'cash').toUpperCase();
+    const method = toShiftTransactionPaymentMethod(params.paymentMethod);
     const { error } = await supabase.from('cashier_shift_transactions').insert({
         shift_id: shiftId,
         transaction_id: params.transactionId,

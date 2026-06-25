@@ -1,18 +1,33 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/powersync/powersync_service.dart';
 import '../../../core/network/dio_client.dart';
 
 final outletPosRepositoryProvider = Provider<OutletPosRepository>((ref) {
-  return OutletPosRepository(ref.read(dioProvider));
+  return OutletPosRepository(ref);
 });
 
 class OutletPosRepository {
-  OutletPosRepository(this._dio);
+  OutletPosRepository(this._ref) : _dio = _ref.read(dioProvider);
 
+  final Ref _ref;
   final Dio _dio;
+
+  PowerSyncService get _powerSync => _ref.read(powerSyncServiceProvider);
 
   Future<List<PosOutlet>> getOutlets(
       {String? outletType, int? branchId}) async {
+    if (_powerSync.hotReadsEnabled) {
+      final local = await _powerSync.getPosOutlets(
+        outletType: outletType,
+        branchId: branchId,
+      );
+      if (local.isNotEmpty) {
+        return local
+            .map((item) => PosOutlet.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      }
+    }
     final response = await _dio.get('/pos/outlets', queryParameters: {
       if (outletType != null) 'outlet_type': outletType,
       if (branchId != null) 'branch_id': branchId,
@@ -27,6 +42,17 @@ class OutletPosRepository {
     bool includeRelated = false,
     PosOutlet? fallbackOutlet,
   }) async {
+    if (_powerSync.hotReadsEnabled && !includeRelated) {
+      final local = await _powerSync.getPosOutletItems(outletId);
+      if (local.isNotEmpty) {
+        return local
+            .map((item) => OutletPosItem.fromJson(
+                  Map<String, dynamic>.from(item),
+                  fallbackOutlet: fallbackOutlet,
+                ))
+            .toList();
+      }
+    }
     final response =
         await _dio.get('/pos/outlets/$outletId/items', queryParameters: {
       if (includeRelated) 'include_related': true,
@@ -88,6 +114,12 @@ class OutletPosRepository {
   }
 
   Future<OutletShift?> getActiveShift(String outletId) async {
+    if (_powerSync.hotReadsEnabled) {
+      final local = await _powerSync.getActivePosShift(outletId);
+      if (local != null) {
+        return OutletShift.fromJson(local);
+      }
+    }
     final response = await _dio.get('/pos/outlets/$outletId/shifts/active');
     final data = _data(response.data);
     if (data == null) return null;
@@ -102,6 +134,15 @@ class OutletPosRepository {
   }
 
   Future<List<OutletShiftOrder>> getOrders(String shiftId) async {
+    if (_powerSync.hotReadsEnabled) {
+      final local = await _powerSync.getPosShiftOrders(shiftId);
+      if (local.isNotEmpty) {
+        return local
+            .map((item) =>
+                OutletShiftOrder.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      }
+    }
     final response = await _dio.get('/pos/shifts/$shiftId/orders');
     return _list(response.data)
         .map((item) =>
@@ -244,8 +285,8 @@ class OutletPosRepository {
       String shiftId) async {
     final response = await _dio.get('/pos/voids/shift/$shiftId');
     return _list(response.data)
-        .map((item) =>
-            ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+        .map(
+            (item) => ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
@@ -258,7 +299,8 @@ class OutletPosRepository {
       return OutletShiftOrder.fromJson(
           Map<String, dynamic>.from(_data(response.data) as Map));
     } on DioException catch (error) {
-      throw StateError(_errorMessage(error, 'This void request could not be approved.'));
+      throw StateError(
+          _errorMessage(error, 'This void request could not be approved.'));
     }
   }
 
@@ -267,15 +309,15 @@ class OutletPosRepository {
     String? rejectionReason,
   }) async {
     try {
-      final response =
-          await _dio.patch('/pos/voids/$requestId/reject', data: {
+      final response = await _dio.patch('/pos/voids/$requestId/reject', data: {
         if (rejectionReason != null && rejectionReason.trim().isNotEmpty)
           'rejection_reason': rejectionReason.trim(),
       });
       return ItemVoidRequest.fromJson(
           Map<String, dynamic>.from(_data(response.data) as Map));
     } on DioException catch (error) {
-      throw StateError(_errorMessage(error, 'This void request could not be rejected.'));
+      throw StateError(
+          _errorMessage(error, 'This void request could not be rejected.'));
     }
   }
 
@@ -287,7 +329,8 @@ class OutletPosRepository {
           await _dio.patch('/pos/voids/$requestId/cashier-acknowledge');
       return Map<String, dynamic>.from(_data(response.data) as Map);
     } on DioException catch (error) {
-      throw StateError(_errorMessage(error, 'Could not acknowledge void request.'));
+      throw StateError(
+          _errorMessage(error, 'Could not acknowledge void request.'));
     }
   }
 
@@ -302,10 +345,17 @@ class OutletPosRepository {
 
   /// Cashier Stage 1 queue — pending void requests for the caller's open shifts.
   Future<List<ItemVoidRequest>> getPendingVoidsCashier() async {
+    if (_powerSync.hotReadsEnabled) {
+      final local = await _powerSync.getPendingItemVoidsCashier();
+      return local
+          .map((item) =>
+              ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    }
     final response = await _dio.get('/pos/voids/pending/cashier');
     return _list(response.data)
-        .map((item) =>
-            ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+        .map(
+            (item) => ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
@@ -313,8 +363,8 @@ class OutletPosRepository {
   Future<List<ItemVoidRequest>> getPendingVoidsManager() async {
     final response = await _dio.get('/pos/voids/pending/manager');
     return _list(response.data)
-        .map((item) =>
-            ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+        .map(
+            (item) => ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
@@ -330,12 +380,13 @@ class OutletPosRepository {
       if (status != null && status.isNotEmpty) 'status': status,
       if (from != null && from.isNotEmpty) 'from': from,
       if (to != null && to.isNotEmpty) 'to': to,
-      if (requestedBy != null && requestedBy.isNotEmpty) 'requested_by': requestedBy,
+      if (requestedBy != null && requestedBy.isNotEmpty)
+        'requested_by': requestedBy,
       if (cashierId != null && cashierId.isNotEmpty) 'cashier_id': cashierId,
     });
     return _list(response.data)
-        .map((item) =>
-            ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+        .map(
+            (item) => ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
@@ -371,6 +422,13 @@ class OutletPosRepository {
 
   /// Cashier queue — pending exchange requests for the caller's open shifts.
   Future<List<ItemExchangeRequest>> getPendingExchangesCashier() async {
+    if (_powerSync.hotReadsEnabled) {
+      final local = await _powerSync.getPendingExchangesCashier();
+      return local
+          .map((item) =>
+              ItemExchangeRequest.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    }
     final response = await _dio.get('/pos/exchanges/pending/cashier');
     return _list(response.data)
         .map((item) =>
@@ -492,6 +550,15 @@ class OutletPosRepository {
   }
 
   Future<List<OutletStockCount>> getStockCount(String shiftId) async {
+    if (_powerSync.hotReadsEnabled) {
+      final local = await _powerSync.getPosShiftStockCounts(shiftId);
+      if (local.isNotEmpty) {
+        return local
+            .map((item) =>
+                OutletStockCount.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+      }
+    }
     final response = await _dio.get('/pos/shifts/$shiftId/stock-count');
     return _list(response.data)
         .map((item) =>
@@ -732,6 +799,7 @@ class OutletCartItem {
 
   final OutletPosItem item;
   final int quantity;
+
   /// Free-form per-line instruction (e.g. "Warm" / "Cold" for drinks) that
   /// rides through to the captain order ticket.
   final String? notes;
@@ -973,7 +1041,8 @@ class ItemVoidRequest {
       reason: '${json['reason'] ?? ''}',
       status: '${json['status'] ?? 'pending'}',
       orderNumber: json['order_number'] as String?,
-      branchId: json['branch_id'] is num ? (json['branch_id'] as num).toInt() : null,
+      branchId:
+          json['branch_id'] is num ? (json['branch_id'] as num).toInt() : null,
       note: json['note'] as String?,
       requestedBy: json['requested_by'] as String?,
       requestedByName: json['requested_by_name'] as String?,
@@ -981,11 +1050,13 @@ class ItemVoidRequest {
       actionedByName: json['actioned_by_name'] as String?,
       cashierId: json['cashier_id'] as String?,
       cashierName: json['cashier_name'] as String?,
-      cashierAcknowledgedAt: DateTime.tryParse('${json['cashier_acknowledged_at'] ?? ''}'),
+      cashierAcknowledgedAt:
+          DateTime.tryParse('${json['cashier_acknowledged_at'] ?? ''}'),
       cashierAction: json['cashier_action'] as String?,
       managerId: json['manager_id'] as String?,
       managerName: json['manager_name'] as String?,
-      managerReviewedAt: DateTime.tryParse('${json['manager_reviewed_at'] ?? ''}'),
+      managerReviewedAt:
+          DateTime.tryParse('${json['manager_reviewed_at'] ?? ''}'),
       rejectionReason: json['rejection_reason'] as String?,
       createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
     );
@@ -1080,9 +1151,8 @@ class ItemExchangeRequest {
       actionedAt: DateTime.tryParse('${json['actioned_at'] ?? ''}'),
       rejectionReason: json['rejection_reason'] as String?,
       exchangeOrderId: json['exchange_order_id'] as String?,
-      refundAmount: json['refund_amount'] == null
-          ? null
-          : _num(json['refund_amount']),
+      refundAmount:
+          json['refund_amount'] == null ? null : _num(json['refund_amount']),
       refundIssuedAt: DateTime.tryParse('${json['refund_issued_at'] ?? ''}'),
       refundIssuedBy: json['refund_issued_by'] as String?,
       refundIssuedByName: json['refund_issued_by_name'] as String?,

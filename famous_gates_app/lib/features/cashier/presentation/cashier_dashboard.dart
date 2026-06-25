@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../core/powersync/powersync_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../../core/utils/api_error_message.dart';
@@ -88,12 +89,14 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   @override
   void initState() {
     super.initState();
-    _voidBadgeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (!mounted) return;
-      ref.invalidate(cashierPendingItemVoidsProvider);
-      ref.invalidate(cashierPendingExchangesProvider);
-      ref.invalidate(cashierAwaitingRefundExchangesProvider);
-    });
+    if (!ref.read(powerSyncHotReadsEnabledProvider)) {
+      _voidBadgeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        if (!mounted) return;
+        ref.invalidate(cashierPendingItemVoidsProvider);
+        ref.invalidate(cashierPendingExchangesProvider);
+        ref.invalidate(cashierAwaitingRefundExchangesProvider);
+      });
+    }
   }
 
   @override
@@ -104,10 +107,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingVoidsCount = ref.watch(cashierPendingItemVoidsProvider).maybeWhen(
-          data: (rows) => rows.length,
-          orElse: () => 0,
-        );
+    final pendingVoidsCount =
+        ref.watch(cashierPendingItemVoidsProvider).maybeWhen(
+              data: (rows) => rows.length,
+              orElse: () => 0,
+            );
     final pendingExchangesCount =
         ref.watch(cashierPendingExchangesProvider).maybeWhen(
               data: (rows) => rows.length,
@@ -507,6 +511,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   // roles only (see _kBarCaptainOrderCashierRoles) so reception/restaurant/
   // other cashier stations never auto-print bar tickets.
   Timer? _captainOrderTimer;
+  StreamSubscription<List<Map<String, dynamic>>>? _captainOrderSubscription;
   final Set<String> _printedCaptainOrderIds = {};
 
   Future<void> _initBarCaptainOrderFeed() async {
@@ -515,9 +520,16 @@ class _StationTabState extends ConsumerState<_StationTab> {
         .trim()
         .toLowerCase();
     if (!mounted || !_kBarCaptainOrderCashierRoles.contains(role)) return;
+    if (ref.read(powerSyncHotReadsEnabledProvider)) {
+      _captainOrderSubscription = ref
+          .read(powerSyncServiceProvider)
+          .watchBarCaptainOrders()
+          .listen(_processBarCaptainOrdersRows);
+      return;
+    }
     _pollBarCaptainOrders();
-    _captainOrderTimer =
-        Timer.periodic(const Duration(seconds: 5), (_) => _pollBarCaptainOrders());
+    _captainOrderTimer = Timer.periodic(
+        const Duration(seconds: 5), (_) => _pollBarCaptainOrders());
   }
 
   @override
@@ -549,6 +561,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   @override
   void dispose() {
     _captainOrderTimer?.cancel();
+    _captainOrderSubscription?.cancel();
     _unpaidSearchDebounce?.cancel();
     _lookupController.dispose();
     _amountController.dispose();
@@ -612,7 +625,46 @@ class _StationTabState extends ConsumerState<_StationTab> {
         });
       }
     } catch (error) {
-      debugPrint('❌ Error polling bar captain orders at cashier station: $error');
+      debugPrint(
+          '❌ Error polling bar captain orders at cashier station: $error');
+    }
+  }
+
+  void _processBarCaptainOrdersRows(List<Map<String, dynamic>> raw) {
+    if (!mounted) return;
+    final orders = raw.map(KitchenOrder.fromJson).toList();
+    for (final order in orders) {
+      final printKey = order.kdsPrintKey;
+      if (_printedCaptainOrderIds.contains(printKey)) continue;
+      if (order.captainOrderAlreadyPrinted) {
+        _printedCaptainOrderIds.add(printKey);
+        continue;
+      }
+      if (order.isVoided || order.hasPendingVoidRequest) continue;
+
+      final status = order.status.toLowerCase();
+      if (status != 'pending' &&
+          status != 'confirmed' &&
+          status != 'recalled') {
+        continue;
+      }
+
+      _printedCaptainOrderIds.add(printKey);
+      final shiftId = order.shiftId;
+      if (shiftId != null && shiftId.isNotEmpty) {
+        ref.read(cashierRepositoryProvider).markBarCaptainOrderPrinted(
+              shiftId: shiftId,
+              orderId: order.id.replaceFirst('pos:', ''),
+            );
+      }
+
+      _printBarCaptainOrder(order).then((_) {
+        debugPrint(
+            'Bar captain order ${order.orderNumber} printed at cashier station');
+      }).catchError((error) {
+        debugPrint(
+            'Failed to print bar captain order ${order.orderNumber} at cashier station: $error');
+      });
     }
   }
 
@@ -1013,12 +1065,16 @@ class _StationTabState extends ConsumerState<_StationTab> {
                                       // Order number (only when different from short_code)
                                       if (() {
                                         final sc = _text(row, ['short_code']);
-                                        final on = _text(row, ['order_number', 'bill_number']);
+                                        final on = _text(row,
+                                            ['order_number', 'bill_number']);
                                         return on.isNotEmpty && on != sc;
                                       }())
                                         _MiniMeta(
                                             icon: Icons.receipt_outlined,
-                                            text: _text(row, ['order_number', 'bill_number'])),
+                                            text: _text(row, [
+                                              'order_number',
+                                              'bill_number'
+                                            ])),
                                       // Table / location
                                       if (_text(row, ['location']).isNotEmpty &&
                                           _text(row, ['location']) != '—')
@@ -1026,31 +1082,42 @@ class _StationTabState extends ConsumerState<_StationTab> {
                                             icon: Icons.table_restaurant,
                                             text: _text(row, ['location'])),
                                       // Waiter
-                                      if (_text(row, ['waiter_name']).isNotEmpty)
+                                      if (_text(row, ['waiter_name'])
+                                          .isNotEmpty)
                                         _MiniMeta(
                                           icon: Icons.badge_outlined,
-                                          text: 'Waiter: ${_text(row, ['waiter_name'])}',
+                                          text: 'Waiter: ${_text(row, [
+                                                'waiter_name'
+                                              ])}',
                                         ),
                                       // Outlet / station
-                                      if (_text(row, ['station_name', 'outlet_name']).isNotEmpty)
+                                      if (_text(row, [
+                                        'station_name',
+                                        'outlet_name'
+                                      ]).isNotEmpty)
                                         _MiniMeta(
                                           icon: Icons.storefront,
-                                          text: _text(row, ['station_name', 'outlet_name']),
+                                          text: _text(row,
+                                              ['station_name', 'outlet_name']),
                                         ),
                                       // Customer (only when not redundant with waiter)
                                       if (customer.isNotEmpty &&
                                           customer.toLowerCase() != 'walk-in' &&
-                                          customer != _text(row, ['waiter_name']))
+                                          customer !=
+                                              _text(row, ['waiter_name']))
                                         _MiniMeta(
                                             icon: Icons.person_outline,
                                             text: customer),
                                       // Time
-                                      if (_text(row, ['created_at', 'bill_date']).isNotEmpty)
+                                      if (_text(
+                                              row, ['created_at', 'bill_date'])
+                                          .isNotEmpty)
                                         _MiniMeta(
                                           icon: Icons.access_time,
                                           text: () {
-                                            final dt = DateTime.tryParse(
-                                                _text(row, ['created_at', 'bill_date']));
+                                            final dt = DateTime.tryParse(_text(
+                                                row,
+                                                ['created_at', 'bill_date']));
                                             if (dt == null) return '';
                                             final local = dt.toLocal();
                                             return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
@@ -1395,8 +1462,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
           if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
             'staff_credit_bill_id':
                 _text(createdCreditData, ['staff_credit_bill_id']),
-          if (_text(createdCreditData, ['bill_number', 'credit_number']).isNotEmpty)
-            'credit_number': _text(createdCreditData, ['bill_number', 'credit_number']),
+          if (_text(createdCreditData, ['bill_number', 'credit_number'])
+              .isNotEmpty)
+            'credit_number':
+                _text(createdCreditData, ['bill_number', 'credit_number']),
         };
       }
       final isCash = _method == 'cash';
@@ -1417,7 +1486,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 method: _backendPaymentMethod(_method),
                 reference: createdCredit == null
                     ? _referenceController.text.trim()
-                    : _text(_payload(createdCredit), ['bill_number', 'credit_number', 'id']),
+                    : _text(_payload(createdCredit),
+                        ['bill_number', 'credit_number', 'id']),
                 creditBill: paymentCreditBill,
                 tendered: isCash && _tendered > 0 ? _tendered : null,
                 change: isCash ? _changeDue : null,
@@ -1435,7 +1505,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
           department: staff?.department,
           amount: amount,
           items: _receiptItemsFromBill(bill, amount),
-          creditNumber: _text(_payload(createdCredit), ['bill_number', 'credit_number', 'id']),
+          creditNumber: _text(
+              _payload(createdCredit), ['bill_number', 'credit_number', 'id']),
           cashierName: nav.user?.name,
           sourceReference: _text(bill, ['bill_number', 'order_number', 'id']),
         );
@@ -1448,7 +1519,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
           response: paymentResponse,
           fallbackReference: createdCredit == null
               ? _referenceController.text.trim()
-              : _text(_payload(createdCredit), ['bill_number', 'credit_number', 'id']),
+              : _text(_payload(createdCredit),
+                  ['bill_number', 'credit_number', 'id']),
           changeGiven: changeGiven,
           amountTendered: isCash ? _tendered : 0,
         );
@@ -1522,7 +1594,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
               .read(cashierRepositoryProvider)
               .createCreditBill(creditBill);
           final createdCreditData = _payload(createdCredit);
-          reference = _text(createdCreditData, ['bill_number', 'credit_number', 'id']);
+          reference =
+              _text(createdCreditData, ['bill_number', 'credit_number', 'id']);
           paymentCreditBill = {
             ...creditBill,
             if (_text(createdCreditData, ['id']).isNotEmpty)
@@ -1530,8 +1603,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
             if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
               'staff_credit_bill_id':
                   _text(createdCreditData, ['staff_credit_bill_id']),
-            if (_text(createdCreditData, ['bill_number', 'credit_number']).isNotEmpty)
-              'credit_number': _text(createdCreditData, ['bill_number', 'credit_number']),
+            if (_text(createdCreditData, ['bill_number', 'credit_number'])
+                .isNotEmpty)
+              'credit_number':
+                  _text(createdCreditData, ['bill_number', 'credit_number']),
           };
         }
 
@@ -1685,7 +1760,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
 
       final shortCode = _billShortCode(bill);
       await ref.read(cashierRepositoryProvider).printReceiptFallback(
-            orderNumber: reference.isEmpty ? 'CASH-${DateTime.now().millisecondsSinceEpoch}' : reference,
+            orderNumber: reference.isEmpty
+                ? 'CASH-${DateTime.now().millisecondsSinceEpoch}'
+                : reference,
             shortCode: shortCode.isNotEmpty ? shortCode : null,
             customerName: _customerName(bill),
             items: receiptItems
@@ -1702,7 +1779,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
           );
       _snack('Backend fallback receipt printed');
     } catch (fallbackError) {
-      _snack('Backend fallback print also failed: ${apiErrorMessage(fallbackError)}');
+      _snack(
+          'Backend fallback print also failed: ${apiErrorMessage(fallbackError)}');
     }
   }
 
@@ -2056,8 +2134,10 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
           if (_text(createdCreditData, ['staff_credit_bill_id']).isNotEmpty)
             'staff_credit_bill_id':
                 _text(createdCreditData, ['staff_credit_bill_id']),
-          if (_text(createdCreditData, ['bill_number', 'credit_number']).isNotEmpty)
-            'credit_number': _text(createdCreditData, ['bill_number', 'credit_number']),
+          if (_text(createdCreditData, ['bill_number', 'credit_number'])
+              .isNotEmpty)
+            'credit_number':
+                _text(createdCreditData, ['bill_number', 'credit_number']),
         };
       }
       final created =
@@ -2381,7 +2461,8 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
                     style: Theme.of(context).textTheme.titleLarge),
               ),
               OutlinedButton.icon(
-                onPressed: () => ref.invalidate(cashierPendingItemVoidsProvider),
+                onPressed: () =>
+                    ref.invalidate(cashierPendingItemVoidsProvider),
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Refresh'),
               ),
@@ -2444,13 +2525,12 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
                 if (r.requestedByName != null && r.requestedByName!.isNotEmpty)
                   'by ${r.requestedByName}',
               ].join('  ·  '),
-              style:
-                  const TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
+              style: const TextStyle(
+                  color: AppColors.kTextSecondary, fontSize: 13),
             ),
             if (r.reason.isNotEmpty) ...[
               const SizedBox(height: 6),
-              Text('Reason: ${r.reason}',
-                  style: const TextStyle(fontSize: 13)),
+              Text('Reason: ${r.reason}', style: const TextStyle(fontSize: 13)),
             ],
             const SizedBox(height: 12),
             Row(
@@ -2458,7 +2538,8 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
               children: [
                 OutlinedButton.icon(
                   onPressed: busy ? null : () => _decline(r),
-                  icon: const Icon(Icons.close, size: 16, color: AppColors.kError),
+                  icon: const Icon(Icons.close,
+                      size: 16, color: AppColors.kError),
                   label: const Text('Decline',
                       style: TextStyle(color: AppColors.kError)),
                 ),
@@ -2549,7 +2630,8 @@ class _ExchangeRequestsTabState extends ConsumerState<_ExchangeRequestsTab> {
   @override
   Widget build(BuildContext context) {
     final pendingAsync = ref.watch(cashierPendingExchangesProvider);
-    final awaitingRefundAsync = ref.watch(cashierAwaitingRefundExchangesProvider);
+    final awaitingRefundAsync =
+        ref.watch(cashierAwaitingRefundExchangesProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -2594,7 +2676,8 @@ class _ExchangeRequestsTabState extends ConsumerState<_ExchangeRequestsTab> {
             ),
           ),
           const SizedBox(height: 28),
-          Text('Awaiting Refund', style: Theme.of(context).textTheme.titleMedium),
+          Text('Awaiting Refund',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           const Text(
             'Approved exchanges where the new item was cheaper -- issue the '
@@ -2649,8 +2732,8 @@ class _ExchangeRequestsTabState extends ConsumerState<_ExchangeRequestsTab> {
               color: AppColors.kError, fontWeight: FontWeight.w700));
     }
     return const Text('Even exchange -- no money movement',
-        style:
-            TextStyle(color: AppColors.kTextSecondary, fontWeight: FontWeight.w600));
+        style: TextStyle(
+            color: AppColors.kTextSecondary, fontWeight: FontWeight.w600));
   }
 
   Widget _pendingCard(ItemExchangeRequest r) {
@@ -2697,7 +2780,8 @@ class _ExchangeRequestsTabState extends ConsumerState<_ExchangeRequestsTab> {
               children: [
                 OutlinedButton.icon(
                   onPressed: busy ? null : () => _reject(r),
-                  icon: const Icon(Icons.close, size: 16, color: AppColors.kError),
+                  icon: const Icon(Icons.close,
+                      size: 16, color: AppColors.kError),
                   label: const Text('Reject',
                       style: TextStyle(color: AppColors.kError)),
                 ),

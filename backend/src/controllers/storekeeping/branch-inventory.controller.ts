@@ -1198,7 +1198,7 @@ export const getMasterCatalog = async (
 
     let query = supabase
       .from('inventory_items')
-      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, is_active, store_type, metadata, created_at, updated_at')
+      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, is_active, store_type, metadata, created_at, updated_at, quantity')
       .eq('is_active', true)
       .not('category', 'eq', 'KITCHEN MENU')
       .not('sku', 'like', 'MENU-%')
@@ -1216,38 +1216,18 @@ export const getMasterCatalog = async (
     const { data: rawItems, error } = await query;
     if (error) throw error;
 
-    // Merge central store quantities from inventory_balances
-    let data: any[] = rawItems || [];
-    try {
-      const centralBranch = await BranchInventoryService.getCentralWarehouse();
-      const centralBranchId = centralBranch?.id;
-      if (!centralBranchId) throw new Error('Central warehouse not configured');
-      const centralLocationId = await ensureInventoryLocation(supabase, centralBranchId);
-      const { data: balances, error: balErr } = await supabase
-        .from('inventory_balances')
-        .select('item_id, current_quantity')
-        .eq('location_id', centralLocationId);
-      if (balErr) logger.warn(`getMasterCatalog: balances query error: ${balErr.message}`);
-      const balMap = new Map((balances || []).map((b: any) => [b.item_id, Number(b.current_quantity)]));
-      data = data.map((item: any) => ({
-        ...item,
-        item_sku: item.sku,
-        unit_of_measure: item.unit,
-        cost_price: item.default_unit_cost,
-        retail_price: item.default_selling_price,
-        quantity: balMap.get(item.id) ?? 0,
-      }));
-    } catch (balLookupErr: any) {
-      logger.warn(`getMasterCatalog: could not load central store balances: ${balLookupErr.message}`);
-      data = data.map((item: any) => ({
-        ...item,
-        item_sku: item.sku,
-        unit_of_measure: item.unit,
-        cost_price: item.default_unit_cost,
-        retail_price: item.default_selling_price,
-        quantity: 0,
-      }));
-    }
+    // inventory_items.quantity is the central store's own stock count — the
+    // same field the Central Master Catalog and central stock-take screens
+    // read/write. inventory_balances is a separate, largely unpopulated
+    // table and must not be used here, or every item shows as 0 in stock.
+    const data: any[] = (rawItems || []).map((item: any) => ({
+      ...item,
+      item_sku: item.sku,
+      unit_of_measure: item.unit,
+      cost_price: item.default_unit_cost,
+      retail_price: item.default_selling_price,
+      quantity: Number(item.quantity) || 0,
+    }));
 
     res.status(200).json({
       success: true,

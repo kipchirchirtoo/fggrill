@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/powersync/powersync_service.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../data/cashier_repository.dart';
 
@@ -121,8 +122,18 @@ final cashierCurrentShiftProvider =
 /// (stage 1 of the two-stage void flow). Whole-bill voids are not included --
 /// those go straight to the branch accountant and never hit this queue.
 final cashierPendingItemVoidsProvider =
-    FutureProvider.autoDispose<List<ItemVoidRequest>>((ref) {
-  return ref.watch(outletPosRepositoryProvider).getPendingVoidsCashier();
+    StreamProvider.autoDispose<List<ItemVoidRequest>>((ref) async* {
+  final powerSync = ref.watch(powerSyncServiceProvider);
+  if (powerSync.hotReadsEnabled) {
+    yield* powerSync.watchPendingItemVoidsCashier().map(
+          (rows) => rows
+              .map((item) =>
+                  ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+              .toList(),
+        );
+    return;
+  }
+  yield await ref.watch(outletPosRepositoryProvider).getPendingVoidsCashier();
 });
 
 /// Post-payment exchange requests awaiting this cashier's approve/reject
@@ -130,8 +141,20 @@ final cashierPendingItemVoidsProvider =
 /// ItemExchangeRequest for why this doesn't go through REVIEW_ROLES like the
 /// void flows do).
 final cashierPendingExchangesProvider =
-    FutureProvider.autoDispose<List<ItemExchangeRequest>>((ref) {
-  return ref.watch(outletPosRepositoryProvider).getPendingExchangesCashier();
+    StreamProvider.autoDispose<List<ItemExchangeRequest>>((ref) async* {
+  final powerSync = ref.watch(powerSyncServiceProvider);
+  if (powerSync.hotReadsEnabled) {
+    yield* powerSync.watchPendingExchangesCashier().map(
+          (rows) => rows
+              .map((item) =>
+                  ItemExchangeRequest.fromJson(Map<String, dynamic>.from(item)))
+              .toList(),
+        );
+    return;
+  }
+  yield await ref
+      .watch(outletPosRepositoryProvider)
+      .getPendingExchangesCashier();
 });
 
 /// Approved refund-direction exchanges that haven't had the cash refund
@@ -141,11 +164,21 @@ final cashierPendingExchangesProvider =
 /// shifts) and history is the only place an approved exchange still lives
 /// once it drops out of the pending queue.
 final cashierAwaitingRefundExchangesProvider =
-    FutureProvider.autoDispose<List<ItemExchangeRequest>>((ref) async {
+    StreamProvider.autoDispose<List<ItemExchangeRequest>>((ref) async* {
+  final powerSync = ref.watch(powerSyncServiceProvider);
+  if (powerSync.hotReadsEnabled) {
+    yield* powerSync.watchAwaitingRefundExchangesCashier().map(
+          (rows) => rows
+              .map((item) =>
+                  ItemExchangeRequest.fromJson(Map<String, dynamic>.from(item)))
+              .toList(),
+        );
+    return;
+  }
   final rows = await ref
       .watch(outletPosRepositoryProvider)
       .getExchangeHistory(status: 'approved', direction: 'refund');
-  return rows.where((r) => !r.refundIssued).toList();
+  yield rows.where((r) => !r.refundIssued).toList();
 });
 
 final cashierInsightsProvider =

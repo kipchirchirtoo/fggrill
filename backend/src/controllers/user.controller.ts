@@ -32,7 +32,7 @@ export const getUsers = async (
       ? await supabase
           .from('staff_profiles')
           .select(
-            'id, user_id, first_name, last_name, email, phone, phone_number, employee_number, employee_id, department, role, position, branch_id'
+            'id, user_id, first_name, last_name, email, phone, employee_number, department, role, position, branch_id'
           )
           .in('user_id', userIds)
       : { data: [], error: null };
@@ -328,7 +328,7 @@ export const updateUser = async (
       const { data: staffProfile, error: staffProfileError } = await supabase
         .from('staff_profiles')
         .select(
-          'id, user_id, first_name, last_name, email, phone, phone_number, employee_number, employee_id, department, role, position, branch_id'
+          'id, user_id, first_name, last_name, email, phone, employee_number, department, role, position, branch_id'
         )
         .eq('id', requestedStaffProfileId)
         .single();

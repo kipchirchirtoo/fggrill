@@ -5,6 +5,10 @@ import { mpesaService } from '../services/mpesa.service';
 import { paystackService } from '../services/paystack.service';
 import { logger } from '../utils/logger';
 import { emailService } from '../services/email.service';
+import {
+  acquireDistributedLock,
+  releaseDistributedLock
+} from '../services/distributed-lock.service';
 
 /**
  * Payment Controller
@@ -464,6 +468,7 @@ export const mpesaCallback = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
+  let paymentLock: Awaited<ReturnType<typeof acquireDistributedLock>> | null = null;
   try {
     const { Body } = req.body;
 
@@ -476,6 +481,17 @@ export const mpesaCallback = async (
 
     logger.info(`M-Pesa Callback received: ${resultCode} - ${resultDesc}`);
 
+    if (!checkoutRequestId) {
+      res.json({ ResultCode: 1, ResultDesc: 'Missing checkout request ID' });
+      return;
+    }
+
+    paymentLock = await acquireDistributedLock(`mpesa-callback:${checkoutRequestId}`, 45000);
+    if (!paymentLock) {
+      res.json({ ResultCode: 0, ResultDesc: 'Duplicate callback accepted' });
+      return;
+    }
+
     // Find payment record
     const { data: payment, error: findError } = await supabase
       .from('payments')
@@ -486,6 +502,12 @@ export const mpesaCallback = async (
     if (findError || !payment) {
       logger.error('Payment not found for checkout request:', checkoutRequestId);
       res.json({ ResultCode: 1, ResultDesc: 'Payment not found' });
+      return;
+    }
+
+    if (payment.status === 'completed') {
+      logger.info(`M-Pesa callback replay ignored for completed payment ${payment.id}`);
+      res.json({ ResultCode: 0, ResultDesc: 'Callback already processed' });
       return;
     }
 
@@ -645,6 +667,8 @@ export const mpesaCallback = async (
       ResultCode: 1,
       ResultDesc: 'Callback processing failed',
     });
+  } finally {
+    await releaseDistributedLock(paymentLock);
   }
 };
 

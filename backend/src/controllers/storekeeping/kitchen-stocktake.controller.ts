@@ -211,6 +211,59 @@ const getApprovedKitchenSpoilageByName = async (
   }
 };
 
+/**
+ * Sum restaurant POS sales for each fixed kitchen item, scoped to whichever
+ * portion of the day this shift is responsible for, so the same sale is
+ * never counted against both shifts: Shift A claims sales up to its own
+ * submission (or now, if still a draft); Shift B claims the rest of the day.
+ * Matched by normalized item name, same approach already used to sync
+ * kitchen closing counts into pos_outlet_items.
+ */
+const getKitchenSoldByName = async (
+  branchId: number,
+  itemNames: string[],
+  stocktakeDate: string,
+  shift: string
+): Promise<Map<string, number>> => {
+  if (itemNames.length === 0) return new Map();
+  try {
+    const { data: siblingShifts } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .select('shift, submitted_at')
+      .eq('branch_id', branchId)
+      .eq('stocktake_date', stocktakeDate)
+      .in('shift', ['A', 'B']);
+    const shiftARow = (siblingShifts || []).find((s: any) => s.shift === 'A');
+    const shiftBRow = (siblingShifts || []).find((s: any) => s.shift === 'B');
+    const dayStart = `${stocktakeDate}T00:00:00.000Z`;
+    const now = new Date().toISOString();
+    const from = shift === 'A' ? dayStart : (shiftARow?.submitted_at || dayStart);
+    const to = shift === 'A' ? (shiftARow?.submitted_at || now) : (shiftBRow?.submitted_at || now);
+
+    const { rows } = await db.query(
+      `SELECT LOWER(TRIM(roi.item_name)) AS item_name_norm, COALESCE(SUM(roi.quantity), 0) AS sold_qty
+       FROM public.restaurant_order_items roi
+       JOIN public.restaurant_orders ro ON ro.id = roi.order_id
+       WHERE ro.branch_id = $1
+         AND ro.created_at >= $2 AND ro.created_at <= $3
+         AND COALESCE(ro.status, '') != 'cancelled'
+         AND LOWER(TRIM(roi.item_name)) = ANY($4)
+       GROUP BY LOWER(TRIM(roi.item_name))`,
+      [branchId, from, to, itemNames.map((n) => n.toLowerCase().trim())]
+    );
+    const byNormName = new Map<string, number>((rows || []).map((r: any) => [r.item_name_norm, num(r.sold_qty)]));
+    const map = new Map<string, number>();
+    for (const name of itemNames) {
+      const sold = byNormName.get(name.toLowerCase().trim());
+      if (sold != null) map.set(name, sold);
+    }
+    return map;
+  } catch (err) {
+    logger.warn('getKitchenSoldByName failed:', (err as Error).message);
+    return new Map();
+  }
+};
+
 const resolveBranchId = (req: Request): number | null => {
   let branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
   if (!isGlobalRole(req.user?.role)) {
@@ -227,15 +280,21 @@ const resolveBranchId = (req: Request): number | null => {
 const syncKitchenStocktakeToStockCounts = async (
   branchId: number,
   stocktakeDate: string,
+  shift: string,
   status: string,
-  items: Array<{ item_name: string; inventory_item_id?: string | null; opening_qty: number; added_qty: number; closing_qty: number; spoilage_qty?: number }>
+  items: Array<{ item_name: string; inventory_item_id?: string | null; opening_qty: number; added_qty: number; closing_qty: number; spoilage_qty?: number; sold_qty?: number }>
 ): Promise<void> => {
+  // One stock_counts row PER SHIFT (location: kitchen_a, kitchen_b, ...) —
+  // otherwise a same-day B-shift sync deletes and replaces A-shift's
+  // stock_count_items under the same row, silently losing that shift's count
+  // from the unified table every accountant/auditor actually reviews.
+  const shiftLocation = `kitchen_${String(shift || '').toLowerCase()}`;
   const { data: existing } = await supabase
     .from('stock_counts')
     .select('id')
     .eq('branch_id', branchId)
     .eq('count_date', stocktakeDate)
-    .eq('location', 'kitchen')
+    .eq('location', shiftLocation)
     .eq('store_type', 'kitchen')
     .maybeSingle();
 
@@ -246,7 +305,7 @@ const syncKitchenStocktakeToStockCounts = async (
     count_date: stocktakeDate,
     count_type: 'daily',
     store_type: 'kitchen',
-    location: 'kitchen',
+    location: shiftLocation,
     status,
   };
 
@@ -271,7 +330,11 @@ const syncKitchenStocktakeToStockCounts = async (
   await supabase.from('stock_count_items').delete().eq('stock_count_id', stockCountId);
 
   const itemRows = items.map((it) => {
-    const systemQty = num(it.opening_qty) + num(it.added_qty) - num(it.spoilage_qty);
+    // System-expected closing = what came in (opening + added) minus what
+    // legitimately left (sold to customers, approved spoilage). Anything
+    // left over after that is the real, unexplained variance — selling food
+    // normally must not show up as a "shortage".
+    const systemQty = num(it.opening_qty) + num(it.added_qty) - num(it.spoilage_qty) - num(it.sold_qty);
     const physicalQty = num(it.closing_qty);
     return {
       stock_count_id: stockCountId,
@@ -490,16 +553,18 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
     const kitchenItemMap = await ensureKitchenInventoryItems();
     const invIds = Array.from(kitchenItemMap.values());
 
-    const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName] = await Promise.all([
+    const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName, soldByName] = await Promise.all([
       getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate, shift),
       getKitchenProductionAddedByInvId(branchId, invIds, stocktakeDate, shift),
       getPastryAddedByInvId(branchId, invIds, stocktakeDate),
       getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
+      getKitchenSoldByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
     ]);
 
     const buildItem = (name: string, existing?: any): Record<string, any> => {
       const invId = kitchenItemMap.get(name);
       const spoilageQty = spoilageByName.get(name) ?? 0;
+      const soldQty = soldByName.get(name) ?? 0;
       const opening = invId ? previousClosingByInvId.get(invId) ?? 0 : 0;
       const computedAdded = invId
         ? (productionAddedByInvId.get(invId) ?? 0) + (pastryAddedByInvId.get(invId) ?? 0)
@@ -514,6 +579,7 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
         item_name: name,
         opening_qty: opening,
         added_qty: added,
+        sold_qty: soldQty,
         closing_qty: num(existing?.closing_qty),
         spoilage_qty: spoilageQty,
         variance: 0,
@@ -526,7 +592,7 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
       const items = KITCHEN_STOCKTAKE_ITEMS.map((name) => {
         const existing: any = itemsByName.get(name);
         if (submitted && existing) {
-          return { ...existing, spoilage_qty: spoilageByName.get(name) ?? 0 };
+          return { ...existing, spoilage_qty: spoilageByName.get(name) ?? 0, sold_qty: soldByName.get(name) ?? 0 };
         }
         return buildItem(name, existing);
       });
@@ -611,11 +677,12 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
     const kitchenItemMap = await ensureKitchenInventoryItems();
     const invIds = Array.from(kitchenItemMap.values());
 
-    const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName] = await Promise.all([
+    const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName, soldByName] = await Promise.all([
       getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate, shift),
       getKitchenProductionAddedByInvId(branchId, invIds, stocktakeDate, shift),
       getPastryAddedByInvId(branchId, invIds, stocktakeDate),
       getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
+      getKitchenSoldByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
     ]);
 
     const itemRows = KITCHEN_STOCKTAKE_ITEMS.map((name) => {
@@ -653,12 +720,16 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
     if (itemsErr) throw itemsErr;
 
     // Sync into the unified stock_counts table so the cashier shift gate works.
+    // spoilage_qty/sold_qty aren't stored on kitchen_stocktake_items — they're
+    // computed fresh each time, same as on the GET side — so merge them in
+    // here for both the variance sync and the response the storekeeper sees.
     const itemsForSync = (savedItems || itemRows).map((it: any) => ({
       ...it,
       inventory_item_id: it.inventory_item_id || null,
       spoilage_qty: spoilageByName.get(it.item_name) ?? 0,
+      sold_qty: soldByName.get(it.item_name) ?? 0,
     }));
-    await syncKitchenStocktakeToStockCounts(branchId, stocktakeDate, shiftRow.status, itemsForSync);
+    await syncKitchenStocktakeToStockCounts(branchId, stocktakeDate, shiftRow.shift, shiftRow.status, itemsForSync);
 
     // Closing count = reconciled kitchen portion count → write into the
     // restaurant POS outlet so waiters see the actual available stock.
@@ -688,7 +759,7 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
 
     res.status(200).json({
       success: true,
-      data: { ...shiftRow, items: savedItems },
+      data: { ...shiftRow, items: itemsForSync },
     });
   } catch (error) {
     logger.error('saveKitchenStocktake failed:', error);

@@ -5,6 +5,10 @@ import { supabase } from '../config/database';
 import { User, UserRole } from '../models/User';
 import { logger } from '../utils/logger';
 import jwt from 'jsonwebtoken';
+import {
+  isManagedSessionActive,
+  touchManagedSession
+} from '../services/session-registry.service';
 
 // Re-export UserRole for convenience
 export { UserRole };
@@ -105,6 +109,17 @@ export const protect = async (
             }
           }
 
+          if (decoded.sid) {
+            const managedSessionState = await isManagedSessionActive(String(decoded.sid), user.id);
+            if (managedSessionState === false) {
+              res.status(401).json({ success: false, message: 'Session revoked or expired' });
+              return;
+            }
+            if (managedSessionState === true) {
+              void touchManagedSession(String(decoded.sid));
+            }
+          }
+
           // Base user from DB
           const effectiveRole = decoded.active_role || user.role;
           let effectiveBranchId = (decoded.active_branch_id !== undefined && decoded.active_branch_id !== null)
@@ -142,6 +157,7 @@ export const protect = async (
             active_outlet_type: decoded.active_outlet_type || null,
             active_outlet_prefix: decoded.active_outlet_prefix || null,
             is_pos_login: decoded.isPosLogin === true,
+            session_id: decoded.sid || null,
             is_impersonation: decoded.impersonation === true,
             impersonation_session_id: decoded.impersonation_session_id || null,
             actual_actor_id: decoded.actual_actor_id || null,

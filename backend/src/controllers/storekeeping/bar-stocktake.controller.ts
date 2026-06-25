@@ -19,6 +19,48 @@ const num = (v: any): number => {
 
 const BAR_LOCATIONS = ['main_bar', 'executive_bar'];
 
+/**
+ * Sales/additions for a bar stocktake are scoped to the most recently
+ * CLOSED cashier shift at that bar outlet, not the calendar day — the
+ * storekeeper counts stock right after a shift hands over, so "what was
+ * sold" must mean "sold during that shift", not "sold today so far"
+ * (which would double-count once a second shift opens the same day).
+ * Falls back to the calendar day if no closed shift is found yet.
+ */
+const getLastClosedBarShiftWindow = async (
+    branchId: number,
+    barLocation: string,
+    stocktakeDate: string
+): Promise<{ from: string; to: string; shiftId: string | null }> => {
+    const dayStart = `${stocktakeDate}T00:00:00.000Z`;
+    const dayEnd = new Date(new Date(dayStart).getTime() + 86400000).toISOString();
+    try {
+        const { data: outlet } = await supabase
+            .from('pos_outlets')
+            .select('id')
+            .eq('branch_id', branchId)
+            .eq('outlet_type', barLocation)
+            .maybeSingle();
+        if (!outlet?.id) return { from: dayStart, to: dayEnd, shiftId: null };
+
+        const { data: shift } = await supabase
+            .from('pos_outlet_shifts')
+            .select('id, opened_at, closed_at')
+            .eq('outlet_id', outlet.id)
+            .eq('status', 'closed')
+            .lt('closed_at', dayEnd)
+            .order('closed_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (!shift) return { from: dayStart, to: dayEnd, shiftId: null };
+
+        return { from: shift.opened_at, to: shift.closed_at, shiftId: shift.id };
+    } catch (err) {
+        logger.warn('getLastClosedBarShiftWindow failed, falling back to calendar day:', (err as Error).message);
+        return { from: dayStart, to: dayEnd, shiftId: null };
+    }
+};
+
 const loadRecord = async (id: string): Promise<Record<string, any> | null> => {
     const { data, error } = await supabase
         .from('bar_stocktake_records')
@@ -316,22 +358,21 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
 
         // 3. No stocktake submitted yet — return ALL catalog items as candidates.
         //    opening_stock  = bar_stock.current_stock (set by the last approved stocktake)
-        //    additions      = today's restock movements from bar_stock_ledger
-        //    sales          = today's sale movements from bar_stock_ledger
+        //    additions      = restock movements during the last closed shift at this bar
+        //    sales          = sale movements during the last closed shift at this bar
         //    quantity       = opening + additions − sales  (system/expected closing)
         const drinkIds = drinkRows.map((d: any) => String(d.id)).filter(Boolean);
         const additionsByDrinkId = new Map<string, number>();
         const salesByDrinkId = new Map<string, number>();
+        const shiftWindow = await getLastClosedBarShiftWindow(branchId, locationFilter, rawDate);
         if (drinkIds.length > 0) {
-            const nextDay = new Date(new Date(rawDate + 'T00:00:00.000Z').getTime() + 86400000)
-                .toISOString().split('T')[0];
             const { data: ledgerRows } = await supabase
                 .from('bar_stock_ledger')
                 .select('drink_id, transaction_type, quantity')
                 .eq('branch_id', branchId)
                 .in('drink_id', drinkIds)
-                .gte('created_at', `${rawDate}T00:00:00.000Z`)
-                .lt('created_at', `${nextDay}T00:00:00.000Z`);
+                .gte('created_at', shiftWindow.from)
+                .lt('created_at', shiftWindow.to);
             for (const row of (ledgerRows || [])) {
                 const did = String(row.drink_id);
                 if (row.transaction_type === 'restock') {
@@ -357,6 +398,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 opening_stock: opening,
                 additions,
                 sales,
+                shift_id: shiftWindow.shiftId,
                 unit: d.unit || 'bottle',
                 sku: d.sku || `bard-${d.id}`,
                 category: null,
@@ -418,6 +460,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             .in('inventory_item_id', invIds);
         const drinkIds = (drinkRows || []).map((d: any) => d.id);
 
+        const shiftWindow = await getLastClosedBarShiftWindow(branchId, bar_location, stocktakeDate);
         const [{ data: stockRows }, { data: ledgerRows }] = await Promise.all([
             supabase.from('bar_stock').select('drink_id, current_stock').eq('branch_id', branchId).in('drink_id', drinkIds),
             drinkIds.length > 0
@@ -425,8 +468,8 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                     .select('drink_id, transaction_type, quantity')
                     .eq('branch_id', branchId)
                     .in('drink_id', drinkIds)
-                    .gte('created_at', `${stocktakeDate}T00:00:00.000Z`)
-                    .lt('created_at', `${new Date(new Date(stocktakeDate + 'T00:00:00.000Z').getTime() + 86400000).toISOString().split('T')[0]}T00:00:00.000Z`)
+                    .gte('created_at', shiftWindow.from)
+                    .lt('created_at', shiftWindow.to)
                 : Promise.resolve({ data: [] }),
         ]);
 
@@ -463,7 +506,15 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             const invItem = invById.get(invId);
             const currentStock = stockByInvId.get(invId) ?? 0;
             const opening = currentStock;
-            const sysQty = currentStock;
+            const additions = additionsByInvId.get(invId) ?? 0;
+            const sales = salesByInvId.get(invId) ?? 0;
+            // Must match the candidate-list formula (opening + additions -
+            // sales) — previously this just used raw current_stock with no
+            // sales/additions adjustment, so the variance actually saved
+            // never matched what the storekeeper saw on screen while filling
+            // the form, and any normal sale during the shift always showed
+            // up as an unexplained "shortage".
+            const sysQty = opening + additions - sales;
 
             const physQtyRaw = Number(it.physical_quantity);
             const physQty = Number.isFinite(physQtyRaw) ? physQtyRaw : NaN;
@@ -487,11 +538,11 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                 branch_id: branchId,
                 bar_location,
                 stocktake_date: stocktakeDate,
-                shift_id: req.body?.shift_id || null,
+                shift_id: req.body?.shift_id || shiftWindow.shiftId || null,
                 item_id: invId,  // inventory_items UUID (satisfies FK)
                 opening_stock: opening,
-                additions: additionsByInvId.get(invId) ?? 0,
-                sales: salesByInvId.get(invId) ?? 0,
+                additions,
+                sales,
                 system_quantity: sysQty,
                 physical_quantity: physQty,
                 // variance is a GENERATED column — do NOT include it

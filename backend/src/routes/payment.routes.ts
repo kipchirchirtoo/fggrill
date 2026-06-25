@@ -16,6 +16,7 @@ import {
   searchMpesaHistory
 } from '../controllers/payment.controller';
 import { protect as authenticate } from '../middleware/auth';
+import { optionalIdempotency } from '../middleware/idempotency';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 
@@ -79,10 +80,30 @@ router.get('/paystack/callback', async (req, res) => {
 router.post('/booking/initiate', initiateBookingPayment);
 
 // M-Pesa specific payment initiation
-router.post('/mpesa/initiate', initiateMpesaPayment);
+router.post(
+  '/mpesa/initiate',
+  optionalIdempotency({
+    scope: 'payments.mpesa-initiate',
+    resourceResolver: (body) => ({
+      resourceId: body?.data?.paymentId || body?.data?.payment_id || null,
+      resourceType: 'payment'
+    })
+  }),
+  initiateMpesaPayment
+);
 
 // Paystack specific payment initiation
-router.post('/paystack/initiate', initiatePaystackPayment);
+router.post(
+  '/paystack/initiate',
+  optionalIdempotency({
+    scope: 'payments.paystack-initiate',
+    resourceResolver: (body) => ({
+      resourceId: body?.data?.paymentId || body?.data?.payment_id || null,
+      resourceType: 'payment'
+    })
+  }),
+  initiatePaystackPayment
+);
 
 // M-Pesa automated status check (Polling)
 router.get('/mpesa/status/:checkoutRequestId', authenticate, checkMpesaStatus);

@@ -13,8 +13,11 @@ import 'record_spoilage_screen.dart';
 /// The storekeeper only records the physical (closing) count.
 /// Opening, additions, and sales are system-calculated:
 ///   opening = previous stocktake's physical count
-///   additions = restock/dispatch/production from bar_stock_ledger
-///   sales = POS bar sales from bar_stock_ledger
+///   additions = restock/dispatch from bar_stock_ledger during the last
+///               closed cashier shift at this bar (not calendar day — a
+///               stocktake follows shift handover, so sales must be scoped
+///               to that shift, not "today so far")
+///   sales = POS bar sales from bar_stock_ledger, same shift window
 ///   system = opening + additions - sales
 ///   variance = physical - system
 /// A reason for variance is required whenever variance is non-zero.
@@ -230,6 +233,7 @@ class _BarLocationStocktakeState
             barLocation: widget.barLocation,
             items: items,
             stocktakeDate: widget.date,
+            shiftId: candidates.isNotEmpty ? '${candidates.first['shift_id'] ?? ''}' : null,
           );
       if (mounted) {
         _notify(context, 'Stocktake submitted for accountant review');

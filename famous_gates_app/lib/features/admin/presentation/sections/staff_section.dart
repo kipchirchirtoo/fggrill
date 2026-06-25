@@ -184,7 +184,7 @@ class _StaffSectionState extends ConsumerState<StaffSection> {
             ),
             const SizedBox.shrink(),
             ElevatedButton.icon(
-              onPressed: () => showUserDialog(context),
+              onPressed: () => showUserDialog(context, isStaffMode: true),
               icon: Icon(PhosphorIcons.plus(), size: 20),
               label: const Text('Add Staff'),
             ),
@@ -270,7 +270,8 @@ class _StaffSectionState extends ConsumerState<StaffSection> {
             children: [
               IconButton(
                 icon: Icon(PhosphorIcons.pencilLine(), size: 18),
-                onPressed: () => showUserDialog(context, user: s),
+                onPressed: () =>
+                    showUserDialog(context, user: s, isStaffMode: true),
                 tooltip: 'Edit',
               ),
               IconButton(
@@ -443,7 +444,7 @@ class _StaffSectionState extends ConsumerState<StaffSection> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ref.read(adminRepositoryProvider).deleteUser(staff.id);
+              ref.read(adminRepositoryProvider).deleteStaff(staff.id);
               ref.invalidate(adminStaffProvider);
             },
             child:

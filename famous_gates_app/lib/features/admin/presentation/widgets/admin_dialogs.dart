@@ -20,11 +20,12 @@ Future<T?> showBranchDialog<T>(BuildContext context, {AdminBranch? branch}) {
   );
 }
 
-Future<T?> showUserDialog<T>(BuildContext context, {AdminUser? user}) {
+Future<T?> showUserDialog<T>(BuildContext context,
+    {AdminUser? user, bool isStaffMode = false}) {
   return showDialog<T>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => _UserDialog(user: user),
+    builder: (_) => _UserDialog(user: user, isStaffMode: isStaffMode),
   );
 }
 
@@ -305,7 +306,8 @@ class _BranchDialogState extends ConsumerState<_BranchDialog> {
 
 class _UserDialog extends ConsumerStatefulWidget {
   final AdminUser? user;
-  const _UserDialog({this.user});
+  final bool isStaffMode;
+  const _UserDialog({this.user, this.isStaffMode = false});
 
   @override
   ConsumerState<_UserDialog> createState() => _UserDialogState();
@@ -413,22 +415,44 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      final data = {
-        'name': _nameCtrl.text.trim(),
-        'email': _emailCtrl.text.trim(),
-        'phone': _phoneCtrl.text.trim(),
-        'branch_id': _selectedBranchId,
-        'role': _selectedRole,
-        'is_active': _isActive,
-        'pos_pin': _posPinCtrl.text.trim(),
-      };
       final repo = ref.read(adminRepositoryProvider);
-      if (widget.user != null) {
-        await repo.updateUser(widget.user!.id, data);
+      if (widget.isStaffMode) {
+        final nameParts =
+            _nameCtrl.text.trim().split(RegExp(r'\s+'));
+        final data = {
+          'first_name': nameParts.first,
+          'last_name':
+              nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '',
+          'email': _emailCtrl.text.trim(),
+          'phone': _phoneCtrl.text.trim(),
+          'branch_id': _selectedBranchId,
+          'role': _selectedRole,
+          'status': _isActive ? 'active' : 'inactive',
+          'pos_pin': _posPinCtrl.text.trim(),
+        };
+        if (widget.user != null) {
+          await repo.updateStaff(widget.user!.id, data);
+        } else {
+          await repo.createStaff(data);
+        }
+        ref.invalidate(adminStaffProvider);
       } else {
-        await repo.createUser(data);
+        final data = {
+          'name': _nameCtrl.text.trim(),
+          'email': _emailCtrl.text.trim(),
+          'phone': _phoneCtrl.text.trim(),
+          'branch_id': _selectedBranchId,
+          'role': _selectedRole,
+          'is_active': _isActive,
+          'pos_pin': _posPinCtrl.text.trim(),
+        };
+        if (widget.user != null) {
+          await repo.updateUser(widget.user!.id, data);
+        } else {
+          await repo.createUser(data);
+        }
+        ref.invalidate(adminUsersProvider);
       }
-      ref.invalidate(adminUsersProvider);
       if (mounted) {
         AppNotifier.showSnackBar(
             context,
@@ -457,7 +481,9 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
   Widget build(BuildContext context) {
     final branchesAsync = ref.watch(adminBranchesProvider);
     return _DialogFormWrapper(
-      title: widget.user != null ? 'Edit User' : 'Add User',
+      title: widget.isStaffMode
+          ? (widget.user != null ? 'Edit Staff' : 'Add Staff')
+          : (widget.user != null ? 'Edit User' : 'Add User'),
       formKey: _formKey,
       isLoading: _isLoading,
       onSubmit: _submit,

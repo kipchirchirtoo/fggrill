@@ -53,6 +53,7 @@ import {
     addShiftTransaction
 } from '../controllers/cashier-shifts.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
+import { optionalIdempotency } from '../middleware/idempotency';
 import { UserRole } from '../models/User';
 import { logger } from '../utils/logger';
 
@@ -133,9 +134,28 @@ router.post('/verify-payment/:paymentId', verifyPayment);
 router.get('/pos/items', getCashierPOSItems);
 
 router.route('/pos/transactions')
-    .post(createPOSTransaction);
+    .post(
+        optionalIdempotency({
+            scope: 'cashier.create-pos-transaction',
+            resourceResolver: (body) => ({
+                resourceId: body?.data?.transaction_id || body?.data?.transactionId || body?.data?.id || null,
+                resourceType: 'pos_transaction'
+            })
+        }),
+        createPOSTransaction
+    );
 
-router.post('/pos/transactions/:id/pay', initiatePOSTransactionPayment);
+router.post(
+    '/pos/transactions/:id/pay',
+    optionalIdempotency({
+        scope: 'cashier.pay-pos-transaction',
+        resourceResolver: (body) => ({
+            resourceId: body?.data?.payment?.id || body?.data?.payment_id || null,
+            resourceType: 'pos_payment'
+        })
+    }),
+    initiatePOSTransactionPayment
+);
 router.get('/pos/reconciliation', getPOSReconciliation);
 router.get('/recent-transactions', getRecentTransactions);
 

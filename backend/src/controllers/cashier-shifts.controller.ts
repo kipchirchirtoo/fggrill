@@ -55,11 +55,15 @@ function isShiftManager(role?: unknown): boolean {
 function requiredStocktakeLocationsForRole(
     role: unknown,
     branchId: number
-): Array<{ key: string; label: string; isBarGroup?: boolean }> {
+): Array<{ key: string; label: string; groupStoreType?: string }> {
     return [
         { key: 'branch_store', label: 'Store stocktake' },
-        { key: 'bar', label: 'Bar stocktake', isBarGroup: true },
-        { key: 'kitchen', label: 'Kitchen stocktake' },
+        { key: 'bar', label: 'Bar stocktake', groupStoreType: 'bar' },
+        // Kitchen syncs one stock_counts row PER SHIFT (location: kitchen_a,
+        // kitchen_b, ...) so an A-shift count can't overwrite a B-shift count
+        // in the same day — group-match on store_type like Bar does, rather
+        // than an exact 'kitchen' location that no row ever has anymore.
+        { key: 'kitchen', label: 'Kitchen stocktake', groupStoreType: 'kitchen' },
     ];
 }
 
@@ -73,6 +77,7 @@ function requiredStocktakeLocationsForRole(
  * for that branch/date/location.
  *
  * For Bar, ANY bar location (main_bar, executive_bar, etc.) counts as complete.
+ * For Kitchen, ANY shift's count (kitchen_a, kitchen_b, etc.) counts as complete.
  *
  * Returns { ok: true } if all are complete, otherwise { ok: false, missing: [...] }.
  */
@@ -90,19 +95,20 @@ async function verifyStocktakesComplete(
     const missing: string[] = [];
 
     for (const loc of requiredLocations) {
-        if (loc.isBarGroup) {
-            // Bar group: ANY bar location stocktake counts
-            const { data: barCounts, error: barError } = await supabase
+        if (loc.groupStoreType) {
+            // Group match: ANY location under this store_type counts (e.g.
+            // any bar location, or any kitchen shift A/B/... for the date).
+            const { data: groupCounts, error: groupError } = await supabase
                 .from('stock_counts')
                 .select('location')
                 .eq('branch_id', branchId)
                 .eq('count_date', date)
-                .eq('store_type', 'bar')
+                .eq('store_type', loc.groupStoreType)
                 .not('status', 'in', '(draft,rejected)')
                 .limit(1);
 
-            if (barError) throw barError;
-            if (!barCounts || barCounts.length === 0) {
+            if (groupError) throw groupError;
+            if (!groupCounts || groupCounts.length === 0) {
                 missing.push(loc.label);
             }
         } else {
@@ -1750,7 +1756,7 @@ export const closeShift = async (
         try {
             let posCloseQuery = supabase
                 .from('pos_outlet_shifts')
-                .update({ status: 'closed' })
+                .update({ status: 'closed', closed_at: new Date().toISOString() })
                 .eq('branch_id', shift.branch_id)
                 .eq('status', 'open');
             if (allowedOutletIds.length) {

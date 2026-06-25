@@ -5438,6 +5438,14 @@ class _ShiftReconciliationCard extends StatelessWidget {
             ? Colors.orange.shade700
             : Colors.red.shade700;
     final module = _firstTextFrom(shift, ['module'], fallback: 'standard');
+    // Lina logbook entries have no shift_number — falling back to the raw
+    // id UUID isn't a useful title for a human reviewer, so show the
+    // cashier's name instead.
+    final cardTitle = isLogbook
+        ? (_shiftCashierName(shift).isEmpty
+            ? 'Lina Shift Logbook'
+            : _shiftCashierName(shift))
+        : _firstTextFrom(shift, ['shift_number'], fallback: 'Shift');
 
     return InkWell(
       borderRadius: BorderRadius.circular(14),
@@ -5472,8 +5480,7 @@ class _ShiftReconciliationCard extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        _firstTextFrom(shift, ['shift_number', 'id'],
-                            fallback: 'Shift'),
+                        cardTitle,
                         style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w900),
                       ),
@@ -7259,7 +7266,7 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
         builder: (items) {
           final filtered = items.where((logbook) {
             if (_historySearch.trim().isEmpty) return true;
-            final name = _text(logbook, ['cashier_name', 'cashier']);
+            final name = _logbookCashierName(logbook);
             return name.toLowerCase().contains(_historySearch.toLowerCase());
           }).toList();
           return ListView(
@@ -7318,14 +7325,11 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                _text(logbook,
-                                                    ['cashier_name', 'cashier'],
-                                                ).isEmpty
+                                                _logbookCashierName(logbook)
+                                                        .isEmpty
                                                     ? 'Cashier'
-                                                    : _text(logbook, [
-                                                        'cashier_name',
-                                                        'cashier'
-                                                      ]),
+                                                    : _logbookCashierName(
+                                                        logbook),
                                                 style: const TextStyle(
                                                     fontWeight:
                                                         FontWeight.w700),
@@ -19226,6 +19230,16 @@ String _text(Map<String, dynamic> item, List<String> keys) {
     }
   }
   return '';
+}
+
+// logbook['cashier'] is a nested {id, first_name, last_name, email} map, not
+// a string — _text() would stringify the raw map if asked to read it as
+// text, so the cashier's name must always be built from its fields instead.
+String _logbookCashierName(Map<String, dynamic> logbook) {
+  final cashier = _map(logbook['cashier']);
+  final fromCashier = _logbookPersonName(cashier);
+  if (fromCashier.isNotEmpty) return fromCashier;
+  return _text(logbook, ['cashier_name']);
 }
 
 num _num(dynamic value) {
