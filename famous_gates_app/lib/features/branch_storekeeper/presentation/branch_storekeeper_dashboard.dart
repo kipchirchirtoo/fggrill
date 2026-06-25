@@ -14407,7 +14407,7 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
 
       // Load kitchen food controls to find raw material SKUs
       final foodControls = await kitchenRepo.getFoodControls();
-      for (const fc in foodControls) {
+      for (final fc in foodControls) {
         final rawSku = '${fc['raw_item_sku'] ?? ''}';
         final rawName = '${fc['raw_item_name'] ?? ''}';
         if (rawSku.isNotEmpty && !existingSkus.contains(rawSku.toLowerCase())) {
