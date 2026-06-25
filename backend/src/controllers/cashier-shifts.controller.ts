@@ -1636,6 +1636,33 @@ export const closeShift = async (
         if (totalUnpaid > 0) {
             throw new AppError(`Cannot close shift: ${totalUnpaid} unsettled bill(s) remain. Settle every bill (cash, M-Pesa or card) or record it as a credit bill before closing the shift.`, 400);
         }
+
+        // Block close if any item-level void requests are still in Stage 1
+        // (pending — cashier has not yet acknowledged or declined). The cashier
+        // shift spans all POS outlet stations in the branch, so we scope by
+        // branch_id rather than shift_id.
+        const { data: pendingItemVoids, error: pendingItemVoidsError } = await supabase
+            .from('pos_item_void_requests')
+            .select('id, order_number, item_name, qty_to_void, requested_by')
+            .eq('branch_id', shift.branch_id)
+            .eq('status', 'pending');
+        if (pendingItemVoidsError) throw pendingItemVoidsError;
+        if (pendingItemVoids && pendingItemVoids.length > 0) {
+            const voidList = pendingItemVoids
+                .map((v: any) => `"${v.item_name}" on bill ${v.order_number || v.id}`)
+                .join(', ');
+            // Notify the branch accountant so they can follow up.
+            await notificationService.notifyRole(
+                'branch_accountant',
+                'Shift close blocked — pending void requests',
+                `Cashier attempted to close the shift but ${pendingItemVoids.length} item void request(s) are still awaiting acknowledgement: ${voidList}.`,
+                { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: shift.branch_id }
+            );
+            throw new AppError(
+                `Cannot close shift: ${pendingItemVoids.length} item void request(s) are still awaiting cashier acknowledgement. Acknowledge or decline each request from the "Void Requests" tab first.`,
+                400
+            );
+        }
         // ==========================================
 
         const { data: shiftTransactionRows, error: shiftTransactionsError } = await supabase

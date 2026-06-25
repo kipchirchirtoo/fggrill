@@ -2940,9 +2940,11 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       .single();
     if (error || !requestRow) throw error || new AppError('Failed to create item void request', 500);
 
-    // Stage 1: notify only the cashier who has the open shift for this
-    // specific outlet — not all cashiers at the branch.
-    // shift.cashier_id is the user who opened this pos_outlet_shift.
+    // Stage 1: notify the cashier who has the open shift for this specific
+    // outlet (shift.cashier_id) AND any general branch-level 'cashier' role
+    // users. The station cashier (e.g. main_bar_cashier) gets a targeted
+    // user notification; the general cashier gets a role broadcast so they
+    // see the request in real time rather than waiting for the next poll.
     const voidNotifMeta = {
       request_id: requestRow.id,
       order_id: orderId,
@@ -2952,14 +2954,27 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       qty_to_void: qtyToVoid
     };
     const shiftCashierId = (shift as any).cashier_id;
-    if (shiftCashierId) {
-      await notificationService.notifyUser(
+    const voidNotifTitle = 'Item void request';
+    const voidNotifMsg = `${String(item.name || 'An item')} on bill ${order.order_number || orderId} — void requested (qty: ${qtyToVoid}). Acknowledge or decline.`;
+    const voidNotifOpts = { type: 'warning' as const, category: 'pos_item_void_request', priority: 'high' as const, metadata: voidNotifMeta };
+    await Promise.allSettled([
+      // Notify the station cashier who opened this specific POS outlet shift.
+      shiftCashierId && notificationService.notifyUser(
         shiftCashierId,
-        'Item void request',
-        `${String(item.name || 'An item')} on bill ${order.order_number || orderId} — void requested (qty: ${qtyToVoid}). Acknowledge or decline.`,
-        { type: 'warning', category: 'pos_item_void_request', priority: 'high', metadata: voidNotifMeta }
-      );
-    }
+        voidNotifTitle,
+        voidNotifMsg,
+        voidNotifOpts
+      ),
+      // Also broadcast to branch-level 'cashier' role so the general cashier
+      // sees new void requests in real time regardless of which POS station
+      // raised them.
+      notificationService.notifyRole(
+        'cashier',
+        voidNotifTitle,
+        voidNotifMsg,
+        { ...voidNotifOpts, branchId: (shift as any).branch_id }
+      ),
+    ]);
 
     res.status(201).json({ success: true, data: requestRow });
   } catch (error) {
