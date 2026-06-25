@@ -18,6 +18,8 @@ export const POStatusEnum = z.enum([
     'approved',
     'sent',
     'received',
+    'fully_receive',
+    'partially_received',
     'cancelled',
     'closed'
 ]);
@@ -33,13 +35,14 @@ export const PaymentTermsEnum = z.enum([
     'advance_payment'
 ]);
 
-// PO Item schema
+// PO Item schema — use z.coerce.number() so Flutter num values that arrive as
+// JSON strings (e.g. from Dart's json serialization) are safely converted.
 export const POItemSchema = z.object({
     item_id: z.string().min(1, 'Item ID is required'),
-    quantity: z.number().positive('Quantity must be positive'),
-    unit_price: z.number().nonnegative('Unit price cannot be negative'),
-    tax_amount: z.number().nonnegative('Tax amount cannot be negative').optional().default(0),
-    total_price: z.number().nonnegative('Total price cannot be negative').optional()
+    quantity: z.coerce.number().positive('Quantity must be positive'),
+    unit_price: z.coerce.number().nonnegative('Unit price cannot be negative'),
+    tax_amount: z.coerce.number().nonnegative('Tax amount cannot be negative').optional().default(0),
+    total_price: z.coerce.number().nonnegative('Total price cannot be negative').optional()
 });
 
 // Create PO schema
