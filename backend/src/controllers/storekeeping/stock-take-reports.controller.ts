@@ -43,7 +43,7 @@ async function buildReportData(id: string, variant: StockTakeVariant, requester:
   const userIds = [
     header.counted_by,
     header.submitted_to_accountant_by,
-    header.accountant_reviewed_by,
+    header.approved_by,
     header.auditor_reviewed_by,
   ].filter(Boolean);
   let usersById = new Map<string, any>();
@@ -68,7 +68,7 @@ async function buildReportData(id: string, variant: StockTakeVariant, requester:
     countDate: header.count_date || header.created_at || null,
     periodLabel: period,
     preparedBy: fullName(usersById.get(header.counted_by) || usersById.get(header.submitted_to_accountant_by)),
-    reviewedBy: fullName(usersById.get(header.accountant_reviewed_by)),
+    reviewedBy: fullName(usersById.get(header.approved_by)),
     approvedBy: fullName(usersById.get(header.auditor_reviewed_by)),
     generatedBy: fullName(requester),
     accountantNotes: header.accountant_review_notes,

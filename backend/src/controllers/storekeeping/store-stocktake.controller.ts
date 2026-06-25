@@ -59,8 +59,8 @@ const syncStoreStocktakeToStockCounts = async (
         store_type: 'branch_store',
         location: 'branch_store',
         status,
-        accountant_reviewed_by: reviewedBy,
-        accountant_reviewed_at: reviewedAt
+        approved_by: reviewedBy,
+        approved_at: reviewedAt
     };
 
     if (existing?.id) {

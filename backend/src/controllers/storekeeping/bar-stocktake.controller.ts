@@ -30,6 +30,34 @@ const BAR_CASHIER_ROLES_BY_LOCATION: Record<string, string[]> = {
 const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stocktakeDate: string) =>
     getLastClosedCashierShiftWindow(supabase, branchId, BAR_CASHIER_ROLES_BY_LOCATION[barLocation] || [], stocktakeDate);
 
+// Additions/sales must be summed over everything since opening_stock was last
+// reset — i.e. since the last APPROVED stocktake for this branch/location —
+// not just "the last closed shift". A single shift window misses restocks/
+// sales from earlier shifts on days with no stocktake, and silently re-counts
+// old restocks against a later stocktake once a newer shift closes, which is
+// what showed up as "additions that were never made" and stale opening
+// figures. shift_id tagging on the record is unaffected — that still comes
+// from getLastClosedBarShiftWindow above.
+const getSinceLastApprovalWindow = async (
+    branchId: number,
+    barLocation: string,
+    stocktakeDate: string
+): Promise<{ from: string; to: string }> => {
+    const dayEnd = new Date(new Date(`${stocktakeDate}T00:00:00.000Z`).getTime() + 86400000).toISOString();
+    const { data: lastApproved } = await supabase
+        .from('bar_stocktake_records')
+        .select('reviewed_at')
+        .eq('branch_id', branchId)
+        .eq('bar_location', barLocation)
+        .eq('status', 'approved')
+        .lt('reviewed_at', dayEnd)
+        .order('reviewed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    const from = lastApproved?.reviewed_at || `${stocktakeDate}T00:00:00.000Z`;
+    return { from, to: dayEnd };
+};
+
 const loadRecord = async (id: string): Promise<Record<string, any> | null> => {
     const { data, error } = await supabase
         .from('bar_stocktake_records')
@@ -71,8 +99,8 @@ const syncBarStocktakeToStockCounts = async (
         store_type: 'bar',
         location: barLocation,
         status,
-        accountant_reviewed_by: reviewedBy,
-        accountant_reviewed_at: reviewedAt
+        approved_by: reviewedBy,
+        approved_at: reviewedAt
     };
 
     if (existing?.id) {
@@ -327,21 +355,22 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
 
         // 3. No stocktake submitted yet — return ALL catalog items as candidates.
         //    opening_stock  = bar_stock.current_stock (set by the last approved stocktake)
-        //    additions      = restock movements during the last closed shift at this bar
-        //    sales          = sale movements during the last closed shift at this bar
+        //    additions      = restock movements since the last approved stocktake
+        //    sales          = sale movements since the last approved stocktake
         //    quantity       = opening + additions − sales  (system/expected closing)
         const drinkIds = drinkRows.map((d: any) => String(d.id)).filter(Boolean);
         const additionsByDrinkId = new Map<string, number>();
         const salesByDrinkId = new Map<string, number>();
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, locationFilter, rawDate);
+        const sumWindow = await getSinceLastApprovalWindow(branchId, locationFilter, rawDate);
         if (drinkIds.length > 0) {
             const { data: ledgerRows } = await supabase
                 .from('bar_stock_ledger')
                 .select('drink_id, transaction_type, quantity')
                 .eq('branch_id', branchId)
                 .in('drink_id', drinkIds)
-                .gte('created_at', shiftWindow.from)
-                .lt('created_at', shiftWindow.to);
+                .gte('created_at', sumWindow.from)
+                .lt('created_at', sumWindow.to);
             for (const row of (ledgerRows || [])) {
                 const did = String(row.drink_id);
                 if (row.transaction_type === 'restock') {
@@ -430,6 +459,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
         const drinkIds = (drinkRows || []).map((d: any) => d.id);
 
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, bar_location, stocktakeDate);
+        const sumWindow = await getSinceLastApprovalWindow(branchId, bar_location, stocktakeDate);
         const [{ data: stockRows }, { data: ledgerRows }] = await Promise.all([
             supabase.from('bar_stock').select('drink_id, current_stock').eq('branch_id', branchId).in('drink_id', drinkIds),
             drinkIds.length > 0
@@ -437,8 +467,8 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                     .select('drink_id, transaction_type, quantity')
                     .eq('branch_id', branchId)
                     .in('drink_id', drinkIds)
-                    .gte('created_at', shiftWindow.from)
-                    .lt('created_at', shiftWindow.to)
+                    .gte('created_at', sumWindow.from)
+                    .lt('created_at', sumWindow.to)
                 : Promise.resolve({ data: [] }),
         ]);
 
