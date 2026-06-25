@@ -49,14 +49,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Ensure trigger is registered on purchase_orders
+-- Ensure trigger is registered on purchase_orders only (store_purchase_orders is a view over it)
 DROP TRIGGER IF EXISTS trg_po_cash_outbound ON purchase_orders;
 CREATE TRIGGER trg_po_cash_outbound
 BEFORE INSERT ON purchase_orders
-FOR EACH ROW EXECUTE FUNCTION fn_po_cash_create_outbound();
-
--- Ensure trigger is registered on store_purchase_orders
-DROP TRIGGER IF EXISTS trg_po_cash_outbound ON store_purchase_orders;
-CREATE TRIGGER trg_po_cash_outbound
-BEFORE INSERT ON store_purchase_orders
 FOR EACH ROW EXECUTE FUNCTION fn_po_cash_create_outbound();
