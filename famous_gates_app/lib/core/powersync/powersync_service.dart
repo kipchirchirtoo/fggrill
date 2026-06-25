@@ -147,28 +147,23 @@ class PowerSyncService {
   }
 
   Future<List<Map<String, dynamic>>> getPendingItemVoidsCashier() async {
-    final userId = await _currentUserId();
-    if (userId == null || userId.isEmpty) return const [];
+    final branchId = await _currentBranchId();
+    if (branchId == null) return const [];
     return _getAll(
       '''
       SELECT *
       FROM pos_item_void_requests
       WHERE status = 'pending'
-        AND shift_id IN (
-          SELECT id
-          FROM pos_outlet_shifts
-          WHERE cashier_id = ?
-            AND status = 'open'
-        )
+        AND branch_id = ?
       ORDER BY created_at ASC
       ''',
-      [userId],
+      [branchId],
     );
   }
 
   Stream<List<Map<String, dynamic>>> watchPendingItemVoidsCashier() async* {
-    final userId = await _currentUserId();
-    if (userId == null || userId.isEmpty || !hotReadsEnabled) {
+    final branchId = await _currentBranchId();
+    if (branchId == null || !hotReadsEnabled) {
       yield const [];
       return;
     }
@@ -177,15 +172,10 @@ class PowerSyncService {
       SELECT *
       FROM pos_item_void_requests
       WHERE status = 'pending'
-        AND shift_id IN (
-          SELECT id
-          FROM pos_outlet_shifts
-          WHERE cashier_id = ?
-            AND status = 'open'
-        )
+        AND branch_id = ?
       ORDER BY created_at ASC
       ''',
-      [userId],
+      [branchId],
     );
   }
 
@@ -289,76 +279,13 @@ class PowerSyncService {
   }
 
   Future<List<Map<String, dynamic>>> getBarCaptainOrders() async {
-    final branchId = await _currentBranchId();
-    if (branchId == null) return const [];
-    final lookbackSince = DateTime.now()
-        .subtract(const Duration(hours: _captainOrderFeedLookbackHours))
-        .toUtc()
-        .toIso8601String();
-    final rows = _decodeJsonColumns(
-      await _getAll(
-        '''
-        SELECT
-          o.*,
-          s.branch_id AS shift_branch_id,
-          s.status AS shift_status,
-          s.opened_at AS shift_opened_at,
-          p.name AS outlet_name,
-          p.outlet_type AS shift_outlet_type
-        FROM pos_shift_orders o
-        INNER JOIN pos_outlet_shifts s ON s.id = o.shift_id
-        INNER JOIN pos_outlets p ON p.id = s.outlet_id
-        WHERE s.branch_id = ?
-          AND p.outlet_type IN ('main_bar', 'executive_bar')
-          AND (s.status = 'open' OR s.opened_at >= ?)
-        ORDER BY o.created_at ASC
-        ''',
-        [branchId, lookbackSince],
-      ),
-      const ['items'],
-    );
-    return rows
-        .map(_toCaptainOrderRow)
-        .where(
-            (row) => _captainOrderActiveStatuses.contains('${row['status']}'))
-        .toList();
+    // Always return empty - use API instead
+    return const [];
   }
 
   Stream<List<Map<String, dynamic>>> watchBarCaptainOrders() async* {
-    final branchId = await _currentBranchId();
-    if (branchId == null || !hotReadsEnabled) {
-      yield const [];
-      return;
-    }
-    final lookbackSince = DateTime.now()
-        .subtract(const Duration(hours: _captainOrderFeedLookbackHours))
-        .toUtc()
-        .toIso8601String();
-    yield* _watchAll(
-      '''
-      SELECT
-        o.*,
-        s.branch_id AS shift_branch_id,
-        s.status AS shift_status,
-        s.opened_at AS shift_opened_at,
-        p.name AS outlet_name,
-        p.outlet_type AS shift_outlet_type
-      FROM pos_shift_orders o
-      INNER JOIN pos_outlet_shifts s ON s.id = o.shift_id
-      INNER JOIN pos_outlets p ON p.id = s.outlet_id
-      WHERE s.branch_id = ?
-        AND p.outlet_type IN ('main_bar', 'executive_bar')
-        AND (s.status = 'open' OR s.opened_at >= ?)
-      ORDER BY o.created_at ASC
-      ''',
-      [branchId, lookbackSince],
-      jsonColumns: const ['items'],
-      mapper: (rows) => rows
-          .map(_toCaptainOrderRow)
-          .where(
-              (row) => _captainOrderActiveStatuses.contains('${row['status']}'))
-          .toList(),
-    );
+    // Always return empty - use API instead
+    yield const [];
   }
 
   Future<List<Map<String, dynamic>>> _getAll(

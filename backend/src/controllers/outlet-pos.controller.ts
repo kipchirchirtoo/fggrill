@@ -1473,6 +1473,8 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
     const branchId = branchIdFor(req);
     const lookbackSince = new Date(Date.now() - CAPTAIN_ORDER_FEED_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
 
+    logger.info(`getBarCaptainOrders - Branch ID: ${branchId}, Lookback: ${lookbackSince}`);
+
     let shiftQuery = supabase
       .from('pos_outlet_shifts')
       .select('id, branch_id, outlet_id, status, opened_at, outlet:pos_outlets(name, outlet_type)')
@@ -1485,24 +1487,34 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
     const { data: outletShifts, error: shiftError } = await shiftQuery;
     if (shiftError) throw shiftError;
 
+    logger.info(`getBarCaptainOrders - Found ${outletShifts?.length || 0} outlet shifts`);
+
     const barShiftIds = (outletShifts || [])
       .filter((shift: any) => {
         const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-        return BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES.has(String(outlet?.outlet_type || '') as OutletType);
+        const isBarOutlet = BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES.has(String(outlet?.outlet_type || '') as OutletType);
+        logger.info(`Shift ${shift.id} - Outlet type: ${outlet?.outlet_type}, Is bar outlet: ${isBarOutlet}`);
+        return isBarOutlet;
       })
       .map((shift: any) => shift.id);
     const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
 
+    logger.info(`getBarCaptainOrders - Bar shift IDs: ${barShiftIds.length}`);
+
     let barOrders: any[] = [];
     if (barShiftIds.length) {
+      logger.info(`getBarCaptainOrders - Querying orders for ${barShiftIds.length} shifts`);
       const { data: posOrders, error: posOrdersError } = await supabase
         .from('pos_shift_orders')
         .select('*')
         .in('shift_id', barShiftIds)
         .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready,recalled)')
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(500);
 
       if (posOrdersError) throw posOrdersError;
+
+      logger.info(`getBarCaptainOrders - Found ${posOrders?.length || 0} orders before filtering`);
 
       barOrders = (posOrders || []).map((order: any) => {
         const shift = shiftsById.get(order.shift_id) || {};
@@ -1557,6 +1569,7 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
       }).filter((order: any) => captainOrderActiveStatuses.has(captainOrderNormalizeStatus(order.status)));
     }
 
+    logger.info(`getBarCaptainOrders - Returning ${barOrders.length} orders after filtering`);
     res.json({ success: true, data: barOrders });
   } catch (error) {
     next(error);
@@ -3396,22 +3409,17 @@ export const getPendingVoidsCashier = async (req: Request, res: Response, next: 
     assertUser(req);
     const branchId = branchIdFor(req);
 
-    // Find shifts the caller has open (they are the cashier_id on those shifts).
-    const { data: myShifts } = await supabase
-      .from('pos_outlet_shifts')
-      .select('id')
-      .eq('cashier_id', req.user.id)
-      .eq('status', 'open');
-
-    const myShiftIds = (myShifts || []).map((s: any) => s.id);
-    if (!myShiftIds.length) { res.json({ success: true, data: [] }); return; }
-
-    const { data, error } = await supabase
+    let query = supabase
       .from('pos_item_void_requests')
       .select('*')
-      .in('shift_id', myShiftIds)
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
+
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
     const rows = data || [];
