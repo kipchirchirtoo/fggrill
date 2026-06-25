@@ -11,6 +11,10 @@ class AppConfig {
     'POWERSYNC_URL',
     defaultValue: 'https://6a3baa5435ca576ca0df47ea.powersync.journeyapps.com',
   );
+  static const String powerSyncToken = String.fromEnvironment(
+    'POWERSYNC_TOKEN',
+    defaultValue: '',
+  );
   static const String mainApiBaseUrl = String.fromEnvironment(
     'MAIN_API_URL',
     defaultValue: 'https://api.hirall.com/api',

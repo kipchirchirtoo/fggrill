@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:powersync/powersync.dart';
 
+import '../config/app_config.dart';
 import '../network/dio_client.dart';
 
 class FamousGatesPowerSyncConnector extends PowerSyncBackendConnector {
@@ -11,10 +12,21 @@ class FamousGatesPowerSyncConnector extends PowerSyncBackendConnector {
 
   @override
   Future<PowerSyncCredentials?> fetchCredentials() async {
+    // Prefer a compile-time token for quick setup / dashboard-generated
+    // client tokens. If not provided, fall back to the backend credentials
+    // endpoint which mints short-lived JWTs for production.
+    const compileTimeToken = AppConfig.powerSyncToken;
+    if (compileTimeToken.isNotEmpty) {
+      return PowerSyncCredentials(
+        endpoint: AppConfig.powerSyncUrl,
+        token: compileTimeToken,
+      );
+    }
+
     final dio = _ref.read(dioProvider);
     final response = await dio.post('/powersync/credentials');
     final payload = _unwrap(response.data);
-    final endpoint = '${payload['endpoint'] ?? ''}'.trim();
+    final endpoint = '${payload['endpoint'] ?? AppConfig.powerSyncUrl}'.trim();
     final token = '${payload['token'] ?? ''}'.trim();
     if (endpoint.isEmpty || token.isEmpty) {
       return null;
