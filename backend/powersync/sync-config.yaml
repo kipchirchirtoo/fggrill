@@ -33,12 +33,12 @@ streams:
         INNER JOIN users u ON u.branch_id = po.branch_id
         WHERE u.id = auth.user_id() AND po.is_active = true
       - |
-        SELECT a.* FROM pos_outlet_assignments a
-        INNER JOIN users u ON u.branch_id = a.branch_id
-        WHERE u.id = auth.user_id()
+        SELECT * FROM pos_outlet_assignments
+        WHERE user_id = auth.user_id()
       - |
         SELECT i.* FROM pos_outlet_items i
-        INNER JOIN users u ON u.branch_id = i.branch_id
+        INNER JOIN pos_outlets po ON po.id = i.outlet_id
+        INNER JOIN users u ON u.branch_id = po.branch_id
         WHERE u.id = auth.user_id() AND i.is_active = true
       - |
         SELECT s.* FROM branch_stock s
