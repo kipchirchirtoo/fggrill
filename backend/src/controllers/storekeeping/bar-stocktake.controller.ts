@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import db from '../../db';
 import { logger } from '../../utils/logger';
+import { getLastClosedCashierShiftWindow } from '../../utils/posStationAccess';
 
 // Bar stocktake (migration 20260622_kitchen_storekeeper_integration.sql,
 // section 4) — storekeeper records physical counts for main_bar/executive_bar
@@ -19,47 +20,15 @@ const num = (v: any): number => {
 
 const BAR_LOCATIONS = ['main_bar', 'executive_bar'];
 
-/**
- * Sales/additions for a bar stocktake are scoped to the most recently
- * CLOSED cashier shift at that bar outlet, not the calendar day — the
- * storekeeper counts stock right after a shift hands over, so "what was
- * sold" must mean "sold during that shift", not "sold today so far"
- * (which would double-count once a second shift opens the same day).
- * Falls back to the calendar day if no closed shift is found yet.
- */
-const getLastClosedBarShiftWindow = async (
-    branchId: number,
-    barLocation: string,
-    stocktakeDate: string
-): Promise<{ from: string; to: string; shiftId: string | null }> => {
-    const dayStart = `${stocktakeDate}T00:00:00.000Z`;
-    const dayEnd = new Date(new Date(dayStart).getTime() + 86400000).toISOString();
-    try {
-        const { data: outlet } = await supabase
-            .from('pos_outlets')
-            .select('id')
-            .eq('branch_id', branchId)
-            .eq('outlet_type', barLocation)
-            .maybeSingle();
-        if (!outlet?.id) return { from: dayStart, to: dayEnd, shiftId: null };
-
-        const { data: shift } = await supabase
-            .from('pos_outlet_shifts')
-            .select('id, opened_at, closed_at')
-            .eq('outlet_id', outlet.id)
-            .eq('status', 'closed')
-            .lt('closed_at', dayEnd)
-            .order('closed_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (!shift) return { from: dayStart, to: dayEnd, shiftId: null };
-
-        return { from: shift.opened_at, to: shift.closed_at, shiftId: shift.id };
-    } catch (err) {
-        logger.warn('getLastClosedBarShiftWindow failed, falling back to calendar day:', (err as Error).message);
-        return { from: dayStart, to: dayEnd, shiftId: null };
-    }
+// Which cashier roles tend the till at each bar location — mirrors
+// POS_STATION_CASHIER_ROLE_TYPES in utils/posStationAccess.ts (reversed: role -> location).
+const BAR_CASHIER_ROLES_BY_LOCATION: Record<string, string[]> = {
+    main_bar: ['main_bar_cashier', 'kyogong_sports_bar_cashier'],
+    executive_bar: ['executive_bar_cashier', 'kyogong_executive_bar_cashier'],
 };
+
+const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stocktakeDate: string) =>
+    getLastClosedCashierShiftWindow(supabase, branchId, BAR_CASHIER_ROLES_BY_LOCATION[barLocation] || [], stocktakeDate);
 
 const loadRecord = async (id: string): Promise<Record<string, any> | null> => {
     const { data, error } = await supabase
@@ -567,9 +536,19 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             return;
         }
 
+        // Prevent "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        // by deduplicating rows based on item_id (keeping the last occurrence if duplicates exist).
+        const uniqueRowsMap = new Map();
+        for (const row of validRows) {
+            if (row) {
+                uniqueRowsMap.set(row.item_id, row);
+            }
+        }
+        const finalRows = Array.from(uniqueRowsMap.values());
+
         const { data, error } = await supabase
             .from('bar_stocktake_records')
-            .upsert(validRows, { onConflict: 'branch_id,bar_location,stocktake_date,item_id' })
+            .upsert(finalRows, { onConflict: 'branch_id,bar_location,stocktake_date,item_id' })
             .select('*, item:inventory_items(id, item_name, unit)');
         if (error) throw error;
 
