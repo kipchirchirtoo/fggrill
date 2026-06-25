@@ -13,8 +13,9 @@ const loadShiftForReconciliation = async (
     req: Request,
     res: Response
 ): Promise<Record<string, any> | null> => {
+    // Query cashier_shift_logs (the canonical shift table) instead of legacy cashier_shifts
     const { data: shift, error } = await supabase
-        .from('cashier_shifts')
+        .from('cashier_shift_logs')
         .select('*')
         .eq('id', shiftId)
         .maybeSingle();
@@ -42,13 +43,13 @@ export const getCashierClearances = async (
 
         console.log('🔍 [Cashier Clearance] Fetching clearances:', { branch_id, date: targetDate, status, cashier_id });
 
-        // Fetch all cashier shifts for the date
+        // Fetch all cashier shifts from cashier_shift_logs (canonical table)
         let shiftsQuery = supabase
-            .from('cashier_shifts')
+            .from('cashier_shift_logs')
             .select('*')
-            .gte('start_time', `${targetDate}T00:00:00`)
-            .lte('start_time', `${targetDate}T23:59:59`)
-            .order('start_time', { ascending: false });
+            .gte('shift_start', `${targetDate}T00:00:00`)
+            .lte('shift_start', `${targetDate}T23:59:59`)
+            .order('shift_start', { ascending: false });
 
         if (branch_id && branch_id !== '0') {
             shiftsQuery = shiftsQuery.eq('branch_id', branch_id);
@@ -71,10 +72,11 @@ export const getCashierClearances = async (
 
         console.log(`✅ [Cashier Clearance] Found ${shifts?.length || 0} shifts`);
 
-        // Fetch user details separately
+        // Fetch user details separately (for reconciled_by, verified_by)
         const uniqueCashierIds = [...new Set((shifts || []).map(s => s.cashier_id).filter(Boolean))];
-        const uniqueApproverIds = [...new Set((shifts || []).map(s => s.approved_by).filter(Boolean))];
-        const allUserIds = [...new Set([...uniqueCashierIds, ...uniqueApproverIds])];
+        const uniqueApproverIds = [...new Set((shifts || []).map(s => s.reconciled_by).filter(Boolean))];
+        const uniqueVerifierIds = [...new Set((shifts || []).map(s => s.verified_by).filter(Boolean))];
+        const allUserIds = [...new Set([...uniqueCashierIds, ...uniqueApproverIds, ...uniqueVerifierIds])];
 
         let usersMap = new Map();
         if (allUserIds.length > 0) {
@@ -88,27 +90,37 @@ export const getCashierClearances = async (
             }
         }
 
-        // Calculate variances and enrich data
+        // Map cashier_shift_logs columns to the expected frontend format
+        // cashier_shift_logs uses: shift_start, shift_end, expected_closing_float, closing_float, variance
+        // Frontend expects: start_time, end_time, expected_cash, actual_cash, variance
         const clearances = (shifts || []).map(shift => {
-            const expectedCash = Number(shift.expected_cash || 0);
-            const actualCash = Number(shift.actual_cash || 0);
-            const variance = actualCash - expectedCash;
+            const expectedCash = Number(shift.expected_closing_float || 0);
+            const actualCash = Number(shift.closing_float || 0);
+            const variance = Number(shift.variance || 0);
             const variancePercentage = expectedCash > 0 ? (variance / expectedCash) * 100 : 0;
 
             const cashier = usersMap.get(shift.cashier_id);
-            const approver = usersMap.get(shift.approved_by);
+            const approver = usersMap.get(shift.reconciled_by);
+            const verifier = usersMap.get(shift.verified_by);
 
             return {
                 ...shift,
+                // Map column names for frontend compatibility
+                start_time: shift.shift_start,
+                end_time: shift.shift_end,
                 expected_cash: expectedCash,
                 actual_cash: actualCash,
                 variance,
                 variance_percentage: variancePercentage,
                 has_discrepancy: Math.abs(variance) > 10, // Flag if variance > 10
-                cashier_name: cashier ? `${cashier.first_name} ${cashier.last_name}` : 'Unknown',
+                cashier_name: shift.cashier_name || (cashier ? `${cashier.first_name} ${cashier.last_name}` : 'Unknown'),
+                approved_by: shift.reconciled_by,
                 approved_by_name: approver ? `${approver.first_name} ${approver.last_name}` : null,
+                verified_by: shift.verified_by,
+                verified_by_name: verifier ? `${verifier.first_name} ${verifier.last_name}` : null,
                 cashier,
-                approved_by_user: approver
+                approved_by_user: approver,
+                verified_by_user: verifier
             };
         });
 
@@ -157,23 +169,26 @@ export const getCashierShiftSummary = async (
 
         console.log('🔍 [Cashier Summary] Fetching summary for cashier:', id, { startDate, endDate });
 
+        // Query cashier_shift_logs (canonical table) instead of legacy cashier_shifts
         const { data: shifts, error } = await supabase
-            .from('cashier_shifts')
+            .from('cashier_shift_logs')
             .select('*')
             .eq('cashier_id', id)
-            .gte('start_time', `${startDate}T00:00:00`)
-            .lte('start_time', `${endDate}T23:59:59`)
-            .order('start_time', { ascending: false });
+            .gte('shift_start', `${startDate}T00:00:00`)
+            .lte('shift_start', `${endDate}T23:59:59`)
+            .order('shift_start', { ascending: false });
 
         if (error) throw error;
 
+        // Map cashier_shift_logs columns to summary format
+        // cashier_shift_logs uses: expected_closing_float, closing_float, variance, total_sales
         const summary = {
             total_shifts: shifts?.length || 0,
             total_sales: shifts?.reduce((sum, s) => sum + Number(s.total_sales || 0), 0) || 0,
-            total_expected_cash: shifts?.reduce((sum, s) => sum + Number(s.expected_cash || 0), 0) || 0,
-            total_actual_cash: shifts?.reduce((sum, s) => sum + Number(s.actual_cash || 0), 0) || 0,
-            total_variance: shifts?.reduce((sum, s) => sum + (Number(s.actual_cash || 0) - Number(s.expected_cash || 0)), 0) || 0,
-            shifts_with_discrepancies: shifts?.filter(s => Math.abs(Number(s.actual_cash || 0) - Number(s.expected_cash || 0)) > 10).length || 0,
+            total_expected_cash: shifts?.reduce((sum, s) => sum + Number(s.expected_closing_float || 0), 0) || 0,
+            total_actual_cash: shifts?.reduce((sum, s) => sum + Number(s.closing_float || 0), 0) || 0,
+            total_variance: shifts?.reduce((sum, s) => sum + Number(s.variance || 0), 0) || 0,
+            shifts_with_discrepancies: shifts?.filter(s => Math.abs(Number(s.variance || 0)) > 10).length || 0,
             average_variance: 0
         };
 
@@ -209,14 +224,15 @@ export const approveCashierClearance = async (
 
         console.log('🔍 [Cashier Clearance] Approving clearance:', id, 'by user:', userId);
 
-        // Update shift status
+        // Update shift status in cashier_shift_logs (canonical table)
+        // cashier_shift_logs uses: reconciled_by, reconciled_at, reconciliation_notes instead of approved_by, approved_at, approval_notes
         const { data: shift, error: updateError } = await supabase
-            .from('cashier_shifts')
+            .from('cashier_shift_logs')
             .update({
                 status: 'closed',
-                approved_by: userId,
-                approved_at: new Date().toISOString(),
-                approval_notes: notes || null,
+                reconciled_by: userId,
+                reconciled_at: new Date().toISOString(),
+                reconciliation_notes: notes || null,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)
@@ -286,15 +302,14 @@ export const flagCashierClearance = async (
 
         console.log('🔍 [Cashier Clearance] Flagging clearance:', id, 'by user:', userId);
 
-        // Update shift with flag
+        // Update shift in cashier_shift_logs (canonical table)
+        // Note: cashier_shift_logs uses shift_status enum ('open', 'closed', 'reconciled', 'verified')
+        // There's no 'flagged' status, so we keep it 'closed' and add flag info to notes
         const { data: shift, error: updateError } = await supabase
-            .from('cashier_shifts')
+            .from('cashier_shift_logs')
             .update({
-                status: 'flagged',
-                flagged_by: userId,
-                flagged_at: new Date().toISOString(),
-                flag_reason: reason,
-                flag_notes: notes || null,
+                status: 'closed',
+                notes: `FLAGGED: ${reason}${notes ? `. ${notes}` : ''}${shift?.notes ? `. Original: ${shift.notes}` : ''}`,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)
