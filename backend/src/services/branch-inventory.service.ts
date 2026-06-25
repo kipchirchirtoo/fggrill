@@ -536,6 +536,122 @@ export async function creditOutletItemStock(outletItemId: string, qty: number): 
     .eq('id', outletItemId);
 }
 
+/**
+ * Automatically records kitchen raw material consumption from a POS shift order when it is paid.
+ */
+export async function recordKitchenConsumption(
+  orderId: string,
+  orderItems: any[],
+  branchId: number,
+  posShiftId?: string
+): Promise<void> {
+  try {
+    // 1. Find the active open kitchen shift for this branch
+    const { data: shift, error: shiftError } = await supabase
+      .from('kitchen_shifts')
+      .select('id, shift_number')
+      .eq('branch_id', branchId)
+      .eq('status', 'open')
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (shiftError) {
+      logger.error('Error finding active kitchen shift for consumption:', shiftError);
+      return;
+    }
+
+    if (!shift) {
+      // No active kitchen shift running at this branch
+      return;
+    }
+
+    for (const item of orderItems) {
+      if (!item.outlet_item_id) continue;
+
+      // 2. Lookup recipe for this pos_outlet_item
+      const { data: recipe, error: recipeError } = await supabase
+        .from('kitchen_production_recipes')
+        .select('*')
+        .eq('pos_outlet_item_id', item.outlet_item_id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (recipeError) {
+        logger.error(`Error looking up recipe for item ${item.outlet_item_id}:`, recipeError);
+        continue;
+      }
+
+      if (!recipe) {
+        // No recipe means this item doesn't require raw material consumption tracking
+        continue;
+      }
+
+      const portionsSold = Number(item.quantity || item.qty || 0);
+      if (portionsSold <= 0) continue;
+
+      // Calculate raw material consumed
+      const ratio = Number(recipe.conversion_ratio || 0);
+      const rawQtyConsumed = ratio > 0 ? portionsSold / ratio : 0;
+
+      if (rawQtyConsumed <= 0) continue;
+
+      // 3. Log the consumption
+      const { error: consError } = await supabase
+        .from('kitchen_shift_pos_consumption')
+        .insert({
+          shift_id: shift.id,
+          branch_id: branchId,
+          pos_shift_id: posShiftId || null,
+          pos_order_id: orderId,
+          pos_outlet_item_id: item.outlet_item_id,
+          portions_sold: portionsSold,
+          produced_item_sku: recipe.produced_item_sku,
+          produced_item_name: recipe.produced_item_name,
+          raw_item_sku: recipe.raw_item_sku,
+          raw_item_name: recipe.raw_item_name,
+          raw_quantity_consumed: rawQtyConsumed,
+          raw_unit: recipe.raw_unit,
+          cost_price: Number(recipe.cost_per_output || 0)
+        });
+
+      if (consError) {
+        logger.error('Failed to insert kitchen shift pos consumption:', consError);
+        continue;
+      }
+
+      // 4. Update sold_quantity in kitchen_shift_items
+      const { data: shiftItem, error: itemError } = await supabase
+        .from('kitchen_shift_items')
+        .select('id, sold_quantity')
+        .eq('shift_id', shift.id)
+        .eq('item_sku', recipe.raw_item_sku)
+        .maybeSingle();
+
+      if (itemError) {
+        logger.error(`Failed to lookup shift item for SKU ${recipe.raw_item_sku}:`, itemError);
+        continue;
+      }
+
+      if (shiftItem) {
+        const { error: updError } = await supabase
+          .from('kitchen_shift_items')
+          .update({
+            sold_quantity: Number(shiftItem.sold_quantity || 0) + rawQtyConsumed,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', shiftItem.id);
+
+        if (updError) {
+          logger.error(`Failed to update sold_quantity for shift item ${shiftItem.id}:`, updError);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Error recording kitchen consumption:', error);
+  }
+}
+
 // ============================================================
 // STOCK REQUESTS
 // ============================================================

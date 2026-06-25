@@ -326,17 +326,14 @@ const createSupplierInvoiceFromGRN = async (params: {
         const unitPrice = toNumber(item.unit_price);
         const detail = params.itemDetails.get(item.item_id);
         return {
-            invoice_id: invoice.id,
+            supplier_invoice_id: invoice.id,
             item_id: item.item_id,
-            grn_item_id: item.id || null,
-            po_item_id: item.po_item_id || null,
+            goods_receipt_line_id: item.id || null,
             description: detail?.item_name || detail?.description || item.item_id,
             quantity: qty,
+            unit: detail?.unit_of_measure || detail?.unit || 'units',
             unit_price: unitPrice,
-            subtotal: qty * unitPrice,
-            vat_rate: 0,
-            vat_amount: 0,
-            total_amount: qty * unitPrice
+            line_total: qty * unitPrice
         };
     });
 
@@ -553,12 +550,17 @@ export const receiveFromSupplier = async (
         }
 
         const stockResults = [];
-        const receivedSkus = (savedItems || grnItems).map((it: any) => String(it.item_id)).filter(Boolean);
-        // Check which received items are bar drinks so we can sync bar_stock + pos_outlet_items
-        const { data: barDrinksForSkus } = receivedSkus.length
-            ? await supabase.from('bar_drinks').select('id, sku').eq('branch_id', branchId).in('sku', receivedSkus)
+        // item_id on a GRN line is the inventory_items UUID, NOT a sku code —
+        // bar_drinks links to it via inventory_item_id. Matching against
+        // bar_drinks.sku here always missed (a UUID never equals a sku like
+        // "FGB-BER-0013"), so every bar item received via GRN silently never
+        // synced into bar_stock/bar_stock_ledger, which is why stocktakes kept
+        // showing "NOT REFLECTED IN SYSTEM" surplus variances for delivered items.
+        const receivedItemIds = (savedItems || grnItems).map((it: any) => String(it.item_id)).filter(Boolean);
+        const { data: barDrinksForItems } = receivedItemIds.length
+            ? await supabase.from('bar_drinks').select('id, inventory_item_id').eq('branch_id', branchId).in('inventory_item_id', receivedItemIds)
             : { data: [] };
-        const barDrinkSkuSet = new Set((barDrinksForSkus || []).map((d: any) => String(d.sku)));
+        const barDrinkIdByInvId = new Map((barDrinksForItems || []).map((d: any) => [String(d.inventory_item_id), String(d.id)]));
 
         for (const item of savedItems || grnItems) {
             const qty = toNumber(item.quantity_accepted || item.quantity_received);
@@ -582,11 +584,12 @@ export const receiveFromSupplier = async (
             });
 
             // If this is a bar item, also sync bar_stock + pos_outlet_items
-            if (barDrinkSkuSet.has(String(item.item_id))) {
+            const barDrinkId = barDrinkIdByInvId.get(String(item.item_id));
+            if (barDrinkId) {
                 try {
                     await recordBarStockMovement({
                         branchId,
-                        sku: String(item.item_id),
+                        drinkId: barDrinkId,
                         quantityDelta: qty,
                         movementType: 'restock',
                         referenceNumber: grnNumber,

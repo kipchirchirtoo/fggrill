@@ -370,17 +370,14 @@ const createSupplierInvoiceFromGRN = async (
         const unitPrice = toNumber(item.unit_price);
         const detail = params.itemDetails.get(item.item_id);
         return {
-            invoice_id: invoice.id,
+            supplier_invoice_id: invoice.id,
             item_id: item.item_id,
-            grn_item_id: item.id || null,
-            po_item_id: item.po_item_id || null,
+            goods_receipt_line_id: item.id || null,
             description: detail?.item_name || detail?.description || item.item_id,
             quantity: qty,
+            unit: detail?.unit || 'units',
             unit_price: unitPrice,
-            subtotal: qty * unitPrice,
-            vat_rate: 0,
-            vat_amount: 0,
-            total_amount: qty * unitPrice
+            line_total: qty * unitPrice
         };
     });
 

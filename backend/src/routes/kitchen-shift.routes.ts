@@ -18,7 +18,8 @@ import {
     deactivateProductionRecipe,
     listProductionRecipes,
     getKitchenShiftStats,
-    getProductionSessionView
+    getProductionSessionView,
+    getKitchenShiftPosConsumption
 } from '../controllers/kitchen-shift.controller';
 
 const router = express.Router();
@@ -50,6 +51,7 @@ router.get('/recipes/list', authorize(KITCHEN_ROLES), listProductionRecipes);
 router.put('/recipes/:recipe_id', authorize(KITCHEN_ROLES), updateProductionRecipe);
 router.delete('/recipes/:recipe_id', authorize(KITCHEN_ROLES), deactivateProductionRecipe);
 router.get('/:shift_id', authorize(KITCHEN_ROLES), getKitchenShift);
+router.get('/:shift_id/pos-consumption', authorize(KITCHEN_ROLES), getKitchenShiftPosConsumption);
 
 // Stock operations
 router.post('/:shift_id/stock', authorize(KITCHEN_ROLES), addShiftStock);

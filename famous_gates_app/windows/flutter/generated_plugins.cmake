@@ -3,10 +3,12 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  app_links
   audioplayers_windows
   connectivity_plus
   flutter_secure_storage_windows
   local_auth_windows
+  passkeys_windows
   powersync_flutter_libs
   printing
   screen_retriever_windows

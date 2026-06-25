@@ -1,0 +1,2106 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../core/theme/app_theme.dart';
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+class PosOutlet {
+  final String id;
+  final String name;
+  final String outletType;
+  final int itemCount;
+
+  const PosOutlet({
+    required this.id,
+    required this.name,
+    required this.outletType,
+    required this.itemCount,
+  });
+}
+
+class BranchStockItem {
+  final String sku;
+  final String itemName;
+  final String category;
+  final double quantity;
+  final String unit;
+  final double costPrice;
+
+  const BranchStockItem({
+    required this.sku,
+    required this.itemName,
+    required this.category,
+    required this.quantity,
+    required this.unit,
+    required this.costPrice,
+  });
+}
+
+class OutletStockItem {
+  final String id;
+  final String sku;
+  final String itemName;
+  final String category;
+  final double currentStock;
+  final double sellableStock;
+  final String unit;
+  final double sellingPrice;
+
+  const OutletStockItem({
+    required this.id,
+    required this.sku,
+    required this.itemName,
+    required this.category,
+    required this.currentStock,
+    required this.sellableStock,
+    required this.unit,
+    required this.sellingPrice,
+  });
+}
+
+class StockMovement {
+  final String id;
+  final String itemName;
+  final String movementType;
+  final double quantity;
+  final String unit;
+  final String performedBy;
+  final DateTime createdAt;
+  final String? notes;
+  final String? outletName;
+
+  const StockMovement({
+    required this.id,
+    required this.itemName,
+    required this.movementType,
+    required this.quantity,
+    required this.unit,
+    required this.performedBy,
+    required this.createdAt,
+    this.notes,
+    this.outletName,
+  });
+}
+
+class IssueCartItem {
+  final BranchStockItem stockItem;
+  double quantity;
+  final String targetOutletId;
+  final String targetOutletName;
+
+  IssueCartItem({
+    required this.stockItem,
+    required this.quantity,
+    required this.targetOutletId,
+    required this.targetOutletName,
+  });
+}
+
+// ─── Mock API Service ─────────────────────────────────────────────────────────
+
+class BranchStorekeeperApiService {
+  static const String _baseUrl = 'http://localhost:5000/api';
+
+  /// GET /api/storekeeping/branch-stock
+  static Future<List<BranchStockItem>> fetchBranchStock({String? search}) async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    final items = [
+      const BranchStockItem(sku: 'BEV-JUC-001', itemName: 'Mango Juice 1L', category: 'Beverages', quantity: 48, unit: 'PCS', costPrice: 120),
+      const BranchStockItem(sku: 'BEV-WTR-002', itemName: 'Mineral Water 500ml', category: 'Beverages', quantity: 200, unit: 'PCS', costPrice: 35),
+      const BranchStockItem(sku: 'FOD-RCE-001', itemName: 'Basmati Rice 1kg', category: 'Dry Foods', quantity: 30, unit: 'KG', costPrice: 145),
+      const BranchStockItem(sku: 'FOD-OIL-002', itemName: 'Cooking Oil 5L', category: 'Dry Foods', quantity: 12, unit: 'JERRICAN', costPrice: 850),
+      const BranchStockItem(sku: 'CLS-BTL-001', itemName: 'Tusker Beer 500ml', category: 'Alcoholic', quantity: 144, unit: 'BTL', costPrice: 180),
+      const BranchStockItem(sku: 'CLS-BTL-002', itemName: 'Guinness 500ml', category: 'Alcoholic', quantity: 72, unit: 'BTL', costPrice: 210),
+      const BranchStockItem(sku: 'DRY-SGR-001', itemName: 'Sugar 1kg', category: 'Dry Foods', quantity: 25, unit: 'KG', costPrice: 120),
+      const BranchStockItem(sku: 'CLS-SFT-001', itemName: 'Coca-Cola 300ml', category: 'Soft Drinks', quantity: 96, unit: 'BTL', costPrice: 55),
+      const BranchStockItem(sku: 'PRO-MTN-001', itemName: 'Beef Fillet 1kg', category: 'Proteins', quantity: 8, unit: 'KG', costPrice: 850),
+      const BranchStockItem(sku: 'PRO-CHK-002', itemName: 'Whole Chicken 1.5kg', category: 'Proteins', quantity: 15, unit: 'PC', costPrice: 520),
+    ];
+    if (search == null || search.isEmpty) return items;
+    final q = search.toLowerCase();
+    return items.where((i) =>
+      i.itemName.toLowerCase().contains(q) ||
+      i.sku.toLowerCase().contains(q) ||
+      i.category.toLowerCase().contains(q)
+    ).toList();
+  }
+
+  /// GET /api/outlet-pos/outlets
+  static Future<List<PosOutlet>> fetchPosOutlets() async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    return const [
+      PosOutlet(id: 'outlet-001', name: 'Cashier', outletType: 'cashier', itemCount: 0),
+      PosOutlet(id: 'outlet-002', name: 'Main Bar', outletType: 'main_bar', itemCount: 117),
+      PosOutlet(id: 'outlet-003', name: 'Non-consumables', outletType: 'non_consumables', itemCount: 3),
+      PosOutlet(id: 'outlet-004', name: 'Restaurant', outletType: 'restaurant', itemCount: 156),
+    ];
+  }
+
+  /// GET /api/outlet-pos/outlets/:id/items
+  static Future<List<OutletStockItem>> fetchOutletStock(String outletId) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    return [
+      OutletStockItem(id: 'oi-001', sku: 'BEV-JUC-001', itemName: 'Mango Juice 1L', category: 'Beverages', currentStock: 0, sellableStock: 0, unit: 'PCS', sellingPrice: 200),
+      OutletStockItem(id: 'oi-002', sku: 'CLS-BTL-001', itemName: 'Tusker Beer 500ml', category: 'Alcoholic', currentStock: 24, sellableStock: 24, unit: 'BTL', sellingPrice: 300),
+      OutletStockItem(id: 'oi-003', sku: 'CLS-SFT-001', itemName: 'Coca-Cola 300ml', category: 'Soft Drinks', currentStock: 0, sellableStock: 0, unit: 'BTL', sellingPrice: 100),
+      OutletStockItem(id: 'oi-004', sku: 'PRO-CHK-002', itemName: 'Whole Chicken 1.5kg', category: 'Proteins', currentStock: 3, sellableStock: 3, unit: 'PC', sellingPrice: 900),
+    ];
+  }
+
+  /// GET /api/storekeeping/stock-movements
+  static Future<List<StockMovement>> fetchStockMovements({String? outletId}) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    return [
+      StockMovement(id: 'mv-001', itemName: 'Tusker Beer 500ml', movementType: 'outlet_issue', quantity: 24, unit: 'BTL', performedBy: 'James Pkemoi', createdAt: DateTime.now().subtract(const Duration(hours: 2)), notes: 'Issued to Main Bar', outletName: 'Main Bar'),
+      StockMovement(id: 'mv-002', itemName: 'Mango Juice 1L', movementType: 'outlet_issue', quantity: 12, unit: 'PCS', performedBy: 'James Pkemoi', createdAt: DateTime.now().subtract(const Duration(hours: 5)), notes: 'Issued to Restaurant', outletName: 'Restaurant'),
+      StockMovement(id: 'mv-003', itemName: 'Basmati Rice 1kg', movementType: 'outlet_issue', quantity: 5, unit: 'KG', performedBy: 'Alice Wanjiku', createdAt: DateTime.now().subtract(const Duration(days: 1)), notes: 'Morning preparation', outletName: 'Restaurant'),
+      StockMovement(id: 'mv-004', itemName: 'Coca-Cola 300ml', movementType: 'outlet_issue', quantity: 48, unit: 'BTL', performedBy: 'James Pkemoi', createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 3)), notes: 'Bar restock', outletName: 'Main Bar'),
+    ];
+  }
+
+  /// POST /api/storekeeping/branch-stock/out  (issue to outlet)
+  static Future<Map<String, dynamic>> issueToOutlet({
+    required String outletId,
+    required List<Map<String, dynamic>> items,
+    required String notes,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 900));
+    return {'success': true, 'message': 'Stock issued successfully', 'movement_ids': List.generate(items.length, (i) => 'mv-new-$i')};
+  }
+}
+
+// ─── Riverpod Providers ───────────────────────────────────────────────────────
+
+final selectedOutletProvider = StateProvider<PosOutlet?>((ref) => null);
+final issueCartProvider = StateProvider<List<IssueCartItem>>((ref) => []);
+final searchQueryProvider = StateProvider<String>((ref) => '');
+final activeTabProvider = StateProvider<int>((ref) => 0); // 0=stock list, 1=outlet stock, 2=movements
+
+final posOutletsProvider = FutureProvider<List<PosOutlet>>((ref) async {
+  return BranchStorekeeperApiService.fetchPosOutlets();
+});
+
+final branchStockProvider = FutureProvider.family<List<BranchStockItem>, String>((ref, search) async {
+  return BranchStorekeeperApiService.fetchBranchStock(search: search);
+});
+
+final outletStockProvider = FutureProvider.family<List<OutletStockItem>, String>((ref, outletId) async {
+  return BranchStorekeeperApiService.fetchOutletStock(outletId);
+});
+
+final stockMovementsProvider = FutureProvider.family<List<StockMovement>, String?>((ref, outletId) async {
+  return BranchStorekeeperApiService.fetchStockMovements(outletId: outletId);
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
+class PosOutletIssueScreen extends ConsumerStatefulWidget {
+  const PosOutletIssueScreen({super.key});
+
+  @override
+  ConsumerState<PosOutletIssueScreen> createState() => _PosOutletIssueScreenState();
+}
+
+class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _searchDebounce;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String val) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      ref.read(searchQueryProvider.notifier).state = val;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.kSurface,
+      body: Column(
+        children: [
+          _TopBar(searchCtrl: _searchCtrl, onSearchChanged: _onSearchChanged),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                _LeftPanel(),
+                VerticalDivider(width: 1, color: AppColors.kDivider),
+                Expanded(child: _MainContent()),
+                VerticalDivider(width: 1, color: AppColors.kDivider),
+                _IssueCartPanel(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Top Bar ──────────────────────────────────────────────────────────────────
+
+class _TopBar extends ConsumerWidget {
+  final TextEditingController searchCtrl;
+  final ValueChanged<String> onSearchChanged;
+
+  const _TopBar({required this.searchCtrl, required this.onSearchChanged});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedOutlet = ref.watch(selectedOutletProvider);
+    final cart = ref.watch(issueCartProvider);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AppColors.kDivider)),
+      ),
+      child: Row(
+        children: [
+          // Title block
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('POS Outlet Issue',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.kTextPrimary)),
+              const SizedBox(height: 2),
+              Text(
+                'Issues branch-store stock into a selling outlet\'s counter',
+                style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(width: 32),
+          // Search
+          SizedBox(
+            width: 280,
+            height: 40,
+            child: TextField(
+              controller: searchCtrl,
+              onChanged: onSearchChanged,
+              decoration: InputDecoration(
+                hintText: selectedOutlet != null
+                    ? 'Search ${selectedOutlet.name} stock...'
+                    : 'Search branch stock...',
+                prefixIcon: Icon(PhosphorIcons.magnifyingGlass(), size: 18),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                isDense: true,
+              ),
+            ),
+          ),
+          const Spacer(),
+          // Refresh
+          OutlinedButton.icon(
+            onPressed: () {
+              ref.invalidate(posOutletsProvider);
+              ref.invalidate(branchStockProvider);
+              if (selectedOutlet != null) {
+                ref.invalidate(outletStockProvider(selectedOutlet.id));
+                ref.invalidate(stockMovementsProvider(selectedOutlet.id));
+              }
+            },
+            icon: Icon(PhosphorIcons.arrowClockwise(), size: 16),
+            label: const Text('Refresh'),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.kDivider),
+              foregroundColor: AppColors.kTextSecondary,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Issue button
+          ElevatedButton.icon(
+            onPressed: cart.isEmpty || selectedOutlet == null ? null : () => _showIssueConfirmDialog(context, ref, selectedOutlet, cart),
+            icon: Icon(PhosphorIcons.arrowBendDownRight(), size: 16),
+            label: Text('Issue to ${selectedOutlet?.name ?? 'POS Outlet'} (${cart.length})'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.kPrimary,
+              disabledBackgroundColor: AppColors.kDivider,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              minimumSize: Size.zero,
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Production Ledger
+          OutlinedButton.icon(
+            onPressed: () => _showMovementsSheet(context),
+            icon: Icon(PhosphorIcons.clipboardText(), size: 16),
+            label: const Text('Production Ledger'),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.kDivider),
+              foregroundColor: AppColors.kTextSecondary,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMovementsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => const _ProductionLedgerSheet(),
+    );
+  }
+
+  void _showIssueConfirmDialog(BuildContext context, WidgetRef ref, PosOutlet outlet, List<IssueCartItem> cart) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _IssueConfirmDialog(outlet: outlet, cart: cart, onConfirmed: (notes) async {
+        final items = cart.map((c) => {
+          'sku': c.stockItem.sku,
+          'quantity': c.quantity,
+          'item_name': c.stockItem.itemName,
+          'unit': c.stockItem.unit,
+        }).toList();
+        try {
+          await BranchStorekeeperApiService.issueToOutlet(outletId: outlet.id, items: items, notes: notes);
+          ref.read(issueCartProvider.notifier).state = [];
+          ref.invalidate(branchStockProvider);
+          ref.invalidate(outletStockProvider(outlet.id));
+          ref.invalidate(stockMovementsProvider(outlet.id));
+          if (ctx.mounted) {
+            Navigator.of(ctx).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(children: [
+                  Icon(PhosphorIcons.checkCircle(), color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Text('Stock issued to ${outlet.name} successfully'),
+                ]),
+                backgroundColor: AppColors.kSuccess,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        } catch (e) {
+          if (ctx.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Issue failed: $e'), backgroundColor: AppColors.kError),
+            );
+          }
+        }
+      }),
+    );
+  }
+}
+
+// ─── Left Panel (Sidebar nav + outlet selector) ───────────────────────────────
+
+class _LeftPanel extends ConsumerWidget {
+  const _LeftPanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SizedBox(
+      width: 220,
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section label
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
+              child: Text('BRANCH STORE',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
+                      color: AppColors.kTextSecondary, letterSpacing: 1.2)),
+            ),
+            _NavItem(icon: PhosphorIcons.squaresFour(), label: 'Overview', selected: false),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('INVENTORY',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
+                      color: AppColors.kTextSecondary, letterSpacing: 1.2)),
+            ),
+            _NavItem(icon: PhosphorIcons.package(), label: 'Master Inventory', selected: false),
+            _NavItem(icon: PhosphorIcons.arrowBendDownRight(), label: 'POS Outlet Issue', selected: true),
+            _NavItem(icon: PhosphorIcons.buildings(), label: 'Outlet Production', selected: false),
+            _NavItem(icon: PhosphorIcons.bookOpen(), label: 'Inventory Ledger', selected: false),
+            _NavItem(icon: PhosphorIcons.truck(), label: 'Receive Goods', selected: false),
+            _NavItem(icon: PhosphorIcons.receipt(), label: 'Receipt Verification', selected: false),
+            _NavItem(icon: PhosphorIcons.storefront(), label: 'Local Vendors', selected: false),
+            _NavItem(icon: PhosphorIcons.clipboardText(), label: 'Stock Take', selected: false),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('PROCUREMENT',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
+                      color: AppColors.kTextSecondary, letterSpacing: 1.2)),
+            ),
+            _NavItem(icon: PhosphorIcons.shoppingCart(), label: 'Purchase Orders', selected: false),
+            const Spacer(),
+            const Divider(height: 1, color: AppColors.kDivider),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: OutlinedButton.icon(
+                onPressed: () {},
+                icon: Icon(PhosphorIcons.printer(), size: 16),
+                label: const Text('Printer Settings'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 40),
+                  foregroundColor: AppColors.kTextPrimary,
+                  side: const BorderSide(color: AppColors.kDivider),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+              child: OutlinedButton.icon(
+                onPressed: () {},
+                icon: Icon(PhosphorIcons.signOut(), size: 16),
+                label: const Text('Logout'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 40),
+                  foregroundColor: AppColors.kError,
+                  side: const BorderSide(color: AppColors.kError),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+
+  const _NavItem({required this.icon, required this.label, required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: selected ? AppColors.kPrimary.withOpacity(0.08) : Colors.transparent,
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+        leading: Icon(icon, size: 18,
+            color: selected ? AppColors.kPrimary : AppColors.kTextSecondary),
+        title: Text(label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              color: selected ? AppColors.kPrimary : AppColors.kTextPrimary,
+            )),
+        visualDensity: VisualDensity.compact,
+        onTap: () {},
+        shape: selected
+            ? const Border(left: BorderSide(color: AppColors.kPrimary, width: 3))
+            : null,
+      ),
+    );
+  }
+}
+
+// ─── Main Content ─────────────────────────────────────────────────────────────
+
+class _MainContent extends ConsumerWidget {
+  const _MainContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedOutlet = ref.watch(selectedOutletProvider);
+    final activeTab = ref.watch(activeTabProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Outlet selector chips
+        const _OutletSelector(),
+        const Divider(height: 1, color: AppColors.kDivider),
+        // Sub-tab bar (only show when outlet selected)
+        if (selectedOutlet != null) _SubTabBar(activeTab: activeTab),
+        if (selectedOutlet != null) const Divider(height: 1, color: AppColors.kDivider),
+        // Stats row
+        _StatsRow(outlet: selectedOutlet),
+        const Divider(height: 1, color: AppColors.kDivider),
+        // Content area
+        Expanded(
+          child: selectedOutlet == null
+              ? const _NoOutletSelected()
+              : activeTab == 0
+                  ? const _BranchStockList()
+                  : activeTab == 1
+                      ? const _OutletStockList()
+                      : const _MovementsTab(),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Outlet Selector Chips ────────────────────────────────────────────────────
+
+class _OutletSelector extends ConsumerWidget {
+  const _OutletSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final outletsAsync = ref.watch(posOutletsProvider);
+    final selected = ref.watch(selectedOutletProvider);
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('POS Outlets',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text('Choose the salable outlet first. Every issue updates that outlet, not generic branch stock.',
+              style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+          const SizedBox(height: 12),
+          outletsAsync.when(
+            loading: () => const SizedBox(height: 36, child: Center(child: LinearProgressIndicator())),
+            error: (e, _) => Text('Failed to load outlets: $e',
+                style: const TextStyle(color: AppColors.kError, fontSize: 12)),
+            data: (outlets) => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: outlets.map((outlet) {
+                final isSelected = selected?.id == outlet.id;
+                return _OutletChip(outlet: outlet, isSelected: isSelected,
+                  onTap: () {
+                    ref.read(selectedOutletProvider.notifier).state =
+                        isSelected ? null : outlet;
+                    ref.read(activeTabProvider.notifier).state = 0;
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OutletChip extends StatelessWidget {
+  final PosOutlet outlet;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _OutletChip({required this.outlet, required this.isSelected, required this.onTap});
+
+  IconData get _icon {
+    switch (outlet.outletType) {
+      case 'cashier': return PhosphorIcons.receipt();
+      case 'main_bar':
+      case 'executive_bar':
+      case 'sports_bar': return PhosphorIcons.wine();
+      case 'restaurant': return PhosphorIcons.forkKnife();
+      default: return PhosphorIcons.storefront();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.kPrimary : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppColors.kPrimary : AppColors.kDivider,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_icon, size: 16, color: isSelected ? Colors.white : AppColors.kTextSecondary),
+            const SizedBox(width: 6),
+            Text('${outlet.name} (${outlet.itemCount})',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.white : AppColors.kTextPrimary,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Sub-Tab Bar ──────────────────────────────────────────────────────────────
+
+class _SubTabBar extends ConsumerWidget {
+  final int activeTab;
+  const _SubTabBar({required this.activeTab});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tabs = ['Branch Stock (Issue)', 'Outlet Current Stock', 'Movement Log'];
+    return Container(
+      color: AppColors.kSurface,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+      child: Row(
+        children: tabs.asMap().entries.map((e) {
+          final i = e.key;
+          final label = e.value;
+          final active = activeTab == i;
+          return GestureDetector(
+            onTap: () => ref.read(activeTabProvider.notifier).state = i,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: active ? AppColors.kPrimary : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+              child: Text(label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                    color: active ? AppColors.kPrimary : AppColors.kTextSecondary,
+                  )),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─── Stats Row ────────────────────────────────────────────────────────────────
+
+class _StatsRow extends ConsumerWidget {
+  final PosOutlet? outlet;
+  const _StatsRow({required this.outlet});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (outlet == null) {
+      return Container(
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: const Text('Select an outlet above to begin issuing stock.',
+            style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13)),
+      );
+    }
+
+    final outletStockAsync = ref.watch(outletStockProvider(outlet!.id));
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      child: outletStockAsync.when(
+        loading: () => const SizedBox(height: 80, child: Center(child: LinearProgressIndicator())),
+        error: (e, _) => Text('Stats error: $e', style: const TextStyle(color: AppColors.kError)),
+        data: (items) {
+          final totalItems = items.length;
+          final available = items.where((i) => i.currentStock > 0).length;
+          final lowZero = items.where((i) => i.currentStock <= 0).length;
+          final totalValue = items.fold(0.0, (s, i) => s + i.currentStock * i.sellingPrice);
+
+          return Row(
+            children: [
+              _StatCard(icon: PhosphorIcons.storefront(), label: 'OUTLET ITEMS',
+                  value: '$totalItems', color: AppColors.kPrimary),
+              const SizedBox(width: 12),
+              _StatCard(icon: PhosphorIcons.checkCircle(), label: 'AVAILABLE',
+                  value: '$available', color: AppColors.kSuccess),
+              const SizedBox(width: 12),
+              _StatCard(icon: PhosphorIcons.warning(), label: 'LOW / ZERO',
+                  value: '$lowZero', color: AppColors.kWarning),
+              const SizedBox(width: 12),
+              _StatCard(icon: PhosphorIcons.currencyDollar(), label: 'OUTLET STOCK VALUE',
+                  value: 'KES ${totalValue.toStringAsFixed(2)}', color: AppColors.kAccent),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatCard({required this.icon, required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, size: 18, color: color),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5)),
+                  const SizedBox(height: 2),
+                  Text(value,
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoOutletSelected extends StatelessWidget {
+  const _NoOutletSelected();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(PhosphorIcons.arrowBendDownRight(), size: 56, color: AppColors.kDivider),
+          const SizedBox(height: 16),
+          const Text('Select a POS outlet above',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary)),
+          const SizedBox(height: 6),
+          const Text('Then browse branch stock and add items to the issue cart',
+              style: TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Branch Stock List (Tab 0) — items to issue FROM ─────────────────────────
+
+class _BranchStockList extends ConsumerWidget {
+  const _BranchStockList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final search = ref.watch(searchQueryProvider);
+    final stockAsync = ref.watch(branchStockProvider(search));
+    final cart = ref.watch(issueCartProvider);
+    final selectedOutlet = ref.watch(selectedOutletProvider);
+
+    final cartSkus = cart.map((c) => c.stockItem.sku).toSet();
+
+    return stockAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(PhosphorIcons.warning(), size: 40, color: AppColors.kError),
+          const SizedBox(height: 12),
+          Text('Failed to load branch stock', style: const TextStyle(color: AppColors.kError)),
+          const SizedBox(height: 8),
+          TextButton(onPressed: () => ref.invalidate(branchStockProvider), child: const Text('Retry')),
+        ]),
+      ),
+      data: (items) {
+        if (items.isEmpty) {
+          return Center(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(PhosphorIcons.package(), size: 48, color: AppColors.kDivider),
+              const SizedBox(height: 12),
+              const Text('No stock items found', style: TextStyle(color: AppColors.kTextSecondary)),
+            ]),
+          );
+        }
+
+        // Group by category
+        final Map<String, List<BranchStockItem>> grouped = {};
+        for (final item in items) {
+          grouped.putIfAbsent(item.category, () => []).add(item);
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Table header
+            _StockTableHeader(),
+            const SizedBox(height: 8),
+            ...grouped.entries.map((entry) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
+                  child: Row(children: [
+                    Container(width: 3, height: 14, color: AppColors.kPrimary,
+                        margin: const EdgeInsets.only(right: 8)),
+                    Text(entry.key,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+                            color: AppColors.kTextSecondary, letterSpacing: 0.5)),
+                  ]),
+                ),
+                ...entry.value.map((item) => _BranchStockRow(
+                  item: item,
+                  inCart: cartSkus.contains(item.sku),
+                  outlet: selectedOutlet!,
+                  onAdd: () => _addToCart(context, ref, item, selectedOutlet),
+                )),
+              ],
+            )).toList(),
+          ],
+        );
+      },
+    );
+  }
+
+  void _addToCart(BuildContext context, WidgetRef ref, BranchStockItem item, PosOutlet outlet) {
+    showDialog(
+      context: context,
+      builder: (_) => _AddToCartDialog(item: item, outlet: outlet),
+    );
+  }
+}
+
+class _StockTableHeader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.kSurface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: const Row(
+        children: [
+          Expanded(flex: 3, child: Text('ITEM NAME', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary, letterSpacing: 0.5))),
+          SizedBox(width: 8),
+          Expanded(flex: 1, child: Text('SKU', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary, letterSpacing: 0.5))),
+          SizedBox(width: 8),
+          Expanded(flex: 1, child: Text('IN STORE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary, letterSpacing: 0.5))),
+          SizedBox(width: 8),
+          Expanded(flex: 1, child: Text('UNIT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary, letterSpacing: 0.5))),
+          SizedBox(width: 8),
+          SizedBox(width: 80, child: Text('ACTION', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary, letterSpacing: 0.5))),
+        ],
+      ),
+    );
+  }
+}
+
+class _BranchStockRow extends StatelessWidget {
+  final BranchStockItem item;
+  final bool inCart;
+  final PosOutlet outlet;
+  final VoidCallback onAdd;
+
+  const _BranchStockRow({
+    required this.item,
+    required this.inCart,
+    required this.outlet,
+    required this.onAdd,
+  });
+
+  Color get _stockColor {
+    if (item.quantity <= 0) return AppColors.kError;
+    if (item.quantity <= 5) return AppColors.kWarning;
+    return AppColors.kSuccess;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: inCart ? AppColors.kPrimary.withOpacity(0.04) : Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: inCart ? AppColors.kPrimary.withOpacity(0.3) : AppColors.kDivider,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(flex: 3, child: Row(children: [
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                color: AppColors.kPrimary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(PhosphorIcons.package(), size: 16, color: AppColors.kPrimary),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(item.itemName,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis)),
+          ])),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: Text(item.sku,
+              style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary,
+                  fontFamily: 'monospace'))),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: _stockColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text('${item.quantity}',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _stockColor)),
+            ),
+          ])),
+          const SizedBox(width: 8),
+          Expanded(flex: 1, child: Text(item.unit,
+              style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary))),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 80,
+            child: item.quantity <= 0
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.kDivider,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('Out', textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11, color: AppColors.kTextSecondary)))
+                : inCart
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.kSuccess.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.kSuccess.withOpacity(0.4)),
+                        ),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(PhosphorIcons.checkCircle(), size: 12, color: AppColors.kSuccess),
+                          const SizedBox(width: 4),
+                          const Text('Added', style: TextStyle(fontSize: 11, color: AppColors.kSuccess, fontWeight: FontWeight.bold)),
+                        ]),
+                      )
+                    : ElevatedButton(
+                        onPressed: onAdd,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.kPrimary,
+                          minimumSize: const Size(80, 32),
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(PhosphorIcons.plus(), size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          const Text('Issue', style: TextStyle(fontSize: 12)),
+                        ]),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Outlet Stock List (Tab 1) — current stock AT outlet ─────────────────────
+
+class _OutletStockList extends ConsumerWidget {
+  const _OutletStockList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final outlet = ref.watch(selectedOutletProvider)!;
+    final stockAsync = ref.watch(outletStockProvider(outlet.id));
+
+    return stockAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppColors.kError))),
+      data: (items) {
+        if (items.isEmpty) {
+          return Center(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(PhosphorIcons.storefront(), size: 48, color: AppColors.kDivider),
+              const SizedBox(height: 12),
+              Text('No items in ${outlet.name}',
+                  style: const TextStyle(color: AppColors.kTextSecondary)),
+              const SizedBox(height: 8),
+              const Text('Issue stock from Branch Store to populate this outlet',
+                  style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+            ]),
+          );
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                  color: AppColors.kSurface,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppColors.kDivider)),
+              child: const Row(children: [
+                Expanded(flex: 3, child: Text('ITEM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 1, child: Text('CURRENT STOCK', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 1, child: Text('SELLABLE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 1, child: Text('SELLING PRICE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 1, child: Text('STATUS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+              ]),
+            ),
+            const SizedBox(height: 8),
+            ...items.map((item) => _OutletStockRow(item: item)).toList(),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _OutletStockRow extends StatelessWidget {
+  final OutletStockItem item;
+  const _OutletStockRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final isZero = item.currentStock <= 0;
+    final isLow = item.currentStock > 0 && item.currentStock <= 5;
+
+    Color statusColor = isZero ? AppColors.kError : isLow ? AppColors.kWarning : AppColors.kSuccess;
+    String statusLabel = isZero ? 'Out of Stock' : isLow ? 'Low Stock' : 'In Stock';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isZero ? AppColors.kError.withOpacity(0.2) : AppColors.kDivider),
+      ),
+      child: Row(children: [
+        Expanded(flex: 3, child: Row(children: [
+          Container(width: 32, height: 32,
+            decoration: BoxDecoration(color: statusColor.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+            child: Icon(PhosphorIcons.storefront(), size: 16, color: statusColor)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(item.itemName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+            Text(item.sku, style: const TextStyle(fontSize: 10, color: AppColors.kTextSecondary, fontFamily: 'monospace')),
+          ])),
+        ])),
+        Expanded(flex: 1, child: Text('${item.currentStock} ${item.unit}',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: statusColor))),
+        Expanded(flex: 1, child: Text('${item.sellableStock} ${item.unit}',
+            style: const TextStyle(fontSize: 13))),
+        Expanded(flex: 1, child: Text('KES ${item.sellingPrice.toStringAsFixed(0)}',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+        Expanded(flex: 1, child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(statusLabel,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: statusColor),
+              textAlign: TextAlign.center),
+        )),
+      ]),
+    );
+  }
+}
+
+// ─── Movements Tab (Tab 2) — audit log ───────────────────────────────────────
+
+class _MovementsTab extends ConsumerWidget {
+  const _MovementsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final outlet = ref.watch(selectedOutletProvider);
+    final movementsAsync = ref.watch(stockMovementsProvider(outlet?.id));
+
+    return movementsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error loading movements: $e',
+          style: const TextStyle(color: AppColors.kError))),
+      data: (movements) {
+        if (movements.isEmpty) {
+          return Center(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(PhosphorIcons.clockCounterClockwise(), size: 48, color: AppColors.kDivider),
+              const SizedBox(height: 12),
+              const Text('No stock movements yet',
+                  style: TextStyle(color: AppColors.kTextSecondary)),
+            ]),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: Row(children: [
+                Icon(PhosphorIcons.clockCounterClockwise(), size: 16, color: AppColors.kTextSecondary),
+                const SizedBox(width: 8),
+                Text('${movements.length} movements',
+                    style: const TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: () => ref.invalidate(stockMovementsProvider(outlet?.id)),
+                  icon: Icon(PhosphorIcons.arrowClockwise(), size: 14),
+                  label: const Text('Refresh', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.kDivider),
+                    foregroundColor: AppColors.kTextSecondary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                  ),
+                ),
+              ]),
+            ),
+            // Table header
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.kSurface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.kDivider),
+              ),
+              child: const Row(children: [
+                Expanded(flex: 3, child: Text('ITEM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 1, child: Text('TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 1, child: Text('QTY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 2, child: Text('OUTLET', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 2, child: Text('PERFORMED BY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+                Expanded(flex: 2, child: Text('DATE/TIME', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                itemCount: movements.length,
+                itemBuilder: (_, i) => _MovementRow(movement: movements[i]),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MovementRow extends StatelessWidget {
+  final StockMovement movement;
+  const _MovementRow({required this.movement});
+
+  String get _typeLabel {
+    switch (movement.movementType) {
+      case 'outlet_issue': return 'Issue';
+      case 'stock_in': return 'Stock In';
+      case 'adjustment': return 'Adjustment';
+      case 'wastage': return 'Wastage';
+      default: return movement.movementType;
+    }
+  }
+
+  Color get _typeColor {
+    switch (movement.movementType) {
+      case 'outlet_issue': return AppColors.kPrimary;
+      case 'stock_in': return AppColors.kSuccess;
+      case 'wastage': return AppColors.kError;
+      default: return AppColors.kWarning;
+    }
+  }
+
+  String _formatDate(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: Row(children: [
+        Expanded(flex: 3, child: Row(children: [
+          Container(width: 32, height: 32,
+            decoration: BoxDecoration(color: _typeColor.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+            child: Icon(PhosphorIcons.arrowsLeftRight(), size: 16, color: _typeColor)),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(movement.itemName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+            if (movement.notes != null)
+              Text(movement.notes!, style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary), overflow: TextOverflow.ellipsis),
+          ])),
+        ])),
+        Expanded(flex: 1, child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: _typeColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(_typeLabel,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _typeColor),
+              textAlign: TextAlign.center),
+        )),
+        Expanded(flex: 1, child: Text('${movement.quantity} ${movement.unit}',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+        Expanded(flex: 2, child: Row(children: [
+          Icon(PhosphorIcons.storefront(), size: 13, color: AppColors.kTextSecondary),
+          const SizedBox(width: 4),
+          Expanded(child: Text(movement.outletName ?? '—',
+              style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
+        ])),
+        Expanded(flex: 2, child: Row(children: [
+          Icon(PhosphorIcons.user(), size: 13, color: AppColors.kTextSecondary),
+          const SizedBox(width: 4),
+          Expanded(child: Text(movement.performedBy,
+              style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
+        ])),
+        Expanded(flex: 2, child: Text(_formatDate(movement.createdAt),
+            style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary))),
+      ]),
+    );
+  }
+}
+
+// ─── Right Panel — Issue Cart ─────────────────────────────────────────────────
+
+class _IssueCartPanel extends ConsumerWidget {
+  const _IssueCartPanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(issueCartProvider);
+    final outlet = ref.watch(selectedOutletProvider);
+
+    return SizedBox(
+      width: 300,
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cart header
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: AppColors.kDivider))),
+              child: Row(children: [
+                Icon(PhosphorIcons.shoppingCartSimple(), size: 18, color: AppColors.kPrimary),
+                const SizedBox(width: 8),
+                const Text('Issue Cart',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (cart.isNotEmpty)
+                  GestureDetector(
+                    onTap: () => _confirmClearCart(context, ref),
+                    child: Text('Clear all',
+                        style: TextStyle(fontSize: 12, color: AppColors.kError,
+                            decoration: TextDecoration.underline)),
+                  ),
+              ]),
+            ),
+
+            // Outlet indicator
+            if (outlet != null)
+              Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.kPrimary.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.kPrimary.withOpacity(0.2)),
+                ),
+                child: Row(children: [
+                  Icon(PhosphorIcons.arrowBendDownRight(), size: 14, color: AppColors.kPrimary),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Issuing to: ${outlet.name}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+                          color: AppColors.kPrimary))),
+                ]),
+              ),
+
+            // Empty cart
+            if (cart.isEmpty)
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(PhosphorIcons.shoppingCartSimple(), size: 48, color: AppColors.kDivider),
+                  const SizedBox(height: 12),
+                  const Text('No items added yet',
+                      style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child: Text('Select a POS outlet, then click Issue on branch stock items',
+                        style: TextStyle(color: AppColors.kTextSecondary, fontSize: 11),
+                        textAlign: TextAlign.center),
+                  ),
+                ]),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: cart.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) => _CartItemTile(
+                    item: cart[i],
+                    onRemove: () {
+                      final updated = List<IssueCartItem>.from(cart)..removeAt(i);
+                      ref.read(issueCartProvider.notifier).state = updated;
+                    },
+                    onQtyChanged: (qty) {
+                      final updated = List<IssueCartItem>.from(cart);
+                      updated[i].quantity = qty;
+                      ref.read(issueCartProvider.notifier).state = [...updated];
+                    },
+                  ),
+                ),
+              ),
+
+            // Footer: summary + submit
+            if (cart.isNotEmpty) ...[
+              const Divider(height: 1, color: AppColors.kDivider),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      const Text('Total items:', style: TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
+                      Text('${cart.length} SKUs',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    ]),
+                    const SizedBox(height: 4),
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      const Text('Total units:', style: TextStyle(fontSize: 13, color: AppColors.kTextSecondary)),
+                      Text('${cart.fold(0.0, (s, c) => s + c.quantity).toStringAsFixed(1)}',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    ]),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: outlet == null ? null : () => _showIssueConfirmFromCart(context, ref, outlet, cart),
+                        icon: Icon(PhosphorIcons.arrowBendDownRight(), size: 16),
+                        label: Text('Issue to ${outlet?.name ?? '—'}'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.kPrimary,
+                          minimumSize: const Size(double.infinity, 44),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmClearCart(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Cart'),
+        content: const Text('Remove all items from the issue cart?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(issueCartProvider.notifier).state = [];
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.kError),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showIssueConfirmFromCart(BuildContext context, WidgetRef ref, PosOutlet outlet, List<IssueCartItem> cart) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _IssueConfirmDialog(
+        outlet: outlet,
+        cart: cart,
+        onConfirmed: (notes) async {
+          final items = cart.map((c) => {
+            'sku': c.stockItem.sku,
+            'quantity': c.quantity,
+            'item_name': c.stockItem.itemName,
+            'unit': c.stockItem.unit,
+          }).toList();
+          await BranchStorekeeperApiService.issueToOutlet(outletId: outlet.id, items: items, notes: notes);
+          ref.read(issueCartProvider.notifier).state = [];
+          ref.invalidate(branchStockProvider);
+          ref.invalidate(outletStockProvider(outlet.id));
+          ref.invalidate(stockMovementsProvider(outlet.id));
+          if (ctx.mounted) {
+            Navigator.of(ctx).pop();
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Stock issued to ${outlet.name} successfully'),
+              backgroundColor: AppColors.kSuccess,
+            ));
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _CartItemTile extends ConsumerWidget {
+  final IssueCartItem item;
+  final VoidCallback onRemove;
+  final ValueChanged<double> onQtyChanged;
+
+  const _CartItemTile({required this.item, required this.onRemove, required this.onQtyChanged});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final qtyCtrl = TextEditingController(text: item.quantity.toStringAsFixed(
+        item.quantity % 1 == 0 ? 0 : 1));
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.kSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.kDivider),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(item.stockItem.itemName,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis)),
+          GestureDetector(
+            onTap: onRemove,
+            child: Icon(PhosphorIcons.x(), size: 16, color: AppColors.kError),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        Text(item.stockItem.sku,
+            style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary,
+                fontFamily: 'monospace')),
+        const SizedBox(height: 8),
+        Row(children: [
+          // Decrement
+          _QtyButton(
+            icon: PhosphorIcons.minus(),
+            onTap: () {
+              if (item.quantity > 1) onQtyChanged(item.quantity - 1);
+            },
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: qtyCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+              ),
+              onSubmitted: (val) {
+                final parsed = double.tryParse(val);
+                if (parsed != null && parsed > 0 && parsed <= item.stockItem.quantity) {
+                  onQtyChanged(parsed);
+                } else {
+                  qtyCtrl.text = item.quantity.toStringAsFixed(0);
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Increment
+          _QtyButton(
+            icon: PhosphorIcons.plus(),
+            onTap: () {
+              if (item.quantity < item.stockItem.quantity) onQtyChanged(item.quantity + 1);
+            },
+          ),
+          const SizedBox(width: 8),
+          Text(item.stockItem.unit,
+              style: const TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+        ]),
+        const SizedBox(height: 4),
+        Text('Max: ${item.stockItem.quantity} ${item.stockItem.unit} in store',
+            style: const TextStyle(fontSize: 10, color: AppColors.kTextSecondary)),
+      ]),
+    );
+  }
+}
+
+class _QtyButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _QtyButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(
+          color: AppColors.kPrimary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.kPrimary.withOpacity(0.2)),
+        ),
+        child: Icon(icon, size: 14, color: AppColors.kPrimary),
+      ),
+    );
+  }
+}
+
+// ─── Add to Cart Dialog ───────────────────────────────────────────────────────
+
+class _AddToCartDialog extends ConsumerStatefulWidget {
+  final BranchStockItem item;
+  final PosOutlet outlet;
+
+  const _AddToCartDialog({required this.item, required this.outlet});
+
+  @override
+  ConsumerState<_AddToCartDialog> createState() => _AddToCartDialogState();
+}
+
+class _AddToCartDialogState extends ConsumerState<_AddToCartDialog> {
+  late final TextEditingController _qtyCtrl;
+  double _qty = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _qtyCtrl = TextEditingController(text: '1');
+  }
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    super.dispose();
+  }
+
+  void _addToCart() {
+    final parsed = double.tryParse(_qtyCtrl.text);
+    if (parsed == null || parsed <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Enter a valid quantity'), backgroundColor: AppColors.kError));
+      return;
+    }
+    if (parsed > widget.item.quantity) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Cannot exceed store stock (${widget.item.quantity} ${widget.item.unit})'),
+          backgroundColor: AppColors.kError));
+      return;
+    }
+    final current = ref.read(issueCartProvider);
+    // If already in cart, update qty
+    final existingIdx = current.indexWhere((c) => c.stockItem.sku == widget.item.sku);
+    if (existingIdx >= 0) {
+      final updated = List<IssueCartItem>.from(current);
+      updated[existingIdx].quantity = parsed;
+      ref.read(issueCartProvider.notifier).state = updated;
+    } else {
+      ref.read(issueCartProvider.notifier).state = [
+        ...current,
+        IssueCartItem(
+          stockItem: widget.item,
+          quantity: parsed,
+          targetOutletId: widget.outlet.id,
+          targetOutletName: widget.outlet.name,
+        ),
+      ];
+    }
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(children: [
+        Icon(PhosphorIcons.arrowBendDownRight(), size: 20, color: AppColors.kPrimary),
+        const SizedBox(width: 8),
+        const Expanded(child: Text('Add to Issue Cart')),
+      ]),
+      content: SizedBox(
+        width: 360,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Item info card
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.kSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.kDivider),
+            ),
+            child: Column(children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Item:', style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+                Expanded(child: Text(widget.item.itemName,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.right)),
+              ]),
+              const SizedBox(height: 4),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('SKU:', style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+                Text(widget.item.sku,
+                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+              ]),
+              const SizedBox(height: 4),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('In Store:', style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+                Text('${widget.item.quantity} ${widget.item.unit}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
+                        color: AppColors.kSuccess)),
+              ]),
+              const SizedBox(height: 4),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Outlet:', style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+                Row(children: [
+                  Icon(PhosphorIcons.arrowRight(), size: 12, color: AppColors.kPrimary),
+                  const SizedBox(width: 4),
+                  Text(widget.outlet.name,
+                      style: const TextStyle(fontSize: 13, color: AppColors.kPrimary,
+                          fontWeight: FontWeight.bold)),
+                ]),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          // Quantity input
+          Row(children: [
+            _QtyButton(icon: PhosphorIcons.minus(), onTap: () {
+              final v = double.tryParse(_qtyCtrl.text) ?? 1;
+              if (v > 1) {
+                setState(() { _qty = v - 1; _qtyCtrl.text = _qty.toStringAsFixed(0); });
+              }
+            }),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _qtyCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  labelText: 'Quantity (${widget.item.unit})',
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (v) => setState(() => _qty = double.tryParse(v) ?? _qty),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _QtyButton(icon: PhosphorIcons.plus(), onTap: () {
+              final v = double.tryParse(_qtyCtrl.text) ?? 1;
+              if (v < widget.item.quantity) {
+                setState(() { _qty = v + 1; _qtyCtrl.text = _qty.toStringAsFixed(0); });
+              }
+            }),
+          ]),
+          const SizedBox(height: 8),
+          // Quick fill buttons
+          Row(children: [
+            const Text('Quick:', style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary)),
+            const SizedBox(width: 8),
+            ...[6, 12, 24, 48].map((q) {
+              if (q > widget.item.quantity) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _qty = q.toDouble();
+                    _qtyCtrl.text = q.toString();
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.kPrimary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AppColors.kPrimary.withOpacity(0.2)),
+                    ),
+                    child: Text(q.toString(),
+                        style: const TextStyle(fontSize: 12, color: AppColors.kPrimary,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              );
+            }).toList(),
+          ]),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton.icon(
+          onPressed: _addToCart,
+          icon: Icon(PhosphorIcons.shoppingCartSimple(), size: 16),
+          label: const Text('Add to Cart'),
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.kPrimary),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Issue Confirm Dialog ─────────────────────────────────────────────────────
+
+class _IssueConfirmDialog extends StatefulWidget {
+  final PosOutlet outlet;
+  final List<IssueCartItem> cart;
+  final Future<void> Function(String notes) onConfirmed;
+
+  const _IssueConfirmDialog({
+    required this.outlet,
+    required this.cart,
+    required this.onConfirmed,
+  });
+
+  @override
+  State<_IssueConfirmDialog> createState() => _IssueConfirmDialogState();
+}
+
+class _IssueConfirmDialogState extends State<_IssueConfirmDialog> {
+  final _notesCtrl = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.onConfirmed(_notesCtrl.text.trim());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalUnits = widget.cart.fold(0.0, (s, c) => s + c.quantity);
+
+    return AlertDialog(
+      title: Row(children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: AppColors.kPrimary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(PhosphorIcons.arrowBendDownRight(), size: 20, color: AppColors.kPrimary),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Confirm Stock Issue', style: TextStyle(fontSize: 16)),
+          Text('→ ${widget.outlet.name}',
+              style: const TextStyle(fontSize: 12, color: AppColors.kPrimary,
+                  fontWeight: FontWeight.bold)),
+        ])),
+      ]),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Summary banner
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.kPrimary.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.kPrimary.withOpacity(0.2)),
+              ),
+              child: Row(children: [
+                Icon(PhosphorIcons.info(), size: 16, color: AppColors.kPrimary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'You are about to issue ${widget.cart.length} item type(s) '
+                  '(${totalUnits.toStringAsFixed(1)} total units) from Branch Store to '
+                  '${widget.outlet.name}. This will reduce branch stock and update '
+                  'the outlet counter.',
+                  style: const TextStyle(fontSize: 12, color: AppColors.kPrimary),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            // Items list
+            const Text('Items to issue:',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: widget.cart.length,
+                separatorBuilder: (_, __) => const Divider(height: 8),
+                itemBuilder: (_, i) {
+                  final c = widget.cart[i];
+                  return Row(children: [
+                    Container(
+                      width: 6, height: 6,
+                      decoration: const BoxDecoration(
+                          color: AppColors.kPrimary, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(c.stockItem.itemName,
+                        style: const TextStyle(fontSize: 13))),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.kPrimary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text('${c.quantity} ${c.stockItem.unit}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+                              color: AppColors.kPrimary)),
+                    ),
+                  ]);
+                },
+              ),
+            ),
+            const SizedBox(height: 14),
+            // Notes
+            TextField(
+              controller: _notesCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Notes / Reason (optional)',
+                hintText: 'e.g. Evening bar restock, weekend prep...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 10),
+            // Audit notice
+            Row(children: [
+              Icon(PhosphorIcons.shieldCheck(), size: 14, color: AppColors.kSuccess),
+              const SizedBox(width: 6),
+              const Expanded(child: Text(
+                'This action will be logged in the stock movement audit trail.',
+                style: TextStyle(fontSize: 11, color: AppColors.kTextSecondary),
+              )),
+            ]),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _isLoading ? null : _confirm,
+          icon: _isLoading
+              ? const SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Icon(PhosphorIcons.checkCircle(), size: 16),
+          label: Text(_isLoading ? 'Issuing...' : 'Confirm & Issue'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.kPrimary,
+            minimumSize: const Size(0, 44),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Production Ledger Bottom Sheet ──────────────────────────────────────────
+
+class _ProductionLedgerSheet extends ConsumerWidget {
+  const _ProductionLedgerSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final movementsAsync = ref.watch(stockMovementsProvider(null));
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      maxChildSize: 0.95,
+      minChildSize: 0.4,
+      builder: (ctx, scrollCtrl) => Column(
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.kDivider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: Row(children: [
+              Icon(PhosphorIcons.clipboardText(), size: 20, color: AppColors.kPrimary),
+              const SizedBox(width: 10),
+              const Text('Production Ledger',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () => ref.invalidate(stockMovementsProvider(null)),
+                icon: Icon(PhosphorIcons.arrowClockwise(), size: 14),
+                label: const Text('Refresh', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.kDivider),
+                  foregroundColor: AppColors.kTextSecondary,
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => Navigator.pop(ctx),
+                icon: Icon(PhosphorIcons.x(), size: 18),
+              ),
+            ]),
+          ),
+          const Divider(height: 1, color: AppColors.kDivider),
+          Expanded(
+            child: movementsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e',
+                  style: const TextStyle(color: AppColors.kError))),
+              data: (movements) {
+                if (movements.isEmpty) {
+                  return Center(
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(PhosphorIcons.clipboardText(), size: 48, color: AppColors.kDivider),
+                      const SizedBox(height: 12),
+                      const Text('No movements recorded yet',
+                          style: TextStyle(color: AppColors.kTextSecondary)),
+                    ]),
+                  );
+                }
+
+                return ListView.separated(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: movements.length,
+                  separatorBuilder: (_, __) => const Divider(height: 8, color: AppColors.kDivider),
+                  itemBuilder: (_, i) {
+                    final m = movements[i];
+                    final typeColor = m.movementType == 'outlet_issue'
+                        ? AppColors.kPrimary
+                        : m.movementType == 'stock_in'
+                            ? AppColors.kSuccess
+                            : AppColors.kWarning;
+
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      leading: Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: typeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          m.movementType == 'outlet_issue'
+                              ? PhosphorIcons.arrowBendDownRight()
+                              : PhosphorIcons.arrowsLeftRight(),
+                          size: 20, color: typeColor,
+                        ),
+                      ),
+                      title: Text(m.itemName,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (m.outletName != null)
+                            Text('→ ${m.outletName}',
+                                style: const TextStyle(fontSize: 12, color: AppColors.kPrimary)),
+                          Text('By ${m.performedBy} • ${_fmtDate(m.createdAt)}',
+                              style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary)),
+                          if (m.notes != null && m.notes!.isNotEmpty)
+                            Text(m.notes!,
+                                style: const TextStyle(fontSize: 11, color: AppColors.kTextSecondary,
+                                    fontStyle: FontStyle.italic)),
+                        ],
+                      ),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: typeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text('${m.quantity} ${m.unit}',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
+                                color: typeColor)),
+                      ),
+                      isThreeLine: true,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _fmtDate(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+}

@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc *)",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "Bash(node apply-pastry-shift-migration.js)",
+      "Read(//c/Users/user/.claude/skills/powersync/**)",
+      "Read(//c/Users/user/.agents/skills/powersync/**)",
+      "Bash(git add *)",
+      "Bash(git restore *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

@@ -327,17 +327,14 @@ export const createInvoice = async (
         // 4. Create invoice items
         if (items && items.length > 0) {
             const invItems = items.map((item: any) => ({
-                invoice_id: newInvoice.id,
+                supplier_invoice_id: newInvoice.id,
                 item_id: item.item_id,
-                grn_item_id: item.grn_item_id,
-                po_item_id: item.po_item_id,
+                goods_receipt_line_id: item.grn_item_id || item.goods_receipt_line_id || null,
                 description: item.description,
                 quantity: item.quantity,
+                unit: item.unit || 'units',
                 unit_price: item.unit_price,
-                subtotal: item.quantity * item.unit_price,
-                vat_rate: item.vat_rate ?? 16.00,
-                vat_amount: (item.quantity * item.unit_price) * ((item.vat_rate ?? 16.00) / 100),
-                total_amount: (item.quantity * item.unit_price) * (1 + ((item.vat_rate ?? 16.00) / 100))
+                line_total: (item.quantity * item.unit_price) * (1 + ((item.vat_rate ?? 0) / 100))
             }));
 
             const { error: itemsError } = await supabase

@@ -27,6 +27,7 @@ import 'kitchen_stocktake_screen.dart';
 import 'store_stocktake_screen.dart';
 import 'record_spoilage_screen.dart';
 import 'wastage_report_screen.dart';
+import '../../kitchen_operations/data/repository.dart';
 
 enum BranchStorekeeperSection {
   overview,
@@ -9593,10 +9594,63 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
   String _recipeSearch = '';
   Map<String, dynamic>? _selectedStock;
 
+  List<Map<String, dynamic>> _shifts = [];
+  Map<String, dynamic>? _selectedShift;
+  bool _loadingShifts = false;
+  bool _loadingAnalytics = false;
+  Map<String, dynamic> _analyticsData = {};
+
   @override
   void initState() {
     super.initState();
     _loadRecipes();
+    _loadShifts();
+  }
+
+  Future<void> _loadShifts() async {
+    setState(() => _loadingShifts = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final data = await repo.getKitchenShifts();
+      if (mounted) setState(() => _shifts = data);
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingShifts = false);
+    }
+  }
+
+  Future<void> _selectShift(Map<String, dynamic> shift) async {
+    setState(() {
+      _selectedShift = shift;
+      _loadingAnalytics = true;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final detail = await repo.getKitchenShiftDetail('${shift['id']}');
+      final posCons = await repo.getKitchenShiftPosConsumption('${shift['id']}');
+      
+      if (mounted) {
+        setState(() {
+          _analyticsData = {
+            'shift': detail['shift'] ?? shift,
+            'items': detail['items'] ?? [],
+            'productions': detail['productions'] ?? [],
+            'stock_take': detail['stock_take'] ?? [],
+            'consumption': posCons['consumption'] ?? [],
+            'cashier_shifts': posCons['cashier_shifts'] ?? [],
+            'summary': detail['summary'] ?? {},
+          };
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load shift analytics: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingAnalytics = false);
+    }
   }
 
   Future<void> _loadRecipes() async {
@@ -9667,24 +9721,69 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
 
   @override
   Widget build(BuildContext context) {
-    return _Page(
-      title: 'Food Control',
-      subtitle:
-          'Kitchen production engine — raw stock, POS item yield, variance, spoilage and food cost.',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: _loadRecipes,
-          tooltip: 'Refresh',
-        ),
-        FilledButton.icon(
-          onPressed: () => _openRecipeDialog(null),
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Add Food Control'),
-        ),
-      ],
+    return DefaultTabController(
+      length: 2,
+      child: _Page(
+        title: 'Food Control & Shift Analytics',
+        subtitle:
+            'Kitchen production engine — recipe config, POS consumption sync, cashier shifts, and deep variance analytics.',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              _loadRecipes();
+              _loadShifts();
+            },
+            tooltip: 'Refresh',
+          ),
+          FilledButton.icon(
+            onPressed: () => _openRecipeDialog(null),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Add Food Control'),
+          ),
+        ],
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.kPrimary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const TabBar(
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white60,
+              indicatorColor: Colors.white,
+              indicatorSize: TabBarIndicatorSize.tab,
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.restaurant_menu_outlined, size: 18),
+                  text: 'Recipes & BOM',
+                ),
+                Tab(
+                  icon: Icon(Icons.analytics_outlined, size: 18),
+                  text: 'Shift & Cashier Analytics',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: MediaQuery.of(context).size.height - 260,
+            child: TabBarView(
+              children: [
+                _buildRecipesAndStockTab(),
+                _buildShiftUsageAnalyticsTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecipesAndStockTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Two-flow info banner ──
         Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
@@ -9720,18 +9819,10 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: null, // navigated from parent
-                icon: const Icon(Icons.local_bar_outlined, size: 16),
-                label: const Text('Bar → POS Outlet Issue',
-                    style: TextStyle(fontSize: 11)),
-              ),
             ],
           ),
         ),
-        SizedBox(
-          height: MediaQuery.of(context).size.height - 260,
+        Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -9925,6 +10016,916 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
       ],
     );
   }
+
+  Widget _buildShiftUsageAnalyticsTab() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Left Side: Shift List (width: 300) ──
+        SizedBox(
+          width: 300,
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.kPrimary,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(12)),
+                  ),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.history, color: Colors.white, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Kitchen Shifts',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _loadingShifts && _shifts.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : _shifts.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No shifts found',
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _shifts.length,
+                              itemBuilder: (ctx, i) {
+                                final s = _shifts[i];
+                                final isSelected =
+                                    _selectedShift?['id'] == s['id'];
+                                final shiftNum = s['shift_number'] ??
+                                    '${s['id']}'.substring(0, 8);
+                                final shiftType = s['shift_type'] ?? 'Shift';
+                                final status = '${s['status'] ?? ''}'.toUpperCase();
+                                final dateStr = s['shift_date'] ?? '';
+                                
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSelected,
+                                  selectedTileColor:
+                                      AppColors.kPrimary.withOpacity(0.08),
+                                  onTap: () => _selectShift(s),
+                                  title: Text(
+                                    '$shiftType - #$shiftNum',
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  subtitle: Text(
+                                    dateStr,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  trailing: _statusBadge(status),
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // ── Right Side: Analytics Details ──
+        Expanded(
+          child: _selectedShift == null
+              ? Card(
+                  margin: EdgeInsets.zero,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.analytics_outlined,
+                            size: 64, color: Colors.grey.shade300),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No Kitchen Shift Selected',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade700),
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            'Select a kitchen shift from the list to view end-of-shift usage, linked cashier shifts, and raw ingredient variance analytics.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.grey.shade500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _loadingAnalytics
+                  ? const Card(
+                      margin: EdgeInsets.zero,
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : Card(
+                      margin: EdgeInsets.zero,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Shift Header Info
+                              _buildShiftHeaderSection(),
+                              const SizedBox(height: 20),
+                              // Linked Cashier Shifts
+                              _buildLinkedCashierShiftsSection(),
+                              const SizedBox(height: 20),
+                              // Raw Ingredient Variance Table
+                              _buildVarianceTableSection(),
+                              const SizedBox(height: 20),
+                              // Wastage Alerts
+                              _buildWastageAlertsSection(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShiftHeaderSection() {
+    final shift = _analyticsData['shift'] ?? _selectedShift ?? {};
+    final shiftNum = shift['shift_number'] ?? '${shift['id']}'.substring(0, 8);
+    final shiftType = shift['shift_type'] ?? 'Shift';
+    final status = '${shift['status'] ?? ''}'.toUpperCase();
+    final dateStr = shift['shift_date'] ?? '';
+    final openedAt = shift['opened_at'] != null ? DateTime.tryParse('${shift['opened_at']}')?.toLocal().toString().substring(0, 16) ?? '' : '—';
+    final closedAt = shift['closed_at'] != null ? DateTime.tryParse('${shift['closed_at']}')?.toLocal().toString().substring(0, 16) ?? '' : '—';
+    
+    // Storekeeper
+    String skName = '—';
+    if (shift['store_keeper'] != null) {
+      final sk = shift['store_keeper'];
+      skName = '${sk['first_name'] ?? ''} ${sk['last_name'] ?? ''}'.trim();
+    } else if (shift['opened_by_user'] != null) {
+      final obu = shift['opened_by_user'];
+      skName = '${obu['first_name'] ?? ''} ${obu['last_name'] ?? ''}'.trim();
+    }
+    
+    // Chefs
+    String chefsList = '—';
+    final staff = _analyticsData['shift_staff'] as List?;
+    if (staff != null && staff.isNotEmpty) {
+      chefsList = staff.map((st) {
+        final profile = st['profile'] ?? {};
+        return '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'.trim();
+      }).where((name) => name.isNotEmpty).join(', ');
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$shiftType - Session #$shiftNum',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              _statusBadge(status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
+            children: [
+              _buildHeaderDetailItem('Date', dateStr, Icons.calendar_today_outlined),
+              _buildHeaderDetailItem('Opened At', openedAt, Icons.login_outlined),
+              _buildHeaderDetailItem('Closed At', closedAt, Icons.logout_outlined),
+              _buildHeaderDetailItem('Storekeeper', skName, Icons.person_outline),
+              _buildHeaderDetailItem('Assigned Chefs', chefsList, Icons.restaurant_menu_outlined),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderDetailItem(String label, String value, IconData icon) {
+    return SizedBox(
+      width: 180,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLinkedCashierShiftsSection() {
+    final list = _analyticsData['cashier_shifts'] as List?;
+    final totalSales = list?.fold<double>(0, (sum, item) => sum + _fcNum(item['total_cost'])) ?? 0.0;
+    final totalPortions = list?.fold<double>(0, (sum, item) => sum + _fcNum(item['total_portions'])) ?? 0.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Linked Cashier Shifts',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (list != null && list.isNotEmpty)
+              Text(
+                'Total Sales: KES ${totalSales.toStringAsFixed(2)} (${totalPortions.toStringAsFixed(1)} portions sold)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.kPrimary,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        list == null || list.isEmpty
+            ? Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'No cashier shifts detected during this kitchen shift. Either no sales were made at POS cashier stations or POS sales were not associated with this kitchen shift yet.',
+                        style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 3.2,
+                ),
+                itemCount: list.length,
+                itemBuilder: (ctx, i) {
+                  final c = list[i];
+                  final shiftNum = c['shift_number'] ?? 'Shift';
+                  final cashier = c['cashier_name'] ?? 'Cashier';
+                  final outlet = c['outlet_name'] ?? 'Outlet';
+                  final sales = _fcNum(c['total_cost']);
+                  final portions = _fcNum(c['total_portions']);
+                  final status = '${c['status'] ?? ''}'.toUpperCase();
+
+                  return Card(
+                    margin: EdgeInsets.zero,
+                    color: Colors.grey.shade50,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '$outlet - #$shiftNum',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              _statusBadge(status),
+                            ],
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                cashier,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              Text(
+                                'KES ${sales.toStringAsFixed(2)} (${portions.toStringAsFixed(1)} sold)',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+
+  Widget _buildVarianceTableSection() {
+    final list = _analyticsData['items'] as List?;
+    if (list == null || list.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Raw Ingredient Variance',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Text(
+              'No raw ingredients tracked in this kitchen shift.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Raw Ingredient Variance',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Table(
+            columnWidths: const {
+              0: FlexColumnWidth(2.0), // Ingredient
+              1: FlexColumnWidth(1.0), // Opening
+              2: FlexColumnWidth(1.0), // Issued
+              3: FlexColumnWidth(1.0), // POS Consumed
+              4: FlexColumnWidth(1.0), // Spoilage
+              5: FlexColumnWidth(1.2), // Exp Closing
+              6: FlexColumnWidth(1.2), // Phy Closing
+              7: FlexColumnWidth(1.0), // Variance
+              8: FlexColumnWidth(1.2), // Variance Cost
+              9: FlexColumnWidth(1.2), // Status
+            },
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              // Table Header
+              TableRow(
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                ),
+                children: [
+                  _buildTableHeaderCell('Ingredient'),
+                  _buildTableHeaderCell('Opening'),
+                  _buildTableHeaderCell('Issued'),
+                  _buildTableHeaderCell('POS Consumed'),
+                  _buildTableHeaderCell('Spoilage'),
+                  _buildTableHeaderCell('Expected'),
+                  _buildTableHeaderCell('Physical'),
+                  _buildTableHeaderCell('Variance'),
+                  _buildTableHeaderCell('Cost (KES)'),
+                  _buildTableHeaderCell('Alert'),
+                ],
+              ),
+              // Table Data
+              ...list.map((item) {
+                final name = item['item_name'] ?? '';
+                final sku = item['item_sku'] ?? '';
+                final unit = item['unit_of_measure'] ?? '';
+                final opening = _fcNum(item['opening_stock']);
+                final additions = _fcNum(item['additions']);
+                final posConsumed = _fcNum(item['sold_quantity']);
+                final spoilage = _fcNum(item['spoilage_quantity']);
+                final expected = _fcNum(item['system_closing_stock']);
+                
+                final hasPhysical = item['physical_count'] != null;
+                final physical = hasPhysical ? _fcNum(item['physical_count']) : 0.0;
+                final variance = hasPhysical ? _fcNum(item['variance']) : 0.0;
+                final varianceCost = hasPhysical ? _fcNum(item['variance_value']) : 0.0;
+
+                // Determine Alert Badge
+                Widget alertBadge;
+                if (!hasPhysical) {
+                  alertBadge = _buildAlertBadge('UNCLOSED', Colors.grey.shade100, Colors.grey.shade700);
+                } else if (variance == 0.0) {
+                  alertBadge = _buildAlertBadge('OK', Colors.green.shade100, Colors.green.shade800);
+                } else {
+                  final alerts = _analyticsData['alerts'] as List?;
+                  final matchedAlert = alerts?.firstWhere(
+                    (a) => a['item_sku'] == sku,
+                    orElse: () => null,
+                  );
+                  if (matchedAlert != null) {
+                    final severity = MatchedSeverity(matchedAlert['severity']);
+                    if (severity == 'critical') {
+                      alertBadge = _buildAlertBadge('CRITICAL', Colors.red.shade100, Colors.red.shade800);
+                    } else {
+                      alertBadge = _buildAlertBadge('WARNING', Colors.amber.shade100, Colors.amber.shade800);
+                    }
+                  } else {
+                    if (variance < 0) {
+                      alertBadge = _buildAlertBadge('SHORTAGE', Colors.orange.shade100, Colors.orange.shade800);
+                    } else {
+                      alertBadge = _buildAlertBadge('OVERAGE', Colors.blue.shade100, Colors.blue.shade800);
+                    }
+                  }
+                }
+
+                return TableRow(
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$sku · $unit',
+                            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _buildTableCellText(opening.toStringAsFixed(1)),
+                    _buildTableCellText(additions.toStringAsFixed(1)),
+                    _buildTableCellText(posConsumed.toStringAsFixed(1)),
+                    _buildTableCellText(spoilage.toStringAsFixed(1)),
+                    _buildTableCellText(expected.toStringAsFixed(1)),
+                    _buildTableCellText(hasPhysical ? physical.toStringAsFixed(1) : '—'),
+                    _buildTableCellText(
+                      hasPhysical ? (variance > 0 ? '+${variance.toStringAsFixed(1)}' : variance.toStringAsFixed(1)) : '—',
+                      color: hasPhysical
+                          ? (variance < 0
+                              ? Colors.red
+                              : (variance > 0 ? Colors.blue : Colors.green))
+                          : null,
+                      bold: true,
+                    ),
+                    _buildTableCellText(
+                      hasPhysical ? varianceCost.toStringAsFixed(2) : '—',
+                      color: hasPhysical && varianceCost < 0 ? Colors.red : null,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: alertBadge,
+                    ),
+                  ],
+                );
+              }),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String MatchedSeverity(dynamic severity) {
+    if (severity == null) return '';
+    return '$severity'.toLowerCase();
+  }
+
+  Widget _buildTableHeaderCell(String text) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableCellText(String text, {Color? color, bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlertBadge(String label, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w800,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWastageAlertsSection() {
+    final alerts = _analyticsData['alerts'] as List?;
+    final liabilityCases = _analyticsData['liability_cases'] as List?;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Wastage Alerts & Staff Liability',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        
+        if (liabilityCases != null && liabilityCases.isNotEmpty) ...[
+          ...liabilityCases.map((lc) {
+            final status = '${lc['status'] ?? ''}'.replaceAll('_', ' ').toUpperCase();
+            final action = '${lc['liability_action'] ?? ''}'.toUpperCase();
+            final totalCost = _fcNum(lc['total_variance_cost']);
+            final reason = lc['write_off_reason'] ?? lc['notes'] ?? '';
+            final isWriteOff = lc['status'] == 'written_off';
+            final allocations = lc['allocations'] as List?;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isWriteOff ? Colors.green.shade50 : Colors.purple.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: isWriteOff ? Colors.green.shade200 : Colors.purple.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isWriteOff ? Icons.check_circle_outline : Icons.gavel_outlined,
+                            color: isWriteOff ? Colors.green.shade800 : Colors.purple.shade800,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isWriteOff ? 'Accountant Write-off' : 'Staff Liability Billed',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: isWriteOff ? Colors.green.shade900 : Colors.purple.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _statusBadge(status),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Total Reconciliation Cost: KES ${totalCost.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                  if (reason.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Reason/Notes: $reason',
+                      style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                  if (allocations != null && allocations.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Billing Details:',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    ...allocations.map((a) {
+                      final name = a['staff_name'] ?? a['user_name'] ?? 'Chef';
+                      final amt = _fcNum(a['amount']);
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 12, bottom: 2),
+                        child: Text(
+                          '• $name: KES ${amt.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      );
+                    }),
+                  ],
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+
+        alerts == null || alerts.isEmpty
+            ? Container(
+                padding: const EdgeInsets.all(16),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'No wastage alerts or shortages reported for this shift.',
+                        style: TextStyle(color: Colors.green.shade900, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: alerts.length,
+                itemBuilder: (ctx, i) {
+                  final a = alerts[i];
+                  final isCritical = a['severity'] == 'critical';
+                  final isAcknowledged = a['acknowledged_by'] != null;
+                  final type = '${a['alert_type'] ?? ''}'.replaceAll('_', ' ').toUpperCase();
+                  final message = a['message'] ?? '';
+                  final cost = _fcNum(a['variance_cost']);
+
+                  Color cardBg = isAcknowledged
+                      ? Colors.grey.shade50
+                      : (isCritical ? Colors.red.shade50 : Colors.amber.shade50);
+                  Color cardBorder = isAcknowledged
+                      ? Colors.grey.shade200
+                      : (isCritical ? Colors.red.shade200 : Colors.amber.shade200);
+                  Color fgColor = isAcknowledged
+                      ? Colors.grey.shade700
+                      : (isCritical ? Colors.red.shade900 : Colors.amber.shade900);
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: cardBg,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: cardBorder),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            isAcknowledged
+                                ? Icons.check_circle_outline
+                                : (isCritical ? Icons.error_outline : Icons.warning_amber_rounded),
+                            color: isAcknowledged
+                                ? Colors.grey.shade600
+                                : (isCritical ? Colors.red.shade800 : Colors.amber.shade800),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      type,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: fgColor,
+                                      ),
+                                    ),
+                                    if (cost > 0)
+                                      Text(
+                                        'Loss: KES ${cost.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isAcknowledged ? Colors.grey.shade700 : Colors.red,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  message,
+                                  style: TextStyle(fontSize: 12, color: fgColor, fontWeight: FontWeight.w600),
+                                ),
+                                if (isAcknowledged) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Acknowledged',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade500,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (!isAcknowledged) ...[
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              onPressed: () => _acknowledgeAlert(a),
+                              icon: const Icon(Icons.check, size: 14),
+                              label: const Text('Acknowledge', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+
+  Future<void> _acknowledgeAlert(Map<String, dynamic> alert) async {
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.acknowledgeWastageAlert('${alert['id']}');
+      
+      if (_selectedShift != null) {
+        final alerts = await repo.kitchenWastageAlerts(shiftId: '${_selectedShift!['id']}');
+        if (mounted) {
+          setState(() {
+            _analyticsData['alerts'] = alerts;
+          });
+        }
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Wastage alert acknowledged successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to acknowledge alert: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _statusBadge(String raw) {
+    final s = raw.toLowerCase();
+    Color bg = Colors.grey.shade100;
+    Color fg = Colors.grey.shade700;
+    if (s == 'paid' || s == 'completed' || s == 'approved') {
+      bg = Colors.green.shade100; fg = Colors.green.shade800;
+    } else if (s == 'credit_bill' || s == 'credit' || s == 'pending_chef') {
+      bg = Colors.purple.shade100; fg = Colors.purple.shade800;
+    } else if (s == 'partial' || s == 'pending_review') {
+      bg = Colors.amber.shade100; fg = Colors.amber.shade900;
+    } else if (s == 'voided' || s == 'cancelled' || s == 'rejected') {
+      bg = Colors.red.shade100; fg = Colors.red.shade800;
+    } else if (s == 'open' || s == 'pending') {
+      bg = Colors.orange.shade100; fg = Colors.orange.shade800;
+    } else if (s == 'closed') {
+      bg = Colors.blue.shade100; fg = Colors.blue.shade800;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg, borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(raw.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: fg)),
+    );
+  }
+
 
   Future<void> _openRecipeDialog(Map<String, dynamic>? existing) async {
     final saved = await showDialog<bool>(
@@ -12375,7 +13376,7 @@ class _KitchenProductionSectionState
   List<Map<String, dynamic>> _recipes = [];
   bool _loading = true;
   Map<String, dynamic>? _selected; // open session for detail view
-  String _shiftFilter = 'ALL'; // ALL | morning | afternoon | night
+  String _shiftFilter = 'ALL'; // ALL | shift_a | shift_b
   List<Map<String, dynamic>> _unacknowledgedAlerts = [];
   Timer? _alertPollTimer;
 
@@ -12790,9 +13791,8 @@ class _KitchenProductionSectionState
             children: [
               for (final entry in const {
                 'ALL': 'All Shifts',
-                'morning': 'Morning',
-                'afternoon': 'Afternoon',
-                'night': 'Night',
+                'shift_a': 'Shift A',
+                'shift_b': 'Shift B',
               }.entries)
                 ChoiceChip(
                   label: Text(entry.value),
@@ -13342,18 +14342,20 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
     'central_storekeeper',
   };
 
-  String _shiftType = 'morning';
+  String _shiftType = 'shift_a';
   final List<Map<String, dynamic>> _items = [];
   bool _posting = false;
   bool _staffLoading = true;
   List<Map<String, dynamic>> _staff = [];
   final Set<String> _selectedChefIds = {};
+  List<Map<String, dynamic>> _combinedStock = [];
 
   @override
   void initState() {
     super.initState();
+    _items.clear();
     _addItem();
-    _loadStaff();
+    _loadStaffAndStock();
   }
 
   @override
@@ -13381,16 +14383,66 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
     return false;
   }
 
-  Future<void> _loadStaff() async {
+  Future<void> _loadStaffAndStock() async {
     setState(() => _staffLoading = true);
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final all = await repo.getStaffList();
-      final kitchenStaff = all.where(_isKitchenStaff).toList();
-      if (mounted) setState(() => _staff = kitchenStaff);
+      final kitchenRepo = ref.read(kitchenOpsRepositoryProvider);
+      
+      // Load staff list
+      final allStaff = await repo.getStaffList();
+      final kitchenStaff = allStaff.where(_isKitchenStaff).toList();
+      if (mounted) {
+        setState(() {
+          _staff = kitchenStaff;
+        });
+      }
+
+      // Initialize combined stock with the branch stock passed in widget.stock
+      final List<Map<String, dynamic>> stockList = List.from(widget.stock);
+      final Set<String> existingSkus = stockList
+          .map((s) => '${s['item_sku'] ?? s['sku'] ?? ''}'.toLowerCase())
+          .where((s) => s.isNotEmpty)
+          .toSet();
+
+      // Load kitchen food controls to find raw material SKUs
+      final foodControls = await kitchenRepo.getFoodControls();
+      for (const fc in foodControls) {
+        final rawSku = '${fc['raw_item_sku'] ?? ''}';
+        final rawName = '${fc['raw_item_name'] ?? ''}';
+        if (rawSku.isNotEmpty && !existingSkus.contains(rawSku.toLowerCase())) {
+          stockList.add({
+            'item_sku': rawSku,
+            'item_name': rawName,
+            'sku': rawSku,
+            'name': rawName,
+            'unit_of_measure': '${fc['raw_unit'] ?? 'kg'}',
+            'unit': '${fc['raw_unit'] ?? 'kg'}',
+            'quantity': 0.0,
+            'cost_price': 0.0,
+          });
+          existingSkus.add(rawSku.toLowerCase());
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _combinedStock = stockList;
+        });
+      }
     } catch (_) {
+      // Fallback to widget.stock if any API fails
+      if (mounted && _combinedStock.isEmpty) {
+        setState(() {
+          _combinedStock = List.from(widget.stock);
+        });
+      }
     } finally {
-      if (mounted) setState(() => _staffLoading = false);
+      if (mounted) {
+        setState(() {
+          _staffLoading = false;
+        });
+      }
     }
   }
 
@@ -13503,9 +14555,8 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
               decoration: const InputDecoration(
                   labelText: 'Shift Type', border: OutlineInputBorder()),
               items: const [
-                DropdownMenuItem(value: 'morning', child: Text('Morning')),
-                DropdownMenuItem(value: 'afternoon', child: Text('Afternoon')),
-                DropdownMenuItem(value: 'night', child: Text('Night')),
+                DropdownMenuItem(value: 'shift_a', child: Text('Shift A')),
+                DropdownMenuItem(value: 'shift_b', child: Text('Shift B')),
               ],
               onChanged: (v) => setState(() => _shiftType = v ?? _shiftType),
             ),
@@ -13586,8 +14637,8 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
                           child: Autocomplete<Map<String, dynamic>>(
                             optionsBuilder: (tv) {
                               final q = tv.text.toLowerCase().trim();
-                              if (q.isEmpty) return widget.stock.take(20);
-                              return widget.stock.where((s) {
+                              if (q.isEmpty) return _combinedStock.take(20);
+                              return _combinedStock.where((s) {
                                 final sku = '${s['item_sku'] ?? s['sku'] ?? ''}'
                                     .toLowerCase();
                                 final name =

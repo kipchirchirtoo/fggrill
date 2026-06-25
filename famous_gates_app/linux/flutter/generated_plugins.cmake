@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   flutter_secure_storage_linux
+  gtk
   powersync_flutter_libs
   printing
   screen_retriever_linux

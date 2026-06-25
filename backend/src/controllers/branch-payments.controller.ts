@@ -253,7 +253,7 @@ const fetchReceiptBundle = async (req: Request, res: Response): Promise<Record<s
     ? await supabase.from('store_grn_items').select('*').eq('grn_id', payment.grn_id)
     : { data: [] } as any;
   const { data: invoiceItems } = !grnItems?.length && (invoice?.id)
-    ? await supabase.from('store_supplier_invoice_items').select('*').eq('invoice_id', invoice.id)
+    ? await supabase.from('store_supplier_invoice_items').select('*').eq('supplier_invoice_id', invoice.id)
     : { data: [] } as any;
 
   const itemRows = (grnItems?.length ? grnItems : invoiceItems) || [];

@@ -27,6 +27,12 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# PowerSync local config — service.yaml contains the live DB password (CLI writes it
+# back in plaintext on `pull instance`); cli.yaml ties this machine to the Cloud instance.
+backend/powersync/service.yaml
+backend/powersync/cli.yaml
+backend/powersync/*.devin-backup
+
 # Vercel
 .vercel
 

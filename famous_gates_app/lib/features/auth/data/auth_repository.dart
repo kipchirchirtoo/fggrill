@@ -18,6 +18,7 @@ class AuthRepository {
 
   static const jwtKey = 'fg_jwt';
   static const refreshKey = 'fg_refresh';
+  static const supabaseTokenKey = 'fg_supabase_token';
   static const branchIdKey = 'fg_branch_id';
   static const branchNameKey = 'fg_branch_name';
   static const roleKey = 'fg_role';
@@ -51,12 +52,16 @@ class AuthRepository {
       final refreshToken = _stringValue(
         authData['refresh_token'] ?? sessionJson?['refresh_token'],
       );
+      final supabaseToken = _stringValue(
+        authData['supabase_token'] ?? sessionJson?['supabase_token'],
+      );
       if (accessToken.isEmpty) {
         throw Exception('No access token received');
       }
       await _storeSession(
         accessToken: accessToken,
         refreshToken: refreshToken,
+        supabaseToken: supabaseToken,
         user: user,
       );
       // Persist remember-me preference and (optionally) email.
@@ -100,12 +105,16 @@ class AuthRepository {
       final refreshToken = _stringValue(
         authData['refresh_token'] ?? sessionJson?['refresh_token'],
       );
+      final supabaseToken = _stringValue(
+        authData['supabase_token'] ?? sessionJson?['supabase_token'],
+      );
       if (accessToken.isEmpty) {
         throw Exception('No access token received');
       }
       await _storeSession(
         accessToken: accessToken,
         refreshToken: refreshToken,
+        supabaseToken: supabaseToken,
         user: user,
       );
       return user;
@@ -235,8 +244,15 @@ class AuthRepository {
       'refresh_token': refreshToken,
     });
     final data = Map<String, dynamic>.from(response.data as Map);
-    final accessToken = '${data['access_token']}';
+    final sessionJson = _sessionJsonFromAuthData(data);
+    final accessToken = _stringValue(
+      data['access_token'] ?? data['token'] ?? sessionJson?['access_token'],
+    );
     await storage.write(key: jwtKey, value: accessToken);
+    final supabaseToken = _stringValue(
+      data['supabase_token'] ?? sessionJson?['supabase_token'],
+    );
+    await _writeOptional(storage, supabaseTokenKey, supabaseToken);
     return accessToken;
   }
 
@@ -272,11 +288,26 @@ class AuthRepository {
     required String accessToken,
     required String refreshToken,
     required User user,
+    String? supabaseToken,
   }) async {
     final storage = _ref.read(secureStorageProvider);
     await storage.write(key: jwtKey, value: accessToken);
     await storage.write(key: refreshKey, value: refreshToken);
+    await _writeOptional(storage, supabaseTokenKey, supabaseToken);
     await _storeUser(user);
+  }
+
+  /// Token signed with the project's real Supabase JWT secret (not this
+  /// app's own JWT_SECRET), bridging this app's custom bcrypt+JWT login
+  /// into a session Supabase's PostgREST/Realtime will accept for RLS.
+  /// Used by direct-to-Supabase reads; null if the backend hasn't issued
+  /// one yet (e.g. SUPABASE_JWT_SECRET unset server-side, or a session
+  /// stored before this existed) -- callers must treat null as "fall back",
+  /// not retry.
+  Future<String?> getSupabaseToken() async {
+    final storage = _ref.read(secureStorageProvider);
+    final token = await storage.read(key: supabaseTokenKey);
+    return (token == null || token.isEmpty) ? null : token;
   }
 
   Future<void> _storeUser(User user) async {

@@ -2172,11 +2172,11 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
       { data: inventoryItems }
     ] = await Promise.all([
       supabase.from('simple_items').select('sku, item_name, unit_of_measure, category').in('sku', itemSkus),
-      supabase.from('inventory_items').select('item_code, name, unit, category').in('item_code', itemSkus)
+      supabase.from('inventory_items').select('item_sku, item_name, unit, category').in('item_sku', itemSkus)
     ]);
 
     const simpleDetailsMap = Object.fromEntries(simpleItems?.map(i => [i.sku, i]) || []);
-    const inventoryDetailsMap = Object.fromEntries(inventoryItems?.map(i => [i.item_code, i]) || []);
+    const inventoryDetailsMap = Object.fromEntries(inventoryItems?.map(i => [i.item_sku, i]) || []);
 
     // Enrich request items with item details
     const enrichedReqItems = reqItems?.map(item => {
@@ -2185,7 +2185,7 @@ export const getBranchOrdersVerification = async (req: Request, res: Response, n
 
       return {
         ...item,
-        item_name: sItem?.item_name || iItem?.name || item.name || item.item_name || item.item_sku || 'Unknown Item',
+        item_name: sItem?.item_name || iItem?.item_name || item.name || item.item_name || item.item_sku || 'Unknown Item',
         item_unit: sItem?.unit_of_measure || iItem?.unit || item.unit || '',
         item_category: sItem?.category || iItem?.category || item.category || '',
         requested_quantity: item.requested_quantity || item.quantity_requested || item.quantity || 0,
@@ -2765,7 +2765,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         ? supabase.from('stock_request_items').select('request_id, item_sku, requested_quantity').in('request_id', stockIds)
         : Promise.resolve({ data: [], error: null } as any),
       barStockIds.length
-        ? supabase.from('bar_stock_request_items').select('request_id, inventory_item_id, requested_quantity').in('request_id', barStockIds)
+        ? supabase.from('bar_stock_request_items').select('request_id, drink_id, requested_qty').in('request_id', barStockIds)
         : Promise.resolve({ data: [], error: null } as any)
     ]);
 
@@ -2786,8 +2786,12 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       menuItemIds.length
         ? supabase.from('restaurant_menu_items').select('id, name, item_code').in('id', menuItemIds)
         : Promise.resolve({ data: [], error: null } as any),
+      // bar_order_items.drink_id is a FK to bar_drinks.id, not
+      // restaurant_bar_inventory (a separate, unrelated legacy table) —
+      // querying the wrong table here meant bar item names/categories on
+      // this report always came back blank.
       drinkIds.length
-        ? supabase.from('restaurant_bar_inventory').select('id, name, category').in('id', drinkIds)
+        ? supabase.from('bar_drinks').select('id, name, category').in('id', drinkIds)
         : Promise.resolve({ data: [], error: null } as any)
     ]);
 
@@ -3037,10 +3041,10 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     barStockRequests.forEach((request: any) => {
       const branchKey = String(request.bar_branch_id);
       (barStockItemsByRequestId[String(request.id)] || []).forEach((item: any) => {
-        const inventoryItemId = item.inventory_item_id ? String(item.inventory_item_id) : '';
-        if (!inventoryItemId) return;
-        const key = `${branchKey}_${inventoryItemId}`;
-        requestedBarByBranchItem[key] = (requestedBarByBranchItem[key] || 0) + Number(item.requested_quantity || 0);
+        const drinkId = item.drink_id ? String(item.drink_id) : '';
+        if (!drinkId) return;
+        const key = `${branchKey}_${drinkId}`;
+        requestedBarByBranchItem[key] = (requestedBarByBranchItem[key] || 0) + Number(item.requested_qty || 0);
       });
     });
 
@@ -3305,7 +3309,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       if (outletShiftIds.length) {
         const { data: paymentData, error: paymentError } = await supabase
           .from('pos_shift_payments')
-          .select('id, shift_id, outlet_id, order_id, payment_method, amount')
+          .select('id, shift_id, outlet_id, order_id, payment_method, amount, reference')
           .in('shift_id', outletShiftIds);
         if (!paymentError && paymentData) {
           payments = paymentData;
@@ -3324,13 +3328,21 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     outletOrders.forEach((order: any) => {
       const orderPayments = paymentsByOrderId[String(order.id)] || [];
       let paymentMethods = orderPayments.map((p: any) => String(p.payment_method || '').toUpperCase());
+      // Build structured {method, code} objects so M-Pesa codes are surfaced in the UI
+      const paymentDetails: { method: string; code?: string }[] = orderPayments.map((p: any) => ({
+        method: String(p.payment_method || '').toUpperCase(),
+        code: p.reference ? String(p.reference).trim() : undefined,
+      }));
       if (paymentMethods.length === 0) {
         if (order.payment_method) {
           paymentMethods = [String(order.payment_method).toUpperCase()];
+          paymentDetails.push({ method: paymentMethods[0] });
         } else if (order.payment_status === 'credit_bill' || order.status === 'credit_bill') {
           paymentMethods = ['CREDIT BILL'];
+          paymentDetails.push({ method: 'CREDIT BILL' });
         } else {
           paymentMethods = ['CASH'];
+          paymentDetails.push({ method: 'CASH' });
         }
       }
       paymentMethods = [...new Set(paymentMethods)];
@@ -3353,6 +3365,7 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         total_amount: Number(order.total_amount || 0),
         payment_status: order.payment_status || order.status,
         payment_methods: paymentMethods,
+        payment_details: paymentDetails,
         item_summary: itemSummary,
         shift_id: order.shift_id ? String(order.shift_id) : 'no_shift',
         source: String(outletMap[String(order.outlet_id)]?.outlet_type || 'pos_outlet'),
@@ -3472,6 +3485,10 @@ export const getBarStockAudits = async (req: Request, res: Response, next: NextF
     let query = supabase
       .from('stock_counts')
       .select('*, items:stock_count_items(*), branch:branches(name)')
+      // Without this, every stock count (kitchen, branch store, etc.) showed
+      // up under "Bar Stock Audits" since stock_counts is a shared table
+      // across all stocktake types, keyed apart only by store_type.
+      .eq('store_type', 'bar')
       .order('created_at', { ascending: false });
 
     if (branch_id) query = query.eq('branch_id', branch_id);
@@ -3504,7 +3521,10 @@ export const getBarStockAudits = async (req: Request, res: Response, next: NextF
       });
     }
 
-    // Fetch item names â€” item_id can reference either restaurant_bar_inventory or store_items
+    // item_id on a stock_count_items row is the inventory_items UUID (set by
+    // syncBarStocktakeToStockCounts / the storekeeping stock-count sync) —
+    // restaurant_bar_inventory and store_items are unrelated legacy tables
+    // and never matched here, which is why item names always came back blank.
     const itemIds = new Set<string>();
     audits?.forEach((audit: any) => {
       audit.items?.forEach((item: any) => {
@@ -3515,20 +3535,18 @@ export const getBarStockAudits = async (req: Request, res: Response, next: NextF
     if (itemIds.size > 0) {
       const idArray = Array.from(itemIds);
 
-      // Try both tables in parallel
-      const [{ data: barItems }, { data: storeItems }] = await Promise.all([
-        supabase.from('restaurant_bar_inventory').select('id, name').in('id', idArray),
-        supabase.from('store_items').select('id, name').in('id', idArray),
-      ]);
+      const { data: invItems } = await supabase
+        .from('inventory_items')
+        .select('id, item_name, unit')
+        .in('id', idArray);
 
-      const itemMap: Record<string, string> = {};
-      (barItems || []).forEach((d: any) => { itemMap[d.id] = d.name; });
-      (storeItems || []).forEach((d: any) => { itemMap[d.id] = d.name; });
+      const itemMap: Record<string, { name: string; unit: string }> = {};
+      (invItems || []).forEach((d: any) => { itemMap[d.id] = { name: d.item_name, unit: d.unit }; });
 
       audits?.forEach((audit: any) => {
         audit.items?.forEach((item: any) => {
           if (item.item_id && itemMap[item.item_id]) {
-            item.drink = { name: itemMap[item.item_id] };
+            item.drink = { name: itemMap[item.item_id].name, unit: itemMap[item.item_id].unit };
           }
         });
       });
@@ -3542,7 +3560,21 @@ export const getBarStockAudits = async (req: Request, res: Response, next: NextF
 
 /**
  * Verify a Bar Stock Take
- * Auditor approves the count and it updates the system inventory.
+ *
+ * This is an auditor sign-off, not an inventory-applying step. The actual
+ * physical count is already committed to bar_stock/pos_outlet_items by the
+ * branch accountant's approval (see approveBarStocktake in
+ * storekeeping/bar-stocktake.controller.ts), which runs before this is ever
+ * reachable. This endpoint previously tried to "apply" the count itself by
+ * writing into restaurant_bar_inventory using item.item_id as that table's
+ * primary key — but item_id here is an inventory_items UUID, a completely
+ * different id space, so that update matched zero rows every single time
+ * (silently — no error, since an .eq() filter matching nothing isn't a
+ * failure). The accompanying branch_stock_movements insert had the same
+ * problem (a UUID stored in a sku-typed column) and wasn't linked to
+ * bar_stock_ledger, so it produced an audit row nobody could trace back to
+ * the real stock. Net effect: clicking "verify" never touched real stock,
+ * it just looked like it did.
  */
 export const verifyBarStockTake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -3550,7 +3582,6 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
     const { notes } = req.body;
     const userId = (req as any).user?.id;
 
-    // 1. Get the stock count and its items
     const { data: count, error: countError } = await supabase
       .from('stock_counts')
       .select('*, items:stock_count_items(*)')
@@ -3560,41 +3591,6 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
     if (countError || !count) throw new Error('Stock count not found');
     if (count.status === 'verified') throw new Error('Stock count already verified');
 
-    // 2. Update restaurant_bar_inventory for each item
-    for (const item of count.items) {
-      if (!item.item_id) continue;
-
-      const { error: updateError } = await supabase
-        .from('restaurant_bar_inventory')
-        .update({
-          current_bottles: item.physical_quantity,
-          last_counted_at: new Date().toISOString()
-        })
-        .eq('id', item.item_id);
-
-      if (updateError) {
-        console.error(`Error updating inventory for item ${item.item_id}:`, updateError.message);
-      }
-
-      // Also log movement - Use branch_stock_movements table
-      const { error: movementError } = await supabase.from('branch_stock_movements').insert([{
-        item_sku: item.item_id, // For bar items, we use ID as SKU in movements for now
-        branch_id: count.branch_id,
-        quantity: item.physical_quantity - item.system_quantity,
-        movement_type: 'adjustment',
-        reference_type: 'stock_count',
-        reference_id: id,
-        notes: `Bar Audit Adjustment: ${notes || ''}`,
-        performed_by: userId
-      }]);
-
-      if (movementError) {
-        console.error('Database error:', movementError);
-        throw movementError;
-      }
-    }
-
-    // 3. Mark the count as verified
     const { error: verifyError } = await supabase.from('stock_counts').update({
       status: 'verified',
       verified_by: userId,
@@ -3604,7 +3600,7 @@ export const verifyBarStockTake = async (req: Request, res: Response, next: Next
 
     if (verifyError) throw verifyError;
 
-    res.status(200).json({ success: true, message: 'Stock count verified and inventory updated' });
+    res.status(200).json({ success: true, message: 'Stock count verified' });
   } catch (error) {
     next(error);
   }

@@ -733,35 +733,19 @@ class _StationTabState extends ConsumerState<_StationTab> {
           currentShift.when(
             data: (raw) {
               final shift = _payload(raw);
-              // Verified collections actually taken in this shift
-              // (cash + M-Pesa + card; credit bills are not "collected").
-              final verified = _num(shift['total_cash_sales']) +
-                  _num(shift['total_mpesa_sales']) +
-                  _num(shift['total_card_sales']);
-              final collections =
-                  verified > 0 ? verified : _num(shift['total_sales']);
+              // Financial totals are deliberately hidden from the cashier
+              // during an active shift. Only the accountant sees real
+              // collections at reconciliation time.
               final txns = _num(shift['transaction_count']).toInt();
               final unpaidCount = unpaidBills.maybeWhen(
                   data: (bills) => bills.length, orElse: () => null);
-              final unpaidTotal = unpaidBills.maybeWhen(
-                data: (bills) => bills.fold<num>(
-                  0,
-                  (sum, bill) =>
-                      sum +
-                      _num(
-                        bill['balance_amount'] ??
-                            bill['balance'] ??
-                            bill['total_amount'],
-                      ),
-                ),
-                orElse: () => null,
-              );
               return Row(
                 children: [
-                  Expanded(
+                  const Expanded(
                     child: StatCard(
                       label: 'Shift Collections',
-                      value: _money(collections),
+                      // Hidden from cashier — revealed at reconciliation
+                      value: 'KES 0',
                       icon: Icons.payments,
                       color: AppColors.kSuccess,
                     ),
@@ -770,9 +754,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   Expanded(
                     child: StatCard(
                       label: 'Unpaid Bills',
-                      value: unpaidCount == null || unpaidTotal == null
+                      // Show count only — no amount visible to cashier
+                      value: unpaidCount == null
                           ? '...'
-                          : '$unpaidCount | ${_money(unpaidTotal)}',
+                          : '$unpaidCount bill${unpaidCount == 1 ? '' : 's'}',
                       icon: Icons.receipt_long,
                       color: AppColors.kWarning,
                     ),
@@ -787,13 +772,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Expanded(
+                  const Expanded(
                     child: StatCard(
                       label: 'Expected Drawer Cash',
-                      value: _money(_num(shift['opening_float']) +
-                          _num(shift['total_cash_sales'] ??
-                              shift['total_cash'] ??
-                              shift['total_cash_in'])),
+                      // Hidden from cashier — revealed at reconciliation
+                      value: 'KES 0',
                       icon: Icons.account_balance_wallet,
                       color: AppColors.kAccent,
                     ),
@@ -3435,104 +3418,317 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${_statusLabel(_status)} shift history',
-                        style: Theme.of(context).textTheme.titleMedium,
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          '${_statusLabel(_status)} shift history',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Card(
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: rows.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (_, index) {
-                            final row = rows[index];
-                            final status = _shiftStatus(row);
-                            return ExpansionTile(
-                              leading: CircleAvatar(
-                                backgroundColor: _statusColor(status)
-                                    .withValues(alpha: 0.12),
-                                child: Icon(Icons.access_time,
-                                    color: _statusColor(status), size: 18),
-                              ),
-                              title: Text(_text(row, ['shift_number', 'id'])),
-                              subtitle: Text(
-                                  '${_date(row['requested_at'] ?? row['shift_start'] ?? row['opened_at'] ?? row['start_time'])} - ${_statusLabel(status)}'),
-                              trailing: Text(_money(row['total_sales'] ??
-                                  row['total_collections'] ??
-                                  row['closing_float'] ??
-                                  row['closing_cash'])),
-                              childrenPadding:
-                                  const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      ...rows.map((row) {
+                        final status = _shiftStatus(row);
+                        final isClosed =
+                            status == 'closed' || status == 'reconciled';
+                        final statusColor = _statusColor(status);
+                        final shiftNum =
+                            _text(row, ['shift_number', 'id']);
+                        final cashierName = _text(row, [
+                          'cashier_name',
+                          'opened_by_name',
+                          'staff_name',
+                          'user_name',
+                        ]);
+                        final openedAt = _date(
+                          row['opened_at'] ??
+                              row['shift_start'] ??
+                              row['requested_at'] ??
+                              row['start_time'],
+                        );
+                        final closedAt = isClosed
+                            ? _date(
+                                row['closed_at'] ??
+                                    row['shift_end'] ??
+                                    row['end_time'],
+                              )
+                            : null;
+
+                        // Money values — shown only after shift is closed.
+                        final showMoney = isClosed;
+                        final baseCash = _num(
+                            row['total_cash_sales'] ?? row['total_cash']);
+                        final baseMpesa = _num(
+                            row['total_mpesa_sales'] ?? row['total_mpesa']);
+                        final baseCard = _num(
+                            row['total_card_sales'] ?? row['total_card']);
+                        final credits = _num(row['credit_bills_taken'] ??
+                            row['total_credit'] ??
+                            row['credit_bills_value']);
+                        final closingFloat =
+                            _num(row['closing_float'] ?? row['closing_cash']);
+                        final expectedCash = _num(
+                            row['expected_closing_float'] ??
+                                row['expected_cash']);
+                        final variance = closingFloat - expectedCash;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: statusColor.withValues(alpha: 0.35),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: ExpansionTile(
+                            tilePadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            childrenPadding:
+                                const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  statusColor.withValues(alpha: 0.12),
+                              child: Icon(Icons.access_time,
+                                  color: statusColor, size: 18),
+                            ),
+                            title: Row(
                               children: [
-                                _KeyValueGrid(values: _shiftSummaryValues(row)),
-                                if (_creditBillDetails(row).isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text('Credit bills — who for',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleSmall),
+                                Expanded(
+                                  child: Text(
+                                    shiftNum,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14),
                                   ),
-                                  const SizedBox(height: 4),
-                                  for (final c in _creditBillDetails(row))
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 2),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.badge_outlined,
-                                              size: 14,
-                                              color: AppColors.kTextSecondary),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(_text(c, [
-                                              'name',
-                                              'staff_name',
-                                              'customer_name'
-                                            ])),
-                                          ),
-                                          Text(
-                                              _money(c['amount'] ??
-                                                  c['total_amount']),
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w700)),
-                                        ],
-                                      ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        statusColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    _statusLabel(status).toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: statusColor,
+                                      letterSpacing: 0.5,
                                     ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (cashierName.isNotEmpty)
+                                    Text(
+                                      cashierName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12),
+                                    ),
+                                  Text(
+                                    'Opened: $openedAt'
+                                    '${closedAt != null ? '  ·  Closed: $closedAt' : ''}',
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.kTextSecondary),
+                                  ),
                                 ],
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: status == 'open'
-                                          ? () => _closeShift(row)
-                                          : null,
-                                      icon: const Icon(Icons.stop, size: 16),
-                                      label: const Text('Close'),
-                                    ),
-                                    if (status == 'pending_open') ...[
-                                      const SizedBox(width: 8),
-                                      const Expanded(
-                                        child: Text(
-                                          'Waiting for branch accountant approval',
-                                          style: TextStyle(
-                                            color: AppColors.kTextSecondary,
+                              ),
+                            ),
+                            // Trailing summary row — only for closed shifts
+                            trailing: showMoney
+                                ? Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        'Cash ${_money(closingFloat)}',
+                                        style: const TextStyle(
                                             fontWeight: FontWeight.w700,
-                                          ),
+                                            fontSize: 13),
+                                      ),
+                                      Text(
+                                        variance >= 0
+                                            ? '+${_money(variance)}'
+                                            : _money(variance),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: variance >= 0
+                                              ? AppColors.kSuccess
+                                              : AppColors.kError,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     ],
+                                  )
+                                : null,
+                            children: [
+                              // ── Shift summary grid ──────────────────────
+                              if (showMoney) ...[
+                                // Full money breakdown for closed shifts
+                                _LogbookSummaryGrid(
+                                  entries: [
+                                    _LogbookEntry('Opening float',
+                                        _money(_num(row['opening_float']))),
+                                    _LogbookEntry('Cash sales',
+                                        _money(baseCash),
+                                        accent: AppColors.kSuccess),
+                                    _LogbookEntry('M-Pesa sales',
+                                        _money(baseMpesa),
+                                        accent: AppColors.kPrimary),
+                                    _LogbookEntry('Card sales',
+                                        _money(baseCard)),
+                                    _LogbookEntry('Credit bills',
+                                        _money(credits),
+                                        accent: AppColors.kWarning),
+                                    _LogbookEntry('Expected cash',
+                                        _money(expectedCash)),
+                                    _LogbookEntry('Actual cash counted',
+                                        _money(closingFloat),
+                                        accent: AppColors.kSuccess),
+                                    _LogbookEntry(
+                                      'Variance',
+                                      (variance >= 0
+                                          ? '+'
+                                          : '') +
+                                          _money(variance),
+                                      accent: variance >= 0
+                                          ? AppColors.kSuccess
+                                          : AppColors.kError,
+                                      bold: true,
+                                    ),
                                   ],
                                 ),
+                              ] else ...[
+                                // Open shifts: do not reveal financial figures
+                                const Padding(
+                                  padding:
+                                      EdgeInsets.symmetric(vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.lock_outline,
+                                          size: 14,
+                                          color: AppColors.kTextSecondary),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Financial totals are hidden until the shift is closed and reviewed by the branch accountant.',
+                                          style: TextStyle(
+                                              color: AppColors.kTextSecondary,
+                                              fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+
+                              // ── Credit bills breakdown ───────────────────
+                              if (_creditBillDetails(row).isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Credit bills',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                            fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                for (final c in _creditBillDetails(row))
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 3),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.badge_outlined,
+                                            size: 14,
+                                            color: AppColors.kTextSecondary),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            _text(c, [
+                                              'name',
+                                              'staff_name',
+                                              'customer_name'
+                                            ]),
+                                          ),
+                                        ),
+                                        Text(
+                                          _money(c['amount'] ??
+                                              c['total_amount']),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+
+                              // ── Actions ─────────────────────────────────
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  if (status == 'open')
+                                    FilledButton.icon(
+                                      onPressed: () => _closeShift(row),
+                                      icon: const Icon(Icons.stop_circle,
+                                          size: 16),
+                                      label: const Text('Close Shift & Submit Logbook'),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: AppColors.kError,
+                                      ),
+                                    )
+                                  else if (status == 'pending_open')
+                                    const Row(
+                                      children: [
+                                        Icon(Icons.hourglass_empty,
+                                            size: 14,
+                                            color: AppColors.kWarning),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'Waiting for branch accountant approval',
+                                          style: TextStyle(
+                                            color: AppColors.kWarning,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Row(
+                                      children: [
+                                        Icon(Icons.check_circle,
+                                            size: 14, color: statusColor),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Logbook submitted to accountant',
+                                          style: TextStyle(
+                                            color: statusColor,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                       }),
+                     ],
                   ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(message: apiErrorMessage(error)),
@@ -3556,15 +3752,39 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
   }
 
   Future<void> _closeShift(Map<String, dynamic> row) async {
+    final repo = ref.read(cashierRepositoryProvider);
+    final shiftId = _text(row, ['id']);
+    if (!mounted) return;
+
+    // Fetch stock items and staff concurrently for the logbook dialog.
+    List<Map<String, dynamic>> stockItems = const [];
+    List<Map<String, dynamic>> staffMembers = const [];
     try {
-      final repo = ref.read(cashierRepositoryProvider);
-      final shiftId = _text(row, ['id']);
-      if (!mounted) return;
-      final payload = await _automatedShiftCloseDialog(context);
-      if (payload == null) return;
+      final results = await Future.wait([
+        repo.getPOSItems(),
+        repo.getBranchStaff(),
+      ]);
+      stockItems = results[0];
+      staffMembers = results[1];
+    } catch (_) {
+      // Non-fatal — logbook will still open with empty lists.
+    }
+
+    if (!mounted) return;
+
+    // Full logbook dialog — cash on drawer is mandatory before submitting.
+    final payload = await _shiftCloseLogbookDialog(
+      context,
+      shift: row,
+      stockItems: stockItems,
+      staffMembers: staffMembers,
+    );
+    if (payload == null) return;
+
+    try {
       await repo.closeShift(shiftId, payload);
       ref.invalidate(cashierShiftsProvider);
-      _snack('Shift closed. Lina generated the logbook for accountant review.');
+      _snack('Shift closed. Cashier logbook submitted for accountant review.');
     } catch (error) {
       _snack('Close shift failed: ${apiErrorMessage(error)}');
     }
@@ -3576,66 +3796,170 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
   }
 }
 
+/// A single key-value row used inside the logbook summary grid.
+class _LogbookEntry {
+  const _LogbookEntry(this.label, this.value,
+      {this.accent, this.bold = false});
+  final String label;
+  final String value;
+  final Color? accent;
+  final bool bold;
+}
+
+/// A compact 2-column grid that renders logbook [_LogbookEntry] rows.
+class _LogbookSummaryGrid extends StatelessWidget {
+  const _LogbookSummaryGrid({required this.entries});
+  final List<_LogbookEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest
+            .withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Wrap(
+        spacing: 0,
+        runSpacing: 0,
+        children: entries
+            .map((entry) => SizedBox(
+                  width: 200,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.label,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.kTextSecondary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          entry.value,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: entry.bold
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            color: entry.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+// Lightweight fallback dialog (used if fetching stock/staff lists fails).
+// ignore: unused_element
 Future<Map<String, dynamic>?> _automatedShiftCloseDialog(BuildContext context) {
   final cashController = TextEditingController();
   final notesController = TextEditingController();
   return showDialog<Map<String, dynamic>>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Close shift with Lina'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Lina will generate the cashier logbook, migrate waiter unpaid bills to staff credit bills, post POS stock adjustments, and send the logbook to the branch accountant.',
+    barrierDismissible: false,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          final cashText = cashController.text.trim();
+          final cashVal = num.tryParse(cashText) ?? -1;
+          final bool isValid = cashVal > 0;
+          final bool showError =
+              cashText.isNotEmpty && cashVal <= 0;
+
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.lock_clock, color: AppColors.kWarning, size: 22),
+                SizedBox(width: 10),
+                Text('Close Shift'),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: cashController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Counted cash (optional)',
-                helperText: 'Leave blank to use expected cash.',
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.kWarning.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppColors.kWarning.withValues(alpha: 0.3)),
+                    ),
+                    child: const Text(
+                      'You must count the cash in the drawer and enter the exact amount before closing. This is mandatory — the logbook will be sent to the branch accountant for reconciliation.',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: cashController,
+                    autofocus: true,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Cash in drawer *',
+                      hintText: 'Enter amount counted in drawer',
+                      prefixText: 'KES ',
+                      errorText: showError
+                          ? 'Enter a valid amount greater than 0'
+                          : null,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Handover note (optional)',
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: notesController,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Close note (optional)',
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.auto_awesome),
-          onPressed: () {
-            final cashText = cashController.text.trim();
-            final notes = notesController.text.trim();
-            Navigator.pop(context, {
-              'automation_mode': 'lina',
-              if (cashText.isNotEmpty)
-                'actual_cash': num.tryParse(cashText) ?? 0,
-              if (cashText.isNotEmpty)
-                'closing_float': num.tryParse(cashText) ?? 0,
-              if (notes.isNotEmpty) 'remarks': notes,
-            });
-          },
-          label: const Text('Close Shift'),
-        ),
-      ],
-    ),
+              FilledButton.icon(
+                icon: const Icon(Icons.archive, size: 16),
+                onPressed: isValid
+                    ? () {
+                        final notes = notesController.text.trim();
+                        Navigator.pop(context, {
+                          'automation_mode': 'manual',
+                          'actual_cash': cashVal,
+                          'closing_float': cashVal,
+                          if (notes.isNotEmpty) 'remarks': notes,
+                        });
+                      }
+                    : null,
+                label: const Text('Close Shift & Submit Logbook'),
+              ),
+            ],
+          );
+        },
+      );
+    },
   ).whenComplete(() {
     cashController.dispose();
     notesController.dispose();
@@ -3822,8 +4146,6 @@ class _ShiftStockEntry {
       };
 }
 
-// Kept temporarily for rollback while Lina close automation is being rolled out.
-// ignore: unused_element
 Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   BuildContext context, {
   required Map<String, dynamic> shift,
@@ -6228,36 +6550,7 @@ Map<String, num> _shiftPaidCredits(Map<String, dynamic> row) {
   return result;
 }
 
-// Shift-summary card values for the logbook list. Paid credits fold into the
-// matching method tally — but only for OPEN shifts, since the backend already
-// folds them into the stored totals when the shift is closed.
-Map<String, String> _shiftSummaryValues(Map<String, dynamic> row) {
-  final status = _shiftStatus(row);
-  final isOpen = status == 'open' || status == 'pending_open';
-  final paid = _shiftPaidCredits(row);
-  final baseCash = _num(row['total_cash_sales'] ?? row['total_cash']);
-  final baseMpesa = _num(row['total_mpesa_sales'] ?? row['total_mpesa']);
-  final baseCard = _num(row['total_card_sales'] ?? row['total_card']);
-  final cash = isOpen ? baseCash + paid['cash']! : baseCash;
-  final mpesa = isOpen ? baseMpesa + paid['mpesa']! : baseMpesa;
-  final card = isOpen ? baseCard + paid['card']! : baseCard;
-  final openingFloat = _num(row['opening_float']);
-  final storedExpected =
-      _num(row['expected_closing_float'] ?? row['expected_cash']);
-  final expected =
-      (!isOpen && storedExpected > 0) ? storedExpected : openingFloat + cash;
-  return {
-    'Opening float': _money(openingFloat),
-    'Cash': _money(cash),
-    'M-Pesa': _money(mpesa),
-    'Card': _money(card),
-    'Credit Bills': _money(row['credit_bills_taken'] ??
-        row['total_credit'] ??
-        row['credit_bills_value']),
-    'Paid Credits': _money(paid['total']),
-    'Expected cash': _money(expected),
-  };
-}
+
 
 // Choose a short, human/scannable CREDIT BILL CODE for the receipt. Avoid raw
 // UUIDs (staff_credit_bill_id): prefer a real credit number, else the order's

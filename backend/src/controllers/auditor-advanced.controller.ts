@@ -498,12 +498,13 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             effectiveBranchId = userBranchId;
         }
 
-        // 1. Fetch pending from approval_requests — filter by branch_id in metadata when available
-        // approval_requests has no direct branch_id column; filter via DB-level joins where possible
-        const { data: requests, error: requestsError } = await supabase
+        // 1. Fetch pending from approval_requests — filter at DB level via branch_id column
+        let requestsQuery = supabase
             .from('approval_requests')
             .select('*')
             .eq('status', 'pending');
+        if (effectiveBranchId) requestsQuery = requestsQuery.eq('branch_id', effectiveBranchId);
+        const { data: requests, error: requestsError } = await requestsQuery;
 
         // 2. Fetch pending credit bills — filter at DB level
         let billsQuery = supabase
@@ -545,18 +546,8 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         if (loansError) throw loansError;
         if (stockCountsError) throw stockCountsError;
 
-        // For approval_requests (no branch_id column): filter by branch_id stored in metadata
-        const filteredRequests = effectiveBranchId
-            ? (requests || []).filter((r: any) => {
-                const meta = r.metadata || {};
-                return meta.branch_id == null || Number(meta.branch_id) === effectiveBranchId;
-              })
-            : (requests || []);
-
-        // In-memory safety net for bills (DB join filter may not work on all Supabase versions)
-        const filteredBills = effectiveBranchId
-            ? (bills || []).filter((b: any) => b.staff?.branch_id === effectiveBranchId)
-            : (bills || []);
+        const filteredRequests = requests || [];
+        const filteredBills = bills || [];
 
         // Combine into a flat list of pending items
         const pendingItems = [

@@ -292,7 +292,7 @@ class PowerSyncService {
     final branchId = await _currentBranchId();
     if (branchId == null) return const [];
     final lookbackSince = DateTime.now()
-        .subtract(const Duration(hours: 24))
+        .subtract(const Duration(hours: _captainOrderFeedLookbackHours))
         .toUtc()
         .toIso8601String();
     final rows = _decodeJsonColumns(
@@ -331,7 +331,7 @@ class PowerSyncService {
       return;
     }
     final lookbackSince = DateTime.now()
-        .subtract(const Duration(hours: 24))
+        .subtract(const Duration(hours: _captainOrderFeedLookbackHours))
         .toUtc()
         .toIso8601String();
     yield* _watchAll(
@@ -548,6 +548,11 @@ class PowerSyncService {
     return double.tryParse('$value') ?? 0;
   }
 }
+
+// Matches CAPTAIN_ORDER_FEED_LOOKBACK_HOURS in
+// backend/src/controllers/outlet-pos.controller.ts — keep these in sync so
+// hot-reads mode shows the same order history window as the polling fallback.
+const _captainOrderFeedLookbackHours = 36;
 
 const _captainOrderActiveStatuses = {
   'pending',

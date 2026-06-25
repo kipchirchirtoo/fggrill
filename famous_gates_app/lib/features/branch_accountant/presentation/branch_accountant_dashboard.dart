@@ -3065,6 +3065,38 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
         _future = _load();
       });
 
+  Future<void> _pickDateRange() async {
+    final initialRange = DateTimeRange(
+      start: DateTime.tryParse(_from) ?? DateTime.now().subtract(const Duration(days: 30)),
+      end: DateTime.tryParse(_to) ?? DateTime.now(),
+    );
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: initialRange,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.indigo.shade700,
+              onPrimary: Colors.white,
+              onSurface: Colors.grey.shade800,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _from = _date(picked.start);
+        _to = _date(picked.end);
+        _future = _load();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -3137,11 +3169,33 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
           final outletValues = outletLabels.keys.toList();
           final selectedOutlet =
               outletValues.contains(_outletGroup) ? _outletGroup : 'all';
+
+          final allTransactions = _list(payload['transactions']);
+          final shiftScopedTransactions = allTransactions.where((tx) {
+            final shiftId = _text(tx, ['shift_id']);
+            return selectedShift == 'all' || shiftId == selectedShift;
+          }).toList();
+          final transactions = shiftScopedTransactions.where((tx) {
+            final q = _search.toLowerCase();
+            final matchesSearch = q.isEmpty ||
+                _text(tx, ['order_number']).toLowerCase().contains(q) ||
+                _text(tx, ['cashier_name']).toLowerCase().contains(q) ||
+                _text(tx, ['item_summary']).toLowerCase().contains(q);
+            final txGroup = _text(tx, ['outlet_group']);
+            final matchesGroup = selectedOutlet == 'all' || txGroup == selectedOutlet;
+            return matchesSearch && matchesGroup;
+          }).toList();
+
           return _Page(
             title: 'Sold Items Analytics',
             subtitle:
                 'Restaurant, bar, rooms, and non-consumables revenue, COGS, gross profit, movement velocity, and KDS timing.',
             actions: [
+              OutlinedButton.icon(
+                onPressed: _pickDateRange,
+                icon: const Icon(Icons.date_range),
+                label: Text('${_shortDate(_from)} - ${_shortDate(_to)}'),
+              ),
               _SoldItemsDropdown(
                 value: selectedOutlet,
                 values: outletValues,
@@ -3311,6 +3365,10 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
               _SectionCard(
                 title: 'Detailed Sold Items Ledger',
                 child: _soldItemsTable(items),
+              ),
+              _SectionCard(
+                title: 'Detailed Transactions Ledger',
+                child: _transactionsTable(transactions),
               ),
             ],
           );
@@ -4176,6 +4234,152 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                     ? '${_num(item['average_kds_minutes']).toStringAsFixed(1)} min'
                     : 'N/A',
               ])
+          .toList(),
+    );
+  }
+
+  /// Renders coloured payment method badges.
+  /// Accepts either:
+  ///   - a List of plain strings (legacy: ['MPESA', 'CASH'])
+  ///   - a List of Maps with {method, code?} (new: [{method:'MPESA', code:'QAZ123XYZ'}])
+  Widget _paymentMethodBadge(List<dynamic> methods) {
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: methods.map((m) {
+        final isMap = m is Map;
+        final label = isMap
+            ? '${m['method'] ?? ''}'.toUpperCase()
+            : '$m'.toUpperCase();
+        final code = isMap ? '${m['code'] ?? ''}'.trim() : '';
+        Color bg = Colors.grey.shade100;
+        Color fg = Colors.grey.shade800;
+        if (label == 'CASH') {
+          bg = Colors.green.shade50;
+          fg = Colors.green.shade700;
+        } else if (label == 'MPESA') {
+          bg = Colors.teal.shade50;
+          fg = Colors.teal.shade700;
+        } else if (label == 'CARD') {
+          bg = Colors.blue.shade50;
+          fg = Colors.blue.shade700;
+        } else if (label == 'CREDIT BILL' || label == 'CREDIT_BILL' || label == 'CREDIT') {
+          bg = Colors.orange.shade50;
+          fg = Colors.orange.shade700;
+        }
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
+              // Show M-Pesa confirmation code if present
+              if (code.isNotEmpty && label == 'MPESA')
+                Text(
+                  code,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: fg.withAlpha(200),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _paymentStatusBadge(String status) {
+    final s = status.toLowerCase();
+    Color bg = Colors.grey.shade100;
+    Color fg = Colors.grey.shade800;
+    if (s == 'paid' || s == 'completed') {
+      bg = Colors.green.shade100;
+      fg = Colors.green.shade800;
+    } else if (s == 'credit_bill') {
+      bg = Colors.orange.shade100;
+      fg = Colors.orange.shade800;
+    } else if (s == 'partial') {
+      bg = Colors.blue.shade100;
+      fg = Colors.blue.shade800;
+    } else if (s == 'unpaid' || s == 'open') {
+      bg = Colors.red.shade100;
+      fg = Colors.red.shade800;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _transactionsTable(List<Map<String, dynamic>> transactions) {
+    return _SimpleTable(
+      columns: const [
+        'Date/Time (EAT)',
+        'Receipt No',
+        'Cashier',
+        'Outlet',
+        'Items Summary',
+        'Amount',
+        'Payment',
+        'Mpesa Code',
+        'Status'
+      ],
+      rows: transactions
+          .map((tx) {
+            // Prefer structured payment_details over legacy payment_methods strings
+            final details = _list(tx['payment_details']);
+            final methods = _list(tx['payment_methods']);
+            // Resolve payment badge input: use details if present, else plain strings
+            final badgeInput = details.isNotEmpty ? details : methods;
+
+            // Extract M-Pesa code(s) from payment_details
+            final mpesaCodes = details
+                .where((d) =>
+                    d is Map &&
+                    '${d['method'] ?? ''}'.toUpperCase() == 'MPESA' &&
+                    '${d['code'] ?? ''}'.trim().isNotEmpty)
+                .map((d) => '${d['code']}'.trim())
+                .toSet()
+                .join(' · ');
+
+            return [
+              _formatCompactDateTime(_text(tx, ['created_at'])),
+              _text(tx, ['order_number']),
+              _text(tx, ['cashier_name']),
+              _text(tx, ['outlet_name']),
+              _text(tx, ['item_summary']),
+              _money(_num(tx['total_amount'])),
+              _paymentMethodBadge(badgeInput),
+              mpesaCodes.isEmpty ? '-' : mpesaCodes,
+              _paymentStatusBadge(_text(tx, ['payment_status'])),
+            ];
+          })
           .toList(),
     );
   }
@@ -5780,7 +5984,7 @@ class _ShiftReconciliationPanel extends StatelessWidget {
     final transactionCount = _shiftTransactionCount(shift!);
     final creditBillsTotal = _creditBillsCreated(shift!);
     final paidBillsTotal = _creditBillsPaid(shift!);
-    final changeGiven = _num(reconciliation['change_given']);
+    final changeGiven = _changeGiven(shift!);
     final titlePrefix =
         _isShiftLogbookReview(shift!) ? 'Lina Shift Logbook' : 'Shift Details';
 
@@ -5844,7 +6048,7 @@ class _ShiftReconciliationPanel extends StatelessWidget {
               _ShiftReportRow('+ Cash Sales', _money(_cashSales(shift!))),
               _ShiftReportRow(
                 'Cash Tendered by Customers',
-                _money(_num(reconciliation['cash_tendered'])),
+                _money(_cashTendered(shift!)),
               ),
               _ShiftReportRow(
                 '- Change Given',
@@ -5853,15 +6057,15 @@ class _ShiftReconciliationPanel extends StatelessWidget {
               ),
               _ShiftReportRow(
                 '= Net Drawer Cash From Sales',
-                _money(_num(reconciliation['drawer_cash_in'])),
+                _money(_drawerCashIn(shift!)),
                 emphasized: true,
               ),
               _ShiftReportRow('+ Credit Payments Received',
                   _money(_creditPaymentsReceived(shift!))),
               _ShiftReportRow(
-                  '- Cash Drops', _money(_num(reconciliation['cash_drops']))),
+                  '- Cash Drops', _money(_cashDrops(shift!))),
               _ShiftReportRow(
-                  '- Payouts', _money(_num(reconciliation['payouts']))),
+                  '- Payouts', _money(_payouts(shift!))),
               _ShiftReportRow(
                 '= Expected Closing Amount',
                 _money(_expectedClosingAmount(shift!)),
@@ -6788,6 +6992,27 @@ Map<String, dynamic> _shiftCashReconciliation(Map<String, dynamic> shift) =>
 List<Map<String, dynamic>> _shiftPaymentRows(Map<String, dynamic> shift) {
   final rows = _list(shift['payment_breakdown']);
   if (rows.isNotEmpty) return rows;
+
+  final lines = _shiftTransactionLines(shift);
+  if (lines.isNotEmpty) {
+    final Map<String, Map<String, dynamic>> aggregated = {};
+    for (final line in lines) {
+      String method = '${line['payment_method'] ?? 'unknown'}'.toLowerCase().trim();
+      if (method == 'credit') {
+        method = 'credit_bill';
+      }
+      final amount = _num(line['amount'] ?? line['total_amount'] ?? line['total']);
+      if (!aggregated.containsKey(method)) {
+        aggregated[method] = {'method': method, 'amount': 0.0, 'count': 0};
+      }
+      aggregated[method]!['amount'] = _num(aggregated[method]!['amount']) + amount;
+      aggregated[method]!['count'] = (aggregated[method]!['count'] as int) + 1;
+    }
+    if (aggregated.isNotEmpty) {
+      return aggregated.values.toList();
+    }
+  }
+
   return [
     {'method': 'cash', 'amount': _cashSales(shift), 'count': 0},
     {'method': 'mpesa', 'amount': _mpesaSales(shift), 'count': 0},
@@ -6802,6 +7027,31 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
       .where((row) => _num(row['amount']) > 0)
       .toList();
   if (rows.isNotEmpty) return rows;
+
+  final lines = _shiftTransactionLines(shift);
+  if (lines.isNotEmpty) {
+    final Map<String, Map<String, dynamic>> aggregated = {};
+    for (final line in lines) {
+      final source = '${line['source_table'] ?? ''}'.toLowerCase().trim();
+      String label = 'Other';
+      if (source.contains('restaurant')) {
+        label = 'Restaurant';
+      } else if (source.contains('bar')) {
+        label = 'Bar';
+      } else if (source.contains('room')) {
+        label = 'Rooms';
+      }
+      final amount = _num(line['amount'] ?? line['total_amount'] ?? line['total']);
+      if (!aggregated.containsKey(label)) {
+        aggregated[label] = {'label': label, 'amount': 0.0};
+      }
+      aggregated[label]!['amount'] = _num(aggregated[label]!['amount']) + amount;
+    }
+    if (aggregated.isNotEmpty) {
+      return aggregated.values.toList();
+    }
+  }
+
   return [
     {'label': 'Restaurant', 'amount': _restaurantRevenue(shift)},
     {'label': 'Bar', 'amount': _barRevenue(shift)},
@@ -6811,9 +7061,38 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
 }
 
 List<Map<String, dynamic>> _shiftTransactionLines(Map<String, dynamic> shift) {
-  final history = _list(shift['transaction_history']);
-  if (history.isNotEmpty) return history;
-  return _list(shift['lines']);
+  final List<dynamic> rawLines = () {
+    final history = _list(shift['transaction_history']);
+    if (history.isNotEmpty) return history;
+    final transactions = _list(shift['transactions']);
+    if (transactions.isNotEmpty) return transactions;
+    return _list(shift['lines']);
+  }();
+
+  return rawLines.map<Map<String, dynamic>>((line) {
+    final map = _map(line);
+    final normalized = Map<String, dynamic>.from(map);
+    if (normalized['created_at'] == null && normalized['transaction_time'] != null) {
+      normalized['created_at'] = normalized['transaction_time'];
+    }
+    if (normalized['reference'] == null) {
+      normalized['reference'] = normalized['transaction_ref'] ?? normalized['transaction_id'] ?? normalized['id'];
+    }
+    if (normalized['section'] == null) {
+      final source = '${normalized['source_table'] ?? ''}'.toLowerCase();
+      if (normalized['payment_method'] == 'credit') {
+        normalized['section'] = 'credit_bill';
+      } else if (source.contains('credit') || source.contains('debt')) {
+        normalized['section'] = 'paid_bill';
+      } else {
+        normalized['section'] = source.replaceAll('_orders', '').replaceAll('_orders_v2', '');
+      }
+    }
+    if (normalized['status'] == null) {
+      normalized['status'] = normalized['is_voided'] == true ? 'voided' : 'completed';
+    }
+    return normalized;
+  }).toList();
 }
 
 List<Map<String, dynamic>> _shiftCreditBills(Map<String, dynamic> shift) {
@@ -6891,6 +7170,63 @@ String _shiftRevenueSystemLabel(
   if (section.contains('credit')) return 'Staff Credit Bills';
   if (section.contains('paid')) return 'Paid Credit Bills';
   return 'Cashier Clearance';
+}
+
+num _cashDrops(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['cash_drops']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift, ['cash_deposited', 'cash_drops']),
+    _num(breakdown['cash_drops']),
+  ]);
+}
+
+num _payouts(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['payouts']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift, ['payouts', 'paid_outs']),
+    _num(breakdown['payouts'] ?? breakdown['paid_outs']),
+  ]);
+}
+
+num _cashTendered(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['cash_tendered']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift, ['cash_tendered', 'total_cash_tendered']),
+    _num(breakdown['total_cash_tendered'] ?? breakdown['cash_tendered']),
+    _cashSales(shift),
+  ]);
+}
+
+num _drawerCashIn(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['drawer_cash_in']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift, ['drawer_cash_in', 'total_cash_sales']),
+    _num(breakdown['total_cash']),
+    _cashSales(shift),
+  ]);
+}
+
+num _changeGiven(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['change_given']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift, ['change_given', 'total_change_given']),
+    _num(breakdown['total_change_given'] ?? breakdown['change_given']),
+  ]);
 }
 
 num _openingFloat(Map<String, dynamic> shift) {
@@ -7002,8 +7338,8 @@ num _expectedClosingAmount(Map<String, dynamic> shift) {
   return _openingFloat(shift) +
       _cashSales(shift) +
       _creditPaymentsReceived(shift) -
-      _num(reconciliation['cash_drops']) -
-      _num(reconciliation['payouts']);
+      _cashDrops(shift) -
+      _payouts(shift);
 }
 
 num _actualCashCounted(Map<String, dynamic> shift) {
@@ -7312,53 +7648,96 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
                       )
                     : Column(
                         children: filtered
-                            .map((logbook) => InkWell(
-                                  onTap: () => _openDetail(logbook),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 10),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                _logbookCashierName(logbook)
-                                                        .isEmpty
-                                                    ? 'Cashier'
-                                                    : _logbookCashierName(
-                                                        logbook),
-                                                style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w700),
-                                              ),
-                                              Text(
-                                                _shortDate(_text(
-                                                    logbook, ['log_date'])),
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors
-                                                        .grey.shade600),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Text(
-                                            _money(_num(
-                                                logbook['closing_amount'] ??
-                                                    logbook['total'])),
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w800)),
-                                        const SizedBox(width: 10),
-                                        _StatusPill(_text(
-                                            logbook, ['status'],
-                                            )),
-                                      ],
-                                    ),
+                            .map((logbook) {
+                              final cashier = _map(logbook['cashier']);
+                              final cashierName = _logbookCashierName(cashier).isEmpty
+                                  ? _logbookCashierName(logbook)
+                                  : _logbookCashierName(cashier);
+                              final shift = _map(logbook['shift']);
+                              final shiftStart = _text(shift, ['shift_start']);
+                              final shiftEnd = _text(shift, ['shift_end']);
+                              final shiftNum = _text(shift, ['shift_number']);
+                              final payments = _list(logbook['payment_breakdown']);
+                              final mpesaTotal = payments
+                                  .where((p) => '${_map(p)['method']}'.toLowerCase().contains('mpesa'))
+                                  .fold<num>(0, (s, p) => s + _num(_map(p)['amount']));
+                              final cashTotal = payments
+                                  .where((p) => '${_map(p)['method']}'.toLowerCase() == 'cash')
+                                  .fold<num>(0, (s, p) => s + _num(_map(p)['amount']));
+                              final closingAmt = _num(logbook['closing_amount'] ?? logbook['total'] ?? logbook['closing_float']);
+
+                              return InkWell(
+                                onTap: () => _openDetail(logbook),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+                                  decoration: const BoxDecoration(
+                                    border: Border(bottom: BorderSide(color: AppColors.kDivider)),
                                   ),
-                                ))
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Avatar / icon
+                                      Container(
+                                        width: 38, height: 38,
+                                        decoration: BoxDecoration(
+                                          color: Colors.indigo.shade50,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(Icons.person, size: 20, color: Colors.indigo),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      // Cashier info & shift times
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              cashierName.isEmpty ? 'Unknown Cashier' : cashierName,
+                                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Wrap(spacing: 12, runSpacing: 4, children: [
+                                              if (shiftNum.isNotEmpty)
+                                                Text(shiftNum, style: TextStyle(fontSize: 11, color: Colors.indigo.shade400, fontWeight: FontWeight.w600)),
+                                              Row(mainAxisSize: MainAxisSize.min, children: [
+                                                Icon(Icons.access_time, size: 12, color: Colors.grey.shade500),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  shiftStart.isEmpty
+                                                      ? _shortDate(_text(logbook, ['log_date']))
+                                                      : '${_formatCompactDateTime(shiftStart)}${shiftEnd.isEmpty ? '' : ' → ${_formatCompactDateTime(shiftEnd)}'}',
+                                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                                ),
+                                              ]),
+                                            ]),
+                                            if (mpesaTotal > 0 || cashTotal > 0) ...[  
+                                              const SizedBox(height: 5),
+                                              Wrap(spacing: 8, runSpacing: 4, children: [
+                                                if (mpesaTotal > 0) _PayBadge(label: 'Mpesa', amount: mpesaTotal, color: Colors.teal),
+                                                if (cashTotal > 0) _PayBadge(label: 'Cash', amount: cashTotal, color: Colors.green),
+                                              ]),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      // Amount + status
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            _money(closingAmt),
+                                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          _StatusPill(_text(logbook, ['status'])),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            })
                             .toList(),
                       ),
               ),
@@ -7694,6 +8073,63 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
               ),
             ],
             children: [
+              // ── Shift Identity Card ───────────────────────────────────────────
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.indigo.shade700, Colors.indigo.shade500],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.person, color: Colors.white70, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        cashierName.isEmpty ? 'Cashier' : cashierName.toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(30),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _text(detail, ['status']).toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    Wrap(spacing: 24, runSpacing: 8, children: [
+                      if (_text(branch, ['name']).isNotEmpty)
+                        _ShiftInfoChip(icon: Icons.location_on, label: _text(branch, ['name'])),
+                      if (_text(detail, ['log_date']).isNotEmpty)
+                        _ShiftInfoChip(icon: Icons.calendar_today, label: _text(detail, ['log_date'])),
+                      if (_text(shift, ['shift_start']).isNotEmpty)
+                        _ShiftInfoChip(
+                          icon: Icons.play_circle_outline,
+                          label: _formatCompactDateTime(_text(shift, ['shift_start'])),
+                        ),
+                      if (_text(shift, ['shift_end']).isNotEmpty)
+                        _ShiftInfoChip(
+                          icon: Icons.stop_circle_outlined,
+                          label: _formatCompactDateTime(_text(shift, ['shift_end'])),
+                        ),
+                      if (_text(shift, ['shift_number']).isNotEmpty)
+                        _ShiftInfoChip(icon: Icons.tag, label: _text(shift, ['shift_number'])),
+                    ]),
+                  ],
+                ),
+              ),
               _ResponsiveGrid(
                 children: [
                   _MetricCard(
@@ -7710,21 +8146,21 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                   ),
                   _MetricCard(
                     'Expected Cash',
-                    _money(_num(reconciliation['expected_closing'])),
+                    _money(_expectedClosingAmount(detail)),
                     Icons.account_balance_wallet,
                     Colors.blue,
                   ),
                   _MetricCard(
                     'Actual Cash',
-                    _money(_num(reconciliation['actual_closing'])),
+                    _money(_actualCashCounted(detail)),
                     Icons.payments,
                     Colors.teal,
                   ),
                   _MetricCard(
                     'Variance',
-                    _money(_num(reconciliation['variance'])),
+                    _money(_varianceAmount(detail)),
                     Icons.warning_amber,
-                    _num(reconciliation['variance']).abs() < 0.01
+                    _varianceAmount(detail).abs() < 0.01
                         ? Colors.green
                         : Colors.red,
                   ),
@@ -7887,7 +8323,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                 child: _ComplianceFlagList(flags: flags),
               ),
               _SectionCard(
-                title: 'Cleared Transaction History',
+                title: 'Full Transaction Ledger — All POS, Restaurant & Bar Sales',
                 child: _LogbookEvidenceTable(lines: clearedTransactions),
               ),
             ],
@@ -8022,32 +8458,167 @@ class _LogbookEvidenceTable extends StatelessWidget {
 
   final List<dynamic> lines;
 
+  /// Colour-coded badge for a payment method string.
+  static Widget _methodBadge(String raw) {
+    final label = raw.toUpperCase().replaceAll('_', ' ');
+    Color bg = Colors.grey.shade100;
+    Color fg = Colors.grey.shade700;
+    if (label == 'CASH') {
+      bg = Colors.green.shade50; fg = Colors.green.shade700;
+    } else if (label.contains('MPESA') || label.contains('M-PESA')) {
+      bg = Colors.teal.shade50; fg = Colors.teal.shade700;
+    } else if (label == 'CARD') {
+      bg = Colors.blue.shade50; fg = Colors.blue.shade700;
+    } else if (label.contains('CREDIT')) {
+      bg = Colors.orange.shade50; fg = Colors.orange.shade700;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg, borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg)),
+    );
+  }
+
+  /// Colour-coded badge for a payment/order status string.
+  static Widget _statusBadge(String raw) {
+    final s = raw.toLowerCase();
+    Color bg = Colors.grey.shade100;
+    Color fg = Colors.grey.shade700;
+    if (s == 'paid' || s == 'completed') {
+      bg = Colors.green.shade100; fg = Colors.green.shade800;
+    } else if (s == 'credit_bill' || s == 'credit') {
+      bg = Colors.orange.shade100; fg = Colors.orange.shade800;
+    } else if (s == 'partial') {
+      bg = Colors.blue.shade100; fg = Colors.blue.shade800;
+    } else if (s == 'voided' || s == 'cancelled') {
+      bg = Colors.red.shade100; fg = Colors.red.shade800;
+    } else if (s == 'open' || s == 'pending') {
+      bg = Colors.amber.shade100; fg = Colors.amber.shade900;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg, borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(raw.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = lines.map<List<Object>>((line) {
-      final item = _map(line);
-      return <Object>[
-        _formatCompactDateTime('${item['created_at'] ?? ''}'),
-        '${item['reference'] ?? '-'}',
-        '${item['customer_name'] ?? '-'}',
-        _title('${item['section'] ?? 'transaction'}'),
-        _title('${item['payment_method'] ?? 'other'}'),
-        _money(_num(item['amount'])),
-        '${item['status'] ?? '-'}',
-      ];
-    }).toList();
+    if (lines.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Text(
+          'No transaction lines recorded for this shift.',
+          style: TextStyle(color: AppColors.kTextSecondary),
+        ),
+      );
+    }
 
-    return _SimpleTable(
-      columns: const [
-        'Time',
-        'Reference',
-        'Customer',
-        'Source',
-        'Payment',
-        'Amount',
-        'Status',
+    // Totals banner
+    final totalAmount = lines.fold<num>(0, (s, line) => s + _num(_map(line)['amount']));
+    final methodTotals = <String, num>{};
+    for (final line in lines) {
+      final item = _map(line);
+      final method = '${item['payment_method'] ?? 'other'}'.toLowerCase();
+      methodTotals[method] = (methodTotals[method] ?? 0) + _num(item['amount']);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Summary banner ────────────────────────────────────────────────
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.indigo.shade100),
+          ),
+          child: Wrap(
+            spacing: 24,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text('Total', style: TextStyle(fontSize: 11, color: Colors.indigo.shade400)),
+                Text(_money(totalAmount), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+              ]),
+              Text('${lines.length} line${lines.length == 1 ? '' : 's'}',
+                  style: TextStyle(fontSize: 12, color: Colors.indigo.shade500)),
+              ...methodTotals.entries.map((e) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(e.key.toUpperCase().replaceAll('_', '-'),
+                      style: TextStyle(fontSize: 10, color: Colors.indigo.shade300)),
+                  Text(_money(e.value), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                ],
+              )),
+            ],
+          ),
+        ),
+        // ── Evidence table ────────────────────────────────────────────────
+        _SimpleTable(
+          columns: const [
+            'Time (EAT)',
+            'Receipt / Ref',
+            'Customer / Staff',
+            'Source',
+            'Payment Method',
+            'Mpesa Code',
+            'Amount',
+            'Status',
+          ],
+          rows: lines.map<List<Object>>((line) {
+            final item = _map(line);
+            final method = '${item['payment_method'] ?? ''}'.trim().toLowerCase();
+            final status = '${item['status'] ?? ''}'.trim();
+            final reference = '${item['reference'] ?? ''}'.trim();
+            // Show M-Pesa code in its own column; keep receipt col for order refs
+            final isMpesa = method.contains('mpesa') || method == 'm-pesa';
+            final mpesaCode = isMpesa && reference.isNotEmpty && reference != 'Linked record'
+                ? reference
+                : '-';
+            final receiptRef = reference.isEmpty || reference == 'Linked record'
+                ? '-'
+                : (isMpesa ? '-' : reference);
+            return <Object>[
+              _formatCompactDateTime('${item['created_at'] ?? ''}'),
+              receiptRef,
+              '${item['customer_name'] ?? '-'}',
+              _title('${item['section'] ?? 'transaction'}'),
+              method.isEmpty ? const Text('-') : _methodBadge(method),
+              // Mpesa code cell — styled in teal monospace when present
+              mpesaCode == '-'
+                  ? const Text('-', style: TextStyle(color: Colors.grey))
+                  : Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.teal.shade100),
+                      ),
+                      child: Text(
+                        mpesaCode,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.teal.shade800,
+                          letterSpacing: 0.8,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+              _money(_num(item['amount'])),
+              status.isEmpty ? const Text('-') : _statusBadge(status),
+            ];
+          }).toList(),
+        ),
       ],
-      rows: rows,
     );
   }
 }
@@ -18361,6 +18932,72 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
+/// Compact coloured badge showing a payment method label + amount.
+/// Used in the Cashier Logbooks history list.
+class _PayBadge extends StatelessWidget {
+  const _PayBadge({
+    required this.label,
+    required this.amount,
+    required this.color,
+  });
+
+  final String label;
+  final num amount;
+  final MaterialColor color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700, color: color.shade700),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _money(amount),
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w900, color: color.shade800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A small white chip used inside the gradient Shift Identity Card.
+class _ShiftInfoChip extends StatelessWidget {
+  const _ShiftInfoChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: Colors.white70),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+        ),
+      ],
+    );
+  }
+}
+
 class _RefreshButton extends StatelessWidget {
   const _RefreshButton({required this.onPressed});
   final VoidCallback onPressed;
@@ -19358,12 +19995,12 @@ String _money(num value) => NumberFormat.currency(
 String _date(DateTime value) =>
     '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 
-String _today() => _date(DateTime.now());
+String _today() => _date(_toKenyaTime(DateTime.now()));
 
 String _shortDate(String value) {
   final parsed = DateTime.tryParse(value);
   if (parsed == null) return value;
-  return DateFormat('MMM d').format(parsed);
+  return DateFormat('MMM d').format(_toKenyaTime(parsed));
 }
 
 // Kenya has a fixed UTC+3 offset with no DST, so bill/credit timestamps are
@@ -19459,7 +20096,7 @@ Future<File> _exportPdf({
   List<List<String>> tableRows = const [],
 }) async {
   final doc = pw.Document();
-  final generated = DateFormat('MMM d, yyyy HH:mm').format(DateTime.now());
+  final generated = DateFormat('MMM d, yyyy HH:mm').format(_toKenyaTime(DateTime.now()));
   final safeTitle = _pdfSafe(title);
   final safeSubtitle = _pdfSafe(subtitle);
   final safeMetrics = metrics.map(

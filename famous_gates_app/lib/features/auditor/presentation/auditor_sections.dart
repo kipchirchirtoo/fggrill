@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/record_detail_screen.dart';
 import '../../../core/utils/api_error_message.dart';
 import '../../admin/domain/admin_providers.dart';
+import '../../../core/router/auditor_route_sections.dart';
 import '../data/repository.dart';
 
 const _allBranchesMenuValue = '__all_branches__';
@@ -887,7 +888,22 @@ class _AuditorBranchScopeChip extends ConsumerWidget {
           style: TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
         ),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, __) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.kError.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.kError.withValues(alpha: 0.4)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(PhosphorIcons.warning(), size: 13, color: AppColors.kError),
+          const SizedBox(width: 6),
+          const Text(
+            'Branch filter unavailable',
+            style: TextStyle(fontSize: 12, color: AppColors.kError),
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -2684,6 +2700,13 @@ class _AuditModule {
   final String? badge;
 }
 
+AdminSection? _auditorSectionForRoute(String route) {
+  for (final entry in auditorSectionRouteSpecs) {
+    if (entry.key == route) return entry.value;
+  }
+  return null;
+}
+
 final _auditControlModules = <_AuditModule>[
   _AuditModule(
       title: 'Shift Verification',
@@ -2787,16 +2810,23 @@ class _ModuleGrid extends StatelessWidget {
   }
 }
 
-class _ModuleCard extends StatelessWidget {
+class _ModuleCard extends ConsumerWidget {
   const _ModuleCard({required this.module});
 
   final _AuditModule module;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => context.go(module.route),
+      onTap: () {
+        final section = _auditorSectionForRoute(module.route);
+        if (section != null) {
+          ref.read(adminSectionProvider.notifier).state = section;
+        } else {
+          context.go(module.route);
+        }
+      },
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -2856,13 +2886,13 @@ class _ModuleCard extends StatelessWidget {
   }
 }
 
-class _RecentExceptionsCard extends StatelessWidget {
+class _RecentExceptionsCard extends ConsumerWidget {
   const _RecentExceptionsCard({required this.exceptions});
 
   final List<Map<String, dynamic>> exceptions;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final visible = exceptions.take(8).toList();
     return Card(
       elevation: 0,
@@ -2904,7 +2934,8 @@ class _RecentExceptionsCard extends StatelessWidget {
             ],
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: () => context.go('/auditor/revenue-oversight'),
+            onPressed: () => ref.read(adminSectionProvider.notifier).state =
+                AdminSection.revenueOversight,
             icon: const Icon(Icons.arrow_forward, size: 16),
             label: const Text('View Audit Watchlist'),
           ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/domain/auth_notifier.dart';
@@ -79,11 +78,16 @@ class AdminSideNav extends ConsumerWidget {
       case null:
         final section = item.section;
         if (section != null) {
+          // In-shell taps only need the section state change — that's what
+          // every other dashboard (branch accountant, superadmin, plain
+          // admin) relies on for a smooth in-place switch. Also calling
+          // context.go(item.routePath) here made go_router build a brand
+          // new AdminScreen.auditor() page and slide it in on every tap,
+          // which is what made auditor navigation look like it was
+          // "popping up"/redirecting instead of switching content in place.
+          // The routes themselves still exist for direct/external deep
+          // links (e.g. a notification linking straight to a section).
           ref.read(adminSectionProvider.notifier).state = section;
-          final routePath = item.routePath;
-          if (routePath != null) {
-            context.go(routePath);
-          }
         }
         return;
     }

@@ -187,9 +187,7 @@ class AuditorRepository {
     } on DioException catch (error) {
       final status = error.response?.statusCode;
       final message = '${error.response?.data}'.toLowerCase();
-      if (status == 400 ||
-          status == 403 ||
-          status == 404 ||
+      if (status == 404 ||
           (status == 500 &&
               (message.contains('nan') || message.contains('null')))) {
         return {
@@ -198,6 +196,9 @@ class AuditorRepository {
           'message': 'No records are available for this audit view.',
         };
       }
+      // 400/403 are real backend errors (bad query, permission issue) —
+      // surface them so the auditor sees an error state instead of a
+      // misleading "no records" empty view.
       rethrow;
     }
   }

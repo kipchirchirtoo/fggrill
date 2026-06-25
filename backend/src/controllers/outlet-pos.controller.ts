@@ -659,34 +659,16 @@ const updateStockForItems = async (
     const quantity = numberValue(item.qty ?? item.quantity);
     if (!outletItemId || quantity <= 0) continue;
 
-    const { data: countRow, error: countError } = await supabase
-      .from('pos_shift_stock_counts')
-      .select('*')
-      .eq('shift_id', shiftId)
-      .eq('outlet_item_id', outletItemId)
-      .maybeSingle();
-
-    if (countError) throw countError;
-    if (countRow) {
-      const soldQuantity = Math.max(0, numberValue(countRow.sold_quantity) + direction * quantity);
-      const systemClosingStock =
-        numberValue(countRow.opening_stock) + numberValue(countRow.additions) - soldQuantity;
-
-      const { error: updateCountError } = await supabase
-        .from('pos_shift_stock_counts')
-        .update({
-          sold_quantity: soldQuantity,
-          system_closing_stock: systemClosingStock,
-          variance:
-            countRow.physical_count === null || countRow.physical_count === undefined
-              ? 0
-              : numberValue(countRow.physical_count) - systemClosingStock,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', countRow.id);
-
-      if (updateCountError) throw updateCountError;
-    }
+    // Atomic RPC: the write itself (sold_quantity/system_closing_stock/
+    // variance) is computed server-side from the row's live value, not from
+    // a value read earlier in this function — two concurrent sales on the
+    // same item can no longer lose a decrement to a stale read.
+    const { error: countRpcError } = await supabase.rpc('apply_pos_shift_stock_count_sale', {
+      p_shift_id: shiftId,
+      p_outlet_item_id: outletItemId,
+      p_quantity_delta: direction * quantity
+    });
+    if (countRpcError) throw countRpcError;
 
     const { data: outletItem, error: itemError } = await supabase
       .from('pos_outlet_items')
@@ -702,37 +684,35 @@ const updateStockForItems = async (
     // Chicken sharing the Full Chicken pool) have no independent stock of
     // their own — deduct the pool-equivalent quantity from the pool item.
     if (outletItem.stock_pool_item_id) {
-      const { data: poolItem, error: poolError } = await supabase
-        .from('pos_outlet_items')
-        .select('current_stock')
-        .eq('id', outletItem.stock_pool_item_id)
-        .maybeSingle();
-      if (poolError) throw poolError;
-      if (poolItem) {
-        const fraction = numberValue(outletItem.pool_fraction) || 1;
-        await supabase
-          .from('pos_outlet_items')
-          .update({
-            current_stock: Math.max(0, numberValue(poolItem.current_stock) - direction * quantity * fraction),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', outletItem.stock_pool_item_id);
-      }
+      const fraction = numberValue(outletItem.pool_fraction) || 1;
+      const { error: poolRpcError } = await supabase.rpc('decrement_pos_outlet_item_stock', {
+        p_item_id: outletItem.stock_pool_item_id,
+        p_outlet_id: null,
+        p_quantity_delta: direction * quantity * fraction
+      });
+      if (poolRpcError) throw poolRpcError;
       continue;
     }
 
-    await supabase
-      .from('pos_outlet_items')
-      .update({
-        current_stock: Math.max(0, numberValue(outletItem.current_stock) - direction * quantity),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', outletItemId)
-      .eq('outlet_id', outletItem.outlet_id || outletId);
+    const isBarSourced = Boolean(outletItem.source_table === 'bar_drinks' && outletItem.source_item_id);
+
+    // For bar-sourced items, recordBarStockMovement's own pos_outlet_items
+    // step below is the sync of record — updating it here too double-decrements
+    // the same row for every single sale (confirmed live: bar_stock matched the
+    // real sale exactly while pos_outlet_items had drifted to double that).
+    if (!isBarSourced) {
+      const { error: itemRpcError } = await supabase.rpc('decrement_pos_outlet_item_stock', {
+        p_item_id: outletItemId,
+        p_outlet_id: outletItem.outlet_id || outletId,
+        p_quantity_delta: direction * quantity
+      });
+      if (itemRpcError) throw itemRpcError;
+    }
 
     // ── Unified bar stock sync ──────────────────────────────────────
-    // Only bar drinks flow into the unified ledger.
-    if (branchId && outletItem.source_table === 'bar_drinks' && outletItem.source_item_id) {
+    // Only bar drinks flow into the unified ledger. This call also covers
+    // the pos_outlet_items update for this row (see isBarSourced above).
+    if (branchId && isBarSourced) {
       try {
         await recordBarStockMovement({
           branchId,
@@ -751,6 +731,13 @@ const updateStockForItems = async (
           syncErr?.message || syncErr,
           syncErr?.details || ''
         );
+        // Fall back to a direct decrement so the POS counter still reflects
+        // the sale even if the unified sync failed for some other reason.
+        await supabase.rpc('decrement_pos_outlet_item_stock', {
+          p_item_id: outletItemId,
+          p_outlet_id: outletItem.outlet_id || outletId,
+          p_quantity_delta: direction * quantity
+        });
       }
     }
   }
@@ -3073,15 +3060,81 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
       throw new AppError(check, 409);
     }
 
-    const { data: updatedOrder, error: rpcError } = await supabase.rpc('void_order_item', {
-      p_request_id: id,
-      p_actioned_by: req.user.id
+    // The financial void already happened at Stage 1 (cashier acknowledge).
+    // Approval here is a compliance sign-off: clear the void_pending_approval
+    // flag so the item is no longer marked "awaiting manager", and write the
+    // append-only audit log row now that the void is officially approved.
+    const now = new Date().toISOString();
+
+    const { data: orderData, error: orderErr } = await supabase
+      .from('pos_shift_orders')
+      .select('id, items, outlet_id, short_code')
+      .eq('id', requestRow.order_id)
+      .single();
+    if (orderErr || !orderData) throw new AppError('Order not found', 404);
+
+    const items = Array.isArray(orderData.items) ? [...orderData.items] as Array<Record<string, any>> : [];
+    const item = items[requestRow.item_index];
+    if (!item) throw new AppError('Item no longer exists on this bill', 404);
+    items[requestRow.item_index] = { ...item, void_pending_approval: false };
+
+    const { data: updatedOrder, error: orderUpdateErr } = await supabase
+      .from('pos_shift_orders')
+      .update({ items, updated_at: now })
+      .eq('id', requestRow.order_id)
+      .select('*')
+      .single();
+    if (orderUpdateErr) throw orderUpdateErr;
+
+    const { data: outletRow } = await supabase
+      .from('pos_outlets')
+      .select('outlet_type')
+      .eq('id', orderData.outlet_id)
+      .maybeSingle();
+
+    const unitPrice = Number(item.unit_price ?? requestRow.unit_price ?? 0);
+    const qtyAfterVoid = Number(item.active_qty ?? 0);
+    const qtyVoided = Number(requestRow.qty_to_void ?? 0);
+    const qtyBeforeVoid = qtyAfterVoid + qtyVoided;
+
+    const { error: logError } = await supabase.from('pos_item_void_log').insert({
+      void_request_id: requestRow.id,
+      shift_id: requestRow.shift_id,
+      order_id: requestRow.order_id,
+      item_index: requestRow.item_index,
+      item_name: requestRow.item_name,
+      unit_price: unitPrice,
+      qty_before_void: qtyBeforeVoid,
+      qty_voided: qtyVoided,
+      qty_after_void: qtyAfterVoid,
+      amount_voided: qtyVoided * unitPrice,
+      authorized_by: req.user.id,
+      requested_by: requestRow.requested_by,
+      void_reason: requestRow.reason,
+      reason_category: requestRow.reason_category,
+      branch_id: requestRow.branch_id,
+      outlet_type: outletRow?.outlet_type || null,
+      bill_code: orderData.short_code || null,
+      voided_at: now
     });
-    if (rpcError) {
-      if (String(rpcError.message || '').includes('already processed')) {
-        throw new AppError('Void request already processed', 409);
-      }
-      throw rpcError;
+    if (logError) throw logError;
+
+    const { data: approvedReq, error: approveUpdateErr } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'approved',
+        actioned_by: req.user.id,
+        actioned_at: now,
+        manager_id: req.user.id,
+        manager_reviewed_at: now,
+        updated_at: now
+      })
+      .eq('id', id)
+      .eq('status', 'void_acknowledged')
+      .select('*')
+      .single();
+    if (approveUpdateErr || !approvedReq) {
+      throw approveUpdateErr || new AppError('Void request already processed', 409);
     }
 
     const approverName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Manager';
@@ -3131,8 +3184,9 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
 
     const now = new Date().toISOString();
 
-    // Reinstate the item: clear the void_pending_approval flag set at Stage 1
-    // so the item reappears on the bill as fully active.
+    // Reinstate the item and reverse the financial void that Stage 1 (cashier
+    // acknowledge) already applied: restore the item's quantity/total fields
+    // and add the voided amount back onto the bill's total/balance.
     const { data: orderData } = await supabase
       .from('pos_shift_orders')
       .select('items, total_amount, balance_amount')
@@ -3140,13 +3194,33 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
       .single();
 
     if (orderData && Array.isArray(orderData.items)) {
-      const items = orderData.items as Array<Record<string, any>>;
-      if (items[requestRow.item_index]) {
-        const reinstated = { ...items[requestRow.item_index], void_pending_approval: false };
-        items[requestRow.item_index] = reinstated;
+      const items = [...orderData.items] as Array<Record<string, any>>;
+      const item = items[requestRow.item_index];
+      if (item) {
+        const unitPrice = Number(item.unit_price ?? requestRow.unit_price ?? 0);
+        const qtyToVoid = Number(requestRow.qty_to_void ?? 0);
+        const voidedQtyAfterReversal = Math.max(Number(item.voided_qty ?? 0) - qtyToVoid, 0);
+        const quantity = Number(item.quantity ?? 0);
+        const activeQtyAfterReversal = quantity - voidedQtyAfterReversal;
+        const amountRestored = qtyToVoid * unitPrice;
+
+        items[requestRow.item_index] = {
+          ...item,
+          voided_qty: voidedQtyAfterReversal,
+          active_qty: activeQtyAfterReversal,
+          is_fully_voided: activeQtyAfterReversal <= 0,
+          active_total: activeQtyAfterReversal * unitPrice,
+          void_pending_approval: false
+        };
+
         await supabase
           .from('pos_shift_orders')
-          .update({ items, updated_at: now })
+          .update({
+            items,
+            total_amount: Number(orderData.total_amount || 0) + amountRestored,
+            balance_amount: Number(orderData.balance_amount || 0) + amountRestored,
+            updated_at: now
+          })
           .eq('id', requestRow.order_id);
       }
     }
@@ -3214,40 +3288,28 @@ export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, ne
 
     const now = new Date().toISOString();
 
-    // Mark item as void_pending_approval in the JSONB array — this hides
-    // it from the bill display without changing financial totals yet.
-    const { data: orderData, error: orderErr } = await supabase
-      .from('pos_shift_orders')
-      .select('*')
-      .eq('id', requestRow.order_id)
-      .single();
-    if (orderErr || !orderData) throw new AppError('Order not found', 404);
+    // Stage 1 now performs the real financial void — the bill is already in
+    // the customer's hand once the cashier acknowledges, so the total can't
+    // wait for manager approval. This recalculates total_amount/balance_amount
+    // and flags the item void_pending_approval=true (still hidden from the
+    // customer-facing line list until the manager signs off in Stage 2).
+    const { data: updatedOrder, error: rpcError } = await supabase.rpc('cashier_acknowledge_item_void', {
+      p_request_id: id,
+      p_actioned_by: req.user.id
+    });
+    if (rpcError) {
+      if (String(rpcError.message || '').includes('already processed')) {
+        throw new AppError('Void request already actioned', 409);
+      }
+      throw rpcError;
+    }
 
-    const items = Array.isArray(orderData.items) ? [...orderData.items] as Array<Record<string, any>> : [];
-    if (!items[requestRow.item_index]) throw new AppError('Item no longer exists on bill', 404);
-    items[requestRow.item_index] = { ...items[requestRow.item_index], void_pending_approval: true };
-
-    const { data: updatedOrder, error: orderUpdateErr } = await supabase
-      .from('pos_shift_orders')
-      .update({ items, updated_at: now })
-      .eq('id', requestRow.order_id)
-      .select('*')
-      .single();
-    if (orderUpdateErr) throw orderUpdateErr;
-
-    const { data: updatedReq, error: reqUpdateErr } = await supabase
+    const { data: updatedReq, error: reqFetchErr } = await supabase
       .from('pos_item_void_requests')
-      .update({
-        status: 'void_acknowledged',
-        cashier_id: req.user.id,
-        cashier_acknowledged_at: now,
-        cashier_action: 'acknowledged',
-        updated_at: now
-      })
-      .eq('id', id)
       .select('*')
+      .eq('id', id)
       .single();
-    if (reqUpdateErr) throw reqUpdateErr;
+    if (reqFetchErr) throw reqFetchErr;
 
     const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
     const ackMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id };

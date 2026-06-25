@@ -107,7 +107,7 @@ export const getAuditorDeliveries = async (req: Request, res: Response) => {
     }
 
     if (branch_id) {
-      query = query.eq('destination_branch', branch_id);
+      query = query.eq('destination_branch_id', branch_id);
     }
 
     if (date_from) query = query.gte('created_at', date_from);

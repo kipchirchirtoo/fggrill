@@ -293,9 +293,17 @@ class _BarLocationStocktakeState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('${item['name'] ?? 'Item'}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w800)),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text('${item['name'] ?? 'Item'}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                  ),
+                                  if (_num(item['sales']) > 0)
+                                    _SalesBadge(sold: _num(item['sales'])),
+                                ],
+                              ),
                               const SizedBox(height: 10),
                               Wrap(
                                 spacing: 12,
@@ -308,10 +316,6 @@ class _BarLocationStocktakeState
                                   _ReadOnlyChip(
                                     label: 'Additions',
                                     value: _fmt(item['additions'] ?? 0),
-                                  ),
-                                  _ReadOnlyChip(
-                                    label: 'Sales',
-                                    value: _fmt(item['sales'] ?? 0),
                                   ),
                                   _ReadOnlyChip(
                                     label: 'System',
@@ -420,6 +424,41 @@ class _ReadOnlyChip extends StatelessWidget {
   }
 }
 
+/// Highlights how many units sold since the last approved stocktake, so the
+/// storekeeper can see at a glance which items moved instead of having to
+/// read it out of the plain Opening/Additions/System chip row.
+class _SalesBadge extends StatelessWidget {
+  const _SalesBadge({required this.sold});
+  final num sold;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.point_of_sale, size: 13, color: Colors.blue.shade700),
+          const SizedBox(width: 4),
+          Text(
+            '${_fmt(sold)} sold',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Colors.blue.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SubmittedView extends StatelessWidget {
   const _SubmittedView({required this.items});
   final List<Map<String, dynamic>> items;
@@ -467,9 +506,17 @@ class _SubmittedView extends StatelessWidget {
         const SizedBox(height: 12),
         for (final item in items)
           ListTile(
-            title: Text('${item['item_name'] ?? item['item_id']}'),
+            title: Row(
+              children: [
+                Expanded(child: Text('${item['item_name'] ?? item['item_id']}')),
+                if (_num(item['sales']) > 0) ...[
+                  _SalesBadge(sold: _num(item['sales'])),
+                  const SizedBox(width: 8),
+                ],
+              ],
+            ),
             subtitle: Text(
-              'Open: ${item['opening_stock'] ?? 0} · Add: ${item['additions'] ?? 0} · Sales: ${item['sales'] ?? 0} · '
+              'Open: ${item['opening_stock'] ?? 0} · Add: ${item['additions'] ?? 0} · '
               'Sys: ${item['system_quantity']} · Phys: ${item['physical_quantity']}',
               style: const TextStyle(fontSize: 12),
             ),

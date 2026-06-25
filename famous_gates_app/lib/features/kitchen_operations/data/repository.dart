@@ -552,7 +552,7 @@ class KitchenOpsRepository {
     String? status,
   }) async {
     final response = await _dio.get(
-      '/kitchen/production-sessions',
+      '/kitchen/shifts/production-sessions-view',
       queryParameters: await _branchQuery({
         if (shiftType != null && shiftType != 'ALL') 'shift_type': shiftType,
         if (status != null && status != 'ALL') 'status': status,

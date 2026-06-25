@@ -1152,7 +1152,7 @@ class BranchStorekeeperRepository {
   }) async {
     final branchId = await _branchId;
     final response = await _dio.get(
-      '/kitchen/production-sessions',
+      '/kitchen/shifts/production-sessions-view',
       queryParameters: {
         'branch_id': branchId,
         if (status != null) 'status': status,
@@ -1355,6 +1355,14 @@ class BranchStorekeeperRepository {
   Future<Map<String, dynamic>> getKitchenShiftDetail(String id) async {
     final response = await _dio.get(
       '/kitchen/shifts/$id',
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<Map<String, dynamic>> getKitchenShiftPosConsumption(String shiftId) async {
+    final response = await _dio.get(
+      '/kitchen/shifts/$shiftId/pos-consumption',
       options: await _authOptions,
     );
     return _unwrapMap(response.data);

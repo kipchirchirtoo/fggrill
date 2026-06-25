@@ -219,9 +219,35 @@ const issueLocalSession = (
       access_token: accessToken,
       refresh_token: refreshToken,
       expires_at: new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString(),
-      user: { id: userId, email }
+      user: { id: userId, email },
+      supabase_token: issueSupabaseBridgeToken(userId, ttlHours)
     }
   };
+};
+
+// Bridges this app's own login (bcrypt + custom JWT, never Supabase Auth)
+// into a token Supabase's PostgREST/Realtime will actually accept for RLS.
+// Registration already creates a matching auth.users row with this same
+// UUID (see register() below), so `sub: userId` here is exactly what
+// auth.uid() resolves to once a direct Supabase client attaches this token.
+// Must be signed with the project's REAL Supabase JWT secret -- a token
+// signed with JWT_SECRET (this app's own secret, used above for
+// accessToken) would fail Supabase's signature check outright. The `role`
+// claim here is the POSTGRES role PostgREST assumes ('authenticated'), not
+// this user's app-level role (cashier/branch_manager/...) -- that
+// distinction matters because RLS policies look up the app role from the
+// `users` table themselves, not from this claim.
+const issueSupabaseBridgeToken = (userId: string, ttlHours: number): string | null => {
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  if (!secret) {
+    logger.warn('SUPABASE_JWT_SECRET not set — cannot issue a direct-Supabase bridge token; direct reads will fail RLS for this session');
+    return null;
+  }
+  return jwt.sign(
+    { sub: userId, role: 'authenticated', aud: 'authenticated' },
+    secret,
+    { expiresIn: `${ttlHours}h` }
+  );
 };
 
 // @desc    Register user

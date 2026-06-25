@@ -44,6 +44,7 @@ import '../../features/director/presentation/director_dashboard.dart';
 import '../../features/system/presentation/crud_module_screen.dart';
 import '../../features/admin/domain/admin_providers.dart';
 import '../../features/auditor/presentation/auditor_sections.dart';
+import 'auditor_route_sections.dart';
 import '../../features/store/presentation/mobile/mobile_receiving_barcode_screen.dart';
 import '../../features/store/presentation/mobile/mobile_branch_store_screen.dart';
 import '../../features/driver/presentation/mobile/mobile_driver_screen.dart';
@@ -389,7 +390,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-List<GoRoute> get _auditorSectionRoutes => _auditorSectionRouteSpecs
+List<GoRoute> get _auditorSectionRoutes => auditorSectionRouteSpecs
     .map(
       (entry) => GoRoute(
         path: entry.key,
@@ -1231,74 +1232,6 @@ const _routeRoles = <String, Set<String>>{
   '/driver': {'driver'},
   '/gm': {'general_manager', 'super_admin'},
 };
-
-const _auditorSectionRouteSpecs = <MapEntry<String, AdminSection>>[
-  MapEntry('/auditor/search', AdminSection.auditSearch),
-  MapEntry('/auditor/financial-sync', AdminSection.financialVerification),
-  MapEntry(
-      '/auditor/financial-verification', AdminSection.financialVerification),
-  MapEntry('/auditor/financial-verification/logs',
-      AdminSection.financialVerification),
-  MapEntry('/auditor/shift-verification', AdminSection.shiftVerification),
-  MapEntry('/auditor/revenue-oversight', AdminSection.revenueOversight),
-  MapEntry('/auditor/revenue-audit', AdminSection.auditorSales),
-  MapEntry('/auditor/sales', AdminSection.auditorSales),
-  MapEntry('/auditor/banking-review', AdminSection.auditorBanking),
-  MapEntry('/auditor/banking', AdminSection.auditorBanking),
-  MapEntry('/auditor/invoice-verification', AdminSection.auditorInvoices),
-  MapEntry('/auditor/invoices', AdminSection.auditorInvoices),
-  MapEntry('/auditor/discrepancies', AdminSection.auditorDiscrepancies),
-  MapEntry('/auditor/order-tracking', AdminSection.auditorOrders),
-  MapEntry('/auditor/orders', AdminSection.auditorOrders),
-  MapEntry('/auditor/item-analytics', AdminSection.soldItemsAnalysis),
-  MapEntry('/auditor/sold-items-analysis', AdminSection.soldItemsAnalysis),
-  MapEntry('/auditor/sold-items', AdminSection.soldItemsAnalysis),
-  MapEntry('/auditor/inventory-flow', AdminSection.auditorStock),
-  MapEntry('/auditor/stock', AdminSection.auditorStock),
-  MapEntry('/auditor/bar-stock', AdminSection.barStockAudits),
-  MapEntry('/auditor/purchases', AdminSection.purchaseAudits),
-  MapEntry('/auditor/deliveries', AdminSection.auditorDeliveries),
-  MapEntry('/auditor/ledger', AdminSection.auditorLedger),
-  MapEntry('/auditor/kitchen-flow', AdminSection.auditorKitchenRequisitions),
-  MapEntry(
-      '/auditor/kitchen-requisitions', AdminSection.auditorKitchenRequisitions),
-  MapEntry('/auditor/kitchen-usage', AdminSection.auditorKitchenUsage),
-  MapEntry('/auditor/kitchen-wastage', AdminSection.auditorKitchenWastage),
-  MapEntry('/auditor/staff-audit', AdminSection.staffFinancials),
-  MapEntry('/auditor/payroll-approvals', AdminSection.auditorPayrollApprovals),
-  MapEntry('/auditor/approvals', AdminSection.stockRequestApprovals),
-  MapEntry('/auditor/request-review', AdminSection.stockRequestApprovals),
-  MapEntry('/auditor/approval-queue', AdminSection.stockRequestApprovals),
-  MapEntry('/auditor/rejection-return', AdminSection.stockRequestApprovals),
-  MapEntry('/auditor/audit-log-review', AdminSection.auditLogs),
-  MapEntry('/auditor/variance-review', AdminSection.auditorDiscrepancies),
-  MapEntry('/auditor/leakage-control', AdminSection.auditReports),
-  MapEntry('/auditor/audit-reports', AdminSection.auditReports),
-  MapEntry('/auditor/branch-audit', AdminSection.auditLogs),
-  MapEntry('/auditor/branch-audit/invoices', AdminSection.auditorInvoices),
-  MapEntry(
-      '/auditor/branch-audit/credit-bills', AdminSection.auditorCreditBills),
-  MapEntry('/auditor/branch-audit/business-mpesa',
-      AdminSection.auditorBusinessMpesa),
-  MapEntry('/auditor/branch-audit/void-bills', AdminSection.auditorVoidBills),
-  MapEntry('/auditor/branch-audit/stock-take', AdminSection.auditorStock),
-  MapEntry('/auditor/void-bills', AdminSection.auditorVoidBills),
-  MapEntry('/auditor/business-mpesa', AdminSection.auditorBusinessMpesa),
-  MapEntry('/auditor/credit-bills', AdminSection.auditorCreditBills),
-  MapEntry('/auditor/cashier-logbooks', AdminSection.auditorCashierLogbooks),
-  MapEntry('/auditor/hr', AdminSection.hrPayroll),
-  MapEntry('/auditor/hr/employees', AdminSection.staff),
-  MapEntry('/auditor/hr/attendance', AdminSection.attendance),
-  MapEntry('/auditor/hr/staff-attendance', AdminSection.attendanceLogs),
-  MapEntry('/auditor/hr/leave', AdminSection.leaveRequests),
-  MapEntry('/auditor/hr/payroll', AdminSection.auditorPayrollApprovals),
-  MapEntry('/auditor/hr/salaries', AdminSection.salaries),
-  MapEntry('/auditor/hr/adjustments', AdminSection.payrollAdjustments),
-  MapEntry('/auditor/hr/policies', AdminSection.payrollPolicies),
-  MapEntry('/auditor/hr/performance', AdminSection.performanceLeaderboard),
-  MapEntry('/auditor/hr/reports', AdminSection.auditReports),
-  MapEntry('/auditor/hr/terminal', AdminSection.hrTerminal),
-];
 
 const _directorSectionRouteSpecs = <MapEntry<String, DirectorSection>>[
   MapEntry('/director/payments', DirectorSection.payments),
