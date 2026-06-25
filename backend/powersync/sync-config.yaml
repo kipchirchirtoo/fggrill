@@ -1,9 +1,6 @@
 # PowerSync Sync Streams configuration for FamousGate.
 # Uses config edition 3 (Sync Streams). Deploy with:
 #   powersync deploy sync-config --directory backend/powersync
-#
-# The JWT issued by the backend /powersync/credentials endpoint contains:
-#   sub (user_id), role, branch_id, active_outlet_id, active_outlet_type
 
 config:
   edition: 3
@@ -26,33 +23,69 @@ streams:
     priority: 2
     query: SELECT * FROM notifications WHERE user_id = auth.user_id()
 
-  # Branch-wide data (managers, storekeepers, accountants, all cashiers)
+  # Branch-wide data via user join (avoids auth.jwt() for broader compatibility)
   branch_data:
     auto_subscribe: true
     priority: 2
     queries:
-      - SELECT * FROM pos_outlets WHERE branch_id = (auth.jwt() ->> 'branch_id')::int AND is_active = true
-      - SELECT * FROM pos_outlet_assignments WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
-      - SELECT * FROM pos_outlet_items WHERE branch_id = (auth.jwt() ->> 'branch_id')::int AND is_active = true
-      - SELECT * FROM branch_stock WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
-      - SELECT * FROM branch_stock_movements WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
-      - SELECT * FROM staff_credit_bills WHERE branch_id = (auth.jwt() ->> 'branch_id')::int
+      - |
+        SELECT po.* FROM pos_outlets po
+        INNER JOIN users u ON u.branch_id = po.branch_id
+        WHERE u.id = auth.user_id() AND po.is_active = true
+      - |
+        SELECT a.* FROM pos_outlet_assignments a
+        INNER JOIN users u ON u.branch_id = a.branch_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT i.* FROM pos_outlet_items i
+        INNER JOIN users u ON u.branch_id = i.branch_id
+        WHERE u.id = auth.user_id() AND i.is_active = true
+      - |
+        SELECT s.* FROM branch_stock s
+        INNER JOIN users u ON u.branch_id = s.branch_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT m.* FROM branch_stock_movements m
+        INNER JOIN users u ON u.branch_id = m.branch_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT b.* FROM staff_credit_bills b
+        INNER JOIN users u ON u.branch_id = b.branch_id
+        WHERE u.id = auth.user_id()
 
-  # POS outlet data for the cashier's active outlet
+  # POS outlet data via active_outlet_id join
   outlet_data:
     auto_subscribe: true
     priority: 3
     queries:
-      - SELECT * FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
-      - SELECT * FROM pos_shift_orders WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
-      - SELECT * FROM pos_shift_payments WHERE shift_id IN (
-          SELECT id FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
-        )
-      - SELECT * FROM pos_shift_stock_counts WHERE shift_id IN (
-          SELECT id FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
-        )
-      - SELECT * FROM pos_void_requests WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
-      - SELECT * FROM pos_item_void_requests WHERE shift_id IN (
-          SELECT id FROM pos_outlet_shifts WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
-        )
-      - SELECT * FROM pos_item_exchange_requests WHERE outlet_id = auth.jwt() ->> 'active_outlet_id'
+      - |
+        SELECT s.* FROM pos_outlet_shifts s
+        INNER JOIN users u ON u.active_outlet_id = s.outlet_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT o.* FROM pos_shift_orders o
+        INNER JOIN users u ON u.active_outlet_id = o.outlet_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT p.* FROM pos_shift_payments p
+        INNER JOIN pos_outlet_shifts s ON s.id = p.shift_id
+        INNER JOIN users u ON u.active_outlet_id = s.outlet_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT c.* FROM pos_shift_stock_counts c
+        INNER JOIN pos_outlet_shifts s ON s.id = c.shift_id
+        INNER JOIN users u ON u.active_outlet_id = s.outlet_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT v.* FROM pos_void_requests v
+        INNER JOIN users u ON u.active_outlet_id = v.outlet_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT iv.* FROM pos_item_void_requests iv
+        INNER JOIN pos_outlet_shifts s ON s.id = iv.shift_id
+        INNER JOIN users u ON u.active_outlet_id = s.outlet_id
+        WHERE u.id = auth.user_id()
+      - |
+        SELECT e.* FROM pos_item_exchange_requests e
+        INNER JOIN users u ON u.active_outlet_id = e.outlet_id
+        WHERE u.id = auth.user_id()
