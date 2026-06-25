@@ -2945,6 +2945,15 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
     // users. The station cashier (e.g. main_bar_cashier) gets a targeted
     // user notification; the general cashier gets a role broadcast so they
     // see the request in real time rather than waiting for the next poll.
+    const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+    const outletType = String(outlet?.outlet_type || '').toLowerCase();
+    let cashierRoleToNotify = 'cashier';
+    if (outletType.includes('bar')) {
+      cashierRoleToNotify = 'main_bar_cashier';
+    } else if (outletType === 'restaurant') {
+      cashierRoleToNotify = 'restaurant_cashier';
+    }
+
     const voidNotifMeta = {
       request_id: requestRow.id,
       order_id: orderId,
@@ -2965,11 +2974,11 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
         voidNotifMsg,
         voidNotifOpts
       ),
-      // Also broadcast to branch-level 'cashier' role so the general cashier
+      // Also broadcast to branch-level specific cashier role so the cashier
       // sees new void requests in real time regardless of which POS station
       // raised them.
       notificationService.notifyRole(
-        'cashier',
+        cashierRoleToNotify,
         voidNotifTitle,
         voidNotifMsg,
         { ...voidNotifOpts, branchId: (shift as any).branch_id }
