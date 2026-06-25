@@ -1646,8 +1646,9 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
       if (outletsError) throw outletsError;
 
       const merged: Array<Record<string, any>> = [];
+      const sync = req.query.sync === 'true';
       for (const branchOutlet of (outlets || []) as Array<Record<string, any>>) {
-        const items = applyPoolDerivedStock(await loadActiveOutletItems(branchOutlet, true));
+        const items = applyPoolDerivedStock(await loadActiveOutletItems(branchOutlet, sync));
         const categorisedItems = await hydrateOutletItemCategories(branchOutlet, items);
         merged.push(...enrichOutletItems(branchOutlet, categorisedItems));
       }
@@ -1658,9 +1659,10 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
+    const sync = req.query.sync === 'true';
     const items = await hydrateOutletItemCategories(
       outlet,
-      applyPoolDerivedStock(await loadActiveOutletItems(outlet, true))
+      applyPoolDerivedStock(await loadActiveOutletItems(outlet, sync))
     );
     res.json({
       success: true,
