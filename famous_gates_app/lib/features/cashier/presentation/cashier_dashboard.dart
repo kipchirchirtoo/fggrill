@@ -511,7 +511,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
   // roles only (see _kBarCaptainOrderCashierRoles) so reception/restaurant/
   // other cashier stations never auto-print bar tickets.
   Timer? _captainOrderTimer;
-  StreamSubscription<List<Map<String, dynamic>>>? _captainOrderSubscription;
   final Set<String> _printedCaptainOrderIds = {};
 
   Future<void> _initBarCaptainOrderFeed() async {
@@ -520,13 +519,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
         .trim()
         .toLowerCase();
     if (!mounted || !_kBarCaptainOrderCashierRoles.contains(role)) return;
-    if (ref.read(powerSyncHotReadsEnabledProvider)) {
-      _captainOrderSubscription = ref
-          .read(powerSyncServiceProvider)
-          .watchBarCaptainOrders()
-          .listen(_processBarCaptainOrdersRows);
-      return;
-    }
     _pollBarCaptainOrders();
     _captainOrderTimer = Timer.periodic(
         const Duration(seconds: 5), (_) => _pollBarCaptainOrders());
@@ -561,7 +553,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
   @override
   void dispose() {
     _captainOrderTimer?.cancel();
-    _captainOrderSubscription?.cancel();
     _unpaidSearchDebounce?.cancel();
     _lookupController.dispose();
     _amountController.dispose();
@@ -627,44 +618,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
     } catch (error) {
       debugPrint(
           '❌ Error polling bar captain orders at cashier station: $error');
-    }
-  }
-
-  void _processBarCaptainOrdersRows(List<Map<String, dynamic>> raw) {
-    if (!mounted) return;
-    final orders = raw.map(KitchenOrder.fromJson).toList();
-    for (final order in orders) {
-      final printKey = order.kdsPrintKey;
-      if (_printedCaptainOrderIds.contains(printKey)) continue;
-      if (order.captainOrderAlreadyPrinted) {
-        _printedCaptainOrderIds.add(printKey);
-        continue;
-      }
-      if (order.isVoided || order.hasPendingVoidRequest) continue;
-
-      final status = order.status.toLowerCase();
-      if (status != 'pending' &&
-          status != 'confirmed' &&
-          status != 'recalled') {
-        continue;
-      }
-
-      _printedCaptainOrderIds.add(printKey);
-      final shiftId = order.shiftId;
-      if (shiftId != null && shiftId.isNotEmpty) {
-        ref.read(cashierRepositoryProvider).markBarCaptainOrderPrinted(
-              shiftId: shiftId,
-              orderId: order.id.replaceFirst('pos:', ''),
-            );
-      }
-
-      _printBarCaptainOrder(order).then((_) {
-        debugPrint(
-            'Bar captain order ${order.orderNumber} printed at cashier station');
-      }).catchError((error) {
-        debugPrint(
-            'Failed to print bar captain order ${order.orderNumber} at cashier station: $error');
-      });
     }
   }
 
