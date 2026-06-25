@@ -507,7 +507,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                 branch_id: branchId,
                 bar_location,
                 stocktake_date: stocktakeDate,
-                shift_id: req.body?.shift_id || shiftWindow.shiftId || null,
+                shift_id: shiftWindow.shiftId || null,
                 item_id: invId,  // inventory_items UUID (satisfies FK)
                 opening_stock: opening,
                 additions,
