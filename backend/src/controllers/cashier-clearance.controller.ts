@@ -92,7 +92,7 @@ export const getCashierClearances = async (
 
         // Map cashier_shift_logs columns to the expected frontend format
         // cashier_shift_logs uses: shift_start, shift_end, expected_closing_float, closing_float, variance
-        // Frontend expects: start_time, end_time, expected_cash, actual_cash, variance
+        // Frontend expects: shift_start, shift_end, expected_cash, actual_cash, variance
         const clearances = (shifts || []).map(shift => {
             const expectedCash = Number(shift.expected_closing_float || 0);
             const actualCash = Number(shift.closing_float || 0);
@@ -105,9 +105,7 @@ export const getCashierClearances = async (
 
             return {
                 ...shift,
-                // Map column names for frontend compatibility
-                start_time: shift.shift_start,
-                end_time: shift.shift_end,
+                // Keep original column names for frontend compatibility
                 expected_cash: expectedCash,
                 actual_cash: actualCash,
                 variance,
