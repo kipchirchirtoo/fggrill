@@ -13,7 +13,9 @@ const mapShiftResponse = (shift: any) => {
     cash_sales: shift.total_cash_in,
     mpesa_sales: shift.total_mpesa_in,
     card_sales: shift.total_card_in,
-    total_sales: shift.total_revenue,
+    // Mask total collections from the cashier UI to prevent visible running
+    // totals from being used for cash manipulation. Backend owns the real data.
+    total_sales: 0,
     opened_at: shift.start_time
   };
   
