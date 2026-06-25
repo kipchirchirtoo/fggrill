@@ -95,6 +95,124 @@ async function staffProfileSummaries(userIds: string[]) {
     });
 }
 
+async function syncKitchenShiftToStockCounts(shiftId: string): Promise<void> {
+    // 1. Fetch kitchen shift
+    const { data: shift, error: shiftError } = await supabase
+        .from('kitchen_shifts')
+        .select('*')
+        .eq('id', shiftId)
+        .single();
+    if (shiftError || !shift) {
+        logger.error(`[syncKitchenShiftToStockCounts] Shift not found: ${shiftId}`, shiftError);
+        return;
+    }
+
+    // Map shift status to stock_counts status
+    let status = 'draft';
+    if (shift.status === 'pending_chef_confirmation' || shift.status === 'pending_accountant_review') {
+        status = 'submitted';
+    } else if (shift.status === 'approved') {
+        status = 'approved';
+    } else if (shift.status === 'rejected') {
+        status = 'rejected';
+    }
+
+    const shiftLocation = `kitchen_${String(shift.shift_type || 'morning').toLowerCase()}`;
+    const stocktakeDate = shift.shift_date;
+
+    // 2. Fetch existing stock_counts header
+    const { data: existing } = await supabase
+        .from('stock_counts')
+        .select('id')
+        .eq('branch_id', shift.branch_id)
+        .eq('count_date', stocktakeDate)
+        .eq('location', shiftLocation)
+        .eq('store_type', 'kitchen')
+        .maybeSingle();
+
+    let stockCountId: string;
+    const now = new Date().toISOString();
+    const headerData: any = {
+        branch_id: shift.branch_id,
+        count_date: stocktakeDate,
+        count_type: 'daily',
+        store_type: 'kitchen',
+        location: shiftLocation,
+        status,
+        counted_by: shift.store_keeper_id || shift.opened_by || null,
+        approved_by: shift.accountant_approved_by || null,
+        approved_at: shift.accountant_approved_at || null,
+        updated_at: now
+    };
+
+    if (existing?.id) {
+        stockCountId = existing.id;
+        const { error: updateError } = await supabase
+            .from('stock_counts')
+            .update(headerData)
+            .eq('id', stockCountId);
+        if (updateError) throw updateError;
+    } else {
+        const { data: created, error: insertError } = await supabase
+            .from('stock_counts')
+            .insert({ ...headerData, id: shiftId, created_at: now })
+            .select('id')
+            .single();
+        if (insertError) {
+            const { data: created2, error: insertError2 } = await supabase
+                .from('stock_counts')
+                .insert({ ...headerData, created_at: now })
+                .select('id')
+                .single();
+            if (insertError2) throw insertError2;
+            stockCountId = created2!.id;
+        } else {
+            stockCountId = created!.id;
+        }
+    }
+
+    // 3. Fetch all kitchen shift stock take records for this shift
+    const { data: records, error: recordsError } = await supabase
+        .from('kitchen_shift_stock_take')
+        .select('*')
+        .eq('shift_id', shiftId);
+
+    if (recordsError) throw recordsError;
+
+    // 4. Delete existing items under this header
+    await supabase.from('stock_count_items').delete().eq('stock_count_id', stockCountId);
+
+    // 5. Insert new items
+    if (records && records.length > 0) {
+        const skus = records.map((r: any) => r.item_sku).filter(Boolean);
+        const { data: invItems } = skus.length > 0
+            ? await supabase.from('inventory_items').select('id, sku').in('sku', skus)
+            : { data: [] };
+
+        const items = records.map((r: any) => {
+            const matchedInv = (invItems || []).find((i: any) => i.sku === r.item_sku);
+            return {
+                stock_count_id: stockCountId,
+                item_id: matchedInv?.id || null,
+                item_sku: r.item_sku,
+                item_name: r.item_name,
+                system_quantity: n(r.system_closing_stock),
+                physical_quantity: n(r.physical_count),
+                counted_quantity: n(r.physical_count),
+                variance: n(r.variance),
+                variance_value: n(r.variance_value),
+                reason: r.variance_reason || null,
+                status,
+                created_at: now,
+                updated_at: now
+            };
+        });
+
+        const { error: itemsError } = await supabase.from('stock_count_items').insert(items);
+        if (itemsError) throw itemsError;
+    }
+}
+
 // ── OPEN SHIFT ──────────────────────────────────────────────
 export const openKitchenShift = asyncWrap(async (req: Request, res: Response) => {
     const { branch_id, shift_type, shift_date, opening_items, assigned_chef_ids } = req.body;
@@ -410,6 +528,12 @@ export const closeKitchenShift = asyncWrap(async (req: Request, res: Response) =
         total_spoilage_cost: spoilageCost, total_variance_cost: varianceCost, closing_notes, updated_at: new Date().toISOString()
     }).eq('id', shift_id).select().single();
 
+    try {
+        await syncKitchenShiftToStockCounts(shift_id);
+    } catch (err: any) {
+        logger.error(`[closeKitchenShift] syncKitchenShiftToStockCounts failed for shift ${shift_id}:`, err);
+    }
+
     res.json({ success: true, data: { shift: closed, stock_take: records, summary: { revenue, cogs, spoilage_cost: spoilageCost, variance_cost: varianceCost } } });
 });
 
@@ -422,6 +546,13 @@ export const submitForApproval = asyncWrap(async (req: Request, res: Response) =
     if (shift.status !== 'closed') throw new AppError('Shift must be closed', 400);
     const { data: upd } = await supabase.from('kitchen_shifts').update({ status: 'pending_chef_confirmation', updated_at: new Date().toISOString() }).eq('id', shift_id).select().single();
     await supabase.from('kitchen_shift_approvals').insert({ shift_id, branch_id: shift.branch_id, approval_stage: 'store_keeper_submitted', approved_by: userId, notes: 'Submitted for chef confirmation' });
+    
+    try {
+        await syncKitchenShiftToStockCounts(shift_id);
+    } catch (err: any) {
+        logger.error(`[submitForApproval] syncKitchenShiftToStockCounts failed for shift ${shift_id}:`, err);
+    }
+
     res.json({ success: true, data: upd });
 });
 
@@ -438,6 +569,13 @@ export const chefConfirmShift = asyncWrap(async (req: Request, res: Response) =>
         status: next, chef_confirmed_by: confirmed ? userId : null, chef_confirmed_at: confirmed ? new Date().toISOString() : null, updated_at: new Date().toISOString()
     }).eq('id', shift_id).select().single();
     await supabase.from('kitchen_shift_approvals').insert({ shift_id, branch_id: shift.branch_id, approval_stage: confirmed ? 'chef_confirmed' : 'chef_rejected', approved_by: userId, notes: notes || `Chef ${confirmed ? 'confirmed' : 'rejected'}` });
+    
+    try {
+        await syncKitchenShiftToStockCounts(shift_id);
+    } catch (err: any) {
+        logger.error(`[chefConfirmShift] syncKitchenShiftToStockCounts failed for shift ${shift_id}:`, err);
+    }
+
     res.json({ success: true, data: upd });
 });
 
@@ -539,6 +677,13 @@ export const accountantReviewShift = asyncWrap(async (req: Request, res: Respons
         approved_by: userId,
         notes: notes || `Accountant ${approved ? 'approved' : 'rejected'} (${action})`
     });
+
+    try {
+        await syncKitchenShiftToStockCounts(shift_id);
+    } catch (err: any) {
+        logger.error(`[accountantReviewShift] syncKitchenShiftToStockCounts failed for shift ${shift_id}:`, err);
+    }
+
     res.json({ success: true, data: { shift: upd, liability_case: liabilityCase, credit_bills: creditBills } });
 });
 
@@ -585,7 +730,7 @@ export const listKitchenShifts = asyncWrap(async (req: Request, res: Response) =
 // Returns kitchen_shifts data in the shape expected by old
 // kitchen_production_sessions consumers — read-only, additive.
 export const getProductionSessionView = asyncWrap(async (req: Request, res: Response) => {
-    const { branch_id, status, shift_type } = req.query;
+    const { branch_id, status, shift_type, date_from, date_to } = req.query;
     let query = supabase
         .from('kitchen_shifts')
         .select(`
@@ -599,10 +744,25 @@ export const getProductionSessionView = asyncWrap(async (req: Request, res: Resp
     if (branch_id) query = query.eq('branch_id', Number(branch_id));
     if (status) query = query.eq('status', status as string);
     if (shift_type) query = query.eq('shift_type', shift_type as string);
+    if (date_from) query = query.gte('shift_date', date_from as string);
+    if (date_to) query = query.lte('shift_date', date_to as string);
 
     const { data, error } = await query;
     if (error) throw new AppError(error.message, 500);
-    res.json({ success: true, data: data || [] });
+
+    const formatted = (data || []).map((s: any) => {
+        const first = s.opened_by_user?.first_name || '';
+        const last = s.opened_by_user?.last_name || '';
+        return {
+            ...s,
+            session_number: s.shift_number,
+            session_date: s.shift_date,
+            staff_name: `${first} ${last}`.trim() || 'Staff',
+            staff_id: s.opened_by,
+        };
+    });
+
+    res.json({ success: true, data: formatted });
 });
 
 // Links a POS item to a shared stock pool — used by Food Controls whose
@@ -746,6 +906,66 @@ export const getKitchenShiftStats = asyncWrap(async (req: Request, res: Response
             summary: { total: (shifts || []).length, open, closed, approved },
             financials: { revenue: rev, cogs, gross_profit: rev - cogs, spoilage: spoil, variance: varc },
             top_items: sorted
+        }
+    });
+});
+
+export const getKitchenShiftPosConsumption = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id } = req.params;
+    
+    // 1. Fetch consumption records
+    const { data: consumption, error: consError } = await supabase
+        .from('kitchen_shift_pos_consumption')
+        .select(`
+            *,
+            pos_shift:pos_outlet_shifts(
+                id,
+                shift_number,
+                status,
+                opened_at,
+                closed_at,
+                cashier:users!cashier_id(first_name,last_name),
+                outlet:pos_outlets(id,name,outlet_type)
+            )
+        `)
+        .eq('shift_id', shift_id)
+        .order('created_at', { ascending: false });
+
+    if (consError) throw new AppError(consError.message, 500);
+
+    // 2. Group by cashier shift (pos_shift_id) to summarize sales per cashier shift
+    const shiftsMap = new Map<string, any>();
+    for (const item of (consumption || [])) {
+        const ps = item.pos_shift as any;
+        if (!ps) continue;
+        const psId = ps.id;
+        if (!shiftsMap.has(psId)) {
+            const first = ps.cashier?.first_name || '';
+            const last = ps.cashier?.last_name || '';
+            shiftsMap.set(psId, {
+                id: psId,
+                shift_number: ps.shift_number,
+                status: ps.status,
+                opened_at: ps.opened_at,
+                closed_at: ps.closed_at,
+                cashier_name: `${first} ${last}`.trim() || 'Cashier',
+                outlet_name: ps.outlet?.name || 'POS Outlet',
+                total_portions: 0,
+                total_cost: 0,
+                items: []
+            });
+        }
+        const grp = shiftsMap.get(psId);
+        grp.total_portions += Number(item.portions_sold || 0);
+        grp.total_cost += Number(item.portions_sold || 0) * Number(item.cost_price || 0);
+        grp.items.push(item);
+    }
+
+    res.json({
+        success: true,
+        data: {
+            consumption: consumption || [],
+            cashier_shifts: Array.from(shiftsMap.values())
         }
     });
 });

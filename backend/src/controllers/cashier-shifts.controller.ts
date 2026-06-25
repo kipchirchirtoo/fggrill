@@ -68,12 +68,12 @@ function requiredStocktakeLocationsForRole(
             return [{ key: 'kitchen', label: 'Kitchen stocktake', groupStoreType: 'kitchen' }];
         case 'main_bar_cashier':
         case 'kyogong_sports_bar_cashier':
-            return [{ key: 'main_bar', label: 'Bar stocktake', groupStoreType: 'bar' }];
+            return [{ key: 'main_bar', label: 'Bar stocktake' }];
         case 'executive_bar_cashier':
         case 'kyogong_executive_bar_cashier':
             return branchId === 1
-                ? [{ key: 'executive_bar', label: 'Executive Bar stocktake', groupStoreType: 'bar' }]
-                : [{ key: 'main_bar', label: 'Bar stocktake', groupStoreType: 'bar' }];
+                ? [{ key: 'executive_bar', label: 'Executive Bar stocktake' }]
+                : [{ key: 'main_bar', label: 'Bar stocktake' }];
         default:
             // No station-specific stocktake applies to this role (e.g.
             // non-consumables, reception, spa) — nothing to gate on.
