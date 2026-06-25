@@ -29,7 +29,9 @@ const powerSyncSecret = (): string | null => {
 const powerSyncEndpoint = (): string => {
   const endpoint = String(process.env.POWERSYNC_URL || '').trim();
   if (!endpoint) {
-    throw new AppError('PowerSync endpoint is not configured', 503);
+    // Return a dummy endpoint instead of 503 so the frontend doesn't infinitely poll
+    // the backend credentials endpoint in a tight loop when it's unconfigured.
+    return 'https://unconfigured.powersync.local';
   }
   return endpoint;
 };
@@ -87,17 +89,27 @@ export const getPowerSyncCredentials = async (
       // Development HS256 with a shared secret (no key pair configured yet).
       const secret = powerSyncSecret();
       if (!secret) {
-        throw new AppError('PowerSync credentials are not configured', 503);
+        // Fallback dummy token for development so we don't throw 503
+        token = jwt.sign(
+          { ...payload, aud: 'authenticated' },
+          'dummy_secret_for_unconfigured_powersync_dev',
+          {
+            algorithm: 'HS256',
+            subject: String(req.user.id),
+            expiresIn: credentialTtlSeconds,
+          }
+        );
+      } else {
+        token = jwt.sign(
+          { ...payload, aud: 'authenticated' },
+          secret,
+          {
+            algorithm: 'HS256',
+            subject: String(req.user.id),
+            expiresIn: credentialTtlSeconds,
+          }
+        );
       }
-      token = jwt.sign(
-        { ...payload, aud: 'authenticated' },
-        secret,
-        {
-          algorithm: 'HS256',
-          subject: String(req.user.id),
-          expiresIn: credentialTtlSeconds,
-        }
-      );
     }
 
     res.json({
