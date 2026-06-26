@@ -16,7 +16,8 @@ import {
   isCashierStationRole,
   loadAssignedPosOutlets,
   shouldRestrictCashierStationAccess,
-  stationTypesForCashierRole
+  stationTypesForCashierRole,
+  POS_STATION_CASHIER_ROLE_TYPES
 } from '../utils/posStationAccess';
 import { createBillVerificationCode } from '../services/bill-verification-code.service';
 
@@ -2941,17 +2942,20 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
     if (error || !requestRow) throw error || new AppError('Failed to create item void request', 500);
 
     // Stage 1: notify the cashier who has the open shift for this specific
-    // outlet (shift.cashier_id) AND any general branch-level 'cashier' role
+    // outlet (shift.cashier_id) AND any general branch-level specific cashier role
     // users. The station cashier (e.g. main_bar_cashier) gets a targeted
     // user notification; the general cashier gets a role broadcast so they
     // see the request in real time rather than waiting for the next poll.
     const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
     const outletType = String(outlet?.outlet_type || '').toLowerCase();
     let cashierRoleToNotify = 'cashier';
-    if (outletType.includes('bar')) {
-      cashierRoleToNotify = 'main_bar_cashier';
-    } else if (outletType === 'restaurant') {
-      cashierRoleToNotify = 'restaurant_cashier';
+    
+    // Dynamically match specific cashier role based on the outlet type
+    for (const [roleKey, outletTypes] of Object.entries(POS_STATION_CASHIER_ROLE_TYPES)) {
+      if (outletTypes.includes(outletType)) {
+        cashierRoleToNotify = roleKey;
+        break;
+      }
     }
 
     const voidNotifMeta = {
@@ -3326,6 +3330,17 @@ export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, ne
       .single();
     if (error || !requestRow) throw new AppError('Void request not found', 404);
     ensureBranchAccess(req, requestRow.branch_id);
+
+    // Ensure this cashier is authorized to access the specific outlet of the request
+    const { data: outletRow } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', requestRow.outlet_id)
+      .single();
+    if (outletRow) {
+      await ensureCashierOutletAccess(req, outletRow);
+    }
+
     if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
 
     const now = new Date().toISOString();
@@ -3399,6 +3414,17 @@ export const cashierDeclineItemVoid = async (req: Request, res: Response, next: 
       .single();
     if (error || !requestRow) throw new AppError('Void request not found', 404);
     ensureBranchAccess(req, requestRow.branch_id);
+
+    // Ensure this cashier is authorized to access the specific outlet of the request
+    const { data: outletRow } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', requestRow.outlet_id)
+      .single();
+    if (outletRow) {
+      await ensureCashierOutletAccess(req, outletRow);
+    }
+
     if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
 
     const now = new Date().toISOString();
@@ -3446,6 +3472,60 @@ export const getPendingVoidsCashier = async (req: Request, res: Response, next: 
 
     if (branchId) {
       query = query.eq('branch_id', branchId);
+    }
+
+    const userRole = roleFor(req);
+    const normalizedRole = userRole.trim().toLowerCase();
+
+    // Specific cashier station roles (e.g. main_bar_cashier, restaurant_cashier)
+    // should only see void requests relevant to their assigned/active outlet stations.
+    // Managers, accountants, auditors, and general cashiers ('cashier') can see all.
+    if (isCashierStationRole(normalizedRole) && normalizedRole !== 'cashier') {
+      // 1. Try active open shifts first
+      const { data: myShifts } = await supabase
+        .from('pos_outlet_shifts')
+        .select('id')
+        .eq('cashier_id', req.user.id)
+        .eq('status', 'open');
+
+      const myShiftIds = (myShifts || []).map((s: any) => s.id);
+      
+      if (myShiftIds.length > 0) {
+        query = query.in('shift_id', myShiftIds);
+      } else {
+        // 2. Fall back to active_outlet_id
+        const activeOutletId = (req.user as any)?.active_outlet_id || req.query.outlet_id;
+        if (activeOutletId) {
+          query = query.eq('outlet_id', activeOutletId);
+        } else {
+          // 3. Fall back to assigned outlets
+          const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
+          const assignedIds = assignedOutlets.map((o) => o.id).filter(Boolean);
+          
+          if (assignedIds.length > 0) {
+            query = query.in('outlet_id', assignedIds);
+          } else {
+            // 4. Fall back to role-based outlet types
+            const allowedTypes = POS_STATION_CASHIER_ROLE_TYPES[normalizedRole] || [];
+            if (allowedTypes.length > 0) {
+              const { data: outlets } = await supabase
+                .from('pos_outlets')
+                .select('id')
+                .eq('branch_id', branchId)
+                .in('outlet_type', allowedTypes);
+              
+              const outletIds = (outlets || []).map(o => o.id);
+              if (outletIds.length > 0) {
+                query = query.in('outlet_id', outletIds);
+              } else {
+                query = query.eq('outlet_id', '00000000-0000-0000-0000-000000000000');
+              }
+            } else {
+              query = query.eq('outlet_id', '00000000-0000-0000-0000-000000000000');
+            }
+          }
+        }
+      }
     }
 
     const { data, error } = await query;
