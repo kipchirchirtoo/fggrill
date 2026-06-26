@@ -120,4 +120,27 @@ CREATE POLICY "Staff can view all order items" ON public.restaurant_order_items
     )
   );
 
+-- Fix calculate_shift_summary to exclude voided transactions from sales totals.
+-- Previously the function summed every row in cashier_shift_transactions,
+-- inflating sales whenever a transaction was voided.
+CREATE OR REPLACE FUNCTION calculate_shift_summary(p_shift_id UUID)
+RETURNS JSONB AS $$
+DECLARE
+  v_summary JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'total_cash', COALESCE(SUM(CASE WHEN UPPER(payment_method) = 'CASH' THEN amount ELSE 0 END), 0),
+    'total_mpesa', COALESCE(SUM(CASE WHEN UPPER(payment_method) IN ('MPESA', 'MPESA_MANUAL') THEN amount ELSE 0 END), 0),
+    'total_card', COALESCE(SUM(CASE WHEN UPPER(payment_method) = 'CARD' THEN amount ELSE 0 END), 0),
+    'total_sales', COALESCE(SUM(amount), 0),
+    'transaction_count', COUNT(*)
+  ) INTO v_summary
+  FROM cashier_shift_transactions
+  WHERE shift_id = p_shift_id
+    AND (is_voided IS NULL OR is_voided = FALSE);
+
+  RETURN v_summary;
+END;
+$$ LANGUAGE plpgsql;
+
 NOTIFY pgrst, 'reload schema';

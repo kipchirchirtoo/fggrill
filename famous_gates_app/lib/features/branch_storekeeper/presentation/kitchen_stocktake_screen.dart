@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
 import '../data/branch_storekeeper_repository.dart';
 import 'record_spoilage_screen.dart';
+import 'daily_controls_screen.dart';
 
 /// Kitchen Stocktake — Branch Storekeeper. Digital replica of the physical
 /// paper logbook used at the kitchen serving counter: OPEN / ADD / CLOSING /
@@ -343,14 +344,40 @@ class _KitchenShiftStocktakeState
               // approved spoilage) — selling food normally must not show up
               // as a "shortage" just because stock went down.
               final variance = c - (open + add - sold - spoilage);
-              return Center(
-                child: Text(
-                  variance.toStringAsFixed(variance == variance.roundToDouble() ? 0 : 1),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: variance < 0
-                        ? Colors.red
-                        : (variance > 0 ? Colors.orange.shade800 : Colors.green),
+              final isShortage = variance < 0;
+              return InkWell(
+                onTap: isShortage
+                    ? () {
+                        final parsedDate = DateTime.tryParse(widget.date) ?? DateTime.now();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DailyControlsScreen(
+                              initialDate: parsedDate,
+                              initialShift: widget.shift,
+                            ),
+                          ),
+                        );
+                      }
+                    : null,
+                child: Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        variance.toStringAsFixed(variance == variance.roundToDouble() ? 0 : 1),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: isShortage
+                              ? Colors.red
+                              : (variance > 0 ? Colors.orange.shade800 : Colors.green),
+                        ),
+                      ),
+                      if (isShortage) ...[
+                        const SizedBox(width: 3),
+                        const Icon(Icons.receipt_long, size: 13, color: Colors.red),
+                      ],
+                    ],
                   ),
                 ),
               );

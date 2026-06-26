@@ -385,10 +385,11 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
             if (!invId) return null;
             const did = String(d.id);
-            const opening = stockByDrinkId.get(did) ?? 0;
+            const currentStock = stockByDrinkId.get(did) ?? 0;
             const additions = additionsByDrinkId.get(did) ?? 0;
             const sales = salesByDrinkId.get(did) ?? 0;
-            const system = opening + additions - sales;
+            const opening = Math.max(0, currentStock - additions + sales);
+            const system = currentStock;
             return {
                 id: invId,
                 name: d.name,
@@ -504,16 +505,11 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             const invId = String(it.item_id);
             const invItem = invById.get(invId);
             const currentStock = stockByInvId.get(invId) ?? 0;
-            const opening = currentStock;
             const additions = additionsByInvId.get(invId) ?? 0;
             const sales = salesByInvId.get(invId) ?? 0;
-            // Must match the candidate-list formula (opening + additions -
-            // sales) — previously this just used raw current_stock with no
-            // sales/additions adjustment, so the variance actually saved
-            // never matched what the storekeeper saw on screen while filling
-            // the form, and any normal sale during the shift always showed
-            // up as an unexplained "shortage".
-            const sysQty = opening + additions - sales;
+            const opening = Math.max(0, currentStock - additions + sales);
+            // Must match the candidate-list formula (which resolves to currentStock)
+            const sysQty = currentStock;
 
             const physQtyRaw = Number(it.physical_quantity);
             const physQty = Number.isFinite(physQtyRaw) ? physQtyRaw : NaN;

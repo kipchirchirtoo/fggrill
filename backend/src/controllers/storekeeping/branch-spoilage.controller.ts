@@ -142,6 +142,7 @@ export const recordSpoilage = async (req: Request, res: Response, next: NextFunc
     try {
         const {
             branch_id, area, bar_location, shift, item_id, quantity, unit, reason, notes, spoilage_date,
+            responsible_staff_id, charge_to_staff,
         } = req.body || {};
 
         const branchId = Number(branch_id);
@@ -232,6 +233,8 @@ export const recordSpoilage = async (req: Request, res: Response, next: NextFunc
             status: 'pending',
             recorded_by: req.user?.id || null,
             recorded_at: new Date().toISOString(),
+            responsible_staff_id: responsible_staff_id || null,
+            charge_to_staff: !!charge_to_staff,
         };
 
         const { data, error } = await supabase.from('branch_spoilage_log').insert(row).select().single();
@@ -244,7 +247,7 @@ export const recordSpoilage = async (req: Request, res: Response, next: NextFunc
     }
 };
 
-const loadSpoilage = async (id: string) => {
+const loadSpoilage = async (id: string): Promise<any> => {
     const { data, error } = await supabase.from('branch_spoilage_log').select('*').eq('id', id).maybeSingle();
     if (error) throw error;
     return data;
@@ -320,10 +323,58 @@ export const approveSpoilage = async (req: Request, res: Response, next: NextFun
         // kitchen: no immediate stock table to adjust — approved rows are
         // summed at read-time in kitchen-stocktake.controller.ts.
 
+        let creditBillId: string | null = null;
+        if (existing.charge_to_staff && existing.responsible_staff_id) {
+            let amount = num(existing.total_loss);
+            if (amount <= 0) {
+                // Fetch retail menu price if kitchen area
+                const { data: menuItem } = await supabase
+                    .from('restaurant_menu_items')
+                    .select('price')
+                    .ilike('name', existing.item_name)
+                    .maybeSingle();
+                if (menuItem?.price) {
+                    amount = num(existing.quantity) * num(menuItem.price);
+                } else {
+                    // Fallback to 100 KES per unit to satisfy amount > 0
+                    amount = num(existing.quantity) * 100;
+                    if (amount <= 0) amount = 100;
+                }
+            }
+
+            const description = `Salary deduction for spoiled/damaged stock: ${existing.item_name} (Qty: ${existing.quantity} ${existing.unit}, Area: ${existing.area})`;
+            const { data: bill, error: billErr } = await supabase
+                .from('staff_credit_bills')
+                .insert({
+                    branch_id: existing.branch_id,
+                    staff_id: existing.responsible_staff_id,
+                    amount: amount,
+                    balance: amount,
+                    paid_amount: 0,
+                    description,
+                    bill_date: new Date().toISOString().split('T')[0],
+                    status: 'pending',
+                })
+                .select()
+                .single();
+            if (billErr) throw billErr;
+            creditBillId = bill.id;
+        }
+
         const now = new Date().toISOString();
+        const updatePayload: any = {
+            status: 'approved',
+            reviewed_by: req.user?.id || null,
+            reviewed_at: now,
+            updated_at: now,
+        };
+        if (creditBillId) {
+            updatePayload.credit_bill_id = creditBillId;
+        }
+
         const { data, error } = await supabase
             .from('branch_spoilage_log')
-            .update({ status: 'approved', reviewed_by: req.user?.id || null, reviewed_at: now, updated_at: now })
+            .update(updatePayload)
             .eq('id', req.params.id)
             .select()
             .single();

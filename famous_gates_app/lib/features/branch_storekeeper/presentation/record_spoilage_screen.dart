@@ -48,7 +48,10 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
   final _notesCtrl = TextEditingController();
 
   late Future<List<Map<String, dynamic>>> _candidatesFuture = _loadCandidates();
+  late Future<List<Map<String, dynamic>>> _staffFuture = _loadStaff();
   Map<String, dynamic>? _selectedItem;
+  Map<String, dynamic>? _selectedStaff;
+  bool _chargeToStaff = false;
   bool _submitting = false;
 
   @override
@@ -70,10 +73,16 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
     return ref.read(branchStorekeeperRepositoryProvider).spoilageCandidates(_area);
   }
 
+  Future<List<Map<String, dynamic>>> _loadStaff() {
+    return ref.read(branchStorekeeperRepositoryProvider).branchStaff();
+  }
+
   void _onAreaChanged(String area) {
     setState(() {
       _area = area;
       _selectedItem = null;
+      _selectedStaff = null;
+      _chargeToStaff = false;
       _candidatesFuture = _loadCandidates();
     });
   }
@@ -102,6 +111,8 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
             barLocation: _area == 'bar' ? _barLocation : null,
             shift: _area == 'kitchen' ? _shift : null,
             spoilageDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            responsibleStaffId: _selectedStaff?['id']?.toString(),
+            chargeToStaff: _chargeToStaff,
           );
       if (mounted) {
         _notify('Spoilage recorded — pending accountant approval');
@@ -109,6 +120,8 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
           _selectedItem = null;
           _quantityCtrl.clear();
           _notesCtrl.clear();
+          _selectedStaff = null;
+          _chargeToStaff = false;
         });
       }
     } catch (e) {
@@ -224,6 +237,57 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
               for (final r in _reasons) DropdownMenuItem(value: r.$1, child: Text(r.$2)),
             ],
             onChanged: (v) => setState(() => _reason = v ?? _reason),
+          ),
+          const SizedBox(height: 16),
+          const Text('Responsible Staff (Optional)', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _staffFuture,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const LinearProgressIndicator();
+              }
+              final staffList = snap.data ?? [];
+              return DropdownButtonFormField<Map<String, dynamic>?>(
+                value: _selectedStaff,
+                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                hint: const Text('Select staff member…'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('None (General branch loss)')),
+                  for (final staff in staffList)
+                    DropdownMenuItem(
+                      value: staff,
+                      child: Text(
+                        (() {
+                          final firstName = staff['first_name']?.toString() ?? '';
+                          final lastName = staff['last_name']?.toString() ?? '';
+                          final name = [firstName, lastName].where((s) => s.isNotEmpty).join(' ').trim();
+                          if (name.isNotEmpty) return name;
+                          return staff['name']?.toString() ?? staff['full_name']?.toString() ?? staff['email']?.toString() ?? 'Unknown Staff';
+                        })(),
+                      ),
+                    ),
+                ],
+                onChanged: (v) {
+                  setState(() {
+                    _selectedStaff = v;
+                    if (v == null) {
+                      _chargeToStaff = false;
+                    }
+                  });
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Charge loss to staff salary'),
+            subtitle: const Text('If enabled, a pending credit bill will be generated upon accountant approval'),
+            value: _chargeToStaff,
+            onChanged: _selectedStaff == null
+                ? null
+                : (v) => setState(() => _chargeToStaff = v),
           ),
           const SizedBox(height: 16),
           const Text('Notes (optional)', style: TextStyle(fontWeight: FontWeight.w800)),

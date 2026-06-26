@@ -201,6 +201,7 @@ function summarizeShiftTransactions(transactions: any[]): {
     };
 
     transactions.forEach((transaction) => {
+        if (transaction?.is_voided === true || transaction?.status === 'void') return;
         const amount = toNumber(transaction?.amount);
         if (amount <= 0) return;
         const method = normalizePaymentMethod(transaction?.payment_method);
@@ -536,8 +537,9 @@ export const getShiftLogs = async (
                 // RPC summary doesn't break out — so we bucket them here.
                 const { data: shiftTxns } = await supabase
                     .from('cashier_shift_transactions')
-                    .select('payment_method, amount')
-                    .eq('shift_id', shift.id);
+                    .select('payment_method, amount, is_voided, status')
+                    .eq('shift_id', shift.id)
+                    .or('is_voided.is.null,is_voided.eq.false');
 
                 if (shiftTxns && shiftTxns.length > 0) {
                     let txnCash = 0, txnMpesa = 0, txnCard = 0, txnCredit = 0, txnTotal = 0;
@@ -600,13 +602,15 @@ export const getShiftLogs = async (
                         .eq('branch_id', branchId)
                         .eq('created_by', shift.cashier_id)
                         .gte('created_at', shift.shift_start)
-                        .lte('created_at', shiftEnd),
+                        .lte('created_at', shiftEnd)
+                        .not('status', 'in', '(voided,cancelled)'),
                     supabase.from('bar_orders')
                         .select('total_amount:total, payment_method')
                         .eq('branch_id', branchId)
                         .eq('created_by', shift.cashier_id)
                         .gte('created_at', shift.shift_start)
-                        .lte('created_at', shiftEnd),
+                        .lte('created_at', shiftEnd)
+                        .not('status', 'in', '(voided,cancelled)'),
                 ]);
 
                 const allOrders = [
@@ -1667,8 +1671,9 @@ export const closeShift = async (
 
         const { data: shiftTransactionRows, error: shiftTransactionsError } = await supabase
             .from('cashier_shift_transactions')
-            .select('amount, payment_method')
-            .eq('shift_id', id);
+            .select('amount, payment_method, is_voided, status')
+            .eq('shift_id', id)
+            .or('is_voided.is.null,is_voided.eq.false');
 
         if (shiftTransactionsError) {
             logger.warn('Unable to load cashier shift transaction evidence for close calculation', {

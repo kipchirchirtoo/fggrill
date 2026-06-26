@@ -85,6 +85,11 @@ import {
     getShiftHandover,
 } from '../controllers/kitchen/kitchen-production.controller';
 
+import {
+    analyzeShiftControls,
+    billStaffForShortage
+} from '../controllers/kitchen/kitchen-controls.controller';
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -224,5 +229,11 @@ router.get('/production-sessions', authorize([...storekeepers, ...kitchenStaff])
 router.post('/production-sessions', authorize(storekeepers), createProductionSession);
 router.get('/production-sessions/:id', authorize([...storekeepers, ...kitchenStaff]), getProductionSession);
 router.put('/production-sessions/:id/complete', authorize(storekeepers), completeProductionSession);
+
+// =====================================================
+// DAILY CONTROLS (STOREKEEPER / ACCOUNTANT)
+// =====================================================
+router.get('/shift-controls/analyze', authorize(storekeepers), analyzeShiftControls);
+router.post('/shift-controls/bill-staff', authorize(storekeepers), billStaffForShortage);
 
 export default router;

@@ -1827,6 +1827,8 @@ class BranchStorekeeperRepository {
     String? barLocation,
     String? shift,
     String? spoilageDate,
+    String? responsibleStaffId,
+    bool chargeToStaff = false,
   }) async {
     final branchId = await _branchId;
     final response = await _dio.post(
@@ -1842,6 +1844,8 @@ class BranchStorekeeperRepository {
         if (barLocation != null) 'bar_location': barLocation,
         if (shift != null) 'shift': shift,
         if (spoilageDate != null) 'spoilage_date': spoilageDate,
+        if (responsibleStaffId != null) 'responsible_staff_id': responsibleStaffId,
+        'charge_to_staff': chargeToStaff,
       },
       options: await _authOptions,
     );

@@ -3136,6 +3136,9 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
     const qtyVoided = Number(requestRow.qty_to_void ?? 0);
     const qtyBeforeVoid = qtyAfterVoid + qtyVoided;
 
+    // Update stock levels: reverse the sales decrement for the voided quantity
+    await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, [{ ...item, qty: qtyVoided }], -1);
+
     const { error: logError } = await supabase.from('pos_item_void_log').insert({
       void_request_id: requestRow.id,
       shift_id: requestRow.shift_id,
@@ -3748,6 +3751,14 @@ export const approveItemExchange = async (req: Request, res: Response, next: Nex
       items: requestRow.new_items,
       actorId: req.user.id
     });
+
+    // Update stock levels: return old items to stock (reverse sale) and deduct new items (normal sale)
+    if (Array.isArray(requestRow.old_items) && requestRow.old_items.length > 0) {
+      await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, requestRow.old_items, -1);
+    }
+    if (Array.isArray(requestRow.new_items) && requestRow.new_items.length > 0) {
+      await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, requestRow.new_items, 1);
+    }
 
     const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
     const approveMeta = { request_id: id, order_id: requestRow.order_id, exchange_order_id: newOrder.id, shift_id: requestRow.shift_id };
