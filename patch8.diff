@@ -1,0 +1,11 @@
+--- famous_gates_app/lib/features/reports/presentation/reports_dashboard.dart
++++ famous_gates_app/lib/features/reports/presentation/reports_dashboard.dart
+@@ -57,7 +57,7 @@
+                   itemBuilder: (context, index) =>
+                       const LoadingSkeleton(type: SkeletonType.card),
+                 ),
+-                error: (e, _) => ErrorState(
++                error: (e, _) => ErrorDisplay(
+                     message: '$e',
+                     onRetry: () => ref.refresh(reportsListProvider)),
+               ),

@@ -384,7 +384,7 @@ class _SectionList extends StatelessWidget {
         child: ReorderableListView.builder(
           buildDefaultDragHandles: false,
           itemCount: sections.length,
-          onReorderItem: onReorder,
+          onReorder: onReorder,
           itemBuilder: (context, i) {
             final s = sections[i];
             return _SectionCard(

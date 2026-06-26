@@ -1,0 +1,11 @@
+--- famous_gates_app/lib/features/branch_storekeeper/presentation/daily_controls_screen.dart
++++ famous_gates_app/lib/features/branch_storekeeper/presentation/daily_controls_screen.dart
+@@ -465,7 +465,7 @@
+               items: _staffList.map((staff) {
+                 return DropdownMenuItem<String>(
+                   value: staff['id'].toString(),
+-                  child: Text('\${staff['first_name']} \${staff['last_name']}'),
++                  child: Text('\${staff["first_name"]} \${staff["last_name"]}'),
+                 );
+               }).toList(),
+               onChanged: (val) {
