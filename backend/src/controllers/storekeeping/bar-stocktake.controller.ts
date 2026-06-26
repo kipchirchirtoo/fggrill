@@ -657,6 +657,17 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
             res.status(404).json({ success: false, message: 'Stocktake record not found' });
             return;
         }
+        if (existing.status === 'approved') {
+            res.status(200).json({
+                success: true,
+                message: 'Stocktake record already approved',
+                data: {
+                    ...existing,
+                    item_name: existing.item?.item_name || existing.item_name || null,
+                }
+            });
+            return;
+        }
         if (!['pending', 'reviewed'].includes(existing.status)) {
             res.status(400).json({ success: false, message: `Cannot approve a record that is ${existing.status}` });
             return;
