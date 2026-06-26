@@ -59,6 +59,7 @@ dependencies:
   http: ^1.6.0
   package_info_plus: ^9.0.1
   flutter_markdown: ^0.7.7+1
+  data_table_2: ^2.7.2
 
 dependency_overrides:
   phosphor_flutter:
