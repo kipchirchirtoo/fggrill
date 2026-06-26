@@ -5,6 +5,7 @@ Extract live Supabase schema to establish baseline truth.
 import json
 import os
 import sys
+from datetime import timezone
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -24,7 +25,7 @@ def extract_schema():
     print("🔍 Connecting to Supabase database...")
     
     output = {
-        "extractedAt": datetime.now(datetime.UTC).isoformat() + "Z",
+        "extractedAt": datetime.now(timezone.utc).isoformat() + "Z",
         "tables": [],
         "indexes": [],
         "policies": [],
