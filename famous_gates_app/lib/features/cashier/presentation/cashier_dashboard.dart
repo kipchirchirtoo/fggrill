@@ -4109,25 +4109,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   final cashAtHand = TextEditingController();
   final cashDeposited = TextEditingController();
   final bankRef = TextEditingController();
-  final handoverNotes = TextEditingController();
-  final stockNotes = TextEditingController();
-
-  final revenueControllers = <String, TextEditingController>{
-    'restaurant_revenue': TextEditingController(
-        text: _num(shift['restaurant_revenue']).toStringAsFixed(0)),
-    'bar_revenue': TextEditingController(
-        text: _num(shift['bar_revenue']).toStringAsFixed(0)),
-    'room_booking_revenue': TextEditingController(
-        text: _num(shift['room_booking_revenue']).toStringAsFixed(0)),
-    'conference_revenue': TextEditingController(
-        text: _num(shift['conference_revenue']).toStringAsFixed(0)),
-    'swimming_pool_revenue': TextEditingController(
-        text: _num(shift['swimming_pool_revenue']).toStringAsFixed(0)),
-    'pool_token_revenue': TextEditingController(
-        text: _num(shift['pool_token_revenue']).toStringAsFixed(0)),
-    'other_revenue': TextEditingController(
-        text: _num(shift['other_revenue']).toStringAsFixed(0)),
-  };
 
   final creditStaffId = TextEditingController();
   final creditName = TextEditingController();
@@ -4146,35 +4127,18 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
     detailKeys: const ['paid_bills_details', 'paid_bills'],
     staffMembers: staffOptions,
   );
-  final stockEntries = stockItems
-      .where((item) => _text(item, ['name', 'product_name']).isNotEmpty)
-      .take(40)
-      .map(_ShiftStockEntry.new)
-      .toList();
-
-  bool poolNa = shift['pool_na'] == true;
-  bool conferenceNa = shift['conference_na'] == true;
-  bool roomsNa = shift['rooms_na'] == true;
-
-  num controllerAmount(String key) =>
-      num.tryParse(revenueControllers[key]?.text.trim() ?? '') ?? 0;
 
   void disposeAll() {
     closingCash.dispose();
     cashAtHand.dispose();
     cashDeposited.dispose();
     bankRef.dispose();
-    handoverNotes.dispose();
-    stockNotes.dispose();
     creditStaffId.dispose();
     creditName.dispose();
     creditAmount.dispose();
     paidStaffId.dispose();
     paidName.dispose();
     paidAmount.dispose();
-    for (final controller in revenueControllers.values) {
-      controller.dispose();
-    }
   }
 
   return showDialog<Map<String, dynamic>>(
@@ -4269,71 +4233,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           ],
                         ),
                         const SizedBox(height: 24),
-                        Text('Revenue sources',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: [
-                            _amountField(
-                                revenueControllers['restaurant_revenue']!,
-                                'Restaurant'),
-                            _amountField(
-                                revenueControllers['bar_revenue']!, 'Bar'),
-                            _amountField(
-                                revenueControllers['room_booking_revenue']!,
-                                'Rooms',
-                                enabled: !roomsNa),
-                            _amountField(
-                                revenueControllers['conference_revenue']!,
-                                'Conference',
-                                enabled: !conferenceNa),
-                            _amountField(
-                                revenueControllers['swimming_pool_revenue']!,
-                                'Swimming pool',
-                                enabled: !poolNa),
-                            _amountField(
-                                revenueControllers['pool_token_revenue']!,
-                                'Pool tokens',
-                                enabled: !poolNa),
-                            _amountField(
-                                revenueControllers['other_revenue']!, 'Other'),
-                          ],
-                        ),
-                        Wrap(
-                          spacing: 16,
-                          children: [
-                            CheckboxListTile(
-                              value: roomsNa,
-                              title: const Text('Rooms N/A'),
-                              dense: true,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              onChanged: (value) => setDialogState(
-                                  () => roomsNa = value ?? false),
-                            ),
-                            CheckboxListTile(
-                              value: conferenceNa,
-                              title: const Text('Conference N/A'),
-                              dense: true,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              onChanged: (value) => setDialogState(
-                                  () => conferenceNa = value ?? false),
-                            ),
-                            CheckboxListTile(
-                              value: poolNa,
-                              title: const Text('Pool N/A'),
-                              dense: true,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              onChanged: (value) =>
-                                  setDialogState(() => poolNa = value ?? false),
-                            ),
-                          ]
-                              .map(
-                                  (child) => SizedBox(width: 190, child: child))
-                              .toList(),
-                        ),
-                        const SizedBox(height: 24),
                         Text('Credit bills and paid credits',
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 12),
@@ -4392,32 +4291,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
-                        Text('Cashier inventory stock take',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        if (stockEntries.isEmpty)
-                          const EmptyState(
-                              message:
-                                  'No cashier POS items found for stock take')
-                        else
-                          _stockTakeTable(stockEntries, setDialogState),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: stockNotes,
-                          minLines: 2,
-                          maxLines: 4,
-                          decoration: const InputDecoration(
-                              labelText: 'Stock take notes / variance summary'),
-                        ),
-                        const SizedBox(height: 24),
-                        TextField(
-                          controller: handoverNotes,
-                          minLines: 3,
-                          maxLines: 5,
-                          decoration: const InputDecoration(
-                              labelText: 'Handover / variance notes'),
-                        ),
                       ],
                     ),
                   ),
@@ -4438,26 +4311,11 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                       ElevatedButton.icon(
                         onPressed: () {
                           if (closingCash.text.trim().isEmpty) return;
-                          final unexplainedStockVariance = stockEntries.any(
-                              (entry) =>
-                                  entry.variance != 0 &&
-                                  entry.reason.trim().isEmpty);
-                          if (unexplainedStockVariance) return;
-                          final stockJson = stockEntries
-                              .map((entry) => entry.toJson())
-                              .toList();
-                          final notes = [
-                            handoverNotes.text.trim(),
-                            if (stockNotes.text.trim().isNotEmpty)
-                              'Stock notes: ${stockNotes.text.trim()}',
-                            if (stockJson.isNotEmpty) 'Stock take: $stockJson',
-                          ].where((line) => line.isNotEmpty).join('\n\n');
+                          if (cashAtHand.text.trim().isEmpty) return;
                           Navigator.pop(context, {
                             'closing_float':
                                 num.tryParse(closingCash.text.trim()) ?? 0,
-                            'notes': notes,
-                            for (final key in revenueControllers.keys)
-                              key: controllerAmount(key),
+                            'notes': '',
                             'credit_bills_taken': creditBillsTotal,
                             'credit_bills_count': creditEntries.length,
                             'credit_bills_details': creditEntries
@@ -4477,9 +4335,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             'cash_deposited':
                                 num.tryParse(cashDeposited.text.trim()) ?? 0,
                             'bank_deposit_ref': bankRef.text.trim(),
-                            'pool_na': poolNa,
-                            'conference_na': conferenceNa,
-                            'rooms_na': roomsNa,
                           });
                         },
                         icon: const Icon(Icons.archive, size: 16),
