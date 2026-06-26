@@ -85,9 +85,8 @@ class ProductsNotifier extends StateNotifier<ProductsState> {
   }
 
   Future<void> refresh() async {
-    await _ref
-        .read(productRepositoryProvider)
-        .refreshProducts(category: state.category);
+    // PowerSync handles background syncing automatically — just re-query
+    // the local SQLite database for the freshest available data.
     await load();
   }
 

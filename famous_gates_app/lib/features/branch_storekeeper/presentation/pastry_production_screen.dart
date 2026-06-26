@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 import '../../../core/widgets/app_notifier.dart';
 import '../data/branch_storekeeper_repository.dart';
 
-/// Pastry Production — Branch Storekeeper. Items only appear in the Kitchen
-/// Sessions ledger after explicit "Issue to Kitchen", not at log time.
+/// Pastry Production - Branch Storekeeper.
+///
+/// Finished pastry is first logged into branch stock, then explicitly issued
+/// into an open kitchen shift where POS sales consume it.
 class PastryProductionScreen extends ConsumerStatefulWidget {
   const PastryProductionScreen({super.key});
 
@@ -32,54 +34,94 @@ class _PastryProductionScreenState
         .getKitchenShifts(status: 'open');
     if (!mounted) return;
     if (openShifts.isEmpty) {
-      _notify(context, 'No open Kitchen Shift — open one in Kitchen Sessions first');
+      _notify(context,
+          'No open Kitchen Shift - open one in Kitchen Sessions first');
       return;
     }
 
-    String? shiftId = openShifts.length == 1 ? '${openShifts.first['id']}' : null;
+    String? shiftId =
+        openShifts.length == 1 ? '${openShifts.first['id']}' : null;
+    final issuedQty = num.tryParse('${record['issued_quantity'] ?? 0}') ?? 0;
+    final producedQty =
+        num.tryParse('${record['quantity_produced'] ?? 0}') ?? 0;
+    final remainingQty = producedQty - issuedQty;
+    final quantityCtrl = TextEditingController(
+      text: remainingQty > 0 ? remainingQty.toString() : '',
+    );
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) {
-        return AlertDialog(
-          title: const Text('Issue to Kitchen'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                  'Issue ${record['quantity_produced']} of "${record['item_name'] ?? 'this item'}" into an open Kitchen Shift. This cannot be undone.'),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: shiftId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Kitchen Shift'),
-                items: openShifts
-                    .map((s) => DropdownMenuItem(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('Issue to Kitchen'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Issue up to $remainingQty of "${record['item_name'] ?? 'this item'}" into an open Kitchen Shift. This cannot be undone.',
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: shiftId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Kitchen Shift'),
+                  items: openShifts
+                      .map(
+                        (s) => DropdownMenuItem(
                           value: '${s['id']}',
                           child: Text('${s['shift_number'] ?? s['id']}'),
-                        ))
-                    .toList(),
-                onChanged: (v) => setDialogState(() => shiftId = v),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setDialogState(() => shiftId = v),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantityCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: 'Quantity to issue',
+                    helperText: 'Remaining available: $remainingQty',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed:
+                    shiftId == null ? null : () => Navigator.pop(ctx, true),
+                child: const Text('Issue'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            FilledButton(
-                onPressed: shiftId == null ? null : () => Navigator.pop(ctx, true),
-                child: const Text('Issue')),
-          ],
-        );
-      }),
+          );
+        },
+      ),
     );
+
+    final issueQty = num.tryParse(quantityCtrl.text.trim());
+    quantityCtrl.dispose();
     if (confirmed != true || shiftId == null) return;
+    if (issueQty == null || issueQty <= 0 || issueQty > remainingQty) {
+      if (mounted) {
+        _notify(context, 'Enter a valid quantity up to $remainingQty');
+      }
+      return;
+    }
+
     setState(() => _issuing = true);
     try {
-      await ref
-          .read(branchStorekeeperRepositoryProvider)
-          .issuePastryToKitchen('${record['id']}', shiftId: shiftId!);
+      await ref.read(branchStorekeeperRepositoryProvider).issuePastryToKitchen(
+            '${record['id']}',
+            shiftId: shiftId!,
+            issuedQuantity: issueQty,
+          );
       if (mounted) {
         _notify(context, 'Issued to kitchen');
         _refresh();
@@ -129,23 +171,33 @@ class _PastryProductionScreenState
               itemCount: items.length,
               itemBuilder: (context, i) {
                 final item = items[i];
+                final producedQty =
+                    num.tryParse('${item['quantity_produced'] ?? 0}') ?? 0;
+                final issuedQty =
+                    num.tryParse('${item['issued_quantity'] ?? 0}') ?? 0;
+                final remainingQty = producedQty - issuedQty;
                 final issued = item['issued_to_kitchen'] == true ||
                     '${item['status']}' == 'issued';
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     title: Text(
-                        '${item['item']?['item_name'] ?? item['item_name'] ?? 'Pastry Item'}'),
+                      '${item['item']?['item_name'] ?? item['item_name'] ?? 'Pastry Item'}',
+                    ),
                     subtitle: Text(
-                      'Qty: ${item['quantity_produced']} · Shift: ${item['shift_id'] ?? '—'}',
+                      'Produced: ${item['quantity_produced']} | Issued: ${item['issued_quantity'] ?? 0} | Remaining: $remainingQty',
                       style: const TextStyle(fontSize: 12),
                     ),
                     trailing: issued
                         ? Chip(
-                            label: const Text('✅ Issued to Kitchen'),
+                            label: Text(
+                              remainingQty > 0
+                                  ? 'Partly issued'
+                                  : 'Issued to Kitchen',
+                            ),
                             backgroundColor: Colors.green.shade50,
-                            labelStyle:
-                                const TextStyle(color: Colors.green),
+                            labelStyle: const TextStyle(color: Colors.green),
                           )
                         : OutlinedButton(
                             onPressed: _issuing ? null : () => _issue(item),
@@ -227,15 +279,16 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Log Production',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const Text(
+                'Log Production',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 16),
               if (snap.connectionState == ConnectionState.waiting)
                 const Center(child: CircularProgressIndicator())
               else if (items.isEmpty)
                 const Text(
-                  'No pastry items configured yet. Add items with '
-                  "store_type = 'pastry' to inventory_items first.",
+                  'No pastry items configured yet. Add items with store_type = \'pastry\' to inventory_items first.',
                   style: TextStyle(color: Colors.grey),
                 )
               else
@@ -244,11 +297,13 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Pastry Item'),
                   items: items
-                      .map((i) => DropdownMenuItem(
-                            value: '${i['id']}',
-                            child:
-                                Text('${i['item_name'] ?? i['name'] ?? 'Item'}'),
-                          ))
+                      .map(
+                        (i) => DropdownMenuItem(
+                          value: '${i['id']}',
+                          child:
+                              Text('${i['item_name'] ?? i['name'] ?? 'Item'}'),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => _itemId = v),
                 ),
@@ -264,7 +319,7 @@ class _LogProductionSheetState extends ConsumerState<_LogProductionSheet> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: _saving ? null : _submit,
-                  child: Text(_saving ? 'Submitting…' : 'Submit'),
+                  child: Text(_saving ? 'Submitting...' : 'Submit'),
                 ),
               ),
             ],

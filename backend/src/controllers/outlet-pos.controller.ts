@@ -777,15 +777,108 @@ const recordKitchenConsumption = async (
     const portionsSold = numberValue(item.quantity);
     if (!outletItemId || portionsSold <= 0) continue;
 
+    const { data: outletItem, error: outletItemError } = await supabase
+      .from('pos_outlet_items')
+      .select('id, name, sku, stock_pool_item_id, pool_fraction, source_table, source_item_id')
+      .eq('id', outletItemId)
+      .maybeSingle();
+    if (outletItemError) throw outletItemError;
+    if (!outletItem) continue;
+
     const { data: recipe } = await supabase
       .from('kitchen_production_recipes')
       .select('*')
       .eq('pos_outlet_item_id', outletItemId)
       .eq('is_active', true)
       .maybeSingle();
-    if (!recipe || numberValue(recipe.produced_quantity) <= 0) continue;
+    if (recipe && numberValue(recipe.produced_quantity) > 0) {
+      const rawQtyConsumed = (numberValue(recipe.raw_quantity) / numberValue(recipe.produced_quantity)) * portionsSold;
 
-    const rawQtyConsumed = (numberValue(recipe.raw_quantity) / numberValue(recipe.produced_quantity)) * portionsSold;
+      await supabase.from('kitchen_shift_pos_consumption').insert({
+        shift_id: shift.id,
+        branch_id: branchId,
+        pos_shift_id: posShiftId,
+        pos_order_id: orderId,
+        pos_outlet_item_id: outletItemId,
+        produced_item_sku: recipe.produced_item_sku,
+        produced_item_name: recipe.produced_item_name,
+        portions_sold: portionsSold,
+        raw_item_sku: recipe.raw_item_sku,
+        raw_item_name: recipe.raw_item_name,
+        raw_quantity_consumed: rawQtyConsumed,
+        raw_unit: recipe.raw_unit,
+        cost_price: numberValue(recipe.cost_per_output)
+      });
+
+      const { data: shiftItem } = await supabase
+        .from('kitchen_shift_items')
+        .select('id, sold_quantity')
+        .eq('shift_id', shift.id)
+        .eq('item_sku', recipe.raw_item_sku)
+        .maybeSingle();
+      if (shiftItem) {
+        await supabase
+          .from('kitchen_shift_items')
+          .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + rawQtyConsumed, updated_at: new Date().toISOString() })
+          .eq('id', shiftItem.id);
+      }
+
+      continue;
+    }
+
+    let sourceTable = outletItem.source_table;
+    let sourceItemId = outletItem.source_item_id;
+    let producedItemSku = outletItem.sku;
+    let producedItemName = outletItem.name;
+    let quantityMultiplier = 1;
+    if (outletItem.stock_pool_item_id) {
+      quantityMultiplier = numberValue(outletItem.pool_fraction) || 1;
+      const { data: poolOutletItem, error: poolOutletItemError } = await supabase
+        .from('pos_outlet_items')
+        .select('id, name, sku, source_table, source_item_id')
+        .eq('id', outletItem.stock_pool_item_id)
+        .maybeSingle();
+      if (poolOutletItemError) throw poolOutletItemError;
+      if (!poolOutletItem) continue;
+      sourceTable = poolOutletItem.source_table;
+      sourceItemId = poolOutletItem.source_item_id;
+      producedItemSku = poolOutletItem.sku;
+      producedItemName = poolOutletItem.name;
+    }
+
+    if (sourceTable !== 'restaurant_menu_items' || !sourceItemId) continue;
+
+    const { data: menuItem, error: menuItemError } = await supabase
+      .from('restaurant_menu_items')
+      .select('id, name, sku, unit, inventory_item_id')
+      .eq('id', sourceItemId)
+      .maybeSingle();
+    if (menuItemError) throw menuItemError;
+    if (!menuItem?.inventory_item_id) continue;
+
+    const { data: inventoryItem, error: inventoryItemError } = await supabase
+      .from('inventory_items')
+      .select('id, sku, item_name, unit, cost_price, default_unit_cost')
+      .eq('id', menuItem.inventory_item_id)
+      .maybeSingle();
+    if (inventoryItemError) throw inventoryItemError;
+    if (!inventoryItem?.sku) continue;
+
+    const consumedQuantity = portionsSold * quantityMultiplier;
+    if (consumedQuantity <= 0) continue;
+
+    const { data: shiftItem, error: shiftItemError } = await supabase
+      .from('kitchen_shift_items')
+      .select('id, sold_quantity')
+      .eq('shift_id', shift.id)
+      .eq('item_sku', inventoryItem.sku)
+      .maybeSingle();
+
+    if (shiftItemError) throw shiftItemError;
+    if (!shiftItem) {
+      logger.warn(`No issued kitchen shift stock row found for direct finished-item sale ${inventoryItem.sku} on shift ${shift.id}`);
+      continue;
+    }
 
     await supabase.from('kitchen_shift_pos_consumption').insert({
       shift_id: shift.id,
@@ -793,28 +886,20 @@ const recordKitchenConsumption = async (
       pos_shift_id: posShiftId,
       pos_order_id: orderId,
       pos_outlet_item_id: outletItemId,
-      produced_item_sku: recipe.produced_item_sku,
-      produced_item_name: recipe.produced_item_name,
+      produced_item_sku: String(producedItemSku || menuItem.sku || inventoryItem.sku),
+      produced_item_name: String(outletItem.name || producedItemName || menuItem.name || inventoryItem.item_name || inventoryItem.sku),
       portions_sold: portionsSold,
-      raw_item_sku: recipe.raw_item_sku,
-      raw_item_name: recipe.raw_item_name,
-      raw_quantity_consumed: rawQtyConsumed,
-      raw_unit: recipe.raw_unit,
-      cost_price: numberValue(recipe.cost_per_output)
+      raw_item_sku: inventoryItem.sku,
+      raw_item_name: inventoryItem.item_name || menuItem.name || inventoryItem.sku,
+      raw_quantity_consumed: consumedQuantity,
+      raw_unit: inventoryItem.unit || menuItem.unit,
+      cost_price: numberValue(inventoryItem.cost_price ?? inventoryItem.default_unit_cost)
     });
 
-    const { data: shiftItem } = await supabase
+    await supabase
       .from('kitchen_shift_items')
-      .select('id, sold_quantity')
-      .eq('shift_id', shift.id)
-      .eq('item_sku', recipe.raw_item_sku)
-      .maybeSingle();
-    if (shiftItem) {
-      await supabase
-        .from('kitchen_shift_items')
-        .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + rawQtyConsumed, updated_at: new Date().toISOString() })
-        .eq('id', shiftItem.id);
-    }
+      .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + consumedQuantity, updated_at: new Date().toISOString() })
+      .eq('id', shiftItem.id);
   }
 };
 
@@ -2081,6 +2166,31 @@ export const markCaptainOrderPrinted = async (req: Request, res: Response, next:
   }
 };
 
+export const markOriginalBillPrinted = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
+
+    const { data, error } = await supabase
+      .from('pos_shift_orders')
+      .update({
+        original_bill_printed_at: new Date().toISOString(),
+        bill_reprint_count: 0
+      })
+      .eq('id', orderId)
+      .select('*')
+      .single();
+
+    if (error || !data) throw error || new AppError('Failed to mark bill printed', 500);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // A waiter/cashier may print the customer bill normally once (that happens
 // automatically on order creation/recall, not through this endpoint), and
 // then exactly one duplicate via the explicit "Reprint bill" action. This
@@ -2175,6 +2285,7 @@ export const updateShiftOrder = async (req: Request, res: Response, next: NextFu
         // rather than carrying over a duplicate already used against the
         // pre-recall version of this order.
         bill_reprint_count: 0,
+        original_bill_printed_at: null,
         updated_at: recalledAt
       })
       .eq('id', orderId)

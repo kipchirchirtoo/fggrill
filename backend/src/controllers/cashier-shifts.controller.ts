@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
+import { loadCashierVoidAudit } from '../services/cashier-void-audit.service';
 import {
     loadAssignedPosOutlets,
     canAccessPosOutlet,
@@ -302,6 +303,18 @@ export async function generateCashierShiftLogbook(shift: any, reviewerId?: strin
                 payment_method: b.payment_method || 'cash',
                 reference: b.reference || b.id || null,
             })),
+            void_summary: shift.void_summary || {
+                total_void_amount: 0,
+                total_void_count: 0,
+                whole_bill_void_amount: 0,
+                whole_bill_void_count: 0,
+                item_void_amount: 0,
+                item_void_count: 0,
+                payment_void_amount: 0,
+                payment_void_count: 0
+            },
+            gross_sales: toNumber(shift.gross_sales ?? totalSales),
+            net_sales: toNumber(shift.net_sales ?? totalSales),
         },
         total_mpesa: totalMpesa,
         total_swipe: totalCard,
@@ -372,6 +385,17 @@ export async function generateCashierShiftLogbook(shift: any, reviewerId?: strin
             source_table: null,
             source_id: null,
             payment_method: bill.payment_method || 'cash'
+        })),
+        ...toArray(shift.void_lines).map((line: any, index: number) => ({
+            logbook_id: logbook.id,
+            line_type: 'voided_transaction',
+            section: line.section || 'voided_transaction',
+            customer_name: line.customer_name || 'Voided transaction',
+            amount: toNumber(line.amount),
+            reference: line.reference || `${shift.shift_number}-void-${index + 1}`,
+            source_table: line.source_table || null,
+            source_id: line.source_id || null,
+            payment_method: line.payment_method || 'other'
         }))
     ].filter((line) => line.amount > 0);
 
@@ -518,10 +542,32 @@ export const getShiftLogs = async (
         // Enrich each shift: compute live sales from source revenue tables
         const enriched = await Promise.all(shifts.map(async (shift: any) => {
             const cashierName = shift.cashier_name || userNameMap[shift.cashier_id] || 'N/A';
+            const buildVoidAudit = async () => {
+                if (!shift.shift_start || !shift.branch_id) return null;
+                try {
+                    return await loadCashierVoidAudit({
+                        branchId: Number(shift.branch_id),
+                        cashierId: shift.cashier_id,
+                        cashierShiftId: shift.id,
+                        shiftStart: shift.shift_start,
+                        shiftEnd: shift.shift_end || new Date().toISOString()
+                    });
+                } catch (voidErr) {
+                    logger.warn(`Void audit failed for shift ${shift.id}:`, voidErr);
+                    return null;
+                }
+            };
 
             // For closed/reconciled shifts that already have totals stored, use them as-is
             if (shift.status !== 'open' && shift.total_sales > 0) {
-                return { ...shift, cashier_name: cashierName };
+                const voidAudit = await buildVoidAudit();
+                return {
+                    ...shift,
+                    cashier_name: cashierName,
+                    void_summary: voidAudit?.summary || undefined,
+                    net_sales: toNumber(shift.total_sales),
+                    gross_sales: toNumber(shift.total_sales) + toNumber(voidAudit?.summary?.total_void_amount)
+                };
             }
 
             if (!shift.shift_start || !shift.branch_id) {
@@ -878,6 +924,13 @@ export const getShiftLog = async (
         try {
             const shiftEnd = shift.shift_end || new Date().toISOString();
             const branchId = shift.branch_id;
+            const voidAudit = await loadCashierVoidAudit({
+                branchId,
+                cashierId: shift.cashier_id,
+                cashierShiftId: shift.id,
+                shiftStart: shift.shift_start,
+                shiftEnd
+            });
 
             // --- fetch POS evidence created during the shift ---
             const [
@@ -897,9 +950,15 @@ export const getShiftLog = async (
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd),
+                // Scoped to this cashier + this shift only — sibling queries
+                // above already filter by created_by + the shift window;
+                // this one previously only filtered by branch_id + time
+                // window, so another cashier's credit bills created during
+                // an overlapping shift at the same branch would leak in.
                 supabase.from('credit_bills')
                     .select('id, credit_number, staff_name, employee_id, department, total_amount, balance_amount, status, approval_status, created_at')
                     .eq('branch_id', branchId)
+                    .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd)
             ]);
@@ -911,6 +970,8 @@ export const getShiftLog = async (
             const totalCreditBill = toNumber(enrichedShift.credit_bills_taken);
             const totalPaidBills = toNumber(enrichedShift.paid_bills_value);
             const totalSales = toNumber(enrichedShift.total_sales);
+            const netSales = totalSales;
+            const grossSales = netSales + toNumber(voidAudit.summary.total_void_amount);
 
             const paymentBreakdown = [
                 { method: 'cash', amount: totalCash, count: (transactions || []).filter((t: any) => normalizePaymentMethod(t.payment_method) === 'cash').length },
@@ -1047,7 +1108,10 @@ export const getShiftLog = async (
                     amount: toNumber(b.amount),
                     payment_method: b.payment_method || 'cash',
                     reference: b.reference || b.id || null
-                }))
+                })),
+                void_summary: voidAudit.summary,
+                gross_sales: grossSales,
+                net_sales: netSales
             };
 
             enrichedShift = {
@@ -1073,8 +1137,14 @@ export const getShiftLog = async (
                 lines: allLines,
                 transaction_history: transactionHistory,
                 sales_breakdown: salesBreakdown,
+                void_summary: voidAudit.summary,
+                void_lines: voidAudit.lines,
                 summary: {
-                    total_sales: totalSales,
+                    total_sales: netSales,
+                    net_sales: netSales,
+                    gross_sales: grossSales,
+                    total_void_amount: toNumber(voidAudit.summary.total_void_amount),
+                    total_void_count: toNumber(voidAudit.summary.total_void_count),
                     transaction_count: toNumber(shift.transaction_count, allLines.length),
                     paid_bills_value: totalPaidBills,
                     paid_bills_count: toNumber(shift.paid_bills_count),
@@ -1715,6 +1785,14 @@ export const closeShift = async (
         const total_mpesa_sales_final = mpesa_sales + mpesaPaidCredits;
         const total_card_sales_final = card_sales + cardPaidCredits;
         const total_sales_final = total_sales + paidCreditsTotal;
+        const voidAudit = await loadCashierVoidAudit({
+            branchId: Number(shift.branch_id),
+            cashierId: shift.cashier_id,
+            cashierShiftId: shift.id,
+            shiftStart: shift.shift_start,
+            shiftEnd: new Date().toISOString()
+        });
+        const gross_sales_final = total_sales_final + toNumber(voidAudit.summary.total_void_amount);
 
         // Strict accounting formula: Expected = Opening Float + Cash Sales (incl.
         // cash paid credits) - Cash Drops/Payouts. Only cash-affecting items count.
@@ -1858,7 +1936,13 @@ export const closeShift = async (
 
         let generatedLogbook: any = null;
         try {
-            generatedLogbook = await generateCashierShiftLogbook(updatedShift, userId);
+            generatedLogbook = await generateCashierShiftLogbook({
+                ...updatedShift,
+                void_summary: voidAudit.summary,
+                void_lines: voidAudit.lines,
+                net_sales: total_sales_final,
+                gross_sales: gross_sales_final
+            }, userId);
         } catch (logbookError) {
             logger.error(`Failed to generate cashier shift logbook for ${id}`, logbookError);
             automationWarnings.push('Shift closed, but cashier logbook generation failed. Branch accountant queue may not show this shift.');
@@ -1871,6 +1955,10 @@ export const closeShift = async (
                 : 'Shift closed and sent to branch accountant for logbook review',
             data: {
                 ...updatedShift,
+                void_summary: voidAudit.summary,
+                void_lines: voidAudit.lines,
+                net_sales: total_sales_final,
+                gross_sales: gross_sales_final,
                 generated_logbook_id: generatedLogbook?.id || null,
                 automation_warnings: automationWarnings
             }

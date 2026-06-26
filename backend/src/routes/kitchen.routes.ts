@@ -87,7 +87,8 @@ import {
 
 import {
     analyzeShiftControls,
-    billStaffForShortage
+    billStaffForShortage,
+    getDailyControlData
 } from '../controllers/kitchen/kitchen-controls.controller';
 
 const router = express.Router();
@@ -235,5 +236,6 @@ router.put('/production-sessions/:id/complete', authorize(storekeepers), complet
 // =====================================================
 router.get('/shift-controls/analyze', authorize(storekeepers), analyzeShiftControls);
 router.post('/shift-controls/bill-staff', authorize(storekeepers), billStaffForShortage);
+router.get('/daily-control', authorize([...storekeepers, UserRole.BRANCH_ACCOUNTANT]), getDailyControlData);
 
 export default router;

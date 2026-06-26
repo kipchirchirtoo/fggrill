@@ -768,7 +768,16 @@ class AdminRepository {
   }
 
   Future<void> dispatchStoreItems(String id, Map<String, dynamic>? data) async {
-    await _dio.put('/store/dispatch-notes/$id/dispatch', data: data ?? {});
+    // Dispatch validates stock for every item sequentially on the server —
+    // give it up to 3 minutes before timing out.
+    await _dio.put(
+      '/store/dispatch-notes/$id/dispatch',
+      data: data ?? {},
+      options: Options(
+        sendTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 3),
+      ),
+    );
   }
 
   /// Download dispatch note PDF from Python services

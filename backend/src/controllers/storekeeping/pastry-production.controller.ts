@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
+import * as BranchInventoryService from '../../services/branch-inventory.service';
 
 // Pastry production log (migration 20260622_famousgate_major_redesign.sql,
 // section 12) — tracks pastry items baked in-house and their issuance to
@@ -77,6 +78,21 @@ export const recordPastryProduction = async (req: Request, res: Response, next: 
             return;
         }
 
+        const { data: inventoryItem, error: inventoryItemError } = await supabase
+            .from('inventory_items')
+            .select('id, branch_id, sku, item_name, unit')
+            .eq('id', String(item_id))
+            .maybeSingle();
+        if (inventoryItemError) throw inventoryItemError;
+        if (!inventoryItem?.sku) {
+            res.status(404).json({ success: false, message: 'Inventory item not found' });
+            return;
+        }
+        if (inventoryItem.branch_id !== null && inventoryItem.branch_id !== undefined && Number(inventoryItem.branch_id) !== branchId) {
+            res.status(400).json({ success: false, message: 'Inventory item belongs to a different branch' });
+            return;
+        }
+
         const { data, error } = await supabase
             .from('pastry_production_log')
             .insert({
@@ -88,6 +104,23 @@ export const recordPastryProduction = async (req: Request, res: Response, next: 
             .select('*, item:inventory_items(id, sku, item_name, unit)')
             .single();
         if (error) throw error;
+
+        try {
+            await BranchInventoryService.updateBranchStock(
+                branchId,
+                String(inventoryItem.sku),
+                qty,
+                'PASTRY_PRODUCTION',
+                req.user?.id || 'system',
+                'pastry_production_log',
+                String(data.id),
+                String(data.id),
+                `Pastry production batch recorded for ${inventoryItem.item_name || inventoryItem.sku}`
+            );
+        } catch (stockError) {
+            await supabase.from('pastry_production_log').delete().eq('id', data.id);
+            throw stockError;
+        }
 
         res.status(201).json({ success: true, data });
     } catch (error) {
@@ -118,8 +151,10 @@ export const issuePastryToKitchen = async (req: Request, res: Response, next: Ne
             res.status(404).json({ success: false, message: 'Pastry production entry not found' });
             return;
         }
-        if (existing.issued_to_kitchen) {
-            res.status(400).json({ success: false, message: 'Batch already issued to kitchen' });
+        const previouslyIssued = num(existing.issued_quantity);
+        const availableToIssue = Math.max(0, num(existing.quantity_produced) - previouslyIssued);
+        if (availableToIssue <= 0 || existing.issued_to_kitchen) {
+            res.status(400).json({ success: false, message: 'Batch already fully issued to kitchen' });
             return;
         }
 
@@ -148,60 +183,97 @@ export const issuePastryToKitchen = async (req: Request, res: Response, next: Ne
             return;
         }
 
-        const issuedQuantity = num(req.body?.issued_quantity ?? existing.quantity_produced);
-        if (issuedQuantity <= 0 || issuedQuantity > num(existing.quantity_produced)) {
-            res.status(400).json({ success: false, message: 'issued_quantity must be between 0 and quantity_produced' });
+        const issuedQuantity = num(req.body?.issued_quantity ?? availableToIssue);
+        if (issuedQuantity <= 0 || issuedQuantity > availableToIssue) {
+            res.status(400).json({ success: false, message: 'issued_quantity must be between 0 and the remaining unissued quantity' });
             return;
         }
 
         const itemSku = String(existing.item?.sku ?? existing.item_id);
         const itemName = existing.item?.item_name || itemSku;
-        const { data: shiftItem, error: shiftItemError } = await supabase
-            .from('kitchen_shift_items')
-            .select('*')
-            .eq('shift_id', shiftId)
-            .eq('item_sku', itemSku)
-            .maybeSingle();
-        if (shiftItemError) throw shiftItemError;
+        let stockDeducted = false;
+        try {
+            await BranchInventoryService.updateBranchStock(
+                Number(existing.branch_id),
+                itemSku,
+                -issuedQuantity,
+                'PASTRY_ISSUE_TO_KITCHEN',
+                req.user?.id || 'system',
+                'pastry_production_log',
+                String(existing.id),
+                String(existing.id),
+                `Issued pastry batch to kitchen shift ${shiftId}`
+            );
+            stockDeducted = true;
 
-        if (shiftItem) {
-            const { error: updateError } = await supabase
+            const { data: shiftItem, error: shiftItemError } = await supabase
                 .from('kitchen_shift_items')
-                .update({ additions: num(shiftItem.additions) + issuedQuantity, updated_at: new Date().toISOString() })
-                .eq('id', shiftItem.id);
-            if (updateError) throw updateError;
-        } else {
-            const { error: insertError } = await supabase
-                .from('kitchen_shift_items')
-                .insert({
+                .select('*')
+                .eq('shift_id', shiftId)
+                .eq('item_sku', itemSku)
+                .maybeSingle();
+            if (shiftItemError) throw shiftItemError;
+
+            if (shiftItem) {
+                const { error: updateError } = await supabase
+                    .from('kitchen_shift_items')
+                    .update({ additions: num(shiftItem.additions) + issuedQuantity, updated_at: new Date().toISOString() })
+                    .eq('id', shiftItem.id);
+                if (updateError) throw updateError;
+            } else {
+                const { error: insertError } = await supabase
+                    .from('kitchen_shift_items')
+                    .insert({
+                        shift_id: shiftId,
+                        branch_id: shift.branch_id,
+                        item_sku: itemSku,
+                        item_name: itemName,
+                        unit_of_measure: existing.item?.unit || 'units',
+                        cost_price: 0,
+                        opening_stock: 0,
+                        additions: issuedQuantity,
+                        sold_quantity: 0,
+                        spoilage_quantity: 0,
+                    });
+                if (insertError) throw insertError;
+            }
+
+            const totalIssued = previouslyIssued + issuedQuantity;
+            const fullyIssued = totalIssued >= num(existing.quantity_produced) - 0.000001;
+            const { data, error } = await supabase
+                .from('pastry_production_log')
+                .update({
                     shift_id: shiftId,
-                    branch_id: shift.branch_id,
-                    item_sku: itemSku,
-                    item_name: itemName,
-                    unit_of_measure: existing.item?.unit || 'units',
-                    cost_price: 0,
-                    opening_stock: 0,
-                    additions: issuedQuantity,
-                    sold_quantity: 0,
-                    spoilage_quantity: 0,
-                });
-            if (insertError) throw insertError;
+                    issued_to_kitchen: fullyIssued,
+                    issued_quantity: totalIssued,
+                    issued_at: new Date().toISOString(),
+                })
+                .eq('id', req.params.id)
+                .select('*, item:inventory_items(id, sku, item_name, unit)')
+                .single();
+            if (error) throw error;
+
+            res.status(200).json({ success: true, data });
+        } catch (innerError) {
+            if (stockDeducted) {
+                try {
+                    await BranchInventoryService.updateBranchStock(
+                        Number(existing.branch_id),
+                        itemSku,
+                        issuedQuantity,
+                        'PASTRY_ISSUE_REVERSAL',
+                        req.user?.id || 'system',
+                        'pastry_production_log',
+                        String(existing.id),
+                        String(existing.id),
+                        `Automatic reversal after pastry kitchen issue failure for shift ${shiftId}`
+                    );
+                } catch (reversalError) {
+                    logger.error('Failed to reverse pastry issue stock deduction:', reversalError);
+                }
+            }
+            throw innerError;
         }
-
-        const { data, error } = await supabase
-            .from('pastry_production_log')
-            .update({
-                shift_id: shiftId,
-                issued_to_kitchen: true,
-                issued_quantity: issuedQuantity,
-                issued_at: new Date().toISOString(),
-            })
-            .eq('id', req.params.id)
-            .select('*, item:inventory_items(id, sku, item_name, unit)')
-            .single();
-        if (error) throw error;
-
-        res.status(200).json({ success: true, data });
     } catch (error) {
         logger.error('issuePastryToKitchen failed:', error);
         next(error);

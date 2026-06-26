@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:updat/updat.dart';
 import 'package:updat/updat_window_manager.dart';
+import 'package:timezone/data/latest.dart' as tz; // KENYA TIME
 
 import 'core/router/app_router.dart';
 import 'core/services/desktop_update_service.dart';
@@ -14,6 +15,7 @@ bool _updateNoticeShown = false;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  tz.initializeTimeZones(); // KENYA TIME
   ensureStableWorkingDirectory();
   FlutterError.onError = (details) {
     final message = details.exceptionAsString();

@@ -116,7 +116,13 @@ class StoreRepository {
   Future<void> updateDispatchStatus(String id, String status) async {
     if (status.toUpperCase() == 'DISPATCHED' ||
         status.toUpperCase() == 'IN_TRANSIT') {
-      await _dio.put('/store/dispatch-notes/$id/dispatch');
+      await _dio.put(
+        '/store/dispatch-notes/$id/dispatch',
+        options: Options(
+          sendTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(minutes: 3),
+        ),
+      );
       return;
     }
     await _dio.put('/storekeeping/dispatch-notes/$id/status',
@@ -196,10 +202,17 @@ class StoreRepository {
 
   Future<void> markDispatched(String id,
       {String? vehicleId, String? driverId}) async {
-    await _dio.put('/store/dispatch-notes/$id/dispatch', data: {
-      if (vehicleId != null && vehicleId.isNotEmpty) 'vehicle_id': vehicleId,
-      if (driverId != null && driverId.isNotEmpty) 'driver_id': driverId,
-    });
+    await _dio.put(
+      '/store/dispatch-notes/$id/dispatch',
+      data: {
+        if (vehicleId != null && vehicleId.isNotEmpty) 'vehicle_id': vehicleId,
+        if (driverId != null && driverId.isNotEmpty) 'driver_id': driverId,
+      },
+      options: Options(
+        sendTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 3),
+      ),
+    );
   }
 
   // Supplier CRUD

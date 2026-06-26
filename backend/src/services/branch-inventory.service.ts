@@ -70,8 +70,101 @@ type BranchStockSource = {
   branchStockExists: boolean;
 };
 
+type LiveBranchBalanceRow = {
+  balanceId: string;
+  itemId: string;
+  sku: string;
+  quantity: number;
+  unitCost: number;
+};
+
+async function getBranchLocationContext(branchId: number): Promise<{
+  isCentralStore: boolean;
+  locationId?: string;
+}> {
+  const { data: branchRow, error: branchError } = await supabase
+    .from('branches')
+    .select('is_central_warehouse, is_main_branch')
+    .eq('id', branchId)
+    .maybeSingle();
+
+  if (branchError) throw branchError;
+
+  const isCentralStore =
+    branchId === KYOGONG_CENTRAL_BRANCH_ID ||
+    branchRow?.is_central_warehouse === true;
+  const locationType = isCentralStore ? 'central_store' : 'branch_store';
+
+  const { data: locRow, error: locError } = await supabase
+    .from('inventory_locations')
+    .select('id')
+    .eq('branch_id', branchId)
+    .eq('location_type', locationType)
+    .limit(1)
+    .maybeSingle();
+
+  if (locError) throw locError;
+
+  return {
+    isCentralStore,
+    locationId: locRow?.id,
+  };
+}
+
+async function getLiveBranchBalancesBySku(branchId: number): Promise<Map<string, LiveBranchBalanceRow>> {
+  const { locationId } = await getBranchLocationContext(branchId);
+  if (!locationId) return new Map();
+
+  const { data: balances, error: balancesError } = await supabase
+    .from('inventory_balances')
+    .select('id, item_id, current_quantity, unit_cost')
+    .eq('location_id', locationId);
+
+  if (balancesError) throw balancesError;
+  if (!balances || balances.length === 0) return new Map();
+
+  const itemIds = [...new Set(balances.map((row: any) => row.item_id).filter(Boolean))];
+  if (itemIds.length === 0) return new Map();
+
+  const { data: items, error: itemsError } = await supabase
+    .from('inventory_items')
+    .select('id, sku')
+    .in('id', itemIds);
+
+  if (itemsError) throw itemsError;
+
+  const skuByItemId = new Map<string, string>(
+    (items || [])
+      .filter((item: any) => item?.id && item?.sku)
+      .map((item: any) => [String(item.id), String(item.sku)])
+  );
+
+  const result = new Map<string, LiveBranchBalanceRow>();
+  for (const balance of balances) {
+    const sku = skuByItemId.get(String(balance.item_id));
+    if (!sku) continue;
+
+    const quantity = Number(balance.current_quantity ?? 0);
+    const existing = result.get(sku);
+    if (existing) {
+      existing.quantity += quantity;
+      continue;
+    }
+
+    result.set(sku, {
+      balanceId: String(balance.id),
+      itemId: String(balance.item_id),
+      sku,
+      quantity,
+      unitCost: Number(balance.unit_cost ?? 0),
+    });
+  }
+
+  return result;
+}
+
 async function resolveBranchStockSource(branchId: number, itemSku: string): Promise<BranchStockSource> {
-  const [branchStockRes, itemRes, branchRes] = await Promise.all([
+  const [branchStockRes, itemRes, locationContext] = await Promise.all([
     supabase
       .from('branch_stock')
       .select('quantity')
@@ -83,53 +176,42 @@ async function resolveBranchStockSource(branchId: number, itemSku: string): Prom
       .select('id')
       .eq('sku', itemSku)
       .maybeSingle(),
-    supabase
-      .from('branches')
-      .select('is_central_warehouse, is_main_branch')
-      .eq('id', branchId)
-      .maybeSingle()
+    getBranchLocationContext(branchId)
   ]);
 
   if (branchStockRes.error) throw branchStockRes.error;
   if (itemRes.error) throw itemRes.error;
-  if (branchRes.error) throw branchRes.error;
 
   const branchStockQuantity = Number(branchStockRes.data?.quantity ?? 0);
-  const isCentralStore = branchId === KYOGONG_CENTRAL_BRANCH_ID || branchRes.data?.is_central_warehouse === true;
+  const isCentralStore = locationContext.isCentralStore;
 
   let balanceId: string | undefined;
   let balanceQuantity = 0;
-  if (itemRes.data?.id) {
-    const locType = isCentralStore ? 'central_store' : 'branch_store';
-    const { data: locRow, error: locError } = await supabase
-      .from('inventory_locations')
-      .select('id')
-      .eq('branch_id', branchId)
-      .eq('location_type', locType)
+  if (itemRes.data?.id && locationContext.locationId) {
+    const { data: balRow, error: balError } = await supabase
+      .from('inventory_balances')
+      .select('id, current_quantity')
+      .eq('item_id', itemRes.data.id)
+      .eq('location_id', locationContext.locationId)
+      .is('batch_id', null)
       .limit(1)
       .maybeSingle();
 
-    if (locError) throw locError;
-
-    if (locRow?.id) {
-      const { data: balRow, error: balError } = await supabase
-        .from('inventory_balances')
-        .select('id, current_quantity')
-        .eq('item_id', itemRes.data.id)
-        .eq('location_id', locRow.id)
-        .is('batch_id', null)
-        .limit(1)
-        .maybeSingle();
-
-      if (balError) throw balError;
-      if (balRow) {
-        balanceId = balRow.id;
-        balanceQuantity = Number(balRow.current_quantity ?? 0);
-      }
+    if (balError) throw balError;
+    if (balRow) {
+      balanceId = balRow.id;
+      balanceQuantity = Number(balRow.current_quantity ?? 0);
     }
   }
 
-  if (balanceId && (isCentralStore || !branchStockRes.data)) {
+  if (
+    balanceId &&
+    (
+      isCentralStore ||
+      !branchStockRes.data ||
+      (branchStockQuantity <= 0 && balanceQuantity > 0)
+    )
+  ) {
     return {
       available: balanceQuantity,
       source: 'inventory_balances',
@@ -146,6 +228,25 @@ async function resolveBranchStockSource(branchId: number, itemSku: string): Prom
       itemExists: !!itemRes.data,
       branchStockExists: true
     };
+  }
+
+  // Final fallback for central store: read from simple_items master stock
+  if (isCentralStore) {
+    const { data: simpleItem } = await supabase
+      .from('simple_items')
+      .select('quantity')
+      .eq('sku', itemSku)
+      .maybeSingle();
+
+    if (simpleItem !== null) {
+      const simpleQty = Number(simpleItem?.quantity ?? 0);
+      return {
+        available: simpleQty,
+        source: 'branch_stock', // treat as authoritative for dispatch validation
+        itemExists: true,
+        branchStockExists: false
+      };
+    }
   }
 
   return {
@@ -269,44 +370,112 @@ async function recordFoundationMovementBestEffort(input: {
  * Get stock for a specific branch
  */
 export async function getBranchStock(branchId: number) {
-  const { data: stock, error } = await supabase
-    .from('branch_stock')
-    .select('*')
-    .eq('branch_id', branchId)
-    .order('quantity', { ascending: true });
+  const [branchStockRes, liveBalances] = await Promise.all([
+    supabase
+      .from('branch_stock')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('quantity', { ascending: true }),
+    getLiveBranchBalancesBySku(branchId)
+  ]);
 
+  const { data: stock, error } = branchStockRes;
   if (error) throw error;
-  if (!stock || stock.length === 0) return [];
 
-  const skus = stock.map(s => s.item_sku);
+  const stockRows = [...(stock || [])];
+  const stockBySku = new Map<string, any>(
+    stockRows
+      .filter((row: any) => row?.item_sku)
+      .map((row: any) => [String(row.item_sku), row])
+  );
 
-  // Manual join with simple_items
-  const { data: items } = await supabase
-    .from('simple_items')
-    .select('sku, item_name, description, category, unit_of_measure, retail_price, cost_price, store_type')
-    .in('sku', skus);
+  for (const [sku, liveRow] of liveBalances.entries()) {
+    const legacyRow = stockBySku.get(sku);
+    if (legacyRow) {
+      if (Number(legacyRow.quantity ?? 0) <= 0 && liveRow.quantity > 0) {
+        legacyRow.quantity = liveRow.quantity;
+      }
+      continue;
+    }
 
-  // Determine source: 'dispatch' if item was ever received via official dispatch/supplier receiving,
-  // 'catalog' if it was only registered manually from the master catalog (INITIAL_STOCK)
-  const { data: dispatchMovements } = await supabase
-    .from('branch_stock_movements')
-    .select('item_sku')
-    .eq('branch_id', branchId)
-    .in('movement_type', ['DISPATCH_RECEIVE', 'RECEIVE_FROM_SUPPLIER'])
-    .in('item_sku', skus);
+    stockRows.push({
+      branch_id: branchId,
+      item_sku: sku,
+      quantity: liveRow.quantity,
+      reorder_level: 10,
+      max_stock_level: 100,
+    });
+  }
 
-  const dispatchedSkus = new Set((dispatchMovements || []).map((m: any) => m.item_sku));
+  if (stockRows.length === 0) return [];
 
-  return stock.map(s => {
-    const item = items?.find(i => i.sku === s.item_sku);
+  const skus = [...new Set(stockRows.map((row: any) => row.item_sku).filter(Boolean))];
+
+  const [simpleItemsRes, inventoryItemsRes, dispatchMovementsRes] = await Promise.all([
+    supabase
+      .from('simple_items')
+      .select('sku, item_name, description, category, unit_of_measure, retail_price, cost_price, store_type')
+      .in('sku', skus),
+    supabase
+      .from('inventory_items')
+      .select('sku, item_name, description, category, unit, default_unit_cost, store_type, reorder_level')
+      .in('sku', skus),
+    supabase
+      .from('branch_stock_movements')
+      .select('item_sku')
+      .eq('branch_id', branchId)
+      .in('movement_type', ['DISPATCH_RECEIVE', 'RECEIVE_FROM_SUPPLIER', 'SUPPLIER_RECEIPT'])
+      .in('item_sku', skus)
+  ]);
+
+  if (simpleItemsRes.error) throw simpleItemsRes.error;
+  if (inventoryItemsRes.error) throw inventoryItemsRes.error;
+  if (dispatchMovementsRes.error) throw dispatchMovementsRes.error;
+
+  const simpleItemBySku = new Map((simpleItemsRes.data || []).map((item: any) => [item.sku, item]));
+  const inventoryItemBySku = new Map((inventoryItemsRes.data || []).map((item: any) => [item.sku, item]));
+  const dispatchedSkus = new Set((dispatchMovementsRes.data || []).map((movement: any) => movement.item_sku));
+
+  return stockRows.map((row: any) => {
+    const simpleItem = simpleItemBySku.get(row.item_sku);
+    const inventoryItem = inventoryItemBySku.get(row.item_sku);
+    const liveRow = liveBalances.get(String(row.item_sku));
+    const quantity = Number(row.quantity ?? 0);
+
     return {
-      ...s,
-      item,
-      item_name: item?.item_name || item?.description || s.item_sku,
-      description: item?.description || item?.item_name || s.item_sku,
-      unit_of_measure: item?.unit_of_measure,
-      store_type: item?.store_type || 'foodstuffs',
-      source: dispatchedSkus.has(s.item_sku) ? 'dispatch' : 'catalog'
+      ...row,
+      quantity,
+      reorder_level: Number(row.reorder_level ?? inventoryItem?.reorder_level ?? 10),
+      item: simpleItem,
+      item_name:
+        simpleItem?.item_name ||
+        inventoryItem?.item_name ||
+        simpleItem?.description ||
+        inventoryItem?.description ||
+        row.item_sku,
+      description:
+        simpleItem?.description ||
+        inventoryItem?.description ||
+        simpleItem?.item_name ||
+        inventoryItem?.item_name ||
+        row.item_sku,
+      category: simpleItem?.category || inventoryItem?.category || null,
+      unit_of_measure: simpleItem?.unit_of_measure || inventoryItem?.unit,
+      cost_price:
+        Number(row.cost_price ?? 0) ||
+        liveRow?.unitCost ||
+        Number(simpleItem?.cost_price ?? 0) ||
+        Number(inventoryItem?.default_unit_cost ?? 0),
+      store_type:
+        simpleItem?.store_type ||
+        inventoryItem?.store_type ||
+        row.store_type ||
+        'foodstuffs',
+      source: dispatchedSkus.has(row.item_sku)
+        ? 'dispatch'
+        : liveRow && quantity > 0
+          ? 'inventory_balances'
+          : 'catalog'
     };
   });
 }
@@ -315,27 +484,10 @@ export async function getBranchStock(branchId: number) {
  * Get low stock items for a branch
  */
 export async function getLowStockItems(branchId: number) {
-  const { data: stock, error } = await supabase
-    .from('branch_stock')
-    .select('*')
-    .eq('branch_id', branchId)
-    .lte('quantity', 10) // Fallback static value if RPC fails or simplifies query
-    .order('quantity', { ascending: true });
-
-  if (error) throw error;
-  if (!stock || stock.length === 0) return [];
-
-  // Manual join with simple_items
-  const skus = stock.map(s => s.item_sku);
-  const { data: items } = await supabase
-    .from('simple_items')
-    .select('sku, item_name, description, category, unit_of_measure, retail_price')
-    .in('sku', skus);
-
-  return stock.map(s => ({
-    ...s,
-    item: items?.find(i => i.sku === s.item_sku)
-  }));
+  const stock = await getBranchStock(branchId);
+  return stock
+    .filter((item: any) => Number(item.quantity ?? 0) <= Number(item.reorder_level ?? 10))
+    .sort((left: any, right: any) => Number(left.quantity ?? 0) - Number(right.quantity ?? 0));
 }
 
 /**
@@ -370,11 +522,12 @@ export async function updateBranchStock(
   referenceId?: string,
   referenceNumber?: string,
   notes?: string,
-  reorderLevel?: number
+  reorderLevel?: number,
+  maxStockLevel?: number
 ) {
   const stockSource = await resolveBranchStockSource(branchId, itemSku);
   const previousStock = stockSource.available;
-  const inventoryBalanceId = stockSource.source === 'inventory_balances' ? stockSource.balanceId : null;
+  let inventoryBalanceId = stockSource.source === 'inventory_balances' ? stockSource.balanceId : null;
 
   const newStock = previousStock + quantityChange;
 
@@ -385,27 +538,86 @@ export async function updateBranchStock(
     );
   }
 
+  const [inventoryItemRes, locationContext, existingBranchStockRes] = await Promise.all([
+    supabase
+      .from('inventory_items')
+      .select('id')
+      .eq('sku', itemSku)
+      .maybeSingle(),
+    getBranchLocationContext(branchId),
+    supabase
+      .from('branch_stock')
+      .select('reorder_level, max_stock_level')
+      .eq('branch_id', branchId)
+      .eq('item_sku', itemSku)
+      .maybeSingle()
+  ]);
+
+  if (inventoryItemRes.error) throw inventoryItemRes.error;
+  if (existingBranchStockRes.error) throw existingBranchStockRes.error;
+
+  if (!inventoryBalanceId && inventoryItemRes.data?.id && locationContext.locationId) {
+    const { data: existingBalance, error: existingBalanceError } = await supabase
+      .from('inventory_balances')
+      .select('id')
+      .eq('item_id', inventoryItemRes.data.id)
+      .eq('location_id', locationContext.locationId)
+      .is('batch_id', null)
+      .maybeSingle();
+
+    if (existingBalanceError) throw existingBalanceError;
+    if (existingBalance?.id) {
+      inventoryBalanceId = existingBalance.id;
+    } else {
+      const { data: createdBalance, error: createBalanceError } = await supabase
+        .from('inventory_balances')
+        .insert({
+          item_id: inventoryItemRes.data.id,
+          location_id: locationContext.locationId,
+          batch_id: null,
+          current_quantity: Math.max(0, newStock),
+          reserved_quantity: 0,
+          damaged_quantity: 0,
+          expired_quantity: 0,
+          unit_cost: 0,
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (createBalanceError) throw createBalanceError;
+      inventoryBalanceId = createdBalance?.id;
+    }
+  }
+
   if (inventoryBalanceId) {
     const { error: balUpdateError } = await supabase
       .from('inventory_balances')
       .update({ current_quantity: Math.max(0, newStock), updated_at: new Date().toISOString() })
       .eq('id', inventoryBalanceId);
     if (balUpdateError) throw balUpdateError;
-  } else {
-    const { error: updateError } = await supabase
-      .from('branch_stock')
-      .upsert({
-        branch_id: branchId,
-        item_sku: itemSku,
-        quantity: newStock,
-        reorder_level: reorderLevel !== undefined ? reorderLevel : 10,
-        max_stock_level: 100,
-        last_stock_in: quantityChange > 0 ? new Date().toISOString() : undefined,
-        last_stock_out: quantityChange < 0 ? new Date().toISOString() : undefined,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'branch_id,item_sku' });
-    if (updateError) throw updateError;
   }
+
+  const existingBranchStock = existingBranchStockRes.data || null;
+  const nextReorderLevel = reorderLevel !== undefined
+    ? reorderLevel
+    : Number(existingBranchStock?.reorder_level ?? 10);
+  const nextMaxStockLevel = maxStockLevel !== undefined
+    ? maxStockLevel
+    : Number(existingBranchStock?.max_stock_level ?? 100);
+
+  const { error: updateError } = await supabase
+    .from('branch_stock')
+    .upsert({
+      branch_id: branchId,
+      item_sku: itemSku,
+      quantity: Math.max(0, newStock),
+      reorder_level: nextReorderLevel,
+      max_stock_level: nextMaxStockLevel,
+      last_stock_in: quantityChange > 0 ? new Date().toISOString() : undefined,
+      last_stock_out: quantityChange < 0 ? new Date().toISOString() : undefined,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'branch_id,item_sku' });
+  if (updateError) throw updateError;
 
   // Log movement
   const { error } = await supabase.from('branch_stock_movements').insert({
@@ -1557,8 +1769,8 @@ export async function confirmDelivery(
   if (noteError && noteError.code !== 'PGRST116') throw noteError;
 
   if (noteDispatch) {
-    if (['CONFIRMED', 'DISPUTED'].includes(noteDispatch.status)) {
-      throw new Error(`Dispatch ${noteDispatch.dispatch_number} has already been confirmed`);
+    if (['CONFIRMED', 'DISPUTED', 'DELIVERED', 'COMPLETED'].includes(noteDispatch.status)) {
+      throw new AppError(`Dispatch ${noteDispatch.dispatch_number} has already been confirmed`, 400);
     }
     dispatch = noteDispatch;
     const { data: noteItems, error: noteItemsError } = await supabase

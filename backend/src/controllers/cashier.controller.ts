@@ -24,6 +24,7 @@ import {
 import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import PDFDocument from 'pdfkit';
+import { loadCashierVoidAudit } from '../services/cashier-void-audit.service';
 
 function isImmediateCashierPaymentMethod(method?: string): boolean {
     const normalized = (method || '').toLowerCase();
@@ -6530,6 +6531,10 @@ function dedupeLogbookLines(lines: any[]): any[] {
     return unique;
 }
 
+function isVoidedLogbookLine(line: any): boolean {
+    return /void|cancel/i.test(`${line?.status || ''} ${line?.section || ''}`);
+}
+
 async function buildCashierLogbookDetail(req: Request, id: string): Promise<any> {
     let query = supabase
         .from('cashier_logbooks')
@@ -6569,6 +6574,19 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     let outletOrders: any[] = [];
     let outletPayments: any[] = [];
     let creditBillRecords: any[] = [];
+    let voidAudit = {
+        lines: [] as any[],
+        summary: {
+            total_void_amount: 0,
+            total_void_count: 0,
+            whole_bill_void_amount: 0,
+            whole_bill_void_count: 0,
+            item_void_amount: 0,
+            item_void_count: 0,
+            payment_void_amount: 0,
+            payment_void_count: 0
+        }
+    };
 
     if (logbook.cashier_shift_id) {
         const shiftResult = await supabase
@@ -6641,6 +6659,14 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                     .lte('created_at', endedAt)
                     .order('created_at', { ascending: true })
             );
+
+            voidAudit = await loadCashierVoidAudit({
+                branchId: shift.branch_id,
+                cashierId: shift.cashier_id,
+                cashierShiftId: shift.id,
+                shiftStart: startedAt,
+                shiftEnd: endedAt
+            });
         }
     }
 
@@ -6702,10 +6728,12 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             customer_name: line.reference || line.payment_method,
             outlet_type: line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type,
             revenue_type: line.revenue_type || line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type
-        }))
+        })),
+        ...voidAudit.lines.map((line) => normalizeLogbookLine(line, 'voided_transaction'))
     ];
 
     const allLines = dedupeLogbookLines([...generatedLines, ...storedLines]);
+    const nonVoidLines = allLines.filter((line) => !isVoidedLogbookLine(line));
     const transactionHistory = [...allLines]
         .filter((line) => logbookNumber(line.amount) > 0)
         .sort((a, b) => {
@@ -6721,7 +6749,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const clearedPaymentLines = [
         ...shiftTransactions.map((line) => normalizeLogbookLine(line, 'cashier_shift_transaction')),
         ...cashierTransactions.map((line) => normalizeLogbookLine(line, 'cashier_transaction'))
-    ];
+    ].filter((line) => !isVoidedLogbookLine(line));
     clearedPaymentLines.forEach((line) => {
         if (logbookNumber(line.amount) > 0) addAmount(clearedPaymentTotals, line.payment_method, line.amount);
     });
@@ -6742,7 +6770,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const creditBillsTotal = creditBills.reduce((sum, b) => sum + logbookNumber(b.amount), 0);
 
     const allLinePaymentTotals: Record<string, number> = {};
-    allLines.forEach((line) => {
+    nonVoidLines.forEach((line) => {
         if (logbookNumber(line.amount) > 0) addAmount(allLinePaymentTotals, line.payment_method, line.amount);
     });
     const outletOrderPaymentTotals: Record<string, number> = {};
@@ -6786,10 +6814,11 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const totalCashTendered = logbookNumber(breakdown.total_cash_tendered) || cashTenderedFromLines;
     const totalChangeGiven = logbookNumber(breakdown.total_change_given) || changeGivenFromLines;
     const evidenceTotalSales = totalCash + totalMpesa + totalCard + totalCreditBill + totalBank + totalOther;
-    const totalSales = Math.max(
+    const netSales = Math.max(
         logbookNumber(breakdown.total_sales ?? shift?.total_sales),
         evidenceTotalSales
     );
+    const grossSales = netSales + logbookNumber(voidAudit.summary.total_void_amount);
     const openingFloat = logbookNumber(logbook.opening_float ?? shift?.opening_float);
     const closingFloat = logbookNumber(logbook.closing_float ?? shift?.closing_float ?? shift?.cash_at_hand);
     const cashDrops = logbookNumber(breakdown.cash_drops ?? shift?.cash_deposited);
@@ -6858,10 +6887,10 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             method,
             amount: logbookNumber(amount),
             count: clearedPaymentLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
-                || allLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
+                || nonVoidLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
         }));
 
-    const voidLines = allLines.filter((line) => /void|cancel/i.test(`${line.status} ${line.section}`));
+    const voidLines = allLines.filter((line) => isVoidedLogbookLine(line));
     const complianceFlags = [
         {
             label: 'Shift close logbook',
@@ -6872,8 +6901,8 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         },
         {
             label: 'Payment capture',
-            status: totalSales > 0 || allLines.length > 0 ? 'OK' : 'Review',
-            detail: totalSales > 0 || allLines.length > 0
+            status: netSales > 0 || allLines.length > 0 ? 'OK' : 'Review',
+            detail: netSales > 0 || allLines.length > 0
                 ? `${transactionHistory.length} cleared transaction line(s) attached`
                 : 'No sales or payment lines were captured'
         },
@@ -6940,7 +6969,11 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             variance
         },
         summary: {
-            total_sales: totalSales,
+            total_sales: netSales,
+            net_sales: netSales,
+            gross_sales: grossSales,
+            total_void_amount: logbookNumber(voidAudit.summary.total_void_amount),
+            total_void_count: logbookNumber(voidAudit.summary.total_void_count),
             transaction_count: Math.max(
                 logbookNumber(breakdown.transaction_count ?? shift?.transaction_count),
                 transactionHistory.length
@@ -6954,6 +6987,8 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         revenue_breakdown: revenueBreakdown,
         credit_bills: creditBills,
         credit_bills_total: creditBillsTotal,
+        void_summary: voidAudit.summary,
+        void_lines: voidLines,
         lines: allLines,
         transaction_history: transactionHistory,
         compliance_flags: complianceFlags
@@ -6974,6 +7009,21 @@ export const downloadCashierLogbookReport = async (req: Request, res: Response, 
         const detail = await buildCashierLogbookDetail(req, req.params.id);
         const shiftNumber = logbookText(detail.shift?.shift_number, 'cashier-shift');
         const filename = `Cashier_Logbook_${shiftNumber}_${detail.log_date || 'report'}.pdf`;
+
+        try {
+            const pythonResponse = await axios.post(
+                `${PYTHON_SERVICE_URL}/api/payroll/generate-cashier-logbook-pdf`,
+                detail,
+                { responseType: 'arraybuffer' }
+            );
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.send(Buffer.from(pythonResponse.data));
+            return;
+        } catch (pythonErr: any) {
+            logger.warn(`Python cashier logbook PDF failed, falling back to native generator: ${pythonErr.message}`);
+        }
+
         const doc = new PDFDocument({ margin: 42, size: 'A4' });
 
         res.setHeader('Content-Type', 'application/pdf');

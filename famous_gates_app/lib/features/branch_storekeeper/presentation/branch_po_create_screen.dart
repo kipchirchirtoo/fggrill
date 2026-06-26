@@ -27,7 +27,12 @@ class _PoItem {
     required this.quantity,
     required this.unit,
     this.error,
-  });
+  }) {
+    nameCtrl = TextEditingController(text: itemName);
+    qtyCtrl = TextEditingController(text: quantity == 0 ? '' : _plainNum(quantity));
+    unitCtrl = TextEditingController(text: unit);
+    costCtrl = TextEditingController(text: unitCost == 0 ? '' : _plainNum(unitCost));
+  }
 
   final String key;
   final String sourceLine;
@@ -38,7 +43,19 @@ class _PoItem {
   String? sku;
   String? error;
 
+  late final TextEditingController nameCtrl;
+  late final TextEditingController qtyCtrl;
+  late final TextEditingController unitCtrl;
+  late final TextEditingController costCtrl;
+
   num get total => quantity * unitCost;
+
+  void dispose() {
+    nameCtrl.dispose();
+    qtyCtrl.dispose();
+    unitCtrl.dispose();
+    costCtrl.dispose();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,6 +130,9 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
   void dispose() {
     _bulkCtrl.dispose();
     _notesCtrl.dispose();
+    for (final item in _items) {
+      item.dispose();
+    }
     super.dispose();
   }
 
@@ -150,6 +170,9 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
       return;
     }
     setState(() {
+      for (final item in _items) {
+        item.dispose();
+      }
       _items
         ..clear()
         ..addAll(lines.indexed.map((e) {
@@ -258,8 +281,12 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
   void _applySuggestion(_PoItem item, Map<String, dynamic> match) {
     item.sku = _text(match, ['sku', 'item_sku', 'id']);
     item.itemName = _text(match, ['item_name', 'name', 'description']);
+    item.nameCtrl.text = item.itemName;
     final unit = _text(match, ['unit_of_measure', 'unit'], '').toUpperCase();
-    if (unit.isNotEmpty) item.unit = unit;
+    if (unit.isNotEmpty) {
+      item.unit = unit;
+      item.unitCtrl.text = unit;
+    }
   }
 
   void _validateAll() {
@@ -312,6 +339,7 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
             )
               ..unitCost = unitCost
               ..sku = sku.isNotEmpty ? sku : null;
+            item.costCtrl.text = unitCost == 0 ? '' : _plainNum(unitCost);
             _items.add(item);
             _validateAll();
           });
@@ -393,6 +421,9 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
   }
 
   void _reset() {
+    for (final item in _items) {
+      item.dispose();
+    }
     setState(() {
       _supplierId = null;
       _paymentTerms = 'credit_30_days';
@@ -782,9 +813,7 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
           SizedBox(
             width: 70,
             child: TextFormField(
-              key: ValueKey('${item.key}-qty'),
-              initialValue:
-                  item.quantity == 0 ? '' : _plainNum(item.quantity),
+              controller: item.qtyCtrl,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               textAlign: TextAlign.center,
@@ -806,8 +835,7 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
           SizedBox(
             width: 70,
             child: TextFormField(
-              key: ValueKey('${item.key}-unit'),
-              initialValue: item.unit,
+              controller: item.unitCtrl,
               textCapitalization: TextCapitalization.characters,
               textAlign: TextAlign.center,
               decoration: const InputDecoration(
@@ -828,9 +856,7 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
           SizedBox(
             width: 90,
             child: TextFormField(
-              key: ValueKey('${item.key}-cost'),
-              initialValue:
-                  item.unitCost == 0 ? '' : _plainNum(item.unitCost),
+              controller: item.costCtrl,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               textAlign: TextAlign.right,
@@ -866,6 +892,7 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
               tooltip: 'Remove',
               icon: const Icon(Icons.close, size: 16),
               onPressed: () => setState(() {
+                item.dispose();
                 _items.remove(item);
                 _validateAll();
               }),
@@ -914,94 +941,19 @@ class _BranchPoCreateScreenState extends ConsumerState<BranchPoCreateScreen> {
   }
 
   Widget _itemNameField(_PoItem item) {
-    return RawAutocomplete<Map<String, dynamic>>(
-      key: ValueKey('${item.key}-name-ac'),
-      focusNode: FocusNode(),
-      textEditingController: TextEditingController(text: item.itemName),
-      displayStringForOption: (r) =>
-          _text(r, ['item_name', 'name', 'description']),
-      optionsBuilder: (v) {
-        final q = v.text.trim();
-        if (q.isEmpty) return const [];
-        return _catalogSuggestions(q).take(8);
-      },
-      onSelected: (match) {
-        setState(() {
-          _applySuggestion(item, match);
-          _validateAll();
-        });
-      },
-      fieldViewBuilder: (_, ctrl, focus, onSubmit) {
-        if (ctrl.text != item.itemName) {
-          ctrl.value = TextEditingValue(
-            text: item.itemName,
-            selection:
-                TextSelection.collapsed(offset: item.itemName.length),
-          );
-        }
-        return TextFormField(
-          controller: ctrl,
-          focusNode: focus,
-          decoration: const InputDecoration(
-            hintText: 'Item name or SKU…',
-            isDense: true,
-            border: OutlineInputBorder(),
-            contentPadding:
-                EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          ),
-          onChanged: (v) {
-            item.itemName = v;
-            _resolveItem(item);
-            _validateAll();
-            setState(() {});
-          },
-        );
-      },
-      optionsViewBuilder: (ctx, onSel, opts) => Align(
-        alignment: Alignment.topLeft,
-        child: Material(
-          elevation: 6,
-          borderRadius: BorderRadius.circular(10),
-          child: ConstrainedBox(
-            constraints:
-                const BoxConstraints(maxWidth: 400, maxHeight: 280),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              shrinkWrap: true,
-              children: opts.map((row) {
-                final name =
-                    _text(row, ['item_name', 'name', 'description']);
-                final sku = _text(row, ['sku', 'item_sku', 'id']);
-                final unit = _text(row, ['unit_of_measure', 'unit'], '—');
-                return InkWell(
-                  onTap: () => onSel(row),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                    child: Row(children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(name,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13)),
-                            Text('$sku • $unit',
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.kTextSecondary)),
-                          ],
-                        ),
-                      ),
-                    ]),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
+    return TextFormField(
+      controller: item.nameCtrl,
+      decoration: const InputDecoration(
+        hintText: 'Item name or SKU…',
+        isDense: true,
+        border: OutlineInputBorder(),
+        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       ),
+      onChanged: (v) => setState(() {
+        item.itemName = v;
+        _resolveItem(item);
+        _validateAll();
+      }),
     );
   }
 
@@ -1358,7 +1310,7 @@ class _SupplierFieldState extends State<_SupplierField> {
 // Date picker field
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _DateField extends StatelessWidget {
+class _DateField extends StatefulWidget {
   const _DateField({
     required this.label,
     required this.value,
@@ -1374,25 +1326,53 @@ class _DateField extends StatelessWidget {
   final bool nullable;
 
   @override
+  State<_DateField> createState() => _DateFieldState();
+}
+
+class _DateFieldState extends State<_DateField> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(
+      text: widget.value == null ? '' : _isoDate(widget.value!),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _DateField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _ctrl.text = widget.value == null ? '' : _isoDate(widget.value!);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     return TextField(
       readOnly: true,
-      controller: TextEditingController(
-          text: value == null ? '' : _isoDate(value!)),
+      controller: _ctrl,
       decoration: InputDecoration(
-        labelText: label,
-        hintText: nullable ? 'Optional' : 'Select date',
+        labelText: widget.label,
+        hintText: widget.nullable ? 'Optional' : 'Select date',
         suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
       ),
       onTap: () async {
         final picked = await showDatePicker(
           context: context,
-          initialDate: value ?? firstDate ?? now,
-          firstDate: firstDate ?? DateTime(now.year - 1),
+          initialDate: widget.value ?? widget.firstDate ?? now,
+          firstDate: widget.firstDate ?? DateTime(now.year - 1),
           lastDate: DateTime(now.year + 3),
         );
-        if (picked != null) onPicked(picked);
+        if (picked != null) widget.onPicked(picked);
       },
     );
   }

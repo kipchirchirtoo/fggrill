@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/powersync/powersync_service.dart';
+import '../../../core/realtime/realtime_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../../core/utils/api_error_message.dart';
@@ -81,26 +82,62 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     return index >= 0 ? index : 0;
   }();
 
-  // Keeps the "Void Requests" / "Exchange Requests" tab badges fresh without
-  // requiring the cashier to switch tabs or pull-to-refresh -- mirrors the
-  // bar captain-order poll timer in _StationTabState.
+  // Keeps the "Void Requests" / "Exchange Requests" tab badges fresh.
+  // When Supabase Realtime is available the badges update instantly;
+  // otherwise falls back to a 15-second poll (e.g. when PowerSync
+  // hot-reads are enabled or branchId is unavailable at startup).
+  StreamSubscription<VoidRequestRealtimeEvent>? _voidRealtimeSub;
   Timer? _voidBadgeTimer;
 
   @override
   void initState() {
     super.initState();
-    if (!ref.read(powerSyncHotReadsEnabledProvider)) {
-      _voidBadgeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _initVoidBadgeFeed();
+  }
+
+  Future<void> _initVoidBadgeFeed() async {
+    // PowerSync handles realtime natively when hot-reads are on.
+    if (ref.read(powerSyncHotReadsEnabledProvider)) return;
+
+    final storage = ref.read(secureStorageProvider);
+    final branchIdStr =
+        await storage.read(key: AuthRepository.branchIdKey) ?? '';
+    final branchId = int.tryParse(branchIdStr.trim());
+
+    if (branchId != null) {
+      final realtimeService = ref.read(realtimeServiceProvider);
+      _voidRealtimeSub =
+          realtimeService.watchVoidRequests(branchId).listen((event) {
         if (!mounted) return;
+        debugPrint(
+            '🔴 Cashier void badge Realtime: ${event.eventType} id=${event.id} status=${event.status}');
         ref.invalidate(cashierPendingItemVoidsProvider);
         ref.invalidate(cashierPendingExchangesProvider);
         ref.invalidate(cashierAwaitingRefundExchangesProvider);
+      }, onError: (Object err) {
+        debugPrint('❌ Cashier void badge Realtime error: $err — falling back to polling');
+        _startVoidBadgePolling();
       });
+    } else {
+      debugPrint(
+          '⚠️ CashierDashboard: No branchId found — falling back to 15s badge polling.');
+      _startVoidBadgePolling();
     }
+  }
+
+  void _startVoidBadgePolling() {
+    _voidBadgeTimer?.cancel();
+    _voidBadgeTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) return;
+      ref.invalidate(cashierPendingItemVoidsProvider);
+      ref.invalidate(cashierPendingExchangesProvider);
+      ref.invalidate(cashierAwaitingRefundExchangesProvider);
+    });
   }
 
   @override
   void dispose() {
+    _voidRealtimeSub?.cancel();
     _voidBadgeTimer?.cancel();
     super.dispose();
   }

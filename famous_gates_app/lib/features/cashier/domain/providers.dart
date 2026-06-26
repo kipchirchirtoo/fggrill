@@ -59,14 +59,27 @@ final cashierStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   (ref) => ref.watch(cashierRepositoryProvider).getStats(),
 );
 
-final cashierUnpaidBillsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, CashierBillFilters>((ref, filters) {
-  return ref.watch(cashierRepositoryProvider).getUnpaidBills(
+/// Streams unpaid POS orders for the cashier station. When PowerSync hot-reads
+/// are enabled this updates in real-time without any manual refresh. Falls back
+/// to a one-shot REST call otherwise.
+final cashierUnpaidBillsProvider = StreamProvider.autoDispose
+    .family<List<Map<String, dynamic>>, CashierBillFilters>((ref, filters) async* {
+  final powerSync = ref.watch(powerSyncServiceProvider);
+  if (powerSync.hotReadsEnabled) {
+    yield* powerSync.watchUnpaidOrders(
+      search: filters.search.isEmpty ? null : filters.search,
+      date: filters.date,
+    );
+    return;
+  }
+  // Fallback: one-shot REST fetch.
+  final rows = await ref.watch(cashierRepositoryProvider).getUnpaidBills(
         status: filters.status,
         billType: filters.billType,
         search: filters.search,
         date: filters.date,
       );
+  yield rows;
 });
 
 final cashierVoidedOrdersProvider = FutureProvider.autoDispose
@@ -116,6 +129,25 @@ final cashierCurrentShiftProvider =
   final shifts =
       await ref.watch(cashierRepositoryProvider).getShifts(status: 'open');
   return shifts.isNotEmpty ? shifts.first : <String, dynamic>{};
+});
+
+/// Live aggregated tally for the active shift. Reads directly from the local
+/// PowerSync SQLite database so the clearance screen loads instantly.
+/// Falls back to an empty map when the shift ID is unknown or hot-reads off.
+final cashierShiftTallyProvider =
+    StreamProvider.autoDispose<Map<String, dynamic>>((ref) async* {
+  final powerSync = ref.watch(powerSyncServiceProvider);
+  if (!powerSync.hotReadsEnabled) {
+    yield const {};
+    return;
+  }
+  final shift = await ref.watch(cashierCurrentShiftProvider.future);
+  final shiftId = '${shift['id'] ?? ''}';
+  if (shiftId.isEmpty) {
+    yield const {};
+    return;
+  }
+  yield* powerSync.watchCashierShiftTally(shiftId);
 });
 
 /// Item-level void requests awaiting this cashier's acknowledgement

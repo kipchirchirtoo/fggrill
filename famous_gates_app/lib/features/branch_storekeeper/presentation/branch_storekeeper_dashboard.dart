@@ -21,6 +21,8 @@ import '../../../core/widgets/notification_button.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/branch_storekeeper_repository.dart';
 import 'branch_po_create_screen.dart';
+import 'branch_stock_request_screen.dart';
+import '../daily_control/daily_control_page.dart';
 import 'pastry_production_screen.dart';
 import 'bar_stocktake_screen.dart';
 import 'kitchen_stocktake_screen.dart';
@@ -45,6 +47,7 @@ enum BranchStorekeeperSection {
   kitchenRequisitions,
   kitchenUsage,
   stockOut,
+  dailyControls,
   foodControl,
   kitchenProduction,
   pastryProduction,
@@ -1093,6 +1096,12 @@ class _BranchStorekeeperDashboardState
           group: 'Usage',
         ),
         const MasterNavItem(
+          section: BranchStorekeeperSection.dailyControls,
+          label: 'Daily Controls',
+          icon: Icons.analytics_outlined,
+          group: 'Usage',
+        ),
+        const MasterNavItem(
           section: BranchStorekeeperSection.foodControl,
           label: 'Food Control',
           icon: Icons.restaurant_outlined,
@@ -1163,6 +1172,8 @@ class _BranchStorekeeperDashboardState
         return _kitchenUsagePage();
       case BranchStorekeeperSection.stockOut:
         return _stockOutPage();
+      case BranchStorekeeperSection.dailyControls:
+        return const DailyControlPage();
       case BranchStorekeeperSection.foodControl:
         return _FoodControlSection(stock: _stock);
       case BranchStorekeeperSection.kitchenProduction:
@@ -1264,6 +1275,8 @@ class _BranchStorekeeperDashboardState
                   () => _go(BranchStorekeeperSection.kitchenUsage)),
               _QuickAction('Stock out', PhosphorIcons.trendDown(),
                   () => _go(BranchStorekeeperSection.stockOut)),
+              _QuickAction('Daily Food Control', PhosphorIcons.chartLine(),
+                  _openDailyControlScreen),
             ],
           ),
         ),
@@ -1345,6 +1358,7 @@ class _BranchStorekeeperDashboardState
                   qty: _qty,
                   toNum: _num,
                   onRequest: _quickRequestStock,
+                  onAddStock: _openQuickAddStockDialog,
                 ),
                 _CentralCatalogTab(
                   catalog: _catalog,
@@ -1374,6 +1388,34 @@ class _BranchStorekeeperDashboardState
       await _loadAll();
       _showSnack(
           '${item['item_name'] ?? item['name']} registered to branch inventory');
+    }
+  }
+
+  /// Quick "Add Stock" dialog — lets the storekeeper receive a quantity of
+  /// any item already in branch inventory directly (local purchase, direct
+  /// delivery). Wired to the ⊕ Add Stock option in the Branch Inventory tab.
+  Future<void> _openQuickAddStockDialog(Map<String, dynamic> stockItem) async {
+    final saved = await showDialog<_QuickAddStockResult?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _QuickAddStockDialog(item: stockItem),
+    );
+    if (saved == null) return;
+    try {
+      await _repo.adjustBranchStock({
+        'item_sku': '${stockItem['item_sku'] ?? stockItem['sku']}',
+        'quantity_change': saved.quantity,
+        'adjustment_type': 'STOCK_IN',
+        if (saved.supplierName.isNotEmpty) 'supplier_name': saved.supplierName,
+        if (saved.invoiceRef.isNotEmpty) 'reference': saved.invoiceRef,
+        'notes': saved.notes.isNotEmpty
+            ? saved.notes
+            : 'Direct stock receipt — ${_itemName(stockItem)}',
+      });
+      await _loadAll();
+      _showSnack('Added ${saved.quantity} ${stockItem['unit_of_measure'] ?? stockItem['unit'] ?? ''} of ${_itemName(stockItem)} to branch stock');
+    } catch (e) {
+      _showSnack('Failed to add stock: $e');
     }
   }
 
@@ -2139,7 +2181,7 @@ class _BranchStorekeeperDashboardState
           label: const Text('Export PDF'),
         ),
         FilledButton.icon(
-          onPressed: _showStockRequestForm,
+          onPressed: _openStockRequestScreen,
           icon: Icon(PhosphorIcons.plus()),
           label: const Text('New Request'),
         ),
@@ -4830,6 +4872,19 @@ class _BranchStorekeeperDashboardState
     if (created == true) await _loadAll();
   }
 
+  Future<void> _openStockRequestScreen() async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const BranchStockRequestScreen()),
+    );
+    if (created == true) await _loadAll();
+  }
+
+  void _openDailyControlScreen() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const DailyControlPage()),
+    );
+  }
+
   // ignore: unused_element
   void _showPurchaseOrderForm() {
     String? supplierId;
@@ -5372,6 +5427,7 @@ class _BranchStorekeeperDashboardState
     }
   }
 
+  // ignore: unused_element
   void _showStockRequestForm() {
     final lines = <Map<String, dynamic>>[];
     final reason = TextEditingController();
@@ -9690,6 +9746,132 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
         name.contains('soda');
   }
 
+  /// Opens a dialog to add (receive) stock for a parent/raw ingredient into
+  /// branch stock. This is the "parent stock that makes menu items" flow:
+  /// the storekeeper records that e.g. 10 kg of BEEF has arrived and should
+  /// be added to the branch store balance before kitchen sessions can issue it.
+  Future<void> _openAddParentStockDialog(Map<String, dynamic> stockItem) async {
+    final qtyCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final itemName = '${stockItem['item_name'] ?? stockItem['item_sku'] ?? ''}';
+    final sku = '${stockItem['item_sku'] ?? ''}';
+    final unit = '${stockItem['unit_of_measure'] ?? stockItem['unit'] ?? 'kg'}';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.add_box_outlined, color: Colors.teal.shade700),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Add Stock — $itemName',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.teal.shade100),
+                ),
+                child: Text(
+                  'SKU: $sku · Unit: $unit\n'
+                  'This will add to the branch store balance immediately. '
+                  'Use this when receiving parent ingredients (BEEF, RICE, FLOUR, etc.) '
+                  'that are consumed by kitchen production recipes.',
+                  style: TextStyle(fontSize: 12, color: Colors.teal.shade900, height: 1.5),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: qtyCtrl,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Quantity to add ($unit)',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (supplier, invoice ref, etc.)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Add to Branch Stock'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.teal.shade700),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final qty = double.tryParse(qtyCtrl.text.trim()) ?? 0;
+    if (qty <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a quantity greater than 0')),
+      );
+      return;
+    }
+
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.adjustBranchStock({
+        'item_sku': sku,
+        'quantity_change': qty,
+        'adjustment_type': 'STOCK_IN',
+        'notes': notesCtrl.text.trim().isNotEmpty
+            ? notesCtrl.text.trim()
+            : 'Stock received for kitchen production — $itemName',
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added $qty $unit of $itemName to branch stock.'),
+            backgroundColor: Colors.teal.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add stock: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   List<Map<String, dynamic>> get _filteredStock {
     final q = _stockSearch.toLowerCase();
     return widget.stock.where((s) {
@@ -9908,6 +10090,29 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
                                   Text(
                                       '${s['unit_of_measure'] ?? s['unit'] ?? ''}',
                                       style: const TextStyle(fontSize: 10)),
+                                  const SizedBox(height: 2),
+                                  GestureDetector(
+                                    onTap: () => _openAddParentStockDialog(s),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.shade50,
+                                        border: Border.all(
+                                            color: Colors.teal.shade300),
+                                        borderRadius:
+                                            BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '+ Add',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.teal.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             );
@@ -11699,6 +11904,7 @@ class _BranchInventoryTab extends StatefulWidget {
     required this.qty,
     required this.toNum,
     required this.onRequest,
+    required this.onAddStock,
   });
 
   final List<Map<String, dynamic>> stock;
@@ -11708,6 +11914,9 @@ class _BranchInventoryTab extends StatefulWidget {
   final String Function(Map<String, dynamic>) qty;
   final num Function(dynamic) toNum;
   final void Function(Map<String, dynamic>) onRequest;
+  /// Opens the quick-receive dialog for adding stock directly to branch inventory
+  /// (local purchases, direct deliveries not coming from central store).
+  final Future<void> Function(Map<String, dynamic>) onAddStock;
 
   @override
   State<_BranchInventoryTab> createState() => _BranchInventoryTabState();
@@ -12056,15 +12265,49 @@ class _BranchInventoryTabState extends State<_BranchInventoryTab> {
                                 children: [
                                   Tooltip(
                                     message:
-                                        'Stock is controlled. Request from Central Store to add more.',
+                                        'Request from Central Store or add local purchase below.',
                                     child: Icon(Icons.lock_outline,
                                         size: 14, color: Colors.grey.shade400),
                                   ),
                                   const SizedBox(width: 4),
-                                  TextButton(
-                                    onPressed: () => widget.onRequest(item),
-                                    child: const Text('Request',
-                                        style: TextStyle(fontSize: 12)),
+                                  PopupMenuButton<String>(
+                                    tooltip: 'Stock actions',
+                                    icon: Icon(Icons.more_vert,
+                                        size: 18,
+                                        color: Colors.grey.shade600),
+                                    onSelected: (action) {
+                                      if (action == 'request') {
+                                        widget.onRequest(item);
+                                      } else if (action == 'add') {
+                                        widget.onAddStock(item);
+                                      }
+                                    },
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(
+                                        value: 'add',
+                                        child: Row(children: [
+                                          Icon(Icons.add_box_outlined,
+                                              size: 16, color: Colors.teal),
+                                          SizedBox(width: 8),
+                                          Text('Add Stock',
+                                              style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.teal)),
+                                        ]),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'request',
+                                        child: Row(children: [
+                                          Icon(Icons.send_outlined,
+                                              size: 16,
+                                              color: Colors.indigo),
+                                          SizedBox(width: 8),
+                                          Text('Request from Central',
+                                              style: TextStyle(fontSize: 13)),
+                                        ]),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -13010,6 +13253,264 @@ class _BulkRegistrationSheetState
             ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────── QUICK ADD STOCK DIALOG ────────────────────────────
+
+class _QuickAddStockResult {
+  const _QuickAddStockResult({
+    required this.quantity,
+    required this.supplierName,
+    required this.invoiceRef,
+    required this.notes,
+  });
+  final double quantity;
+  final String supplierName;
+  final String invoiceRef;
+  final String notes;
+}
+
+class _QuickAddStockDialog extends ConsumerStatefulWidget {
+  const _QuickAddStockDialog({required this.item});
+  final Map<String, dynamic> item;
+
+  @override
+  ConsumerState<_QuickAddStockDialog> createState() =>
+      _QuickAddStockDialogState();
+}
+
+class _QuickAddStockDialogState extends ConsumerState<_QuickAddStockDialog> {
+  final _qtyCtrl = TextEditingController();
+  final _supplierCtrl = TextEditingController();
+  final _invoiceCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _supplierCtrl.dispose();
+    _invoiceCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  String get _itemName =>
+      '${widget.item['item_name'] ?? widget.item['name'] ?? widget.item['item_sku'] ?? widget.item['sku'] ?? ''}';
+  String get _sku =>
+      '${widget.item['item_sku'] ?? widget.item['sku'] ?? ''}';
+  String get _unit =>
+      '${widget.item['unit_of_measure'] ?? widget.item['unit'] ?? 'unit'}';
+  num get _currentQty => widget.item['quantity'] is num
+      ? widget.item['quantity'] as num
+      : num.tryParse('${widget.item['quantity']}') ?? 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final addQty = double.tryParse(_qtyCtrl.text.trim()) ?? 0.0;
+    final newBalance = _currentQty + addQty;
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.teal.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.add_box_outlined,
+                color: Colors.teal.shade700, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_itemName,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w800)),
+                Text('SKU: $_sku · Unit: $_unit',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.normal)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Current balance info
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Current Balance',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w600)),
+                          Text(
+                            '${_currentQty.toStringAsFixed(2)} $_unit',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: _currentQty <= 0
+                                  ? Colors.red
+                                  : AppColors.kPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward,
+                        color: Colors.grey, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('New Balance',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w600)),
+                          StatefulBuilder(
+                            builder: (_, __) => Text(
+                              addQty > 0
+                                  ? '${newBalance.toStringAsFixed(2)} $_unit'
+                                  : '—',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: addQty > 0
+                                    ? Colors.teal.shade700
+                                    : Colors.grey.shade400,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Quantity
+              TextField(
+                controller: _qtyCtrl,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Quantity to add ($_unit)',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  helperText:
+                      'Enter the exact amount received from your supplier.',
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Supplier
+              TextField(
+                controller: _supplierCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Supplier / Source (optional)',
+                  hintText: 'e.g. Naivas Supermarket, Local Market',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Invoice
+              TextField(
+                controller: _invoiceCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Invoice / Receipt No. (optional)',
+                  hintText: 'e.g. INV-2026-001',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Notes
+              TextField(
+                controller: _notesCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  hintText: 'e.g. Received for kitchen production — lunch prep',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'This creates a STOCK_IN movement in the branch ledger and increases '
+                'the balance immediately.',
+                style:
+                    TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _busy
+              ? null
+              : () {
+                  final qty =
+                      double.tryParse(_qtyCtrl.text.trim()) ?? 0;
+                  if (qty <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Enter a quantity greater than 0')));
+                    return;
+                  }
+                  Navigator.pop(
+                    context,
+                    _QuickAddStockResult(
+                      quantity: qty,
+                      supplierName: _supplierCtrl.text.trim(),
+                      invoiceRef: _invoiceCtrl.text.trim(),
+                      notes: _notesCtrl.text.trim(),
+                    ),
+                  );
+                },
+          icon: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.add, size: 16),
+          label: Text(_busy ? 'Saving…' : 'Add to Branch Stock'),
+          style: FilledButton.styleFrom(backgroundColor: Colors.teal.shade700),
+        ),
+      ],
     );
   }
 }

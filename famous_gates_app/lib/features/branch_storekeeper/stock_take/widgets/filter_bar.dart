@@ -155,7 +155,12 @@ class _FilterBarState extends State<FilterBar> {
             // Date Filter
             InkWell(
               onTap: () async {
-                final initial = DateFormat('yyyy-MM-dd').parse(widget.selectedDate);
+                DateTime initial;
+                try {
+                  initial = DateFormat('yyyy-MM-dd').parse(widget.selectedDate);
+                } catch (_) {
+                  initial = DateTime.now();
+                }
                 final picked = await showDatePicker(
                   context: context,
                   initialDate: initial,
@@ -169,37 +174,45 @@ class _FilterBarState extends State<FilterBar> {
               },
               child: Container(
                 height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey.shade300),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(Icons.calendar_month_outlined, size: 20, color: Colors.grey.shade600),
-                    const SizedBox(width: 8),
+                    Icon(Icons.calendar_month_outlined, size: 18, color: Colors.grey.shade600),
+                    const SizedBox(width: 6),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           'Date',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 9,
                             color: Colors.grey.shade600,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
-                          DateFormat('d MMM yyyy')
-                              .format(DateFormat('yyyy-MM-dd').parse(widget.selectedDate)),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          () {
+                            try {
+                              return DateFormat('d MMM yyyy')
+                                  .format(DateFormat('yyyy-MM-dd').parse(widget.selectedDate));
+                            } catch (_) {
+                              return DateFormat('d MMM yyyy').format(DateTime.now());
+                            }
+                          }(),
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_drop_down, size: 20),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_drop_down, size: 18),
                   ],
                 ),
               ),
@@ -242,17 +255,19 @@ class _FilterBarState extends State<FilterBar> {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, size: 20, color: Colors.grey.shade600),
-          const SizedBox(width: 8),
+          Icon(icon, size: 18, color: Colors.grey.shade600),
+          const SizedBox(width: 6),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 9,
                   color: Colors.grey.shade600,
                   fontWeight: FontWeight.w600,
                 ),
@@ -265,11 +280,11 @@ class _FilterBarState extends State<FilterBar> {
                     items: items,
                     onChanged: onChanged,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).textTheme.bodyMedium?.color,
                     ),
-                    icon: const Icon(Icons.arrow_drop_down, size: 18),
+                    icon: const Icon(Icons.arrow_drop_down, size: 16),
                   ),
                 ),
               ),

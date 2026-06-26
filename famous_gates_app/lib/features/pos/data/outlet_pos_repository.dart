@@ -529,6 +529,22 @@ class OutletPosRepository {
     }
   }
 
+  Future<OutletShiftOrder> markOriginalBillPrinted({
+    required String shiftId,
+    required String orderId,
+  }) async {
+    try {
+      final response = await _dio.post('/pos/shifts/$shiftId/orders/$orderId/original-printed');
+      if (response.data != null && response.data['data'] != null) {
+        return OutletShiftOrder.fromJson(response.data['data'] as Map<String, dynamic>);
+      }
+      throw StateError('Empty response from server');
+    } on DioException catch (e) {
+      final msg = e.response?.data?['message']?.toString() ?? e.message ?? 'Failed to mark original bill as printed';
+      throw StateError(msg);
+    }
+  }
+
   Future<void> payOrder({
     required String shiftId,
     required String orderId,
@@ -855,6 +871,7 @@ class OutletShiftOrder {
     this.createdAt,
     this.items = const [],
     this.billReprintCount = 0,
+    this.originalBillPrintedAt,
   });
 
   final String id;
@@ -885,6 +902,7 @@ class OutletShiftOrder {
   // reprint action is exhausted once this reaches 1 (server-enforced; this
   // is only used to proactively disable the menu item in the UI).
   final int billReprintCount;
+  final DateTime? originalBillPrintedAt;
 
   bool get canReprintBill => billReprintCount < 1;
 
@@ -941,6 +959,9 @@ class OutletShiftOrder {
       billReprintCount: json['bill_reprint_count'] is num
           ? (json['bill_reprint_count'] as num).toInt()
           : int.tryParse('${json['bill_reprint_count'] ?? 0}') ?? 0,
+      originalBillPrintedAt: json['original_bill_printed_at'] != null
+          ? DateTime.tryParse(json['original_bill_printed_at'].toString())
+          : null,
     );
   }
 }

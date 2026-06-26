@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/realtime/realtime_service.dart';
+import '../../../core/storage/secure_storage_provider.dart';
+import '../../auth/data/auth_repository.dart';
 import '../data/bar_repository.dart';
 import 'models.dart';
 
@@ -38,6 +43,7 @@ class BarOrdersNotifier extends StateNotifier<AsyncValue<List<BarOrder>>> {
 
   final Ref _ref;
   String _statusFilter = '';
+  StreamSubscription<OrderItemRealtimeEvent>? _realtimeSub;
 
   String get statusFilter => _statusFilter;
 
@@ -47,10 +53,50 @@ class BarOrdersNotifier extends StateNotifier<AsyncValue<List<BarOrder>>> {
     try {
       final repo = _ref.read(barRepositoryProvider);
       final orders = await repo.getOrders(status: status);
-      state = AsyncValue.data(orders);
+      if (mounted) state = AsyncValue.data(orders);
     } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
+      if (mounted) state = AsyncValue.error(error, stackTrace);
     }
+    // Subscribe to Realtime after initial load
+    _ensureRealtimeSubscription();
+  }
+
+  Future<void> _ensureRealtimeSubscription() async {
+    // Only subscribe once
+    if (_realtimeSub != null) return;
+
+    final storage = _ref.read(secureStorageProvider);
+    final branchIdStr =
+        await storage.read(key: AuthRepository.branchIdKey) ?? '';
+    final branchId = int.tryParse(branchIdStr.trim());
+
+    if (branchId == null) {
+      debugPrint('⚠️ BarOrdersNotifier: No branchId — realtime disabled.');
+      return;
+    }
+
+    final realtimeService = _ref.read(realtimeServiceProvider);
+    _realtimeSub = realtimeService.watchOrderItems(branchId).listen(
+      (event) {
+        debugPrint(
+            '🔴 Bar Realtime event: ${event.eventType} order=${event.orderId} status=${event.status}');
+        // Re-fetch bar orders when any order/item changes for this branch.
+        _fetchQuiet();
+      },
+      onError: (Object err) {
+        debugPrint('❌ BarOrdersNotifier Realtime error: $err');
+      },
+    );
+  }
+
+  /// Fetches orders without resetting state to loading (silent refresh).
+  Future<void> _fetchQuiet() async {
+    try {
+      final repo = _ref.read(barRepositoryProvider);
+      final orders = await repo.getOrders(
+          status: _statusFilter.isEmpty ? null : _statusFilter);
+      if (mounted) state = AsyncValue.data(orders);
+    } catch (_) {}
   }
 
   Future<void> refresh() => load(status: _statusFilter);
@@ -61,6 +107,12 @@ class BarOrdersNotifier extends StateNotifier<AsyncValue<List<BarOrder>>> {
       await repo.updateOrderStatus(orderId, status);
       await refresh();
     } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    super.dispose();
   }
 }
 

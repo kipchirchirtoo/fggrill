@@ -5,6 +5,7 @@ from datetime import datetime
 from reports.branded_pdf_generator import BrandedPDFGenerator
 from email_automation.routes import email_service
 from payroll.payroll_generator import generate_payroll_xlsx, generate_payroll_pdf
+from payroll.cashier_logbook_pdf import generate_cashier_logbook_pdf
 
 payroll_bp = Blueprint('payroll', __name__, url_prefix='/api/payroll')
 logger = logging.getLogger(__name__)
@@ -112,4 +113,24 @@ def generate_single_pdf():
         return pdf_content, 200, {'Content-Type': 'application/pdf'}
     except Exception as e:
         logger.error(f"Error generating single PDF: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@payroll_bp.route('/generate-cashier-logbook-pdf', methods=['POST'])
+def generate_cashier_logbook():
+    try:
+        data = request.json or {}
+        pdf_bytes = generate_cashier_logbook_pdf(data)
+        shift_number = (data.get('shift') or {}).get('shift_number') or 'cashier-shift'
+        log_date = data.get('log_date') or datetime.now().strftime('%Y-%m-%d')
+        filename = f"Cashier_Logbook_{shift_number}_{log_date}.pdf".replace(' ', '_')
+
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        logger.error(f"Cashier logbook PDF generation error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500

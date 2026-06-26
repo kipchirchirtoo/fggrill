@@ -35,6 +35,7 @@ import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
 import 'waiter_audit_screen.dart';
 import '../../pos/data/outlet_pos_repository.dart';
+import '../shift_reconciliation/screens/shift_reconciliation_screen.dart';
 
 enum BranchAccountantSection {
   overview,
@@ -5529,15 +5530,27 @@ class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
         notes: _notesController.text.trim(),
       );
       _toast('Lina shift logbook approved');
+      _notesController.clear();
+      _selectedShiftId = null;
+      _selectedShift = null;
+      _selectedDetail = null;
+      _refresh();
     } else {
-      await repo.reconcileShift('${shift['id']}', _notesController.text.trim());
-      _toast('Shift reconciled');
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BranchAccountantShiftReconciliationScreen(
+            shiftId: '${shift['id']}',
+            cashierId: '${shift['cashier_id']}',
+          ),
+        ),
+      );
+      _notesController.clear();
+      _selectedShiftId = null;
+      _selectedShift = null;
+      _selectedDetail = null;
+      _refresh();
     }
-    _notesController.clear();
-    _selectedShiftId = null;
-    _selectedShift = null;
-    _selectedDetail = null;
-    _refresh();
   }
 
   Future<void> _approveOpening(Map<String, dynamic> shift) async {

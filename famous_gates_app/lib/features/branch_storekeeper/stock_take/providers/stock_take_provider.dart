@@ -127,7 +127,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
                 ? _toInt(r['physical_quantity'])
                 : null,
             reason: r['reason_for_variance'] ?? r['notes'],
-            category: _getBarCategory('${r['item_name'] ?? r['name'] ?? 'Item'}'),
+            category: getBarCategory('${r['item_name'] ?? r['name'] ?? 'Item'}'),
           );
         }).toList();
       } else {
@@ -140,21 +140,28 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
 
         loadedItems = records.map((r) {
           final isSubmittedRow = r['physical_quantity'] != null;
-          final systemQty = _toInt(r['system_quantity'] ?? r['quantity'] ?? 0);
+          // Use opening_stock when available (new backend), fall back to system_quantity/quantity
+          final opening  = _toInt(r['opening_stock']  ?? r['system_quantity'] ?? r['quantity'] ?? 0);
+          final sales    = _toInt(r['sales']           ?? 0);
+          final additions = _toInt(r['additions']      ?? 0);
+          // SDDS = negative additions (same convention as bar stocktake)
+          final sdds = _toInt(r['sdds'] ?? 0) != 0
+              ? _toInt(r['sdds'])
+              : -additions;
 
           return StockTakeItem(
             id: '${r['item_id'] ?? r['id']}',
-            sku: '${r['item']?['sku'] ?? r['sku'] ?? ''}',
+            sku: '${r['sku'] ?? r['item']?['sku'] ?? ''}',
             productName: '${r['item_name'] ?? r['name'] ?? 'Item'}',
             imageUrl: '',
-            openingStock: systemQty,
-            sales: 0,
-            sdds: 0,
+            openingStock: opening,
+            sales: sales,
+            sdds: sdds,
             physicalCount: isSubmittedRow
                 ? _toInt(r['physical_quantity'])
                 : null,
             reason: r['notes'] ?? r['reason_for_variance'],
-            category: '${r['category'] ?? 'Other'}',
+            category: '${r['category'] ?? r['item']?['category'] ?? 'Other'}',
           );
         }).toList();
       }
@@ -337,91 +344,6 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
 
   void clearError() {
     state = state.copyWith(errorMessage: null);
-  }
-
-  String _getBarCategory(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('beer') ||
-        lower.contains('tusker') ||
-        lower.contains('guinness') ||
-        lower.contains('heineken') ||
-        lower.contains('white cap') ||
-        lower.contains('whitecap') ||
-        lower.contains('balozi') ||
-        lower.contains('pilsner') ||
-        lower.contains('summit') ||
-        lower.contains('windhoek') ||
-        lower.contains('black ice') ||
-        lower.contains('savanna') ||
-        lower.contains('guiness')) {
-      return 'BEERS';
-    } else if (lower.contains('wine') ||
-        lower.contains('sweet red') ||
-        lower.contains('sweet white') ||
-        lower.contains('four cousins') ||
-        lower.contains('cellar cask') ||
-        lower.contains('robertson') ||
-        lower.contains('frontera') ||
-        lower.contains('nederburg') ||
-        lower.contains('caprice') ||
-        lower.contains('drostdy') ||
-        lower.contains('chamdor')) {
-      return 'WINES';
-    } else if (lower.contains('whisky') ||
-        lower.contains('whiskey') ||
-        lower.contains('johnnie walker') ||
-        lower.contains('red label') ||
-        lower.contains('black label') ||
-        lower.contains('double black') ||
-        lower.contains('jack daniel') ||
-        lower.contains('jameson') ||
-        lower.contains('glenfiddich') ||
-        lower.contains('chivas') ||
-        lower.contains('ballantines') ||
-        lower.contains('vat 69') ||
-        lower.contains('famous grouse') ||
-        lower.contains('grants') ||
-        lower.contains('viceroy') ||
-        lower.contains('chrome') ||
-        lower.contains('gordons') ||
-        lower.contains('gilbeys') ||
-        lower.contains('tanqueray') ||
-        lower.contains('beefeater') ||
-        lower.contains('hendricks') ||
-        lower.contains('chrome vodka') ||
-        lower.contains('smirnoff') ||
-        lower.contains('absolut') ||
-        lower.contains('captain morgan') ||
-        lower.contains('bacardi') ||
-        lower.contains('rum') ||
-        lower.contains('vodka') ||
-        lower.contains('gin') ||
-        lower.contains('brandy') ||
-        lower.contains('cognac') ||
-        lower.contains('spirit') ||
-        lower.contains('liquer') ||
-        lower.contains('liqueur') ||
-        lower.contains('baileys') ||
-        lower.contains('sheridans') ||
-        lower.contains('amarula') ||
-        lower.contains('jagermeister') ||
-        lower.contains('tequila')) {
-      return 'SPIRITS & LIQUEURS';
-    } else if (lower.contains('soda') ||
-        lower.contains('coke') ||
-        lower.contains('fanta') ||
-        lower.contains('sprite') ||
-        lower.contains('water') ||
-        lower.contains('keringet') ||
-        lower.contains('juice') ||
-        lower.contains('tonic') ||
-        lower.contains('ginger ale') ||
-        lower.contains('soft drink') ||
-        lower.contains('red bull') ||
-        lower.contains('monster')) {
-      return 'SOFT DRINKS & WATER';
-    }
-    return 'OTHER BEVERAGES';
   }
 
   int _toInt(dynamic v) {

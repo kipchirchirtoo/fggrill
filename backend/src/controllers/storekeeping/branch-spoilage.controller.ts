@@ -54,19 +54,35 @@ export const getSpoilageCandidates = async (req: Request, res: Response, next: N
         }
 
         if (area === 'bar') {
-            // Mirrors bar-stocktake.controller.ts's candidate source exactly
-            // (the Bar Stock screen catalog, restaurant_bar_inventory) so the
-            // spoilage item list lines up with the stocktake item list.
+            // Use bar_drinks as the catalog source — matches bar-stocktake.controller.ts exactly.
             const { data: items, error } = await supabase
-                .from('restaurant_bar_inventory')
-                .select('id, item_name, unit, current_bottles, current_stock')
-                .order('item_name');
+                .from('bar_drinks')
+                .select('id, name, unit, inventory_item_id')
+                .eq('branch_id', branchId)
+                .eq('is_active', true)
+                .order('name');
             if (error) throw error;
+
+            // Get current stock from bar_stock
+            const drinkIds = (items || []).map((i: any) => i.id);
+            let stockByDrinkId: Record<string, number> = {};
+            if (drinkIds.length > 0) {
+                const { data: stockRows } = await supabase
+                    .from('bar_stock')
+                    .select('drink_id, current_stock')
+                    .eq('branch_id', branchId)
+                    .in('drink_id', drinkIds);
+                stockByDrinkId = Object.fromEntries(
+                    (stockRows || []).map((r: any) => [String(r.drink_id), Number(r.current_stock ?? 0)])
+                );
+            }
+
             const result = (items || []).map((i: any) => ({
-                id: i.id,
-                name: i.item_name,
+                id: i.inventory_item_id || i.id,  // prefer inventory_items UUID for FK
+                drink_id: i.id,
+                name: i.name,
                 unit: i.unit || 'bottle',
-                quantity: num(i.current_bottles ?? i.current_stock),
+                quantity: stockByDrinkId[String(i.id)] ?? 0,
             }));
             res.status(200).json({ success: true, data: result });
             return;

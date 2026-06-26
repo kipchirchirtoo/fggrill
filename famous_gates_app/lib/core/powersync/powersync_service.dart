@@ -179,6 +179,81 @@ class PowerSyncService {
     );
   }
 
+  /// Live stream of unpaid POS orders for the cashier station. Updates
+  /// instantly via PowerSync whenever a waiter creates or updates an order.
+  Stream<List<Map<String, dynamic>>> watchUnpaidOrders({
+    String? search,
+    String? date,
+    String? outletId,
+  }) async* {
+    final branchId = await _currentBranchId();
+    if (branchId == null || !hotReadsEnabled) {
+      yield const [];
+      return;
+    }
+
+    final conditions = <String>["o.payment_status NOT IN ('paid','voided')", 'o.branch_id = ?'];
+    final params = <Object?>[branchId];
+
+    if (outletId != null && outletId.isNotEmpty) {
+      conditions.add('o.outlet_id = ?');
+      params.add(outletId);
+    }
+
+    if (date != null && date.isNotEmpty) {
+      conditions.add("date(o.created_at) = date(?)");
+      params.add(date);
+    }
+
+    if (search != null && search.trim().isNotEmpty) {
+      conditions.add(
+        "(LOWER(o.order_number) LIKE ? OR LOWER(o.customer_name) LIKE ? OR LOWER(o.table_number) LIKE ?)",
+      );
+      final pat = '%${search.trim().toLowerCase()}%';
+      params.addAll([pat, pat, pat]);
+    }
+
+    final where = conditions.join(' AND ');
+
+    yield* _watchAll(
+      '''
+      SELECT
+        o.*,
+        p.name   AS outlet_name,
+        p.outlet_type AS outlet_type
+      FROM pos_shift_orders o
+      LEFT JOIN pos_outlets p ON p.id = o.outlet_id
+      WHERE $where
+      ORDER BY o.created_at DESC
+      ''',
+      params,
+      jsonColumns: const ['items'],
+    );
+  }
+
+  /// Live running tally for the cashier's shift-clearance screen. Aggregates
+  /// totals per payment method and voids directly from local SQLite so the
+  /// screen loads instantly without an API round-trip.
+  Stream<Map<String, dynamic>> watchCashierShiftTally(String shiftId) async* {
+    if (!hotReadsEnabled) {
+      yield const {};
+      return;
+    }
+    yield* _watchAll(
+      '''
+      SELECT
+        COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_amount ELSE 0 END), 0)   AS total_collected,
+        COALESCE(SUM(CASE WHEN payment_status NOT IN ('paid','voided') THEN total_amount ELSE 0 END), 0) AS total_unpaid,
+        COUNT(CASE WHEN payment_status = 'paid'   THEN 1 END)                              AS paid_count,
+        COUNT(CASE WHEN payment_status NOT IN ('paid','voided') THEN 1 END)                AS unpaid_count,
+        COUNT(CASE WHEN payment_status = 'voided' THEN 1 END)                              AS void_count
+      FROM pos_shift_orders
+      WHERE shift_id = ?
+      ''',
+      [shiftId],
+    ).map((rows) => rows.isNotEmpty ? rows.first : <String, dynamic>{});
+  }
+
   Future<List<Map<String, dynamic>>> getPendingExchangesCashier() async {
     final userId = await _currentUserId();
     if (userId == null || userId.isEmpty) return const [];
@@ -362,6 +437,20 @@ class PowerSyncService {
     final rows = await database.getAll(sql, parameters);
     return _rowsToMaps(rows);
   }
+
+  /// Public version of [_getAll] for use by external repository classes.
+  Future<List<Map<String, dynamic>>> getAll(
+    String sql, [
+    List<Object?> parameters = const [],
+  ]) =>
+      _getAll(sql, parameters);
+
+  /// Public version of [_watchAll] for use by external repository classes.
+  Stream<List<Map<String, dynamic>>> watchAll(
+    String sql, [
+    List<Object?> parameters = const [],
+  ]) =>
+      _watchAll(sql, parameters);
 
   Future<Map<String, dynamic>?> _getOptional(
     String sql, [

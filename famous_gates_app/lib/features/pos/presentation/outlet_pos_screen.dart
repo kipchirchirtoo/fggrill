@@ -8,6 +8,9 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../templates/data/document_printer.dart';
+import '../../../core/realtime/realtime_service.dart';
+import '../../../core/storage/secure_storage_provider.dart';
+import '../../auth/data/auth_repository.dart';
 import '../data/outlet_pos_repository.dart';
 import '../domain/models.dart';
 
@@ -68,6 +71,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   bool _busy = false;
   String? _error;
   Timer? _sessionTimeoutTimer;
+  bool _printBillImmediately = true;
 
   @override
   void initState() {
@@ -106,8 +110,15 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         );
       }
       final snapshot = await _fetchOutletState(repo, outlet);
+      final storage = ref.read(secureStorageProvider);
+      final printImmediatelyStr = await storage.read(key: 'print_bill_immediately');
       if (!mounted) return;
       setState(() {
+        if (printImmediatelyStr != null) {
+          _printBillImmediately = printImmediatelyStr == 'true';
+        } else {
+          _printBillImmediately = true;
+        }
         _stationOutlets = stationOutlets;
         _outlet = outlet;
         _shift = snapshot.shift;
@@ -127,6 +138,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _setPrintBillImmediately(bool value) async {
+    setState(() {
+      _printBillImmediately = value;
+    });
+    final storage = ref.read(secureStorageProvider);
+    await storage.write(key: 'print_bill_immediately', value: value.toString());
   }
 
   List<PosOutlet> _normaliseStationOutlets(List<PosOutlet> outlets) {
@@ -341,7 +360,21 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                     tooltip: 'Refresh',
                     icon: const Icon(Icons.refresh),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.print_outlined, size: 20),
+                      const SizedBox(width: 4),
+                      const Text('Auto-print Bill', style: TextStyle(fontSize: 13)),
+                      const SizedBox(width: 4),
+                      Switch(
+                        value: _printBillImmediately,
+                        onChanged: (val) => _setPrintBillImmediately(val),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
                   SegmentedButton<bool>(
                     segments: const [
                       ButtonSegment(
@@ -800,24 +833,26 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               roomNumber: _roomController.text.trim(),
               appendItems: true,
             );
-      if (recalled == null) {
-        if (_isRestaurant) {
-          // Restaurant new order: print the customer bill only.
-          // The captain order goes to the KDS which polls every 5 s and
-          // prints it on the kitchen printer — printing it here too would
-          // send a duplicate to the waiter's own station printer.
-          await _printCaptainOrderReceipt(order);
+      if (_printBillImmediately) {
+        if (recalled == null) {
+          if (_isRestaurant) {
+            // Restaurant new order: print the customer bill only.
+            // The captain order goes to the KDS which polls every 5 s and
+            // prints it on the kitchen printer — printing it here too would
+            // send a duplicate to the waiter's own station printer.
+            await _printCaptainOrderReceipt(order);
+          } else {
+            // Bar / non-restaurant new order: print customer bill immediately.
+            // Captain orders for these outlets are delivered to the cashier
+            // station feed separately — but the customer still needs a bill.
+            await _printCustomerBillFromSavedOrder(order);
+          }
         } else {
-          // Bar / non-restaurant new order: print customer bill immediately.
-          // Captain orders for these outlets are delivered to the cashier
-          // station feed separately — but the customer still needs a bill.
+          // Recall: the customer bill always prints locally from the desktop app
+          // using the fully merged order returned by updateOrder.
+          // The recalled captain order is picked up by the KDS poll automatically.
           await _printCustomerBillFromSavedOrder(order);
         }
-      } else {
-        // Recall: the customer bill always prints locally from the desktop app
-        // using the fully merged order returned by updateOrder.
-        // The recalled captain order is picked up by the KDS poll automatically.
-        await _printCustomerBillFromSavedOrder(order);
       }
       _cart = [];
       _recalledOrder = null;
@@ -969,6 +1004,10 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       builder: (context) => _BillDetailSheet(
         order: order,
         shiftId: _shift!.id,
+        onPrintOriginal: () {
+          Navigator.of(context).pop();
+          _printOriginalBill(order);
+        },
         onPrintDuplicate: () {
           Navigator.of(context).pop();
           _reprintBill(order);
@@ -1005,6 +1044,56 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         qty: activeQty.round(),
       );
     }).whereType<CartItem>().toList();
+  }
+
+  Future<void> _printOriginalBill(OutletShiftOrder order) async {
+    OutletShiftOrder? updatedOrder;
+    try {
+      updatedOrder = await ref.read(outletPosRepositoryProvider).markOriginalBillPrinted(
+            shiftId: _shift!.id,
+            orderId: order.id,
+          );
+    } on StateError catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(content: Text(error.message)),
+        );
+      }
+      return;
+    } catch (error) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(content: Text('Could not mark bill as printed: $error')),
+        );
+      }
+      return;
+    }
+
+    try {
+      await _printCustomerBillFromSavedOrder(
+        updatedOrder,
+        fallbackTitle: 'CUSTOMER BILL',
+        itemsOverride: _activeBillItems(updatedOrder),
+      );
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(content: Text('Original bill printed')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+    } finally {
+      final repo = ref.read(outletPosRepositoryProvider);
+      try {
+        final refreshed = await repo.getOrders(_shift!.id);
+        if (mounted) setState(() => _orders = refreshed);
+      } catch (_) {
+        // Best-effort refresh
+      }
+    }
   }
 
   Future<void> _printUpdatedBill(OutletShiftOrder order) async {
@@ -1912,12 +2001,14 @@ class _BillDetailSheet extends ConsumerStatefulWidget {
   const _BillDetailSheet({
     required this.order,
     required this.shiftId,
+    required this.onPrintOriginal,
     required this.onPrintDuplicate,
     required this.onPrintUpdated,
   });
 
   final OutletShiftOrder order;
   final String shiftId;
+  final VoidCallback onPrintOriginal;
   final VoidCallback onPrintDuplicate;
   final VoidCallback onPrintUpdated;
 
@@ -1926,11 +2017,11 @@ class _BillDetailSheet extends ConsumerStatefulWidget {
 }
 
 class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
-  static const _pollInterval = Duration(seconds: 6);
-
   late OutletShiftOrder _order;
   List<ItemVoidRequest> _voidRequests = const [];
   bool _actioning = false;
+  StreamSubscription<VoidRequestRealtimeEvent>? _realtimeSub;
+  // Fallback timer when Realtime is unavailable.
   Timer? _pollTimer;
 
   @override
@@ -1938,11 +2029,43 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
     super.initState();
     _order = widget.order;
     _poll();
-    _pollTimer = Timer.periodic(_pollInterval, (_) => _poll());
+    _initRealtime();
+  }
+
+  Future<void> _initRealtime() async {
+    final storage = ref.read(secureStorageProvider);
+    final branchIdStr =
+        await storage.read(key: AuthRepository.branchIdKey) ?? '';
+    final branchId = int.tryParse(branchIdStr.trim());
+
+    if (branchId == null) {
+      _startFallbackPolling();
+      return;
+    }
+
+    final realtimeService = ref.read(realtimeServiceProvider);
+    _realtimeSub = realtimeService.watchVoidRequests(branchId).listen(
+      (event) {
+        // Only refresh if the event concerns this order.
+        if (event.orderId == _order.id || event.orderId.isEmpty) {
+          _poll();
+        }
+      },
+      onError: (Object err) {
+        debugPrint('❌ BillDetailSheet Realtime error: $err — falling back to polling');
+        _startFallbackPolling();
+      },
+    );
+  }
+
+  void _startFallbackPolling() {
+    if (_pollTimer != null) return;
+    _pollTimer = Timer.periodic(const Duration(seconds: 6), (_) => _poll());
   }
 
   @override
   void dispose() {
+    _realtimeSub?.cancel();
     _pollTimer?.cancel();
     super.dispose();
   }
@@ -2150,7 +2273,9 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final order = _order;
-    final canPrint = order.paymentStatus == 'unpaid' && order.canReprintBill;
+    final isOriginalUnprinted = order.originalBillPrintedAt == null;
+    final canPrintOriginal = order.paymentStatus == 'unpaid';
+    final canPrintDuplicate = order.paymentStatus == 'unpaid' && order.canReprintBill;
     final pendingTotal = _voidRequests
         .where((r) => r.isPending || r.isAcknowledged)
         .fold<double>(0, (sum, r) => sum + r.amount);
@@ -2366,13 +2491,17 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: canPrint ? widget.onPrintDuplicate : null,
+                onPressed: isOriginalUnprinted
+                    ? (canPrintOriginal ? widget.onPrintOriginal : null)
+                    : (canPrintDuplicate ? widget.onPrintDuplicate : null),
                 icon: const Icon(Icons.print_outlined),
-                label: Text(canPrint
-                    ? 'Print duplicate bill'
-                    : order.canReprintBill
-                        ? 'Bill must be unpaid to print'
-                        : 'Duplicate already printed'),
+                label: Text(isOriginalUnprinted
+                    ? (canPrintOriginal ? 'Print Customer Bill' : 'Bill must be unpaid to print')
+                    : (canPrintDuplicate
+                        ? 'Print duplicate bill'
+                        : order.canReprintBill
+                            ? 'Bill must be unpaid to print'
+                            : 'Duplicate already printed')),
               ),
             ),
             if (_hasApprovedVoid) ...[

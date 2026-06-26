@@ -5,7 +5,19 @@ import '../models/stock_take_item.dart';
 import 'editable_cell.dart';
 import 'variance_badge.dart';
 
-class StockTable extends StatelessWidget {
+// ── Excel-style constants ─────────────────────────────────────────────────────
+const _kHeaderBg    = Color(0xFF217346); // Excel green header
+const _kHeaderText  = Colors.white;
+const _kCatBg       = Color(0xFFE8F5E9); // light-green category band
+const _kCatBgDark   = Color(0xFF1B3A2A);
+const _kEvenRow     = Color(0xFFF9F9F9);
+const _kOddRow      = Colors.white;
+const _kGridLine    = Color(0xFFD0D0D0);
+const _kFontSz      = 11.0;  // cell body text
+const _kHdrFontSz   = 10.5;  // header text
+const _kRowH        = 36.0;  // row height — enough for two-line product cell
+
+class StockTable extends StatefulWidget {
   final List<StockTakeItem> items;
   final bool isReadOnly;
   final ValueChanged2<String, int?> onPhysicalCountChanged;
@@ -20,242 +32,311 @@ class StockTable extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+  State<StockTable> createState() => _StockTableState();
+}
 
-    final reasonsList = [
-      'Damaged',
-      'Expired',
-      'Theft',
-      'Supplier Error',
-      'Counting Error',
-      'Transfer',
-      'Adjustment',
-      'Other'
+class _StockTableState extends State<StockTable> {
+  List<FocusNode> _focusNodes = [];
+  int _lastItemCount = 0;
+
+  void _ensureFocusNodes(int count) {
+    if (count == _lastItemCount) return;
+    for (final fn in _focusNodes) fn.dispose();
+    _focusNodes = List.generate(count, (_) => FocusNode());
+    _lastItemCount = count;
+  }
+
+  @override
+  void dispose() {
+    for (final fn in _focusNodes) fn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    const reasonsList = [
+      'Damaged', 'Expired', 'Theft', 'Supplier Error',
+      'Counting Error', 'Transfer', 'Adjustment', 'Other',
     ];
 
-    if (items.isEmpty) {
+    if (widget.items.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade400),
-              const SizedBox(height: 16),
-              Text(
-                'No products match your search or filters.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.table_chart_outlined, size: 48,
+                color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text('No items found',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+          ],
         ),
       );
     }
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      color: isDark ? theme.colorScheme.surface : Colors.white,
-      child: Container(
-        height: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: DataTable2(
-          columnSpacing: 12,
-          horizontalMargin: 12,
-          minWidth: 1200,
-          fixedTopRows: 1,
-          fixedLeftColumns: 2, // Sticky index + Product columns
-          headingRowColor: WidgetStateProperty.resolveWith(
-            (states) => const Color(0xFF1565C0), // Material 3 blue AppBar style
-          ),
-          headingTextStyle: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-          ),
-          border: TableBorder(
-            horizontalInside: BorderSide(color: Colors.grey.shade300, width: 1),
-            verticalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-            bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-          ),
-          columns: const [
-            DataColumn2(label: Text('#'), size: ColumnSize.S, numeric: true),
-            DataColumn2(label: Text('Product'), size: ColumnSize.L),
-            DataColumn2(label: Text('Opening Stock'), size: ColumnSize.S, numeric: true),
-            DataColumn2(label: Text('Sales'), size: ColumnSize.S, numeric: true),
-            DataColumn2(label: Text('SDDS'), size: ColumnSize.S, numeric: true),
-            DataColumn2(label: Text('Closing Stock (Auto)'), size: ColumnSize.M, numeric: true),
-            DataColumn2(label: Text('Physical Count (Editable)'), size: ColumnSize.M, numeric: true),
-            DataColumn2(label: Text('Variance'), size: ColumnSize.S, numeric: true),
-            DataColumn2(label: Text('Reason for Variance'), size: ColumnSize.L),
-          ],
-          rows: List<DataRow2>.generate(items.length, (index) {
-            final item = items[index];
-            final isEven = index % 2 == 0;
-            final rowColor = isEven
-                ? (isDark ? Colors.grey.shade900 : Colors.grey.shade50)
-                : (isDark ? const Color(0xFF0F0F0F) : Colors.white);
-            final varianceVal = item.physicalCount != null ? item.variance : 0;
-            final hasCount = item.physicalCount != null;
-            final isVarianceNonZero = hasCount && varianceVal != 0;
+    final sorted = List<StockTakeItem>.from(widget.items)
+      ..sort((a, b) {
+        if (a.category != b.category) return a.category.compareTo(b.category);
+        return a.productName.compareTo(b.productName);
+      });
 
-            return DataRow2(
-              key: ValueKey(item.id),
-              color: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.hovered)) {
-                  return isDark ? Colors.grey.shade800 : const Color(0xFFE3F2FD); // Hover color
-                }
-                return rowColor;
-              }),
-              cells: [
-                // 1. Index
-                DataCell(
-                  Text(
-                    '${index + 1}',
-                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
-                  ),
+    _ensureFocusNodes(sorted.length);
+
+    final rows = <DataRow2>[];
+    String? lastCat;
+    int rowNum = 1;
+    int fi = 0;
+
+    for (int i = 0; i < sorted.length; i++) {
+      final item = sorted[i];
+
+      // ── Category header row ──────────────────────────────────────────────
+      if (lastCat != item.category) {
+        lastCat = item.category;
+        rows.add(DataRow2(
+          key: ValueKey('cat_$i'),
+          color: WidgetStateProperty.all(
+              isDark ? _kCatBgDark : _kCatBg),
+          cells: [
+            const DataCell(SizedBox.shrink()),
+            DataCell(Row(children: [
+              Icon(Icons.label_outline,
+                  size: 11,
+                  color: isDark ? Colors.green.shade300 : const Color(0xFF217346)),
+              const SizedBox(width: 4),
+              Text(
+                item.category.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: isDark
+                      ? Colors.green.shade300
+                      : const Color(0xFF1A5C38),
                 ),
-                // 2. Product Name, SKU, Image
-                DataCell(
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: item.imageUrl.isNotEmpty
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Image.network(
-                                    item.imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (c, e, s) =>
-                                        const Icon(Icons.image_outlined, size: 16, color: Colors.grey),
-                                  ),
-                                )
-                              : const Icon(Icons.image_outlined, size: 16, color: Colors.grey),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                item.productName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                              ),
-                              const SizedBox(height: 1),
-                              Text(
-                                item.sku,
-                                style: TextStyle(
-                                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+              ),
+            ])),
+            for (int _ = 0; _ < 7; _++) const DataCell(SizedBox.shrink()),
+          ],
+        ));
+      }
+
+      // ── Data row ─────────────────────────────────────────────────────────
+      final idx      = rowNum++;
+      final isEven   = idx % 2 == 0;
+      final bgColor  = isEven
+          ? (isDark ? const Color(0xFF1A1A1A) : _kEvenRow)
+          : (isDark ? const Color(0xFF111111) : _kOddRow);
+      final variance = item.physicalCount != null ? item.variance : 0;
+      final hasCount = item.physicalCount != null;
+      final hasVar   = hasCount && variance != 0;
+
+      rows.add(DataRow2(
+        key: ValueKey(item.id),
+        specificRowHeight: _kRowH,
+        color: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered)) {
+            return isDark
+                ? Colors.green.shade900.withOpacity(0.3)
+                : const Color(0xFFE8F5E9);
+          }
+          return bgColor;
+        }),
+        cells: [
+          // # ─────────────────────────────────────────────────────────────
+          DataCell(Text(
+            '$idx',
+            style: TextStyle(
+              fontSize: 9.5,
+              color: Colors.grey.shade500,
+              fontWeight: FontWeight.w600,
+            ),
+          )),
+
+          // Product ─────────────────────────────────────────────────────
+          DataCell(Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.productName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: _kFontSz, fontWeight: FontWeight.w600),
                 ),
-                // 3. Opening Stock
-                DataCell(Text('${item.openingStock}')),
-                // 4. Sales
-                DataCell(Text('${item.sales}')),
-                // 5. SDDS
-                // If sdds is negative (representing additions), we can show it as negative or format it.
-                // But wait! To match the math `Opening Stock - Sales - SDDS = Closing Stock`,
-                // if SDDS is additions, we mapped it as -additions.
-                // Let's display the absolute value of SDDS if it's additions, or let's display the actual value.
-                // Wait! In the Excel mock, SDDS is a positive subtraction (e.g. 5, 2, 10).
-                // So if we mapped additions to SDDS, and additions is +10 (restocks),
-                // then SDDS is -10. But showing -10 in the UI under SDDS might look strange if additions is positive.
-                // If it is bar stocktake, where additions is +10 and sales is 25, then:
-                // Closing = Opening + 10 - 25 = Opening - 25 - (-10).
-                // So SDDS is -10. We can show it as `-10` (or show it as additions).
-                // Let's display `item.sdds` as is.
-                DataCell(Text('${item.sdds}')),
-                // 6. Expected Closing Stock (Auto)
-                DataCell(
-                  Text(
-                    '${item.closingStock}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                // 7. Physical Count (Editable)
-                DataCell(
-                  EditableCell(
-                    value: item.physicalCount,
-                    readOnly: isReadOnly,
-                    onChanged: (val) {
-                      onPhysicalCountChanged(item.id, val);
-                    },
-                  ),
-                ),
-                // 8. Variance
-                DataCell(
-                  VarianceBadge(
-                    variance: varianceVal,
-                    hasCount: hasCount,
-                  ),
-                ),
-                // 9. Reason for Variance
-                DataCell(
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: DropdownButtonFormField<String>(
-                      value: isVarianceNonZero && reasonsList.contains(item.reason)
-                          ? item.reason
-                          : null,
-                      hint: Text(
-                        isReadOnly ? '—' : '— Select reason —',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.textTheme.bodyMedium?.color,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: reasonsList
-                          .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                          .toList(),
-                      onChanged: !isReadOnly && isVarianceNonZero
-                          ? (val) {
-                              onReasonChanged(item.id, val);
-                            }
-                          : null, // Disabled if read-only or variance is 0
-                    ),
-                  ),
+                Text(
+                  item.sku,
+                  style: TextStyle(
+                      fontSize: 8.5,
+                      color: Colors.grey.shade500,
+                      letterSpacing: 0.2),
                 ),
               ],
-            );
-          }),
+            ),
+          )),
+
+          // Opening ─────────────────────────────────────────────────────
+          DataCell(_numCell('${item.openingStock}', isDark)),
+
+          // Sales ───────────────────────────────────────────────────────
+          DataCell(_numCell(
+            item.sales > 0 ? '-${item.sales}' : '${item.sales}',
+            isDark,
+            color: item.sales > 0 ? Colors.red.shade700 : null,
+          )),
+
+          // Adds ────────────────────────────────────────────────────────
+          DataCell(_numCell(
+            item.sdds != 0 ? '+${-item.sdds}' : '0',
+            isDark,
+            color: item.sdds < 0 ? Colors.green.shade700 : null,
+          )),
+
+          // Closing (auto) ──────────────────────────────────────────────
+          DataCell(_numCell(
+            '${item.closingStock}',
+            isDark,
+            bold: true,
+          )),
+
+          // Physical Count ──────────────────────────────────────────────
+          DataCell(EditableCell(
+            value: item.physicalCount,
+            readOnly: widget.isReadOnly,
+            focusNode: _focusNodes[fi],
+            onNext: fi < _focusNodes.length - 1
+                ? () => _focusNodes[fi + 1].requestFocus()
+                : null,
+            onChanged: (val) => widget.onPhysicalCountChanged(item.id, val),
+          )),
+
+          // Variance ────────────────────────────────────────────────────
+          DataCell(VarianceBadge(variance: variance, hasCount: hasCount)),
+
+          // Reason ──────────────────────────────────────────────────────
+          DataCell(_ReasonDropdown(
+            value: hasVar && reasonsList.contains(item.reason)
+                ? item.reason
+                : null,
+            items: reasonsList,
+            enabled: !widget.isReadOnly && hasVar,
+            onChanged: (v) => widget.onReasonChanged(item.id, v),
+          )),
+        ],
+      ));
+      fi++;
+    }
+
+    // ── Table ───────────────────────────────────────────────────────────────
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: _kGridLine, width: 1),
+          borderRadius: BorderRadius.circular(6),
+          color: isDark ? const Color(0xFF111111) : Colors.white,
         ),
+        child: DataTable2(
+          columnSpacing: 8,
+          horizontalMargin: 8,
+          minWidth: 900,
+          dataRowHeight: _kRowH,
+          headingRowHeight: 32,
+          fixedTopRows: 1,
+          fixedLeftColumns: 2,
+          headingRowColor:
+              WidgetStateProperty.all(_kHeaderBg),
+          headingTextStyle: const TextStyle(
+            color: _kHeaderText,
+            fontWeight: FontWeight.w700,
+            fontSize: _kHdrFontSz,
+            letterSpacing: 0.3,
+          ),
+          border: TableBorder(
+            horizontalInside: const BorderSide(color: _kGridLine, width: 0.5),
+            verticalInside: const BorderSide(color: _kGridLine, width: 0.5),
+            top: const BorderSide(color: _kGridLine, width: 0.5),
+            bottom: const BorderSide(color: _kGridLine, width: 0.5),
+          ),
+          columns: const [
+            DataColumn2(label: Text('#'),            size: ColumnSize.S, fixedWidth: 32, numeric: true),
+            DataColumn2(label: Text('Product'),      size: ColumnSize.L),
+            DataColumn2(label: Text('Opening'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
+            DataColumn2(label: Text('Sales'),        size: ColumnSize.S, fixedWidth: 60, numeric: true),
+            DataColumn2(label: Text('Adds'),         size: ColumnSize.S, fixedWidth: 60, numeric: true),
+            DataColumn2(label: Text('Closing'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
+            DataColumn2(label: Text('Count'),        size: ColumnSize.M, fixedWidth: 110),
+            DataColumn2(label: Text('Var'),          size: ColumnSize.S, fixedWidth: 60, numeric: true),
+            DataColumn2(label: Text('Reason'),       size: ColumnSize.L),
+          ],
+          rows: rows,
+        ),
+      ),
+    );
+  }
+
+  Widget _numCell(String text, bool isDark,
+      {Color? color, bool bold = false}) {
+    return Text(
+      text,
+      textAlign: TextAlign.right,
+      style: TextStyle(
+        fontSize: _kFontSz,
+        fontWeight: bold ? FontWeight.w700 : FontWeight.normal,
+        color: color ?? (isDark ? Colors.grey.shade200 : Colors.grey.shade800),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+  }
+}
+
+// ── Compact inline reason dropdown ───────────────────────────────────────────
+class _ReasonDropdown extends StatelessWidget {
+  final String? value;
+  final List<String> items;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  const _ReasonDropdown({
+    required this.value,
+    required this.items,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (!enabled) {
+      return Text(
+        value ?? '—',
+        style: TextStyle(
+            fontSize: 10, color: Colors.grey.shade400),
+      );
+    }
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: value,
+        hint: Text('Select…',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+        style: TextStyle(
+          fontSize: 10,
+          color: isDark ? Colors.grey.shade200 : Colors.grey.shade800,
+        ),
+        isDense: true,
+        iconSize: 14,
+        items: items
+            .map((r) => DropdownMenuItem(
+                value: r,
+                child: Text(r, style: const TextStyle(fontSize: 10))))
+            .toList(),
+        onChanged: onChanged,
       ),
     );
   }

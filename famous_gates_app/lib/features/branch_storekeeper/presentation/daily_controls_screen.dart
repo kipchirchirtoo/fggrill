@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../../../core/constants/api_constants.dart';
-import '../../../core/services/auth_service.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/storage/secure_storage_provider.dart';
+import '../../auth/data/auth_repository.dart';
 
-class DailyControlsScreen extends StatefulWidget {
+class DailyControlsScreen extends ConsumerStatefulWidget {
   const DailyControlsScreen({Key? key, this.initialDate, this.initialShift}) : super(key: key);
 
   final DateTime? initialDate;
   final String? initialShift;
 
   @override
-  _DailyControlsScreenState createState() => _DailyControlsScreenState();
+  ConsumerState<DailyControlsScreen> createState() => _DailyControlsScreenState();
 }
 
-class _DailyControlsScreenState extends State<DailyControlsScreen> {
+class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
   DateTime _selectedDate = DateTime.now();
   String _selectedShift = 'A';
   bool _isLoading = false;
@@ -70,12 +72,13 @@ class _DailyControlsScreenState extends State<DailyControlsScreen> {
     });
 
     try {
-      final token = await AuthService.getToken();
-      final branchId = await AuthService.getBranchId();
+      final storage = ref.read(secureStorageProvider);
+      final token = await storage.read(key: AuthRepository.jwtKey) ?? '';
+      final branchId = await storage.read(key: AuthRepository.branchIdKey) ?? '';
       final dateStr = _selectedDate.toIso8601String().split('T')[0];
 
       final response = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/kitchen/shift-controls/analyze?branch_id=$branchId&shift_date=$dateStr&shift_type=$_selectedShift'),
+        Uri.parse('${AppConfig.mainApiUrl}/kitchen/shift-controls/analyze?branch_id=$branchId&shift_date=$dateStr&shift_type=$_selectedShift'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -339,24 +342,25 @@ class _DailyControlsScreenState extends State<DailyControlsScreen> {
   }
 }
 
-class _CreditBillDialog extends StatefulWidget {
+class _CreditBillDialog extends ConsumerStatefulWidget {
+  const _CreditBillDialog({
+    Key? key,
+    required this.control,
+    required this.date,
+    required this.shiftType,
+    required this.onSuccess,
+  }) : super(key: key);
+
   final Map<String, dynamic> control;
   final DateTime date;
   final String shiftType;
   final VoidCallback onSuccess;
 
-  const _CreditBillDialog({
-    required this.control,
-    required this.date,
-    required this.shiftType,
-    required this.onSuccess,
-  });
-
   @override
-  __CreditBillDialogState createState() => __CreditBillDialogState();
+  ConsumerState<_CreditBillDialog> createState() => __CreditBillDialogState();
 }
 
-class __CreditBillDialogState extends State<_CreditBillDialog> {
+class __CreditBillDialogState extends ConsumerState<_CreditBillDialog> {
   final _amountController = TextEditingController();
   final _reasonController = TextEditingController();
   String? _selectedStaffId;
@@ -367,16 +371,20 @@ class __CreditBillDialogState extends State<_CreditBillDialog> {
   void initState() {
     super.initState();
     _fetchStaff();
-    _reasonController.text = 'Shortage of \${widget.control['variance']} \${widget.control['item_name']} in Kitchen Shift \${widget.shiftType} on \${widget.date.toIso8601String().split('T')[0]}';
+    final variance = widget.control['variance'];
+    final itemName = widget.control['item_name'];
+    final dateStr = widget.date.toIso8601String().split('T')[0];
+    _reasonController.text = 'Shortage of $variance $itemName in Kitchen Shift ${widget.shiftType} on $dateStr';
   }
 
   Future<void> _fetchStaff() async {
     try {
-      final token = await AuthService.getToken();
-      final branchId = await AuthService.getBranchId();
+      final storage = ref.read(secureStorageProvider);
+      final token = await storage.read(key: AuthRepository.jwtKey) ?? '';
+      final branchId = await storage.read(key: AuthRepository.branchIdKey) ?? '';
 
       final response = await http.get(
-        Uri.parse('\${ApiConstants.baseUrl}/hr/staff?branch_id=$branchId'),
+        Uri.parse('${AppConfig.mainApiUrl}/hr/staff?branch_id=$branchId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -394,10 +402,10 @@ class __CreditBillDialogState extends State<_CreditBillDialog> {
     }
   }
 
-  Future<void> _submitBill() async {
-    if (_selectedStaffId == null || _amountController.text.isEmpty) {
+  Future<void> _submitCreditBill() async {
+    if (_selectedStaffId == null || _amountController.text.isEmpty || _reasonController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select staff and enter amount')),
+        const SnackBar(content: Text('Please fill all fields')),
       );
       return;
     }
@@ -407,11 +415,12 @@ class __CreditBillDialogState extends State<_CreditBillDialog> {
     });
 
     try {
-      final token = await AuthService.getToken();
-      final branchId = await AuthService.getBranchId();
+      final storage = ref.read(secureStorageProvider);
+      final token = await storage.read(key: AuthRepository.jwtKey) ?? '';
+      final branchId = await storage.read(key: AuthRepository.branchIdKey) ?? '';
 
       final response = await http.post(
-        Uri.parse('\${ApiConstants.baseUrl}/kitchen/shift-controls/bill-staff'),
+        Uri.parse('${AppConfig.mainApiUrl}/kitchen/shift-controls/bill-staff'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -431,8 +440,9 @@ class __CreditBillDialogState extends State<_CreditBillDialog> {
       if (response.statusCode == 200) {
         widget.onSuccess();
       } else {
+        final message = json.decode(response.body)['message'] ?? response.statusCode;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit bill: \${json.decode(response.body)['message'] ?? response.statusCode}')),
+          SnackBar(content: Text('Failed to submit bill: $message')),
         );
       }
     } catch (e) {
@@ -450,22 +460,27 @@ class __CreditBillDialogState extends State<_CreditBillDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final itemName = widget.control['item_name'];
+    final variance = widget.control['variance'];
+
     return AlertDialog(
       title: const Text('Credit Bill Staff'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Item: \${widget.control['item_name']}'),
-            Text('Shortage: \${widget.control['variance']}', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text('Item: $itemName'),
+            Text('Shortage: $variance', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Select Staff Member'),
               value: _selectedStaffId,
               items: _staffList.map((staff) {
+                final fname = staff['first_name'];
+                final lname = staff['last_name'];
                 return DropdownMenuItem<String>(
                   value: staff['id'].toString(),
-                  child: Text('\${staff['first_name']} \${staff['last_name']}'),
+                  child: Text('$fname $lname'),
                 );
               }).toList(),
               onChanged: (val) {
@@ -500,7 +515,7 @@ class __CreditBillDialogState extends State<_CreditBillDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _isLoading ? null : _submitBill,
+          onPressed: _isLoading ? null : _submitCreditBill,
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
           child: _isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Submit Bill'),
         ),

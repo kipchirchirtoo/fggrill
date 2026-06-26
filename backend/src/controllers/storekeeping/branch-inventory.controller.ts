@@ -251,7 +251,17 @@ export const updateBranchStock = async (
 ): Promise<void> => {
   try {
     const branchId = req.user?.branch_id;
-    const { item_sku, quantity, movement_type, notes, reorder_level } = req.body;
+    const {
+      item_sku,
+      quantity,
+      quantity_change,
+      movement_type,
+      adjustment_type,
+      notes,
+      reorder_level,
+      max_stock_level,
+      storage_location
+    } = req.body;
 
     if (!branchId) {
       res.status(400).json({ success: false, message: 'Branch ID required' });
@@ -263,27 +273,49 @@ export const updateBranchStock = async (
       return;
     }
 
-    // For updateBranchStock, quantity is the NEW quantity if some flag is set, 
-    // or the CHANGE if it's an adjustment.
-    // Based on service: updateBranchStock(..., quantityChange, ...)
-    // Let's assume the frontend sends the change.
+    const normalizedQuantity = Number(quantity_change ?? quantity ?? 0);
+    const normalizedMovementType = String(
+      movement_type ||
+        adjustment_type ||
+        (normalizedQuantity >= 0 ? 'MANUAL_ADJUSTMENT' : 'STOCK_OUT')
+    )
+      .trim()
+      .toUpperCase();
+    const normalizedReorderLevel =
+      reorder_level === undefined || reorder_level === null || reorder_level === ''
+        ? undefined
+        : Number(reorder_level);
+    const normalizedMaxStockLevel =
+      max_stock_level === undefined || max_stock_level === null || max_stock_level === ''
+        ? undefined
+        : Number(max_stock_level);
+    const normalizedNotes = [
+      notes,
+      storage_location ? `Storage location: ${storage_location}` : null
+    ]
+      .filter((value) => value != null && `${value}`.trim().length > 0)
+      .join(' | ');
 
     const result = await BranchInventoryService.updateBranchStock(
       branchId,
       item_sku,
-      quantity || 0,
-      movement_type || 'MANUAL_ADJUSTMENT',
+      normalizedQuantity,
+      normalizedMovementType,
       req.user?.id,
       'MANUAL',
       undefined,
       undefined,
-      notes || 'Manual stock adjustment',
-      reorder_level ? parseInt(reorder_level) : undefined
+      normalizedNotes || 'Manual stock adjustment',
+      Number.isFinite(normalizedReorderLevel) ? normalizedReorderLevel : undefined,
+      Number.isFinite(normalizedMaxStockLevel) ? normalizedMaxStockLevel : undefined
     );
 
     res.status(200).json({
       success: true,
-      message: 'Stock adjusted successfully',
+      message:
+        normalizedMovementType === 'INITIAL_STOCK'
+          ? 'Item registered to branch stock successfully'
+          : 'Stock adjusted successfully',
       data: result
     });
   } catch (error) {

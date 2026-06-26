@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/realtime/realtime_service.dart';
+import '../../../core/storage/secure_storage_provider.dart';
+import '../../auth/data/auth_repository.dart';
 import '../data/repository.dart';
 import 'models.dart';
 
@@ -12,21 +16,64 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
   KdsNotifier(this._ref) : super(const AsyncValue.loading());
 
   final Ref _ref;
-  Timer? _timer;
+  StreamSubscription<OrderItemRealtimeEvent>? _realtimeSub;
+  // Fallback timer used only when Realtime is unavailable.
+  Timer? _fallbackTimer;
 
-  void start() {
-    _fetch();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _fetch());
+  Future<void> start() async {
+    await _fetch();
+    await _subscribeRealtime();
+  }
+
+  Future<void> _subscribeRealtime() async {
+    final storage = _ref.read(secureStorageProvider);
+    final branchIdStr =
+        await storage.read(key: AuthRepository.branchIdKey) ?? '';
+    final branchId = int.tryParse(branchIdStr.trim());
+
+    if (branchId == null) {
+      debugPrint(
+          '⚠️ KdsNotifier: No branchId found — falling back to polling.');
+      _startFallbackPolling();
+      return;
+    }
+
+    final realtimeService = _ref.read(realtimeServiceProvider);
+    final stream = realtimeService.watchOrderItems(branchId);
+
+    _realtimeSub = stream.listen(
+      (event) {
+        debugPrint(
+            '🔴 KDS Realtime event: ${event.eventType} order=${event.orderId} status=${event.status}');
+        // On any change, refresh from server to get full order details.
+        _fetch();
+      },
+      onError: (Object err) {
+        debugPrint('❌ KDS Realtime subscription error: $err');
+        // Fallback gracefully if realtime breaks.
+        _startFallbackPolling();
+      },
+    );
+
+    // Status stream for connection indicator
+    realtimeService.statusStream.listen((status) {
+      debugPrint('🔌 KDS Realtime status: $status');
+    });
+  }
+
+  void _startFallbackPolling() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer =
+        Timer.periodic(const Duration(seconds: 10), (_) => _fetch());
   }
 
   Future<void> _fetch() async {
     try {
       final repo = _ref.read(kitchenRepositoryProvider);
       final orders = await repo.getOrders();
-      state = AsyncValue.data(orders);
+      if (mounted) state = AsyncValue.data(orders);
     } catch (error, stackTrace) {
-      // Always update state with error so UI can show error state
-      state = AsyncValue.error(error, stackTrace);
+      if (mounted) state = AsyncValue.error(error, stackTrace);
     }
   }
 
@@ -99,7 +146,8 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _realtimeSub?.cancel();
+    _fallbackTimer?.cancel();
     super.dispose();
   }
 }

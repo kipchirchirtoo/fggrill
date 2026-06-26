@@ -28,7 +28,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
   String _localSearch = '';
   String _localCategory = 'all';
   String _localLocation = '';
-  String _localDate = '';
+  String _localDate = DateTime.now().toIso8601String().split('T')[0]; // never empty
   bool _filtersInitialized = false;
 
   @override

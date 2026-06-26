@@ -151,37 +151,111 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
             return;
         }
 
-        // 2. No stocktake submitted yet — return store item candidates
-        //    (everything except bar_store), merged with branch_stock quantity.
-        const { data: items, error: itemsErr } = await supabase
-            .from('inventory_items')
-            .select('id, sku, item_name, unit, category, store_type')
-            .not('store_type', 'in', `(${NON_STORE_TYPES.join(',')})`)
-            .eq('is_active', true)
-            .order('item_name');
-        if (itemsErr) throw itemsErr;
-        const itemList = (items || []) as Array<Record<string, any>>;
+        // 2. No stocktake submitted yet — source ONLY from branch_stock for this branch.
+        //    This ensures only items actually received into the branch appear,
+        //    not global/central catalog items. Exclude bar_store items.
+        const { data: branchStockRows, error: bsErr } = await supabase
+            .from('branch_stock')
+            .select('item_sku, quantity')
+            .eq('branch_id', branchId);
+        if (bsErr) throw bsErr;
 
-        const skus = itemList.map((i) => i.sku).filter(Boolean);
-        let stockBySku: Record<string, number> = {};
-        if (skus.length > 0) {
-            const { data: stockRows } = await supabase
-                .from('branch_stock')
-                .select('item_sku, quantity')
-                .eq('branch_id', branchId)
-                .in('item_sku', skus);
-            stockBySku = Object.fromEntries((stockRows || []).map((s: any) => [s.item_sku, num(s.quantity)]));
+        const stockRows = (branchStockRows || []) as Array<{ item_sku: string; quantity: number }>;
+        if (stockRows.length === 0) {
+            res.status(200).json({ success: true, data: [] });
+            return;
         }
 
-        const candidates = itemList.map((item) => ({
-            id: item.id,
-            name: item.item_name,
-            quantity: stockBySku[item.sku] ?? 0,
-            unit: item.unit || 'unit',
-            sku: item.sku,
-            category: item.category || null,
-            store_type: item.store_type,
-        }));
+        const allSkus = stockRows.map((r) => r.item_sku).filter(Boolean);
+        const stockBySkuMap = new Map(stockRows.map((r) => [r.item_sku, num(r.quantity)]));
+
+        // Resolve item details from inventory_items (provides UUID FK for store_stocktake_records)
+        const { data: invItems, error: invErr } = await supabase
+            .from('inventory_items')
+            .select('id, sku, item_name, unit, category, store_type')
+            .in('sku', allSkus);
+        if (invErr) throw invErr;
+
+        // Build map SKU → inventory_items row, excluding bar_store
+        const invMap = new Map(
+            (invItems || [])
+                .filter((i: any) => !NON_STORE_TYPES.includes(i.store_type))
+                .map((i: any) => [i.sku as string, i])
+        );
+
+        // Fallback: for SKUs not in inventory_items, check simple_items
+        const missingSkus = allSkus.filter((sku) => !invMap.has(sku));
+        if (missingSkus.length > 0) {
+            const { data: simpleRows } = await supabase
+                .from('simple_items')
+                .select('sku, item_name, unit, category, store_type')
+                .in('sku', missingSkus)
+                .not('store_type', 'in', `(${NON_STORE_TYPES.join(',')})`);
+            for (const s of (simpleRows || [])) {
+                // No UUID — will be skipped at submit. Listed here for visibility.
+                invMap.set(s.sku, { id: null, ...s });
+            }
+        }
+
+        // 3. Compute today's movements for opening stock, sales, and additions (SDDS)
+        const dayStart = `${rawDate}T00:00:00.000Z`;
+        const dayEnd   = `${rawDate}T23:59:59.999Z`;
+        const resolvedSkus = allSkus.filter((sku) => invMap.has(sku));
+
+        const salesBySku:     Record<string, number> = {};
+        const additionsBySku: Record<string, number> = {};
+
+        if (resolvedSkus.length > 0) {
+            const { data: movRows } = await supabase
+                .from('branch_stock_movements')
+                .select('item_sku, movement_type, quantity')
+                .eq('branch_id', branchId)
+                .in('item_sku', resolvedSkus)
+                .gte('created_at', dayStart)
+                .lte('created_at', dayEnd);
+
+            for (const mv of (movRows || []) as Array<{ item_sku: string; movement_type: string; quantity: number }>) {
+                const sku = mv.item_sku;
+                const qty = Math.abs(num(mv.quantity));
+                const t   = (mv.movement_type || '').toUpperCase();
+                if (['SALE', 'KITCHEN_USE', 'HOUSEKEEPING_USE', 'DAMAGE', 'LOSS',
+                     'TRANSFER_OUT', 'ADJUSTMENT_OUT', 'DISPATCH_OUT', 'ISSUE'].includes(t)) {
+                    salesBySku[sku] = (salesBySku[sku] ?? 0) + qty;
+                } else if (['DISPATCH_RECEIVE', 'PURCHASE', 'ADJUSTMENT_IN',
+                            'TRANSFER_IN', 'RETURN', 'RESTOCK'].includes(t)) {
+                    additionsBySku[sku] = (additionsBySku[sku] ?? 0) + qty;
+                }
+            }
+        }
+
+        // 4. Build candidates — only items with a UUID in inventory_items
+        const candidates = resolvedSkus
+            .map((sku) => {
+                const inv          = invMap.get(sku)!;
+                if (!inv.id) return null; // skip if no UUID FK
+                const currentStock = stockBySkuMap.get(sku) ?? 0;
+                const sales        = salesBySku[sku]        ?? 0;
+                const additions    = additionsBySku[sku]    ?? 0;
+                const opening      = Math.max(0, currentStock + sales - additions);
+                return {
+                    item_id:          inv.id,
+                    id:               inv.id,
+                    sku,
+                    item_name:        inv.item_name || sku,
+                    name:             inv.item_name || sku,
+                    unit:             inv.unit       || 'unit',
+                    category:         inv.category  || 'GENERAL',
+                    store_type:       inv.store_type,
+                    opening_stock:    opening,
+                    sales,
+                    additions,
+                    sdds:             -additions,
+                    system_quantity:  currentStock,
+                    quantity:         currentStock,
+                    physical_quantity: null,
+                };
+            })
+            .filter(Boolean);
 
         res.status(200).json({ success: true, data: candidates });
     } catch (error) {
@@ -265,6 +339,46 @@ export const recordStoreStocktake = async (req: Request, res: Response, next: Ne
 
         // Sync into the unified stock_counts table so the cashier shift gate works.
         await syncStoreStocktakeToStockCounts(branchId, stocktakeDate, 'submitted');
+
+        // Update branch_stock with the physical count so inventory stays live.
+        // Each row: set quantity = physical_quantity, log a STOCKTAKE_ADJUSTMENT movement.
+        const now2 = new Date().toISOString();
+        for (const row of rows as Array<Record<string, any>>) {
+            if (!row) continue;
+            const sku = skuById.get(row.item_id);
+            if (!sku) continue;
+            const physQty = num(row.physical_quantity);
+            const systemQty = num(row.system_quantity);
+
+            // Update branch_stock
+            await supabase
+                .from('branch_stock')
+                .upsert({
+                    branch_id: branchId,
+                    item_sku: sku,
+                    quantity: physQty,
+                    updated_at: now2,
+                }, { onConflict: 'branch_id,item_sku' });
+
+            // Log adjustment movement only when there's a variance
+            const variance = physQty - systemQty;
+            if (variance !== 0) {
+                await supabase
+                    .from('branch_stock_movements')
+                    .insert({
+                        branch_id: branchId,
+                        item_sku: sku,
+                        movement_type: variance > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
+                        quantity: Math.abs(variance),
+                        previous_stock: systemQty,
+                        new_stock: physQty,
+                        reference_type: 'STOCKTAKE',
+                        reference_number: `ST-${stocktakeDate}-${branchId}`,
+                        performed_by: req.user?.id || null,
+                        notes: `Daily store stocktake adjustment ${stocktakeDate}`,
+                    });
+            }
+        }
 
         const result = (data || []).map((r: any) => ({
             ...r,

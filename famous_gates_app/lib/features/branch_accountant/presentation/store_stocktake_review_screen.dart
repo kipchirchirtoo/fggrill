@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
+import '../../branch_storekeeper/stock_take/models/stock_take_item.dart';
+import '../../branch_storekeeper/stock_take/providers/stock_take_provider.dart';
 import '../data/repository.dart';
+import 'stock_take_review_detail_page.dart';
 
 /// Store Stocktake Review — Branch Accountant.
 /// Lists pending store stocktake submissions grouped by date and provides
-/// Review / Approve / Reject actions. Approving one record batch-approves
-/// all records for that date and updates branch_stock quantities.
+/// Review / Approve / Reject actions.
 class StoreStocktakeReviewScreen extends ConsumerStatefulWidget {
   const StoreStocktakeReviewScreen({super.key});
 
@@ -30,34 +31,10 @@ class _StoreStocktakeReviewScreenState
 
   num _num(dynamic v) => v == null ? 0 : (num.tryParse('$v') ?? 0);
 
-  Future<String?> _askNotes(String title, String hint,
-      {bool required = false}) async {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: ctrl,
-          minLines: 2,
-          maxLines: 4,
-          decoration: InputDecoration(labelText: hint),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final text = ctrl.text.trim();
-              if (required && text.isEmpty) return;
-              Navigator.pop(ctx, text);
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
+  num? _nullableNum(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v;
+    return num.tryParse('$v');
   }
 
   Future<void> _runAction(
@@ -74,41 +51,82 @@ class _StoreStocktakeReviewScreenState
       }
     } catch (e) {
       if (mounted) _notify(context, 'Action failed: $e');
+      rethrow;
     } finally {
       if (mounted) setState(() => _busyIds.removeAll(ids));
     }
   }
 
-  Future<void> _review(List<String> ids) async {
-    final notes = await _askNotes('Review Stocktake', 'Notes (optional)');
-    if (notes == null) return;
+  Future<void> _reviewAction(List<String> ids, String? notes) async {
     await _runAction(ids, (r) async {
       for (final id in ids) { await r.reviewStoreStocktake(id, notes: notes); }
     }, 'Stocktake reviewed');
   }
 
-  Future<void> _approve(List<String> ids) async {
-    final notes = await _askNotes('Approve Stocktake', 'Notes (optional)');
-    if (notes == null) return;
-    // Approving the first record batch-approves all (backend handles it)
+  Future<void> _approveAction(List<String> ids, String? notes) async {
     await _runAction(ids, (r) async {
       await r.approveStoreStocktake(ids.first, notes: notes);
     }, 'Stocktake approved — branch stock updated');
   }
 
-  Future<void> _reject(List<String> ids) async {
-    final notes = await _askNotes('Reject Stocktake',
-        'Reason for rejection (required)',
-        required: true);
-    if (notes == null || notes.isEmpty) return;
+  Future<void> _rejectAction(List<String> ids, String notes) async {
     await _runAction(ids, (r) async {
       for (final id in ids) { await r.rejectStoreStocktake(id, notes: notes); }
     }, 'Stocktake rejected');
   }
 
+  void _openReviewDetail(
+    BuildContext context,
+    String date,
+    List<Map<String, dynamic>> rows,
+    List<String> ids,
+  ) async {
+    final stockTakeItems = rows.map((r) {
+      final systemQty = _num(r['system_quantity'] ?? r['quantity'] ?? 0).toInt();
+      final physical = _nullableNum(r['physical_quantity'] ?? r['counted_quantity'] ?? r['actual_quantity'])?.toInt();
+      return StockTakeItem(
+        id: '${r['item_id'] ?? r['id']}',
+        sku: '${r['item']?['sku'] ?? r['sku'] ?? ''}',
+        productName: '${r['item_name'] ?? r['name'] ?? 'Item'}',
+        imageUrl: '',
+        openingStock: systemQty,
+        sales: 0,
+        sdds: 0,
+        physicalCount: physical,
+        reason: r['notes'] ?? r['reason_for_variance'],
+        category: '${r['category'] ?? 'Other'}',
+      );
+    }).toList();
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => StockTakeReviewDetailPage(
+          stockTakeType: StockTakeType.store,
+          title: 'Store Stocktake Review',
+          subtitle: date,
+          items: stockTakeItems,
+          ids: ids,
+          onApprove: (notes) => _approveAction(ids, notes),
+          onReject: (notes) => _rejectAction(ids, notes),
+          onReview: (notes) => _reviewAction(ids, notes),
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text('Store Stocktake Review'),
         actions: [
@@ -140,68 +158,75 @@ class _StoreStocktakeReviewScreenState
               final busy = rows.any((r) => _busyIds.contains('${r['id']}'));
               final shortages = rows.where((r) => _num(r['variance']) < 0);
               final shortageCount = shortages.length;
+
               return Card(
                 margin: const EdgeInsets.only(bottom: 14),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Store — ${entry.key}',
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 4),
-                      Text('${rows.length} items · $shortageCount shortages',
-                          style: TextStyle(
-                              color: shortageCount > 0
-                                  ? Colors.red
-                                  : Colors.green,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13)),
-                      const SizedBox(height: 10),
-                      for (final r in rows)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                  child: Text(
-                                      '${r['item_name'] ?? r['item_id']}',
-                                      style: const TextStyle(fontSize: 13))),
-                              Text(
-                                '${_num(r['variance']) >= 0 ? '+' : ''}${r['variance']}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: _num(r['variance']) < 0
-                                      ? Colors.red
-                                      : Colors.green,
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: busy
+                      ? null
+                      : () => _openReviewDetail(context, entry.key, rows, ids),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Store — ${entry.key}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1565C0).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${rows.length} items',
+                                style: const TextStyle(
+                                  color: Color(0xFF1565C0),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Sys:${r['system_quantity']} Phy:${r['physical_quantity']}',
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.kTextSecondary),
-                              ),
-                            ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '$shortageCount shortages',
+                          style: TextStyle(
+                            color: shortageCount > 0 ? Colors.red : Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
                           ),
                         ),
-                      const SizedBox(height: 12),
-                      Row(children: [
-                        OutlinedButton(
-                            onPressed: busy ? null : () => _reject(ids),
-                            child: const Text('Reject')),
-                        const SizedBox(width: 10),
-                        OutlinedButton(
-                            onPressed: busy ? null : () => _review(ids),
-                            child: const Text('Review')),
-                        const SizedBox(width: 10),
-                        FilledButton(
-                            onPressed: busy ? null : () => _approve(ids),
-                            child: const Text('Approve')),
-                      ]),
-                    ],
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: busy
+                                ? null
+                                : () => _openReviewDetail(context, entry.key, rows, ids),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF1565C0),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.table_chart_outlined, size: 18),
+                            label: const Text(
+                              'Open Excel Review Grid',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );

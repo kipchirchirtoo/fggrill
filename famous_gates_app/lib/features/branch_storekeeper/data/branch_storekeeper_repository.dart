@@ -1066,6 +1066,29 @@ class BranchStorekeeperRepository {
     return file;
   }
 
+  String _csvCell(String value) => '"${value.replaceAll('"', '""')}"';
+
+  /// Generic client-side CSV export for any list of row maps — no backend
+  /// round trip needed. Columns are the union of keys across all rows, in
+  /// first-seen order.
+  Future<File> exportRowsToCsv({
+    required String name,
+    required List<Map<String, dynamic>> rows,
+  }) async {
+    final columns = <String>[];
+    for (final row in rows) {
+      for (final key in row.keys) {
+        if (!columns.contains(key)) columns.add(key);
+      }
+    }
+    final csv = [
+      columns.map(_csvCell).join(','),
+      ...rows.map((row) =>
+          columns.map((key) => _csvCell('${row[key] ?? ''}')).join(',')),
+    ].join('\n');
+    return _saveBytes(csv.codeUnits, '$name.csv');
+  }
+
   String _today() => DateTime.now().toIso8601String().split('T').first;
 
   // ── Outlet Item Control ───────────────────────────────────────────────────
@@ -1095,6 +1118,24 @@ class BranchStorekeeperRepository {
   }
 
   // ── Recipe / Food Control ──────────────────────────────────────────────────
+
+  /// Daily Food Control dashboard: theoretical (BOM) vs actual ingredient
+  /// consumption, kitchen production vs POS sales, and food cost % for a
+  /// single calendar date. See GET /kitchen/daily-control.
+  Future<Map<String, dynamic>> dailyControlData({
+    required String date,
+    String? shift,
+  }) async {
+    final response = await _dio.get(
+      '/kitchen/daily-control',
+      queryParameters: await _branchQuery({
+        'date': date,
+        if (shift != null) 'shift': shift,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
 
   Future<List<Map<String, dynamic>>> getRecipes() async {
     final response = await _dio.get(

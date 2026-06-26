@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/realtime/realtime_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart';
@@ -10,6 +11,7 @@ import '../../../services/print_service.dart';
 import '../../pos/domain/models.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
+import '../domain/providers.dart';
 
 enum KitchenKdsSection { orders, history, analytics, notifications }
 
@@ -25,7 +27,6 @@ class KDSScreen extends ConsumerStatefulWidget {
 class _KDSScreenState extends ConsumerState<KDSScreen> {
   late KitchenKdsSection _section;
   late Future<_KitchenModuleSnapshot> _future;
-  Timer? _timer;
   String _notificationStatus = 'unread';
 
   // Track printed order IDs to avoid duplicate printing
@@ -38,9 +39,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     super.initState();
     _section = widget.initialSection;
     _future = _load();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted && _section == KitchenKdsSection.orders) _refresh();
-    });
+    // No polling timer — KdsNotifier uses Supabase Realtime to trigger
+    // refreshes automatically. The FutureBuilder here handles history,
+    // analytics, and notifications sections only.
   }
 
   @override
@@ -54,7 +55,6 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
     super.dispose();
   }
 
@@ -244,57 +244,76 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         ),
       ],
       onSectionSelected: (section) => setState(() => _section = section),
-      child: FutureBuilder<_KitchenModuleSnapshot>(
-        key: ValueKey('${_section.name}-$_notificationStatus'),
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Padding(
-              padding: EdgeInsets.all(24),
-              child: LoadingSkeleton(type: SkeletonType.list),
-            );
-          }
-          if (snapshot.hasError) {
-            return ErrorState(message: '${snapshot.error}', onRetry: _refresh);
-          }
-          final data = snapshot.data ?? _KitchenModuleSnapshot.empty();
-          switch (_section) {
-            case KitchenKdsSection.orders:
-              return _orders(data);
-            case KitchenKdsSection.history:
-              return _history(data);
-            case KitchenKdsSection.analytics:
-              return _analytics(data);
-            case KitchenKdsSection.notifications:
-              return _notifications(data);
-          }
-        },
-      ),
+      child: _section == KitchenKdsSection.orders
+          // Orders section is driven by kdsOrdersProvider (Realtime-backed)
+          ? _buildOrdersSection()
+          : FutureBuilder<_KitchenModuleSnapshot>(
+              key: ValueKey('${_section.name}-$_notificationStatus'),
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: LoadingSkeleton(type: SkeletonType.list),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return ErrorState(
+                      message: '${snapshot.error}', onRetry: _refresh);
+                }
+                final data = snapshot.data ?? _KitchenModuleSnapshot.empty();
+                switch (_section) {
+                  case KitchenKdsSection.orders:
+                    // Unreachable — orders is handled above
+                    return const SizedBox.shrink();
+                  case KitchenKdsSection.history:
+                    return _history(data);
+                  case KitchenKdsSection.analytics:
+                    return _analytics(data);
+                  case KitchenKdsSection.notifications:
+                    return _notifications(data);
+                }
+              },
+            ),
     );
   }
 
-  Widget _orders(_KitchenModuleSnapshot data) {
+  /// Builds the live orders tab backed by kdsOrdersProvider (Supabase Realtime).
+  Widget _buildOrdersSection() {
+    final kdsAsync = ref.watch(kdsOrdersProvider);
+    return kdsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(24),
+        child: LoadingSkeleton(type: SkeletonType.list),
+      ),
+      error: (err, _) =>
+          ErrorState(message: '$err', onRetry: () => _refresh()),
+      data: (activeOrders) => _orders(activeOrders),
+    );
+  }
+
+  Widget _orders(List<KitchenOrder> activeOrders) {
     // Newest orders first so chefs always see fresh tickets at the top.
-    final orders = [...data.activeOrders]
+    final orders = [...activeOrders]
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final pending = data.activeOrders
+    final pending = activeOrders
         .where(
             (order) => order.status == 'pending' || order.status == 'confirmed')
         .length;
     final preparing =
-        data.activeOrders.where((order) => order.status == 'preparing').length;
+        activeOrders.where((order) => order.status == 'preparing').length;
     final ready =
-        data.activeOrders.where((order) => order.status == 'ready').length;
+        activeOrders.where((order) => order.status == 'ready').length;
     final voidPending =
-        data.activeOrders.where((order) => order.hasPendingVoidRequest).length;
-    final voided = data.activeOrders.where((order) => order.isVoided).length;
-    final avgWait = data.activeOrders.isEmpty
+        activeOrders.where((order) => order.hasPendingVoidRequest).length;
+    final voided = activeOrders.where((order) => order.isVoided).length;
+    final avgWait = activeOrders.isEmpty
         ? 0
-        : (data.activeOrders
+        : (activeOrders
                     .map((order) => order.elapsed.inMinutes)
                     .reduce((a, b) => a + b) /
-                data.activeOrders.length)
+                activeOrders.length)
             .round();
 
     return _Page(
@@ -302,6 +321,8 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       subtitle:
           'Live restaurant order queue from POS. Bar orders are excluded by using restaurant order tables only.',
       actions: [
+        // Realtime live indicator dot
+        const _RealtimeLiveDot(),
         if (voided > 0)
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: AppColors.kError),
@@ -723,7 +744,82 @@ class _KitchenOrderIntelligenceContent extends StatelessWidget {
   }
 }
 
+/// Animated pulsing green dot that indicates Supabase Realtime is active.
+/// Shown in the KDS orders action bar so kitchen staff can tell at a glance
+/// whether the live feed is connected.
+class _RealtimeLiveDot extends StatefulWidget {
+  const _RealtimeLiveDot();
+
+  @override
+  State<_RealtimeLiveDot> createState() => _RealtimeLiveDotState();
+}
+
+class _RealtimeLiveDotState extends State<_RealtimeLiveDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Supabase Realtime: Live',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (_, __) => Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF22C55E).withOpacity(_pulse.value),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF22C55E).withOpacity(_pulse.value * 0.6),
+                    blurRadius: 6,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'LIVE',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF22C55E),
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Page extends StatelessWidget {
+
   const _Page({
     required this.title,
     required this.subtitle,

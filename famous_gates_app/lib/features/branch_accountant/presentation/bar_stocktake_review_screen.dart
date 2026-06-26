@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
+import '../../branch_storekeeper/stock_take/models/stock_take_item.dart';
+import '../../branch_storekeeper/stock_take/providers/stock_take_provider.dart';
 import '../data/repository.dart';
+import 'stock_take_review_detail_page.dart';
 
 /// Bar Stocktake Review — Branch Accountant.
 /// Lists pending bar stocktake submissions grouped by location/date and
@@ -27,57 +29,30 @@ class _BarStocktakeReviewScreenState
 
   void _refresh() => setState(() => _future = _load());
 
-  Future<void> _review(List<String> ids) async {
-    final notes = await _askNotes('Review Stocktake', 'Add review notes (optional)');
-    if (notes == null) return;
+  Future<void> _reviewAction(List<String> ids, String? notes) async {
     await _runAction(ids, (repo) async {
-      for (final id in ids) await repo.reviewBarStocktake(id, notes: notes);
+      for (final id in ids) {
+        await repo.reviewBarStocktake(id, notes: notes);
+      }
     }, 'Stocktake reviewed');
   }
 
-  Future<void> _approve(List<String> ids) async {
-    final notes = await _askNotes('Approve Stocktake', 'Add approval notes (optional)');
-    if (notes == null) return;
+  Future<void> _approveAction(List<String> ids, String? notes) async {
     await _runAction(ids, (repo) async {
-      for (final id in ids) await repo.approveBarStocktake(id, notes: notes);
+      for (final id in ids) {
+        await repo.approveBarStocktake(id, notes: notes);
+      }
     }, 'Stocktake approved');
   }
 
-  Future<void> _reject(List<String> ids) async {
-    final notes = await _askNotes('Reject Stocktake', 'Reason for rejection (required)', required: true);
-    if (notes == null || notes.isEmpty) return;
+  Future<void> _rejectAction(List<String> ids, String notes) async {
     await _runAction(ids, (repo) async {
-      for (final id in ids) await repo.rejectBarStocktake(id, notes: notes);
+      for (final id in ids) {
+        await repo.rejectBarStocktake(id, notes: notes);
+      }
     }, 'Stocktake rejected');
   }
 
-  Future<String?> _askNotes(String title, String hint, {bool required = false}) async {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: ctrl,
-          minLines: 2,
-          maxLines: 4,
-          decoration: InputDecoration(labelText: hint),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final text = ctrl.text.trim();
-              if (required && text.isEmpty) return;
-              Navigator.pop(ctx, text);
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Future<void> _runAction(
     List<String> ids,
@@ -94,14 +69,67 @@ class _BarStocktakeReviewScreenState
       }
     } catch (e) {
       if (mounted) _notify(context, 'Action failed: $e');
+      rethrow;
     } finally {
       if (mounted) setState(() => _busyIds.removeAll(ids));
     }
   }
 
+  void _openReviewDetail(
+    BuildContext context,
+    Map<String, dynamic> first,
+    List<Map<String, dynamic>> rows,
+    List<String> ids,
+  ) async {
+    final stockTakeItems = rows.map((r) {
+      final opening = _num(r['opening_stock'] ?? r['opening'] ?? 0).toInt();
+      final sales = _num(r['sales'] ?? 0).toInt();
+      final additions = _num(r['additions'] ?? 0).toInt();
+      final sdds = -additions;
+      final physical = _nullableNum(r['physical_quantity'] ?? r['counted_quantity'] ?? r['actual_quantity'])?.toInt();
+      return StockTakeItem(
+        id: '${r['item_id'] ?? r['id']}',
+        sku: '${r['item']?['sku'] ?? r['sku'] ?? ''}',
+        productName: '${r['item_name'] ?? r['name'] ?? 'Item'}',
+        imageUrl: '',
+        openingStock: opening,
+        sales: sales,
+        sdds: sdds,
+        physicalCount: physical,
+        reason: r['reason_for_variance'] ?? r['notes'],
+        category: getBarCategory('${r['item_name'] ?? r['name'] ?? 'Item'}'),
+      );
+    }).toList();
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) => StockTakeReviewDetailPage(
+          stockTakeType: StockTakeType.bar,
+          title: '${_locationLabel(first['bar_location'])} Review',
+          subtitle: '${first['stocktake_date']}',
+          items: stockTakeItems,
+          ids: ids,
+          onApprove: (notes) => _approveAction(ids, notes),
+          onReject: (notes) => _rejectAction(ids, notes),
+          onReview: (notes) => _reviewAction(ids, notes),
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text('Bar Stocktake Review'),
         actions: [
@@ -134,86 +162,75 @@ class _BarStocktakeReviewScreenState
                   .where((r) => _num(r['variance']) < 0)
                   .fold<num>(0, (sum, r) => sum + _num(r['variance']).abs());
               final busy = rows.any((r) => _busyIds.contains('${r['id']}'));
+
               return Card(
                 margin: const EdgeInsets.only(bottom: 14),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${_locationLabel(first['bar_location'])} — ${first['stocktake_date']}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Shortage value: KES ${negativeVariance.toStringAsFixed(2)}',
-                          style: TextStyle(
-                              color: negativeVariance > 0
-                                  ? Colors.red
-                                  : Colors.green,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 10),
-                      for (final r in rows)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                      child: Text('${r['item_name'] ?? r['item_id']}',
-                                          style: const TextStyle(fontWeight: FontWeight.w600))),
-                                  Text(
-                                    '${_num(r['variance']) >= 0 ? '+' : ''}${r['variance']}',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                      color: _num(r['variance']) < 0
-                                          ? Colors.red
-                                          : Colors.green,
-                                    ),
-                                  ),
-                                ],
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: busy
+                      ? null
+                      : () => _openReviewDetail(context, first, rows, ids),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${_locationLabel(first['bar_location'])} — ${first['stocktake_date']}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1565C0).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              Text(
-                                'Open: ${r['opening_stock'] ?? 0} · Add: ${r['additions'] ?? 0} · '
-                                'Sales: ${r['sales'] ?? 0} · Sys: ${r['system_quantity']} · Phys: ${r['physical_quantity']}',
+                              child: Text(
+                                '${rows.length} items',
                                 style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.kTextSecondary),
-                              ),
-                              if ((r['reason_for_variance'] ?? '').toString().isNotEmpty)
-                                Text(
-                                  'Reason: ${r['reason_for_variance']}',
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      fontStyle: FontStyle.italic,
-                                      color: AppColors.kTextSecondary),
+                                  color: Color(0xFF1565C0),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
                                 ),
-                            ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Shortage value: KES ${negativeVariance.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: negativeVariance > 0 ? Colors.red : Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
                           ),
                         ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          OutlinedButton(
-                            onPressed: busy ? null : () => _reject(ids),
-                            child: const Text('Reject'),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: busy
+                                ? null
+                                : () => _openReviewDetail(context, first, rows, ids),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF1565C0),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.table_chart_outlined, size: 18),
+                            label: const Text(
+                              'Open Excel Review Grid',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
-                          const SizedBox(width: 10),
-                          OutlinedButton(
-                            onPressed: busy ? null : () => _review(ids),
-                            child: const Text('Review'),
-                          ),
-                          const SizedBox(width: 10),
-                          FilledButton(
-                            onPressed: busy ? null : () => _approve(ids),
-                            child: const Text('Approve'),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -236,46 +253,12 @@ String _locationLabel(dynamic key) {
   }
 }
 
-String _itemLabel(Map<String, dynamic> row) {
-  final item = row['item'];
-  final nestedName =
-      item is Map ? item['name'] : item is Map<dynamic, dynamic> ? item['name'] : null;
-  final value = row['item_name'] ?? row['name'] ?? nestedName ?? row['item_id'];
-  return '${value ?? 'Unknown item'}';
-}
-
-num? _systemQuantity(Map<String, dynamic> row) {
-  return _nullableNum(
-    row['system_quantity'] ?? row['system_closing_stock'] ?? row['closing_balance'],
-  );
-}
-
-num? _physicalQuantity(Map<String, dynamic> row) {
-  return _nullableNum(
-    row['physical_quantity'] ?? row['counted_quantity'] ?? row['actual_quantity'],
-  );
-}
-
-num _variance(Map<String, dynamic> row) {
-  final stored = _nullableNum(row['variance']);
-  if (stored != null) return stored;
-  final system = _systemQuantity(row);
-  final physical = _physicalQuantity(row);
-  if (system != null && physical != null) return physical - system;
-  return 0;
-}
-
 num _num(dynamic v) => v is num ? v : num.tryParse('${v ?? 0}') ?? 0;
 
 num? _nullableNum(dynamic v) {
   if (v == null) return null;
   if (v is num) return v;
   return num.tryParse('$v');
-}
-
-String _displayQty(num? value) {
-  if (value == null) return '-';
-  return value == value.roundToDouble() ? value.toInt().toString() : '$value';
 }
 
 void _notify(BuildContext context, String message) {

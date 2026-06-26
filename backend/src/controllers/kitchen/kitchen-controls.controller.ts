@@ -114,38 +114,34 @@ export const analyzeShiftControls = async (req: Request, res: Response, next: Ne
     // If shift_type is A (Morning), maybe 6am to 6pm. B (Night) 6pm to 6am.
     // However, kitchen_production_sessions explicitly have 'shift_type'.
     
-    // First, fetch kitchen sessions for this branch, date, shift_type
+    // First, fetch kitchen sessions for this branch, date, shift_type.
+    // NOTE: this previously embedded a "kitchen_session_closing_stock" relation
+    // that does not exist as a table in the live schema (confirmed via
+    // PostgREST: PGRST205 "Could not find the table") — every call to this
+    // endpoint was throwing before reaching any response. There is no
+    // closing-stock tracking table at all today, so actual usage is simply
+    // the sum of kitchen_session_issues (items given to kitchen), matching
+    // the comment below.
     const { data: kitchenSessions, error: ksErr } = await supabase
       .from('kitchen_production_sessions')
-      .select('id, session_number, status, closing_stock:kitchen_session_closing_stock(*), issues:kitchen_session_issues(*)')
+      .select('id, session_number, status, issues:kitchen_session_issues(*)')
       .eq('branch_id', branch_id)
       .eq('session_date', shift_date)
       .eq('shift_type', shift_type);
 
     if (ksErr) throw ksErr;
 
-    // Actual usage logic: Opening stock is tracked where? 
-    // Usually kitchen sessions don't explicitly store opening stock unless it's in kitchen_session_issues or from the previous closing stock.
-    // However, the prompt says "KITCHEN ADDDITIONSS ARE TRACKED AS PER THE KITCHEN SHIFT THEY ARE A OR B AND ARE TRACKED AS ITEMSS GIVEN TO KITCHEN"
-    // So "kitchen_session_issues" = items given to kitchen.
-    // Let's sum up the items given to kitchen during this session.
+    // "kitchen_session_issues" = items given to kitchen for this session.
     const actualUsageMap: Record<string, number> = {};
 
     let kitchen_session_id = null;
-    
+
     if (kitchenSessions && kitchenSessions.length > 0) {
       kitchen_session_id = kitchenSessions[0].id;
-      // Add up issues (additions to kitchen)
       kitchenSessions.forEach(session => {
-        session.issues?.forEach((issue: { item_name: string; quantity: number }) => {
+        session.issues?.forEach((issue: { item_name: string; quantity_issued: number }) => {
           const parent = issue.item_name;
-          actualUsageMap[parent] = (actualUsageMap[parent] || 0) + Number(issue.quantity || 0);
-        });
-        
-        // Subtract closing stock (what was left over)
-        session.closing_stock?.forEach((closing: { item_name: string; actual_quantity?: number; expected_quantity?: number }) => {
-           const parent = closing.item_name;
-           actualUsageMap[parent] = (actualUsageMap[parent] || 0) - Number(closing.actual_quantity || closing.expected_quantity || 0);
+          actualUsageMap[parent] = (actualUsageMap[parent] || 0) + Number(issue.quantity_issued || 0);
         });
       });
     }
@@ -360,6 +356,384 @@ export const billStaffForShortage = async (req: Request, res: Response, next: Ne
       success: true,
       message: 'Staff billed successfully',
       data: bill
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =====================================================
+// DAILY FOOD CONTROL DASHBOARD
+// Theoretical (BOM) vs actual ingredient consumption, kitchen production vs
+// POS sales, and food cost % — all scoped by branch_id + a single calendar
+// date (not the A/B shift split used by analyzeShiftControls above).
+// =====================================================
+
+const DEFAULT_FOOD_COST_TARGET_PERCENT = 30;
+const VARIANCE_TOLERANCE_GREEN_PCT = 5;
+const VARIANCE_TOLERANCE_ORANGE_PCT = 15;
+
+const normalizeItemName = (value: string): string =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+// Sold menu-item names rarely match recipe names exactly (e.g. recipe
+// "Samosa (Standard Yield)" vs the POS item "Samosa") — same fuzzy
+// resolution philosophy already used for catalog/SKU matching on the
+// branch storekeeper PO and stock-request screens.
+const findRecipeForSoldItem = <T extends { menu_item_name: string }>(
+  soldName: string,
+  recipes: T[]
+): T | null => {
+  const normalizedSold = normalizeItemName(soldName);
+  if (!normalizedSold) return null;
+  for (const recipe of recipes) {
+    if (normalizeItemName(recipe.menu_item_name) === normalizedSold) return recipe;
+  }
+  for (const recipe of recipes) {
+    const normalizedRecipe = normalizeItemName(recipe.menu_item_name);
+    if (normalizedRecipe.includes(normalizedSold) || normalizedSold.includes(normalizedRecipe)) {
+      return recipe;
+    }
+  }
+  return null;
+};
+
+const varianceFlag = (varianceQty: number, theoreticalQty: number): 'green' | 'orange' | 'red' => {
+  if (theoreticalQty <= 0) return varianceQty > 0 ? 'red' : 'green';
+  const pct = Math.abs((varianceQty / theoreticalQty) * 100);
+  if (pct <= VARIANCE_TOLERANCE_GREEN_PCT) return 'green';
+  if (pct <= VARIANCE_TOLERANCE_ORANGE_PCT) return 'orange';
+  return 'red';
+};
+
+// GET /api/kitchen/daily-control?branch_id=&date=&shift=
+// shift is optional: 'A' filters 06:00-18:00, 'B' filters 18:00-06:00 next day.
+// When omitted, the full 24-hour day is used (backward compatible).
+export const getDailyControlData = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { branch_id, date, shift } = req.query;
+    if (!branch_id) {
+      throw new AppError('branch_id is required', 400);
+    }
+    const branchId = Number(branch_id);
+    if (!Number.isInteger(branchId)) {
+      throw new AppError('branch_id must be an integer', 400);
+    }
+    const controlDate = (date as string) || new Date().toISOString().split('T')[0];
+
+    // Build time window — full day when shift not specified, half-day otherwise.
+    let dayStart: string;
+    let dayEnd: string;
+    if (shift === 'A') {
+      // Morning shift: 06:00 – 18:00 local (stored as UTC offset naive in DB)
+      const shiftStart = new Date(`${controlDate}T06:00:00.000Z`);
+      const shiftEnd = new Date(`${controlDate}T18:00:00.000Z`);
+      dayStart = shiftStart.toISOString();
+      dayEnd = shiftEnd.toISOString();
+    } else if (shift === 'B') {
+      // Evening/night shift: 18:00 – 06:00 next day
+      const shiftStart = new Date(`${controlDate}T18:00:00.000Z`);
+      const nextDay = new Date(`${controlDate}T00:00:00.000Z`);
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const shiftEnd = new Date(nextDay);
+      shiftEnd.setUTCHours(6, 0, 0, 0);
+      dayStart = shiftStart.toISOString();
+      dayEnd = shiftEnd.toISOString();
+    } else {
+      dayStart = `${controlDate}T00:00:00.000Z`;
+      const dayEndDate = new Date(`${controlDate}T00:00:00.000Z`);
+      dayEndDate.setUTCDate(dayEndDate.getUTCDate() + 1);
+      dayEnd = dayEndDate.toISOString();
+    }
+
+    const shiftFilter = shift === 'A' ? 'shift_a' : shift === 'B' ? 'shift_b' : null;
+
+    // 1. POS sales for the day/shift — pos_shift_orders is the live source of
+    // truth for sales in this system (restaurant_orders/restaurant_order_items
+    // exist but are empty in production; all real orders flow through
+    // pos_shift_orders.items[], tagged item_group: 'restaurant' for
+    // kitchen/food items vs 'bar' for drinks).
+    const { data: posOrders, error: posErr } = await supabase
+      .from('pos_shift_orders')
+      .select('items, status, payment_status, created_at')
+      .eq('branch_id', branchId)
+      .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)')
+      .gte('created_at', dayStart)
+      .lt('created_at', dayEnd);
+    if (posErr) throw posErr;
+
+    const soldByItem: Record<string, { qty: number; revenue: number }> = {};
+    (posOrders || []).forEach((order: any) => {
+      const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+      if (!Array.isArray(items)) return;
+      items.forEach((item: any) => {
+        if (item.item_group !== 'restaurant') return;
+        const name = String(item.name || '').trim();
+        if (!name) return;
+        const qty = Number(item.quantity || 0);
+        const revenue = Number(item.line_total ?? qty * Number(item.unit_price || 0));
+        const entry = soldByItem[name] || { qty: 0, revenue: 0 };
+        entry.qty += qty;
+        entry.revenue += revenue;
+        soldByItem[name] = entry;
+      });
+    });
+
+    const totalFoodRevenue = Object.values(soldByItem).reduce((sum, e) => sum + e.revenue, 0);
+    const totalFoodQtySold = Object.values(soldByItem).reduce((sum, e) => sum + e.qty, 0);
+
+    // 2. Recipes (BOM) — global (branch_id null) or branch-specific, active only.
+    const { data: recipesRaw, error: recipeErr } = await supabase
+      .from('recipes')
+      .select('id, menu_item_name, output_quantity, is_active, branch_id, items:recipe_items(item_sku, item_name, quantity_required, unit)')
+      .or(`branch_id.is.null,branch_id.eq.${branchId}`)
+      .eq('is_active', true);
+    if (recipeErr) throw recipeErr;
+    const recipes = (recipesRaw || []) as Array<{
+      menu_item_name: string;
+      output_quantity: number;
+      items: Array<{ item_sku: string; item_name: string; quantity_required: number; unit: string }>;
+    }>;
+
+    // 3. Theoretical ingredient consumption = sum over sold menu items of
+    // (recipe_items.quantity_required / recipes.output_quantity) * qty_sold.
+    // Falls back to the RECIPE_MAP hardcoded table when no DB recipe matches —
+    // this ensures Branch 2 (which may not have recipes registered yet) still
+    // gets meaningful BOM data from the known menu item → raw ingredient mapping.
+    const theoreticalBySku: Record<string, { item_name: string; unit: string; qty: number }> = {};
+    const noRecipeItems: Array<{ item_name: string; qty_sold: number }> = [];
+
+    Object.entries(soldByItem).forEach(([itemName, sold]) => {
+      const recipe = findRecipeForSoldItem(itemName, recipes);
+      if (recipe && recipe.output_quantity > 0 && recipe.items?.length) {
+        // Live DB recipe path
+        recipe.items.forEach((ri) => {
+          const sku = ri.item_sku;
+          if (!sku) return;
+          const perUnit = Number(ri.quantity_required || 0) / Number(recipe.output_quantity);
+          const entry = theoreticalBySku[sku] || { item_name: ri.item_name, unit: ri.unit || '', qty: 0 };
+          entry.qty += perUnit * sold.qty;
+          theoreticalBySku[sku] = entry;
+        });
+        return;
+      }
+
+      // RECIPE_MAP fallback — resolves parent raw ingredients by menu item name
+      const mapEntry = RECIPE_MAP[itemName];
+      if (mapEntry) {
+        const parentSku = mapEntry.parent;
+        const entry = theoreticalBySku[parentSku] || { item_name: parentSku, unit: 'kg', qty: 0 };
+        entry.qty += sold.qty / mapEntry.yield;
+        theoreticalBySku[parentSku] = entry;
+
+        // Multi-parent (Special Pilau / Special Rice also uses RICE; Samosa also uses EXE FLOUR)
+        const extras = getParentUsages(itemName, sold.qty).filter(u => u.parent !== mapEntry.parent);
+        extras.forEach(u => {
+          const e = theoreticalBySku[u.parent] || { item_name: u.parent, unit: 'kg', qty: 0 };
+          e.qty += u.amount;
+          theoreticalBySku[u.parent] = e;
+        });
+        return;
+      }
+
+      noRecipeItems.push({ item_name: itemName, qty_sold: sold.qty });
+    });
+
+    // 4. Actual ingredient consumption — kitchen_session_issues for sessions
+    // on this branch/date. When a shift filter is applied, only sessions of
+    // that shift_type are included. Falls back to branch_stock movements
+    // (stock_history OUT entries for the same date) when no kitchen sessions
+    // exist, so the BOM tab still shows real stock usage even before the
+    // production-session workflow is adopted.
+    let sessionsQuery = supabase
+      .from('kitchen_session_issues')
+      .select('item_sku, item_name, quantity_issued, session:kitchen_production_sessions!inner(branch_id, session_date, shift_type)')
+      .eq('session.branch_id', branchId)
+      .eq('session.session_date', controlDate);
+    if (shiftFilter) {
+      sessionsQuery = sessionsQuery.eq('session.shift_type', shiftFilter);
+    }
+    const { data: issuesRaw, error: issuesErr } = await sessionsQuery;
+    if (issuesErr) throw issuesErr;
+
+    const actualBySku: Record<string, { item_name: string; qty: number }> = {};
+    (issuesRaw || []).forEach((row: any) => {
+      const sku = row.item_sku;
+      if (!sku) return;
+      const entry = actualBySku[sku] || { item_name: row.item_name, qty: 0 };
+      entry.qty += Number(row.quantity_issued || 0);
+      actualBySku[sku] = entry;
+    });
+
+    const hasKitchenSession = (issuesRaw || []).length > 0;
+
+    // When no kitchen sessions have been opened for the day, fall back to
+    // branch_stock OUT movements so that actual cost is not reported as 0.
+    if (!hasKitchenSession && Object.keys(theoreticalBySku).length > 0) {
+      const { data: stockOut } = await supabase
+        .from('stock_history')
+        .select('item_sku, quantity_change, reason')
+        .eq('branch_id', branchId)
+        .in('reason', ['USAGE', 'KITCHEN_ISSUE', 'DISPATCH', 'OUT'])
+        .gte('created_at', dayStart)
+        .lt('created_at', dayEnd);
+      (stockOut || []).forEach((row: any) => {
+        const sku = row.item_sku;
+        if (!sku) return;
+        const qty = Math.abs(Number(row.quantity_change || 0));
+        const entry = actualBySku[sku] || { item_name: sku, qty: 0 };
+        entry.qty += qty;
+        actualBySku[sku] = entry;
+      });
+    }
+
+    // 5. Cost basis — simple_items.cost_price by SKU (the live, populated
+    // cost field; recipe_items/kitchen_session_issues do not reliably carry
+    // cost data in this schema). For RECIPE_MAP parent items whose SKU is the
+    // ingredient name (e.g. "BEEF", "RICE"), also try a case-insensitive item_name
+    // lookup so they get priced correctly even without a formal SKU.
+    const allSkus = [...new Set([...Object.keys(theoreticalBySku), ...Object.keys(actualBySku)])];
+    let costBySku: Record<string, number> = {};
+    if (allSkus.length > 0) {
+      const { data: costRows, error: costErr } = await supabase
+        .from('simple_items')
+        .select('sku, item_name, cost_price')
+        .or(`sku.in.(${allSkus.map(s => `"${s}"`).join(',')}),item_name.in.(${allSkus.map(s => `"${s}"`).join(',')})`)
+        .limit(500);
+      if (costErr) throw costErr;
+      (costRows || []).forEach((r: any) => {
+        const price = Number(r.cost_price || 0);
+        if (allSkus.includes(r.sku)) costBySku[r.sku] = price;
+        if (allSkus.includes(r.item_name)) costBySku[r.item_name] = price;
+      });
+    }
+
+    // 6. LAYER 1 — BOM control rows.
+    const bomControl = allSkus.map((sku) => {
+      const theoretical = theoreticalBySku[sku];
+      const actual = actualBySku[sku];
+      const theoreticalQty = theoretical?.qty || 0;
+      const actualQty = actual?.qty || 0;
+      const unitCost = costBySku[sku] || 0;
+      const theoreticalCost = theoreticalQty * unitCost;
+      const actualCost = actualQty * unitCost;
+      const varianceQty = actualQty - theoreticalQty;
+      const varianceCost = actualCost - theoreticalCost;
+      return {
+        item_sku: sku,
+        item_name: theoretical?.item_name || actual?.item_name || sku,
+        unit: theoretical?.unit || '',
+        theoretical_qty: Number(theoreticalQty.toFixed(3)),
+        actual_qty: Number(actualQty.toFixed(3)),
+        unit_cost: unitCost,
+        has_cost: unitCost > 0,
+        theoretical_cost: Number(theoreticalCost.toFixed(2)),
+        actual_cost: Number(actualCost.toFixed(2)),
+        variance_qty: Number(varianceQty.toFixed(3)),
+        variance_cost: Number(varianceCost.toFixed(2)),
+        variance_percent: theoreticalQty > 0 ? Number(((varianceQty / theoreticalQty) * 100).toFixed(1)) : null,
+        flag: varianceFlag(varianceQty, theoreticalQty)
+      };
+    });
+
+    const theoreticalIngredientCost = bomControl.reduce((s, r) => s + r.theoretical_cost, 0);
+    const actualIngredientCost = bomControl.reduce((s, r) => s + r.actual_cost, 0);
+    const bomVarianceCost = actualIngredientCost - theoreticalIngredientCost;
+
+    // 7. LAYER 2 — Kitchen production vs POS sales, per menu item.
+    // Honour shift filter on production entries when specified.
+    let entriesQuery = supabase
+      .from('kitchen_production_entries')
+      .select('menu_item_name, expected_quantity, actual_quantity, session:kitchen_production_sessions!inner(branch_id, session_date, shift_type)')
+      .eq('session.branch_id', branchId)
+      .eq('session.session_date', controlDate);
+    if (shiftFilter) {
+      entriesQuery = entriesQuery.eq('session.shift_type', shiftFilter);
+    }
+    const { data: entriesRaw, error: entriesErr } = await entriesQuery;
+    if (entriesErr) throw entriesErr;
+
+    const producedByItem: Record<string, number> = {};
+    (entriesRaw || []).forEach((row: any) => {
+      const name = String(row.menu_item_name || '').trim();
+      if (!name) return;
+      const produced = Number(row.actual_quantity || 0) > 0 ? Number(row.actual_quantity) : Number(row.expected_quantity || 0);
+      producedByItem[name] = (producedByItem[name] || 0) + produced;
+    });
+
+    const kitchenVsSalesNames = [...new Set([...Object.keys(producedByItem), ...Object.keys(soldByItem)])];
+    const kitchenVsSales = kitchenVsSalesNames.map((name) => {
+      const produced = producedByItem[name] || 0;
+      const sold = soldByItem[name]?.qty || 0;
+      const variance = produced - sold;
+      return {
+        item_name: name,
+        produced_qty: Number(produced.toFixed(2)),
+        sold_qty: Number(sold.toFixed(2)),
+        variance: Number(variance.toFixed(2)),
+        status: variance > 0 ? 'overproduction' : variance < 0 ? 'underproduction' : 'balanced'
+      };
+    });
+
+    // 8. LAYER 3 — Stock issued cost vs food revenue.
+    const { data: branchRow } = await supabase
+      .from('branches')
+      .select('metadata')
+      .eq('id', branchId)
+      .maybeSingle();
+    const configuredTarget = Number(
+      (branchRow?.metadata as any)?.settings?.food_cost_target_percent
+    );
+    const targetPercent = Number.isFinite(configuredTarget) && configuredTarget > 0
+      ? configuredTarget
+      : DEFAULT_FOOD_COST_TARGET_PERCENT;
+
+    const foodCostPercent = totalFoodRevenue > 0
+      ? Number(((actualIngredientCost / totalFoodRevenue) * 100).toFixed(1))
+      : null;
+
+    const stockVsSales = {
+      stock_issued_cost: Number(actualIngredientCost.toFixed(2)),
+      food_revenue: Number(totalFoodRevenue.toFixed(2)),
+      food_cost_percent: foodCostPercent,
+      target_percent: targetPercent,
+      exceeds_target: foodCostPercent !== null && foodCostPercent > targetPercent
+    };
+
+    // 9. LAYER 4 — Summary + top variance items.
+    const topVarianceItems = [...bomControl]
+      .sort((a, b) => Math.abs(b.variance_cost) - Math.abs(a.variance_cost))
+      .slice(0, 5);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        branch_id: branchId,
+        date: controlDate,
+        shift: shift || null,
+        has_kitchen_session: hasKitchenSession,
+        bom_control: bomControl,
+        no_recipe_items: noRecipeItems,
+        kitchen_vs_sales: kitchenVsSales,
+        stock_vs_sales: stockVsSales,
+        summary: {
+          total_food_qty_sold: Number(totalFoodQtySold.toFixed(2)),
+          total_food_revenue: Number(totalFoodRevenue.toFixed(2)),
+          theoretical_ingredient_cost: Number(theoreticalIngredientCost.toFixed(2)),
+          actual_ingredient_cost: Number(actualIngredientCost.toFixed(2)),
+          bom_variance_cost: Number(bomVarianceCost.toFixed(2)),
+          bom_variance_percent: theoreticalIngredientCost > 0
+            ? Number(((bomVarianceCost / theoreticalIngredientCost) * 100).toFixed(1))
+            : null,
+          food_cost_percent: foodCostPercent,
+          target_food_cost_percent: targetPercent,
+          top_variance_items: topVarianceItems
+        }
+      }
     });
   } catch (error) {
     next(error);
