@@ -13,7 +13,7 @@ import '../../auth/domain/auth_notifier.dart';
 import '../../auth/domain/models.dart';
 
 const _storage = FlutterSecureStorage();
-const _appVersion = 'v3.9.9.19 (Famous Gates)';
+const _appVersion = 'v3.9.9.20 (Famous Gates)';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
