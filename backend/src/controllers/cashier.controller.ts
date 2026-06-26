@@ -6281,10 +6281,7 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
         // embedded branches(...) join 500s ("Could not find a relationship...").
         let query = supabase
             .from('cashier_logbooks')
-            .select(`
-                *,
-                lines:cashier_logbook_lines!logbook_id(id, section, customer_name, amount, reference)
-            `)
+            .select('*')
             .order('log_date', { ascending: false });
 
         if (status !== 'all') {
@@ -6319,6 +6316,26 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
         if (error) throw error;
 
         const usersById = await fetchCashierUsersById((logbooks || []).map((logbook: any) => logbook.cashier_id));
+        const logbookIds = [...new Set((logbooks || [])
+            .map((logbook: any) => String(logbook.id || '').trim())
+            .filter(Boolean))];
+        const linesByLogbookId = new Map<string, any[]>();
+        if (logbookIds.length) {
+            const { data: lineRows, error: lineError } = await supabase
+                .from('cashier_logbook_lines')
+                .select('id, logbook_id, section, customer_name, amount, reference')
+                .in('logbook_id', logbookIds);
+
+            if (lineError) throw lineError;
+
+            for (const line of (lineRows || []) as Array<Record<string, any>>) {
+                const logbookId = String(line.logbook_id || '');
+                if (!logbookId) continue;
+                const bucket = linesByLogbookId.get(logbookId) || [];
+                bucket.push(line);
+                linesByLogbookId.set(logbookId, bucket);
+            }
+        }
 
         // Hydrate branch names separately (no FK relationship in schema cache).
         const branchIds = [...new Set((logbooks || [])
@@ -6337,6 +6354,7 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
 
         const decoratedLogbooks = (logbooks || []).map((logbook: any) => ({
             ...logbook,
+            lines: linesByLogbookId.get(String(logbook.id || '')) || [],
             cashier: usersById.get(String(logbook.cashier_id || '')) || null,
             branch: branchById.get(String(logbook.branch_id || '')) || null
         }));
