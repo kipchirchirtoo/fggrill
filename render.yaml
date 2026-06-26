@@ -1,4 +1,25 @@
 services:
+  # Backend API
+  - type: web
+    name: famous-gate-backend
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: |
+      cd backend
+      npm install
+      npm run build
+    startCommand: |
+      cd backend
+      npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: NODE_ENV
+        value: production
+    autoDeploy: true
+
   # Python Service
   - type: web
     name: famous-gate-python-service
