@@ -2594,7 +2594,7 @@ export const getPendingPosVoidRequests = async (req: Request, res: Response, nex
 
     const [ordersResult, outletsResult, branchesResult, usersResult] = await Promise.all([
       orderIds.length
-        ? supabase.from('pos_shift_orders').select('id, order_number, customer_name, total_amount, amount_paid, balance_amount').in('id', orderIds)
+        ? supabase.from('pos_shift_orders').select('id, order_number, customer_name, total_amount, amount_paid, balance_amount, items').in('id', orderIds)
         : Promise.resolve({ data: [], error: null }),
       outletIds.length
         ? supabase.from('pos_outlets').select('id, name').in('id', outletIds)
@@ -2629,6 +2629,7 @@ export const getPendingPosVoidRequests = async (req: Request, res: Response, nex
         total_amount: order.total_amount,
         amount_paid: order.amount_paid,
         balance_amount: order.balance_amount,
+        void_items: order.items || [],
         outlet_name: outlet.name,
         branch_name: branch.name,
         requested_by_email: user.email,
@@ -3123,7 +3124,11 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
 
     const { data: updatedOrder, error: orderUpdateErr } = await supabase
       .from('pos_shift_orders')
-      .update({ items, updated_at: now })
+      .update({
+        items,
+        bill_reprint_count: 0,
+        updated_at: now
+      })
       .eq('id', requestRow.order_id)
       .select('*')
       .single();
@@ -3265,6 +3270,7 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
             items,
             total_amount: Number(orderData.total_amount || 0) + amountRestored,
             balance_amount: Number(orderData.balance_amount || 0) + amountRestored,
+            bill_reprint_count: 0,
             updated_at: now
           })
           .eq('id', requestRow.order_id);
