@@ -6626,7 +6626,22 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
                 'restaurant_orders',
                 supabase
                     .from('restaurant_orders')
-                    .select('*')
+                    .select(`
+                        id,
+                        order_number,
+                        short_code,
+                        status,
+                        payment_status,
+                        guest_name,
+                        total_amount,
+                        amount_paid,
+                        balance_amount,
+                        created_at,
+                        branch_id,
+                        created_by,
+                        table_number,
+                        room_number
+                    `)
                     .eq('branch_id', shift.branch_id)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', startedAt)
