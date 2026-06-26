@@ -410,6 +410,10 @@ const varianceFlag = (varianceQty: number, theoreticalQty: number): 'green' | 'o
   return 'red';
 };
 
+const isMissingShiftTypeColumn = (error: any): boolean =>
+  error?.code === '42703' &&
+  String(error?.message || '').toLowerCase().includes('shift_type');
+
 // GET /api/kitchen/daily-control?branch_id=&date=&shift=
 // shift is optional: 'A' filters 06:00-18:00, 'B' filters 18:00-06:00 next day.
 // When omitted, the full 24-hour day is used (backward compatible).
@@ -549,15 +553,26 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
     // (stock_history OUT entries for the same date) when no kitchen sessions
     // exist, so the BOM tab still shows real stock usage even before the
     // production-session workflow is adopted.
-    let sessionsQuery = supabase
-      .from('kitchen_session_issues')
-      .select('item_sku, item_name, quantity_issued, session:kitchen_production_sessions!inner(branch_id, session_date, shift_type)')
-      .eq('session.branch_id', branchId)
-      .eq('session.session_date', controlDate);
-    if (shiftFilter) {
-      sessionsQuery = sessionsQuery.eq('session.shift_type', shiftFilter);
+    const buildIssuesQuery = (includeShiftType: boolean) => {
+      let query = supabase
+        .from('kitchen_session_issues')
+        .select(
+          includeShiftType
+            ? 'item_sku, item_name, quantity_issued, session:kitchen_production_sessions!inner(branch_id, session_date, shift_type)'
+            : 'item_sku, item_name, quantity_issued, session:kitchen_production_sessions!inner(branch_id, session_date)'
+        )
+        .eq('session.branch_id', branchId)
+        .eq('session.session_date', controlDate);
+      if (includeShiftType && shiftFilter) {
+        query = query.eq('session.shift_type', shiftFilter);
+      }
+      return query;
+    };
+
+    let { data: issuesRaw, error: issuesErr } = await buildIssuesQuery(true);
+    if (issuesErr && isMissingShiftTypeColumn(issuesErr)) {
+      ({ data: issuesRaw, error: issuesErr } = await buildIssuesQuery(false));
     }
-    const { data: issuesRaw, error: issuesErr } = await sessionsQuery;
     if (issuesErr) throw issuesErr;
 
     const actualBySku: Record<string, { item_name: string; qty: number }> = {};
@@ -646,15 +661,26 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
 
     // 7. LAYER 2 — Kitchen production vs POS sales, per menu item.
     // Honour shift filter on production entries when specified.
-    let entriesQuery = supabase
-      .from('kitchen_production_entries')
-      .select('menu_item_name, expected_quantity, actual_quantity, session:kitchen_production_sessions!inner(branch_id, session_date, shift_type)')
-      .eq('session.branch_id', branchId)
-      .eq('session.session_date', controlDate);
-    if (shiftFilter) {
-      entriesQuery = entriesQuery.eq('session.shift_type', shiftFilter);
+    const buildEntriesQuery = (includeShiftType: boolean) => {
+      let query = supabase
+        .from('kitchen_production_entries')
+        .select(
+          includeShiftType
+            ? 'menu_item_name, expected_quantity, actual_quantity, session:kitchen_production_sessions!inner(branch_id, session_date, shift_type)'
+            : 'menu_item_name, expected_quantity, actual_quantity, session:kitchen_production_sessions!inner(branch_id, session_date)'
+        )
+        .eq('session.branch_id', branchId)
+        .eq('session.session_date', controlDate);
+      if (includeShiftType && shiftFilter) {
+        query = query.eq('session.shift_type', shiftFilter);
+      }
+      return query;
+    };
+
+    let { data: entriesRaw, error: entriesErr } = await buildEntriesQuery(true);
+    if (entriesErr && isMissingShiftTypeColumn(entriesErr)) {
+      ({ data: entriesRaw, error: entriesErr } = await buildEntriesQuery(false));
     }
-    const { data: entriesRaw, error: entriesErr } = await entriesQuery;
     if (entriesErr) throw entriesErr;
 
     const producedByItem: Record<string, number> = {};
