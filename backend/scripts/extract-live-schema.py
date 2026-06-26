@@ -24,7 +24,7 @@ def extract_schema():
     print("🔍 Connecting to Supabase database...")
     
     output = {
-        "extractedAt": datetime.utcnow().isoformat() + "Z",
+        "extractedAt": datetime.now(datetime.UTC).isoformat() + "Z",
         "tables": [],
         "indexes": [],
         "policies": [],
@@ -232,7 +232,7 @@ def extract_schema():
     conn.close()
     
     # Write output
-    output_path = "/home/john/.windsurf/worktrees/fggrill-1/fggrill-1-3b591a4b/LIVE_SCHEMA.json"
+    output_path = "LIVE_SCHEMA.json"
     print(f"\n📄 Writing schema to {output_path}...")
     with open(output_path, 'w') as f:
         json.dump(output, f, indent=2, default=str)
