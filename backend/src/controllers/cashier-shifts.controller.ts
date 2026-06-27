@@ -974,7 +974,7 @@ export const getShiftLog = async (
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd),
                 supabase.from('bar_orders')
-                    .select('id, total, subtotal, customer_name, order_type, created_at')
+                    .select('id, total, subtotal, customer_name, created_at')
                     .eq('branch_id', branchId)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
@@ -1052,7 +1052,7 @@ export const getShiftLog = async (
                     section: 'bar_sale',
                     source_table: 'bar_orders',
                     source_id: o.id,
-                    customer_name: o.customer_name || o.guest_name || o.order_type || 'Bar order',
+                    customer_name: o.customer_name || o.guest_name || 'Bar order',
                     reference: o.id,
                     created_at: o.created_at
                 }))
