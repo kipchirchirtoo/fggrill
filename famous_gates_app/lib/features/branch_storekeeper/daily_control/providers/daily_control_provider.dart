@@ -123,6 +123,7 @@ class DailyControlNotifier extends StateNotifier<DailyControlState> {
                   'actual_cost': i.actualCost,
                   'variance_cost': i.varianceCost,
                   'variance_percent': i.variancePercent ?? '',
+                  'variance_type': i.varianceType,
                   'flag': i.flag,
                 })
             .toList();

@@ -90,15 +90,38 @@ class RealtimeService {
 
   /// Subscribe to orders-related updates for a branch.
   /// Handles both traditional restaurant orders (restaurant_orders) and POS orders (pos_shift_orders).
+  ///
+  /// Returns the stream synchronously so callers can attach `onError`
+  /// immediately, but the actual Supabase wiring happens after awaiting
+  /// `SupabaseDirectService.ensureReady()` — nothing else in this app ever
+  /// called that, so the direct-Supabase client was never initialized and
+  /// every realtime subscription was silently a no-op stream that neither
+  /// emitted data nor errored (so callers' fallback-polling never engaged
+  /// either). If init still leaves no client (e.g. no bridge token yet),
+  /// the stream emits an error so the caller's fallback kicks in instead of
+  /// going dark forever.
   Stream<OrderItemRealtimeEvent> watchOrderItems(int branchId) {
+    final controller = StreamController<OrderItemRealtimeEvent>.broadcast();
+    final channelName = RealtimeChannelKeys.ordersChannel(branchId);
+
+    _initOrderChannel(branchId, channelName, controller);
+
+    return controller.stream;
+  }
+
+  Future<void> _initOrderChannel(
+    int branchId,
+    String channelName,
+    StreamController<OrderItemRealtimeEvent> controller,
+  ) async {
+    await _ref.read(supabaseDirectServiceProvider).ensureReady();
     final client = _supabaseClient;
     if (client == null) {
       debugPrint('⚠️ RealtimeService: Supabase client is not available. Realtime disabled.');
-      return const Stream.empty();
+      _statusController.add(RealtimeConnectionStatus.disconnected);
+      controller.addError(StateError('Direct Supabase client unavailable'));
+      return;
     }
-
-    final controller = StreamController<OrderItemRealtimeEvent>.broadcast();
-    final channelName = RealtimeChannelKeys.ordersChannel(branchId);
 
     if (_activeChannels.containsKey(channelName)) {
       _activeChannels[channelName]?.unsubscribe();
@@ -227,19 +250,30 @@ class RealtimeService {
       channel.unsubscribe();
       _activeChannels.remove(channelName);
     };
+  }
+
+  /// Subscribe to void requests updates for a branch. See watchOrderItems()
+  /// above for why this awaits ensureReady() before wiring the channel.
+  Stream<VoidRequestRealtimeEvent> watchVoidRequests(int branchId) {
+    final controller = StreamController<VoidRequestRealtimeEvent>.broadcast();
+    final channelName = RealtimeChannelKeys.voidsChannel(branchId);
+
+    _initVoidChannel(channelName, branchId, controller);
 
     return controller.stream;
   }
 
-  /// Subscribe to void requests updates for a branch.
-  Stream<VoidRequestRealtimeEvent> watchVoidRequests(int branchId) {
+  Future<void> _initVoidChannel(
+    String channelName,
+    int branchId,
+    StreamController<VoidRequestRealtimeEvent> controller,
+  ) async {
+    await _ref.read(supabaseDirectServiceProvider).ensureReady();
     final client = _supabaseClient;
     if (client == null) {
-      return const Stream.empty();
+      controller.addError(StateError('Direct Supabase client unavailable'));
+      return;
     }
-
-    final controller = StreamController<VoidRequestRealtimeEvent>.broadcast();
-    final channelName = RealtimeChannelKeys.voidsChannel(branchId);
 
     if (_activeChannels.containsKey(channelName)) {
       _activeChannels[channelName]?.unsubscribe();
@@ -286,8 +320,6 @@ class RealtimeService {
       channel.unsubscribe();
       _activeChannels.remove(channelName);
     };
-
-    return controller.stream;
   }
 
   RealtimeEventType _parseEventType(PostgresChangeEvent event) {

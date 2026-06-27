@@ -6,6 +6,8 @@ import {
   approveItemVoidRequest,
   cashierAcknowledgeItemVoid,
   cashierDeclineItemVoid,
+  cashierVoidLineItems,
+  cashierVoidWholeBill,
   closeShift,
   createOutlet,
   createOutletItem,
@@ -44,6 +46,7 @@ import {
   requestVoidShiftOrder,
   reviewPosVoidRequest,
   reviewShift,
+  searchVoidableBills,
   splitShiftOrder,
   syncOutletItems,
   submitShift,
@@ -52,6 +55,13 @@ import {
   updateShiftOrder,
   updateStockCount
 } from '../controllers/outlet-pos.controller';
+import {
+  addVoidAuditNote,
+  flagVoidAuditForManager,
+  getVoidAuditDetail,
+  listVoidAudits,
+  markVoidAuditReviewed,
+} from '../controllers/cashier-void-audit-review.controller';
 
 const router = Router();
 
@@ -112,6 +122,20 @@ router.post('/outlets/:outletId/shifts/open', openShift);
 
 router.get('/void-requests/pending', getPendingPosVoidRequests);
 router.post('/void-requests/:requestId/review', reviewPosVoidRequest);
+
+// Cashier Void Management — cashier searches a bill and voids it immediately
+// (no bartender/waiter request, no separate manager-approval wait).
+router.get('/voids/cashier/search', searchVoidableBills);
+router.post('/voids/cashier/whole-bill', cashierVoidWholeBill);
+router.post('/voids/cashier/items', cashierVoidLineItems);
+
+// Branch Accountant — read-only Void Audit drill-down, populated automatically
+// on cashier shift close (see compileShiftVoidAudit).
+router.get('/void-audits', listVoidAudits);
+router.get('/void-audits/:id', getVoidAuditDetail);
+router.patch('/void-audits/:id/review', markVoidAuditReviewed);
+router.patch('/void-audits/:id/flag', flagVoidAuditForManager);
+router.patch('/void-audits/:id/note', addVoidAuditNote);
 
 router.post('/voids/request', requestItemVoid);
 router.patch('/voids/:id/cashier-acknowledge', cashierAcknowledgeItemVoid);

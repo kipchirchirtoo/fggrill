@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/realtime/realtime_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart';
@@ -83,6 +82,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     setState(() {
       _future = _load();
     });
+    // The Orders tab is driven by kdsOrdersProvider, not _future above — this
+    // was previously a no-op for that tab (manual Refresh button, void-ack,
+    // and other post-action refreshes never actually reloaded the live grid).
+    ref.read(kdsOrdersProvider.notifier).refresh();
   }
 
   /// Automatically print captain order tickets as backup.
@@ -201,6 +204,13 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Auto-print must react to every kdsOrdersProvider update (realtime push,
+    // fallback poll, or manual refresh) — previously it only ran once inside
+    // _load(), so an order arriving after the initial screen load via
+    // Realtime would show up on the grid but never get a kitchen ticket.
+    ref.listen<AsyncValue<List<KitchenOrder>>>(kdsOrdersProvider, (previous, next) {
+      next.whenData(_autoPrintNewCaptainOrders);
+    });
     return MasterDashboardShell<KitchenKdsSection>(
       title: 'Kitchen Display',
       subtitle: 'Restaurant orders only',

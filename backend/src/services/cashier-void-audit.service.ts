@@ -1,6 +1,77 @@
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 
+type CompileShiftVoidAuditInput = {
+  cashierShiftId: string;
+  branchId: number;
+  cashierId?: string | null;
+  shiftStart: string;
+  shiftEnd: string;
+  outletShiftIds: string[];
+  grossRevenue: number;
+};
+
+// Persists one cashier_shift_void_audits row per closed cashier_shift_logs
+// shift, for the Branch Accountant's read-only void-audit review queue.
+// Distinct from loadCashierVoidAudit() above (which is a live, unpersisted
+// preview used elsewhere in this controller) — this is the spec'd standing
+// record accountants mark reviewed/flag/note against.
+export async function compileShiftVoidAudit(input: CompileShiftVoidAuditInput): Promise<void> {
+  const shiftIds = input.outletShiftIds;
+
+  const [wholeBillResult, itemVoidResult] = await Promise.all([
+    shiftIds.length
+      ? supabase.from('pos_void_requests').select('id').in('shift_id', shiftIds).eq('status', 'approved')
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shiftIds.length
+      ? supabase.from('pos_item_void_log').select('amount_voided').in('shift_id', shiftIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  if (wholeBillResult.error) throw wholeBillResult.error;
+  if (itemVoidResult.error) throw itemVoidResult.error;
+
+  const wholeBillIds = (wholeBillResult.data || []).map((row: any) => row.id);
+  let wholeBillValue = 0;
+  if (wholeBillIds.length) {
+    const { data: auditRows, error: auditErr } = await supabase
+      .from('void_bills_audit')
+      .select('details')
+      .in('void_id', wholeBillIds)
+      .eq('action', 'cashier_void');
+    if (auditErr) throw auditErr;
+    wholeBillValue = (auditRows || []).reduce((sum: number, row: any) => sum + n(row.details?.original_total), 0);
+  }
+
+  const itemVoidRows = itemVoidResult.data || [];
+  const itemVoidValue = itemVoidRows.reduce((sum: number, row: any) => sum + n(row.amount_voided), 0);
+
+  const totalBillsVoided = wholeBillIds.length;
+  const totalItemsVoided = itemVoidRows.length;
+  const totalValueVoided = wholeBillValue + itemVoidValue;
+  const voidPct = input.grossRevenue > 0 ? (totalValueVoided / input.grossRevenue) * 100 : 0;
+
+  // Only the computed/refresh columns are in this payload, so an upsert on
+  // an existing row leaves status/reviewed_by/flagged_by/accountant_note
+  // untouched — a recompile never clobbers accountant review state.
+  const { error: upsertErr } = await supabase
+    .from('cashier_shift_void_audits')
+    .upsert({
+      shift_id: input.cashierShiftId,
+      branch_id: input.branchId,
+      cashier_id: input.cashierId || null,
+      outlet_shift_ids: shiftIds,
+      shift_opened_at: input.shiftStart,
+      shift_closed_at: input.shiftEnd,
+      total_bills_voided: totalBillsVoided,
+      total_items_voided: totalItemsVoided,
+      total_value_voided: totalValueVoided,
+      gross_shift_revenue: input.grossRevenue,
+      void_pct_of_revenue: voidPct,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'shift_id' });
+  if (upsertErr) throw upsertErr;
+}
+
 type VoidAuditInput = {
   branchId: number;
   cashierId?: string | null;

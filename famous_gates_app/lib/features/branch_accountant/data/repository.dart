@@ -872,6 +872,32 @@ class BranchAccountantRepository {
     });
   }
 
+  // ── Cashier Void Management: Branch Accountant audit (read-only) ─────────
+
+  Future<List<Map<String, dynamic>>> listVoidAudits({String? status}) async {
+    final branchId = await getBranchId();
+    return _getList('/pos/void-audits', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (status != null && status.isNotEmpty) 'status': status,
+    });
+  }
+
+  Future<Map<String, dynamic>> getVoidAuditDetail(String id) async {
+    return _getMap('/pos/void-audits/$id');
+  }
+
+  Future<void> markVoidAuditReviewed(String id) async {
+    await _dio.patch('/pos/void-audits/$id/review');
+  }
+
+  Future<void> flagVoidAuditForManager(String id) async {
+    await _dio.patch('/pos/void-audits/$id/flag');
+  }
+
+  Future<void> addVoidAuditNote(String id, String note) async {
+    await _dio.patch('/pos/void-audits/$id/note', data: {'note': note});
+  }
+
   Future<Map<String, dynamic>> getBankingSummary() async {
     final branchId = await getBranchId();
     return _getMap('/banking/summary', query: {

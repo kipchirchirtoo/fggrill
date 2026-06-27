@@ -9,6 +9,19 @@ final _money = NumberFormat('#,##0.00', 'en_KE');
 final _qty = NumberFormat('#,##0.###', 'en_KE');
 String _fmtMoney(num v) => 'KES ${_money.format(v)}';
 String _fmtQty(num v) => _qty.format(v);
+String _varianceLabel(BomControlItem item) {
+  final percent = item.variancePercent == null
+      ? ''
+      : ' ${item.variancePercent! >= 0 ? '+' : ''}${item.variancePercent}%';
+  switch (item.varianceType) {
+    case 'wastage':
+      return 'Wastage$percent';
+    case 'shortage':
+      return 'Shortage$percent';
+    default:
+      return item.variancePercent == null ? 'OK' : 'OK$percent';
+  }
+}
 
 class BomControlTab extends StatelessWidget {
   const BomControlTab({
@@ -118,9 +131,7 @@ class BomControlTab extends StatelessWidget {
                       )),
                       DataCell(ControlVarianceBadge(
                         flag: item.flag,
-                        label: item.variancePercent == null
-                            ? (item.flag == 'red' ? 'Unaccounted' : 'OK')
-                            : '${item.variancePercent! >= 0 ? '+' : ''}${item.variancePercent}%',
+                        label: _varianceLabel(item),
                       )),
                     ]);
                   }).toList(),

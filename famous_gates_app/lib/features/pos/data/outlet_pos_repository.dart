@@ -244,6 +244,64 @@ class OutletPosRepository {
     });
   }
 
+  // ── Cashier Void Management ──────────────────────────────────────────────
+  // The cashier searches for any unpaid/partial bill in the branch and voids
+  // it immediately (whole bill or specific items) — no bartender/waiter
+  // request, no separate manager-approval wait.
+
+  Future<List<Map<String, dynamic>>> searchVoidableBills(String query) async {
+    if (query.trim().isEmpty) return [];
+    final response = await _dio.get('/pos/voids/cashier/search',
+        queryParameters: {'q': query.trim()});
+    return _list(response.data)
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<OutletShiftOrder> cashierVoidWholeBill({
+    required String orderId,
+    required String reasonCategory,
+    String? note,
+  }) async {
+    try {
+      final response = await _dio.post('/pos/voids/cashier/whole-bill', data: {
+        'order_id': orderId,
+        'reason_category': reasonCategory,
+        'reason': (note != null && note.trim().isNotEmpty)
+            ? note.trim()
+            : cashierVoidReasonLabel(reasonCategory),
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      });
+      return OutletShiftOrder.fromJson(
+          Map<String, dynamic>.from(_data(response.data) as Map));
+    } on DioException catch (error) {
+      throw StateError(_errorMessage(error, 'Could not void this bill.'));
+    }
+  }
+
+  Future<OutletShiftOrder> cashierVoidLineItems({
+    required String orderId,
+    required List<Map<String, dynamic>> items,
+    required String reasonCategory,
+    String? note,
+  }) async {
+    try {
+      final response = await _dio.post('/pos/voids/cashier/items', data: {
+        'order_id': orderId,
+        'items': items,
+        'reason_category': reasonCategory,
+        'reason': (note != null && note.trim().isNotEmpty)
+            ? note.trim()
+            : cashierVoidReasonLabel(reasonCategory),
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      });
+      return OutletShiftOrder.fromJson(
+          Map<String, dynamic>.from(_data(response.data) as Map));
+    } on DioException catch (error) {
+      throw StateError(_errorMessage(error, 'Could not void the selected item(s).'));
+    }
+  }
+
   Future<OutletShiftOrder> getOrder({
     required String shiftId,
     required String orderId,
@@ -976,6 +1034,24 @@ const Map<String, String> itemVoidReasonCategories = {
 
 String itemVoidReasonLabel(String category) =>
     itemVoidReasonCategories[category] ?? 'Other';
+
+// Reason dropdown for the Cashier Void Management screen — distinct from the
+// legacy itemVoidReasonCategories above (kept for the older request/approve
+// pipeline's in-flight records).
+const Map<String, String> cashierVoidReasonCategories = {
+  'customer_changed_order': 'Customer Changed Order',
+  'item_out_of_stock': 'Item Out of Stock',
+  'wrong_item_ordered': 'Wrong Item Ordered',
+  'duplicate_order': 'Duplicate Order',
+  'customer_cancelled': 'Customer Cancelled',
+  'quality_issue': 'Quality Issue / Complaint',
+  'manager_instruction': 'Manager Instruction',
+  'billing_error': 'Billing Error',
+  'other': 'Other',
+};
+
+String cashierVoidReasonLabel(String category) =>
+    cashierVoidReasonCategories[category] ?? 'Other';
 
 class ItemVoidRequest {
   const ItemVoidRequest({

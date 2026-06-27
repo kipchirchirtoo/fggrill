@@ -1231,6 +1231,7 @@ class BranchStorekeeperRepository {
     bool requiresYieldConfirmation = true,
     String? poolItemId,
     double? poolFraction,
+    List<Map<String, dynamic>> outputs = const [],
   }) async {
     final branchId = await _branchId;
     final response = await _dio.post(
@@ -1255,6 +1256,7 @@ class BranchStorekeeperRepository {
         'requires_yield_confirmation': requiresYieldConfirmation,
         if (poolItemId != null && poolItemId.isNotEmpty) 'pool_item_id': poolItemId,
         if (poolFraction != null) 'pool_fraction': poolFraction,
+        if (outputs.isNotEmpty) 'outputs': outputs,
       },
       options: await _authOptions,
     );

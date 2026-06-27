@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:famous_gates_app/core/utils/api_error_message.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:famous_gates_app/core/widgets/branch_sales_payments_view.dart';
 import 'package:famous_gates_app/core/widgets/payment_method_breakdown_widget.dart';
@@ -57,6 +58,7 @@ enum BranchAccountantSection {
   shiftReview,
   cashierLogbooks,
   voidApprovals,
+  voidAudit,
   exchangeHistory,
   banking,
   payments,
@@ -193,6 +195,8 @@ class _BranchAccountantDashboardState
         return const _CashierLogbooksSection();
       case BranchAccountantSection.voidApprovals:
         return const _VoidApprovalsSection();
+      case BranchAccountantSection.voidAudit:
+        return const _VoidAuditSection();
       case BranchAccountantSection.exchangeHistory:
         return const _ExchangeHistorySection();
       case BranchAccountantSection.banking:
@@ -290,6 +294,8 @@ const _navItems = [
   _NavItem(BranchAccountantSection.waiterAudit, 'Waiter Audit', Icons.restaurant),
   _NavItem(
       BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
+  _NavItem(BranchAccountantSection.voidAudit, 'Void Audit',
+      Icons.fact_check_outlined),
   _NavItem(BranchAccountantSection.exchangeHistory, 'Item Exchanges',
       Icons.swap_horiz),
   _NavItem(
@@ -8971,6 +8977,459 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
     } finally {
       if (mounted) setState(() => _actioning = false);
     }
+  }
+}
+
+// Cashier Void Management — Branch Accountant audit. Read-only drill-down
+// over void activity compiled automatically when a cashier shift closes
+// (see cashier_shift_void_audits / compileShiftVoidAudit on the backend).
+// Distinct from _VoidApprovalsSection above (that screen is a pre-execution
+// approval gate for the older request/approve pipeline still serving
+// in-flight legacy requests); this one never blocks or modifies a void —
+// only marks the shift reviewed, flags it for the branch manager, or
+// records a one-time note.
+class _VoidAuditSection extends ConsumerStatefulWidget {
+  const _VoidAuditSection();
+
+  @override
+  ConsumerState<_VoidAuditSection> createState() => _VoidAuditSectionState();
+}
+
+class _VoidAuditSectionState extends ConsumerState<_VoidAuditSection> {
+  String _statusFilter = 'all';
+  late Future<List<Map<String, dynamic>>> _future = _load();
+
+  Future<List<Map<String, dynamic>>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .listVoidAudits(status: _statusFilter == 'all' ? null : _statusFilter);
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              ScreenSize.p(context).horizontal / 2,
+              ScreenSize.p(context).vertical / 2,
+              ScreenSize.p(context).horizontal / 2,
+              0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Void Audit',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Read-only drill-down of every cashier-initiated void, compiled automatically when a cashier shift closes.',
+                      style: TextStyle(color: AppColors.kTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              _RefreshButton(onPressed: _refresh),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: EdgeInsets.symmetric(
+              horizontal: ScreenSize.p(context).horizontal / 2),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              for (final entry in const {
+                'all': 'All',
+                'pending_review': 'Pending Review',
+                'reviewed': 'Reviewed',
+                'flagged': 'Flagged',
+              }.entries)
+                ChoiceChip(
+                  label: Text(entry.value),
+                  selected: _statusFilter == entry.key,
+                  onSelected: (_) {
+                    setState(() => _statusFilter = entry.key);
+                    _refresh();
+                  },
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: _future,
+            builder: (context, snap) => _FuturePage(
+              snapshot: snap,
+              onRefresh: _refresh,
+              builder: (rows) => rows.isEmpty
+                  ? Center(
+                      child: Text('No void audits for this filter',
+                          style:
+                              const TextStyle(color: AppColors.kTextSecondary)),
+                    )
+                  : ListView(
+                      padding: ScreenSize.p(context),
+                      children: [
+                        _ResponsiveGrid(children: [
+                          _MetricCard('Shifts', '${rows.length}',
+                              Icons.receipt_long, AppColors.kPrimary),
+                          _MetricCard(
+                              'Total Value Voided',
+                              _money(_sumKey(rows, 'total_value_voided')),
+                              Icons.payments,
+                              Colors.red),
+                          _MetricCard(
+                              'Flagged',
+                              '${rows.where((r) => r['status'] == 'flagged').length}',
+                              Icons.flag,
+                              Colors.orange),
+                        ]),
+                        const SizedBox(height: 16),
+                        ...rows.map((row) => _ActionCard(
+                              title:
+                                  '${row['cashier_name'] ?? 'Unknown cashier'} • ${row['branch_name'] ?? ''}',
+                              subtitle:
+                                  '${_fmtDate(row['shift_opened_at'])} → ${_fmtDate(row['shift_closed_at'])}',
+                              trailing: _VoidAuditStatusBadge(
+                                  status: '${row['status'] ?? 'pending_review'}'),
+                              rows: {
+                                'Bills voided':
+                                    '${row['total_bills_voided'] ?? 0}',
+                                'Items voided':
+                                    '${row['total_items_voided'] ?? 0}',
+                                'Value voided':
+                                    _money((row['total_value_voided'] as num?) ?? 0),
+                                'Void % of revenue':
+                                    '${((row['void_pct_of_revenue'] as num?) ?? 0).toStringAsFixed(1)}%',
+                              },
+                              actions: [
+                                TextButton(
+                                  onPressed: () async {
+                                    await showDialog(
+                                      context: context,
+                                      builder: (context) => _VoidAuditDetailDialog(
+                                        auditId: '${row['id']}',
+                                      ),
+                                    );
+                                    _refresh();
+                                  },
+                                  child: const Text('View drill-down'),
+                                ),
+                              ],
+                            )),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+double _sumKey(List<Map<String, dynamic>> rows, String key) =>
+    rows.fold(0.0, (sum, row) => sum + ((row[key] as num?)?.toDouble() ?? 0));
+
+String _fmtDate(dynamic value) {
+  if (value == null) return '—';
+  final parsed = DateTime.tryParse('$value');
+  if (parsed == null) return '—';
+  return DateFormat('d MMM, HH:mm').format(parsed.toLocal());
+}
+
+class _VoidAuditStatusBadge extends StatelessWidget {
+  const _VoidAuditStatusBadge({required this.status});
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final String label;
+    switch (status) {
+      case 'reviewed':
+        color = Colors.green;
+        label = 'Reviewed';
+        break;
+      case 'flagged':
+        color = Colors.orange;
+        label = 'Flagged';
+        break;
+      default:
+        color = AppColors.kTextSecondary;
+        label = 'Pending Review';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(label,
+          style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+    );
+  }
+}
+
+class _VoidAuditDetailDialog extends ConsumerStatefulWidget {
+  const _VoidAuditDetailDialog({required this.auditId});
+  final String auditId;
+
+  @override
+  ConsumerState<_VoidAuditDetailDialog> createState() =>
+      _VoidAuditDetailDialogState();
+}
+
+class _VoidAuditDetailDialogState extends ConsumerState<_VoidAuditDetailDialog> {
+  late Future<Map<String, dynamic>> _future = _load();
+  bool _busy = false;
+
+  Future<Map<String, dynamic>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .getVoidAuditDetail(widget.auditId);
+
+  Future<void> _markReviewed() async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .markVoidAuditReviewed(widget.auditId);
+      if (mounted) setState(() => _future = _load());
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${apiErrorMessage(error)}')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _flagForManager() async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .flagVoidAuditForManager(widget.auditId);
+      if (mounted) setState(() => _future = _load());
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${apiErrorMessage(error)}')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addNote() async {
+    final controller = TextEditingController();
+    final note = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add accountant note'),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          decoration: const InputDecoration(
+              labelText: 'Note', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (note == null || note.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .addVoidAuditNote(widget.auditId, note);
+      if (mounted) setState(() => _future = _load());
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${apiErrorMessage(error)}')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900, maxHeight: 720),
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              return _ErrorPane(error: snap.error!, onRefresh: () => setState(() => _future = _load()));
+            }
+            final data = snap.data!;
+            final records =
+                (data['records'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            final perServer =
+                (data['per_server'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            final perReason =
+                (data['per_reason'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            final status = '${data['status'] ?? 'pending_review'}';
+            final note = '${data['accountant_note'] ?? ''}';
+
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${data['cashier_name'] ?? 'Unknown cashier'} — ${_fmtDate(data['shift_opened_at'])} → ${_fmtDate(data['shift_closed_at'])}',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      _VoidAuditStatusBadge(status: status),
+                      IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: DefaultTabController(
+                      length: 3,
+                      child: Column(
+                        children: [
+                          const TabBar(tabs: [
+                            Tab(text: 'Void Records'),
+                            Tab(text: 'Per Server'),
+                            Tab(text: 'Per Reason'),
+                          ]),
+                          Expanded(
+                            child: TabBarView(
+                              children: [
+                                ListView.separated(
+                                  itemCount: records.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final r = records[index];
+                                    final items =
+                                        (r['items_voided'] as List? ?? [])
+                                            .map((e) => Map<String, dynamic>.from(
+                                                e as Map))
+                                            .toList();
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(
+                                          '${r['bill_shortcode'] ?? r['bill_number'] ?? 'Bill'} — ${r['void_type'] == 'FULL_BILL' ? 'Full Bill' : 'Line Item'}'),
+                                      subtitle: Text(
+                                          '${_fmtDate(r['void_timestamp'])} • ${r['server_name'] ?? 'Unknown'} • ${items.map((i) => i['item_name']).join(', ')}\n'
+                                          'Reason: ${r['reason'] ?? '—'} • Voided by ${r['cashier_who_voided'] ?? 'Unknown'}'),
+                                      isThreeLine: true,
+                                      trailing: Text(
+                                          'KES ${((r['value_lost'] as num?) ?? 0).toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.red)),
+                                    );
+                                  },
+                                ),
+                                ListView.separated(
+                                  itemCount: perServer.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final s = perServer[index];
+                                    final flagged = s['flagged'] == true;
+                                    return ListTile(
+                                      title: Text('${s['server_name'] ?? 'Unknown'}'),
+                                      subtitle: Text(
+                                          '${s['count'] ?? 0} void(s) • KES ${((s['value'] as num?) ?? 0).toStringAsFixed(2)}'),
+                                      trailing: flagged
+                                          ? const Chip(
+                                              label: Text('⚠ Review Flag'),
+                                              backgroundColor: Color(0xFFFFE0B2),
+                                            )
+                                          : null,
+                                    );
+                                  },
+                                ),
+                                ListView.separated(
+                                  itemCount: perReason.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final r = perReason[index];
+                                    final notes =
+                                        (r['notes'] as List? ?? []).cast<String>();
+                                    return ListTile(
+                                      title: Text(cashierVoidReasonLabel(
+                                          '${r['reason_category'] ?? 'other'}')),
+                                      subtitle: Text(
+                                          '${r['count'] ?? 0} void(s) • KES ${((r['value'] as num?) ?? 0).toStringAsFixed(2)}'
+                                          '${notes.isNotEmpty ? '\nNotes: ${notes.join(' | ')}' : ''}'),
+                                      isThreeLine: notes.isNotEmpty,
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  if (note.isNotEmpty) ...[
+                    Text('Accountant note: $note',
+                        style: const TextStyle(fontStyle: FontStyle.italic)),
+                    const SizedBox(height: 8),
+                  ],
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      FilledButton(
+                        onPressed: _busy || status != 'pending_review'
+                            ? null
+                            : _markReviewed,
+                        child: const Text('Mark Reviewed'),
+                      ),
+                      OutlinedButton(
+                        onPressed:
+                            _busy || status == 'flagged' ? null : _flagForManager,
+                        child: const Text('Flag for Manager'),
+                      ),
+                      OutlinedButton(
+                        onPressed: _busy || note.isNotEmpty ? null : _addNote,
+                        child: const Text('Add Note'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 

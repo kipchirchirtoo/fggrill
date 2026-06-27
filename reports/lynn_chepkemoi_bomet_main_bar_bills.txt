@@ -1,0 +1,161 @@
+﻿Lynn Chepkemoi - Bomet Town Main Bar POS bills
+Branch: 2
+
+
+order_number          short_code bill_created_at_nairobi total_amount status      payment_status clearance_amount clearance_method clearance_reference clearance_time_nairobi cleared_by     
+------------          ---------- ----------------------- ------------ ------      -------------- ---------------- ---------------- ------------------- ---------------------- ----------     
+POS-1781891774775     XKLLCF     2026-06-19 20:56:14     1900.00      paid        paid           1900.00          mpesa            QK5                 2026-06-20 04:28:17    LENAH SIGEI    
+POS-1781891837804     JNVUJK     2026-06-19 20:57:17     700.00       paid        paid           700.00           mpesa            XBC                 2026-06-20 04:34:22    LENAH SIGEI    
+POS-1781892350673     XW2XCZ     2026-06-19 21:05:50     1000.00      paid        paid           1000.00          mpesa            X48                 2026-06-20 04:01:52    LENAH SIGEI    
+POS-1781893339603     GUNHU8     2026-06-19 21:22:19     1800.00      paid        paid           1800.00          cash             cash-1781899997140  2026-06-19 23:13:17    LENAH SIGEI    
+POS-1781894316784     A7FDJV     2026-06-19 21:38:36     5850.00      paid        paid           5850.00          mpesa            JVT                 2026-06-20 04:39:16    LENAH SIGEI    
+POS-1781955980386     6YREA3     2026-06-20 14:46:20     50.00        voided      voided                                                                                                     
+POS-1781956236801     WDTMB7     2026-06-20 14:50:36     50.00        voided      voided                                                                                                     
+POS-1781957413489     AH7EDN     2026-06-20 15:10:13     750.00       paid        paid           750.00           mpesa            3PD                 2026-06-20 19:31:41    LENAH SIGEI    
+POS-1781960684332     8RAKBX     2026-06-20 16:04:44     3850.00      paid        paid           3850.00          mpesa            UGW                 2026-06-20 18:56:47    LENAH SIGEI    
+POS-1781962277726     6N2S7P     2026-06-20 16:31:17     4000.00      paid        paid           4000.00          mpesa            W6D                 2026-06-20 18:59:40    LENAH SIGEI    
+POS-1781964539730     8LGRMG     2026-06-20 17:08:59     1800.00      paid        paid           1800.00          mpesa            FUK                 2026-06-20 19:33:52    LENAH SIGEI    
+POS-1781969045097     K57Q5E     2026-06-20 18:24:05     150.00       paid        paid           150.00           mpesa            UGW                 2026-06-20 19:03:50    LENAH SIGEI    
+POS-1781969097618     4DJBVZ     2026-06-20 18:24:57     1700.00      paid        paid           1700.00          mpesa            BVZ                 2026-06-20 19:36:05    LENAH SIGEI    
+POS-1781969503830     AA4FD8     2026-06-20 18:31:43     2900.00      paid        paid           2900.00          mpesa            7YZ                 2026-06-21 00:59:03    LENAH SIGEI    
+POS-1781971591339     56DERV     2026-06-20 19:06:31     300.00       paid        paid           300.00           mpesa            QR1                 2026-06-20 19:34:51    LENAH SIGEI    
+POS-1781974475217     9F8Q47     2026-06-20 19:54:35     750.00       paid        paid           750.00           mpesa            YK9                 2026-06-20 21:20:32    LENAH SIGEI    
+POS-1781974717595     KL242N     2026-06-20 19:58:37     100.00       paid        paid           100.00           cash             cash-1781992445045  2026-06-21 00:54:05    LENAH SIGEI    
+POS-1781975230062     JF5NQC     2026-06-20 20:07:10     2000.00      paid        paid           2000.00          cash             cash-1781990176100  2026-06-21 00:16:16    LENAH SIGEI    
+POS-1781975403674     5KHBYP     2026-06-20 20:10:04     700.00       voided      voided                                                                                                     
+POS-1781976566720     S5XQFP     2026-06-20 20:29:26     4700.00      paid        paid           4700.00          mpesa            5CZ                 2026-06-21 02:39:45    LENAH SIGEI    
+POS-1781975403674-2   28QXF7     2026-06-20 20:31:03     800.00       voided      voided                                                                                                     
+POS-1781975403674-1   X2GWTN     2026-06-20 20:31:03     250.00       voided      voided                                                                                                     
+POS-1781979709587     59SSXG     2026-06-20 21:21:49     250.00       credit_bill credit_bill    250.00           credit_bill      CRD-202606-00044    2026-06-21 15:04:56    LENAH SIGEI    
+POS-1781981688382     URUCJA     2026-06-20 21:54:48     100.00       paid        paid           100.00           cash             cash-1782003155936  2026-06-21 03:52:36    LENAH SIGEI    
+POS-1781982086612     JW4CM3     2026-06-20 22:01:26     650.00       paid        paid           650.00           cash             cash-1781990102052  2026-06-21 00:15:02    LENAH SIGEI    
+POS-1781982311078     6AUJ9H     2026-06-20 22:05:11     900.00       voided      voided                                                                                                     
+POS-1781983576481     A6HKTA     2026-06-20 22:26:17     1700.00      paid        paid           1700.00          cash             cash-1781995928918  2026-06-21 01:52:09    LENAH SIGEI    
+POS-1781983661326     8PGMGE     2026-06-20 22:27:41     9800.00      paid        paid           2500.00          cash             cash-1782006062191  2026-06-21 04:41:02    LENAH SIGEI    
+POS-1781983661326     8PGMGE     2026-06-20 22:27:41     9800.00      paid        paid           7300.00          mpesa            HYTGDEC             2026-06-21 04:45:21    LENAH SIGEI    
+POS-1781984361145     MHMEMA     2026-06-20 22:39:21     1150.00      voided      voided                                                                                                     
+MERGE-1781987195019   SEZDUC     2026-06-20 23:26:35     1050.00      voided      voided                                                                                                     
+MERGE-1781987195019-1 4E935G     2026-06-20 23:27:14     250.00       voided      voided                                                                                                     
+MERGE-1781987195019-2 SCESAC     2026-06-20 23:27:14     800.00       paid        paid           800.00           mpesa            HGF                 2026-06-21 01:43:06    LENAH SIGEI    
+POS-1781988663439     K3HUCL     2026-06-20 23:51:03     1500.00      paid        paid           1500.00          mpesa            FCI                 2026-06-21 01:33:40    LENAH SIGEI    
+POS-1781982311078-2   VDZQL8     2026-06-21 00:06:53     600.00       voided      voided                                                                                                     
+POS-1781982311078-1   XE3YHJ     2026-06-21 00:06:53     600.00       paid        paid           600.00           cash             cash-1781994339482  2026-06-21 01:25:39    LENAH SIGEI    
+POS-1781984361145-2   TYGNK4     2026-06-21 00:27:26     850.00       paid        paid           850.00           mpesa            INE                 2026-06-21 01:28:34    LENAH SIGEI    
+POS-1781984361145-1   GLBUTH     2026-06-21 00:27:26     600.00       paid        paid           600.00           cash             cash-1781994643380  2026-06-21 01:30:43    LENAH SIGEI    
+POS-1781991439189     F6PTM4     2026-06-21 00:37:19     200.00       paid        paid           200.00           cash             cash-1781997055053  2026-06-21 02:10:55    LENAH SIGEI    
+POS-1781992777212     3XQ8AJ     2026-06-21 00:59:37     1250.00      paid        paid           1250.00          mpesa            EC9                 2026-06-21 03:44:20    LENAH SIGEI    
+POS-1781993680520     G3H8G3     2026-06-21 01:14:40     500.00       paid        paid           500.00           mpesa            RRL                 2026-06-21 01:55:59    LENAH SIGEI    
+POS-1782047944173     N44246     2026-06-21 16:19:04     2450.00      paid        paid           2450.00          card             0000                2026-06-21 18:31:56    LENAH SIGEI    
+POS-1782049037801     XGKVPP     2026-06-21 16:37:18     500.00       paid        paid           500.00           cash             cash-1782049303581  2026-06-21 16:41:43    LENAH SIGEI    
+POS-1782054296832     AFG7QX     2026-06-21 18:04:57     100.00       paid        paid           100.00           mpesa            XLT                 2026-06-21 18:19:39    LENAH SIGEI    
+POS-1782054750665     6USPMR     2026-06-21 18:12:30     6200.00      paid        paid           6200.00          mpesa            206                 2026-06-22 01:36:04    LENAH SIGEI    
+POS-1782055736076     CMTMRW     2026-06-21 18:28:56     4800.00      paid        paid           4800.00          mpesa            GFX                 2026-06-21 22:45:56    LENAH SIGEI    
+POS-1782057176129     8W29P3     2026-06-21 18:52:56     600.00       paid        paid           600.00           mpesa            9QL                 2026-06-21 20:15:03    LENAH SIGEI    
+POS-1782059340006     3DDTKS     2026-06-21 19:29:00     750.00       paid        paid           750.00           mpesa            P12                 2026-06-21 21:52:58    LENAH SIGEI    
+POS-1782059475719     KSAP9A     2026-06-21 19:31:15     2600.00      paid        paid           2600.00          mpesa            VF8                 2026-06-21 22:55:06    LENAH SIGEI    
+POS-1782061665225     A3NGAP     2026-06-21 20:07:45     950.00       paid        paid           950.00           mpesa            A3U                 2026-06-21 22:25:06    LENAH SIGEI    
+POS-1782068021595     MFFWA6     2026-06-21 21:53:41     1900.00      paid        paid           1800.00          mpesa            UIY                 2026-06-22 00:15:10    LENAH SIGEI    
+POS-1782068021595     MFFWA6     2026-06-21 21:53:41     1900.00      paid        paid           100.00           cash             cash-1782076514046  2026-06-22 00:15:14    LENAH SIGEI    
+POS-1782069897375     CZ5NMV     2026-06-21 22:24:57     600.00       paid        paid           600.00           mpesa            UJL                 2026-06-22 01:34:44    LENAH SIGEI    
+POS-1782071934220     E3ZZSF     2026-06-21 22:58:54     1900.00      paid        paid           1900.00          mpesa            K7V                 2026-06-22 01:44:18    LENAH SIGEI    
+POS-1782072567305     MTXYXG     2026-06-21 23:09:27     100.00       paid        paid           100.00           mpesa            6YL                 2026-06-21 23:32:52    LENAH SIGEI    
+POS-1782076313189     5WX2Y9     2026-06-22 00:11:53     1400.00      paid        paid           1400.00          mpesa            XUX                 2026-06-22 01:37:44    LENAH SIGEI    
+POS-1782078562406     2HZ9WB     2026-06-22 00:49:22     50.00        paid        paid           50.00            cash             cash-1782081315120  2026-06-22 01:35:15    LENAH SIGEI    
+POS-1782213061329     KVF2S6     2026-06-23 14:11:01     2500.00      paid        paid           2500.00          cash             cash-1782213328448  2026-06-23 14:15:29    LENAH SIGEI    
+POS-1782213113879     GTH3MR     2026-06-23 14:11:53     800.00       paid        paid           800.00           cash             cash-1782213418418  2026-06-23 14:16:58    LENAH SIGEI    
+POS-1782213137862     J9PS4N     2026-06-23 14:12:18     550.00       paid        paid           550.00           mpesa            T9N                 2026-06-23 14:17:55    LENAH SIGEI    
+POS-1782213163136     JKE89R     2026-06-23 14:12:43     1000.00      paid        paid           1000.00          cash             cash-1782213518983  2026-06-23 14:18:39    LENAH SIGEI    
+POS-1782213200210     AQZSPS     2026-06-23 14:13:20     500.00       paid        paid           500.00           cash             cash-1782213555393  2026-06-23 14:19:15    LENAH SIGEI    
+POS-1782213291124     3995RL     2026-06-23 14:14:51     750.00       paid        paid           750.00           cash             cash-1782213387487  2026-06-23 14:16:27    LENAH SIGEI    
+POS-1782218334665     ZERF29     2026-06-23 15:38:54     1100.00      paid        paid           1100.00          mpesa            NLI                 2026-06-23 19:25:18    LENAH SIGEI    
+POS-1782218856711     V48LYY     2026-06-23 15:47:36     650.00       paid        paid           650.00           mpesa            8UW                 2026-06-23 15:50:04    LENAH SIGEI    
+POS-1782219433831     XLS6UU     2026-06-23 15:57:13     1200.00      voided      voided                                                                                                     
+POS-1782223980157     NVLBUN     2026-06-23 17:13:00     1550.00      paid        paid           1550.00          mpesa            B9U                 2026-06-23 18:34:08    LENAH SIGEI    
+POS-1782219433831-1   BMYAVV     2026-06-23 18:01:25     300.00       voided      voided                                                                                                     
+POS-1782219433831-2   BUL2J5     2026-06-23 18:01:25     900.00       paid        paid           900.00           mpesa            5KJ                 2026-06-23 18:07:34    LENAH SIGEI    
+POS-1782227129826     KVXHUE     2026-06-23 18:05:30     4400.00      paid        paid           4400.00          mpesa            RLY                 2026-06-23 22:17:07    LENAH SIGEI    
+POS-1782304989931     PGFMVX     2026-06-24 15:43:10     200.00       paid        paid           200.00           cash             cash-1782310699945  2026-06-24 17:18:20    MERCY CHEPKORIR
+POS-1782305019370     VTXEEN     2026-06-24 15:43:39     200.00       paid        paid           200.00           cash             cash-1782310521287  2026-06-24 17:15:21    MERCY CHEPKORIR
+POS-1782305208519     P2UMXU     2026-06-24 15:46:48     350.00       paid        paid           350.00           mpesa            JEQ                 2026-06-24 17:31:19    MERCY CHEPKORIR
+POS-1782307027799     WSACFM     2026-06-24 16:17:08     100.00       paid        paid           100.00           mpesa            ALBINA              2026-06-24 18:47:08    MERCY CHEPKORIR
+POS-1782307314947     ZAJCMJ     2026-06-24 16:21:55     100.00       paid        paid           100.00           cash             cash-1782311064607  2026-06-24 17:24:24    MERCY CHEPKORIR
+POS-1782312004966     M4K4CT     2026-06-24 17:40:05     750.00       paid        paid           750.00           mpesa            557                 2026-06-24 18:52:08    MERCY CHEPKORIR
+POS-1782314581416     X7ZG3E     2026-06-24 18:23:01     50.00        paid        paid           50.00            cash             cash-1782348527035  2026-06-25 03:48:47    MERCY CHEPKORIR
+POS-1782315008307     A5RXYK     2026-06-24 18:30:08     200.00       paid        paid           200.00           mpesa            LY7                 2026-06-24 20:59:58    MERCY CHEPKORIR
+POS-1782317193462     G5YNAE     2026-06-24 19:06:33     1100.00      paid        paid           2200.00          cash             cash-1782322361428  2026-06-24 20:32:41    MERCY CHEPKORIR
+POS-1782317266132     JWBBVT     2026-06-24 19:07:46     1000.00      paid        paid           1000.00          cash             cash-1782323905670  2026-06-24 20:58:25    MERCY CHEPKORIR
+POS-1782320142012     ELPAD9     2026-06-24 19:55:42     600.00       paid        paid           600.00           mpesa            L25                 2026-06-25 00:09:46    MERCY CHEPKORIR
+POS-1782321049799     5CGUKQ     2026-06-24 20:10:49     100.00       paid        paid           100.00           cash             cash-1782321140568  2026-06-24 20:12:20    MERCY CHEPKORIR
+POS-1782322882643     VMMV75     2026-06-24 20:41:22     900.00       paid        paid           1400.00          mpesa            ANK                 2026-06-25 01:52:19    MERCY CHEPKORIR
+POS-1782324019834     AU9KBP     2026-06-24 21:00:20     150.00       paid        paid           150.00           mpesa            HJK                 2026-06-24 23:00:57    MERCY CHEPKORIR
+POS-1782324811357     H9TF2Q     2026-06-24 21:13:31     3150.00      paid        paid           3150.00          mpesa            XYY                 2026-06-25 02:02:21    MERCY CHEPKORIR
+POS-1782326576294     AA7QTB     2026-06-24 21:42:56     50.00        paid        paid           50.00            mpesa            BNM                 2026-06-24 22:35:41    MERCY CHEPKORIR
+POS-1782327601344     VNPKS9     2026-06-24 22:00:01     1000.00      paid        paid           1000.00          mpesa            OFW                 2026-06-25 01:34:21    MERCY CHEPKORIR
+POS-1782329138118     3DAD53     2026-06-24 22:25:38     600.00       paid        paid           600.00           mpesa            KCV                 2026-06-25 03:58:40    MERCY CHEPKORIR
+POS-1782332312945     ZW3TX2     2026-06-24 23:18:33     2250.00      voided      voided                                                                                                     
+POS-1782332537385     MVRZP9     2026-06-24 23:22:17     250.00       voided      voided                                                                                                     
+POS-1782333061495     8P6LEK     2026-06-24 23:31:01     450.00       paid        paid           450.00           mpesa            T20                 2026-06-25 01:13:40    MERCY CHEPKORIR
+POS-1782335509213     QUY5YT     2026-06-25 00:11:49     100.00       paid        paid           100.00           cash             cash-1782345282228  2026-06-25 02:54:42    MERCY CHEPKORIR
+POS-1782336876986     Y79QQQ     2026-06-25 00:34:37     400.00       paid        paid           400.00           cash             cash-1782341449645  2026-06-25 01:50:49    MERCY CHEPKORIR
+POS-1782338553166     AYQ2X7     2026-06-25 01:02:33     800.00       paid        paid           800.00           mpesa            IWP                 2026-06-25 01:49:10    MERCY CHEPKORIR
+POS-1782338723973     SPMLRV     2026-06-25 01:05:24     1800.00      paid        paid           1800.00          mpesa            2UO                 2026-06-25 03:07:23    MERCY CHEPKORIR
+POS-1782339111857     8VUZHY     2026-06-25 01:11:52     250.00       paid        paid           250.00           mpesa            WO1                 2026-06-25 02:53:59    MERCY CHEPKORIR
+POS-1782343189318     M8MCSP     2026-06-25 02:19:49     2300.00      paid        paid           2300.00          mpesa            V7B                 2026-06-25 03:40:57    MERCY CHEPKORIR
+POS-1782344373243     YZ7QYR     2026-06-25 02:39:33     250.00       paid        paid           250.00           mpesa            NMH                 2026-06-25 05:21:55    MERCY CHEPKORIR
+POS-1782332312945-2   J52VKV     2026-06-25 03:44:38     1950.00      paid        paid           1950.00          cash             cash-1782348434599  2026-06-25 03:47:14    MERCY CHEPKORIR
+POS-1782332312945-1   VGRY89     2026-06-25 03:44:38     0.00         voided      voided                                                                                                     
+POS-1782393782508     W9ATQT     2026-06-25 16:23:02     100.00       paid        paid           100.00           mpesa            780                 2026-06-25 17:05:16    LENAH SIGEI    
+POS-1782398490096     395XMV     2026-06-25 17:41:30     6550.00      paid        paid           7550.00          mpesa            U6U                 2026-06-25 23:04:34    LENAH SIGEI    
+POS-1782398622175     JC6SLB     2026-06-25 17:43:42     1100.00      paid        paid           1100.00          cash             cash-1782407230446  2026-06-25 20:07:10    LENAH SIGEI    
+POS-1782404949558     QD43NA     2026-06-25 19:29:09     2800.00      paid        paid           1000.00          cash             cash-1782421096411  2026-06-25 23:58:16    LENAH SIGEI    
+POS-1782404949558     QD43NA     2026-06-25 19:29:09     2800.00      paid        paid           1400.00          mpesa            2AA                 2026-06-25 23:58:21    LENAH SIGEI    
+POS-1782404949558     QD43NA     2026-06-25 19:29:09     2800.00      paid        paid           400.00           mpesa            OHL                 2026-06-25 23:58:25    LENAH SIGEI    
+POS-1782407279714     H9VHVL     2026-06-25 20:07:59     500.00       paid        paid           500.00           mpesa            K2K                 2026-06-25 21:01:34    LENAH SIGEI    
+POS-1782407287932     K7SCXJ     2026-06-25 20:08:08     0.00         voided      voided                                                                                                     
+POS-1782407298539     AGPW2G     2026-06-25 20:08:18     0.00         voided      voided                                                                                                     
+POS-1782407707624     JZ9L8H     2026-06-25 20:15:07     100.00       paid        paid           100.00           cash             cash-1782425689506  2026-06-26 01:14:49    LENAH SIGEI    
+POS-1782409823473     8QYPRU     2026-06-25 20:50:23     500.00       paid        paid           500.00           cash             A3N                 2026-06-25 21:35:48    LENAH SIGEI    
+POS-1782410852402     9UXC3M     2026-06-25 21:07:32     500.00       paid        paid           500.00           mpesa            A3N                 2026-06-25 21:34:24    LENAH SIGEI    
+POS-1782411332462     9HJP3L     2026-06-25 21:15:32     150.00       paid        paid           150.00           cash             7TK                 2026-06-25 21:39:57    LENAH SIGEI    
+POS-1782412327776     43UEBH     2026-06-25 21:32:07     2000.00      paid        paid           2000.00          mpesa            BMN                 2026-06-26 03:07:03    LENAH SIGEI    
+POS-1782414168066     MYU985     2026-06-25 22:02:48     600.00       paid        paid           600.00           mpesa            490                 2026-06-25 22:52:07    LENAH SIGEI    
+POS-1782415138207     88M2JF     2026-06-25 22:18:58     5100.00      paid        paid           5100.00          mpesa            IDD                 2026-06-25 23:02:50    LENAH SIGEI    
+POS-1782416723398     VH74DM     2026-06-25 22:45:23     1800.00      paid        paid           1800.00          mpesa            Y9N                 2026-06-26 01:13:05    LENAH SIGEI    
+POS-1782419937582     MLGVKY     2026-06-25 23:38:57     600.00       paid        paid           600.00           cash             cash-1782421462566  2026-06-26 00:04:22    LENAH SIGEI    
+POS-1782472264043     PQZ4A5     2026-06-26 14:11:04     2150.00      paid        paid           2150.00          mpesa            U4H                 2026-06-26 18:21:04    MERCY CHEPKORIR
+POS-1782491365165     F3PJQ6     2026-06-26 19:29:25     1000.00      voided      voided                                                                                                     
+POS-1782492757633     YDAVXA     2026-06-26 19:52:38     950.00       paid        paid           950.00           mpesa            UDY                 2026-06-26 22:22:28    MERCY CHEPKORIR
+POS-1782493197166     TWK88G     2026-06-26 19:59:57     1100.00      paid        paid           1100.00          mpesa            C2Y                 2026-06-26 20:56:09    MERCY CHEPKORIR
+POS-1782494537238     7ZM9G9     2026-06-26 20:22:17     600.00       paid        paid           250.00           mpesa            EC9                 2026-06-26 23:06:07    MERCY CHEPKORIR
+POS-1782494537238     7ZM9G9     2026-06-26 20:22:17     600.00       paid        paid           350.00           mpesa            E4M                 2026-06-26 23:06:03    MERCY CHEPKORIR
+POS-1782495246229     VDWBFF     2026-06-26 20:34:06     0.00         open        unpaid                                                                                                     
+POS-1782496380896     7HZER5     2026-06-26 20:53:01     400.00       voided      voided                                                                                                     
+POS-1782496732371     9TLR8E     2026-06-26 20:58:52     600.00       paid        paid           600.00           cash             cash-1782497763954  2026-06-26 21:16:04    MERCY CHEPKORIR
+POS-1782496916818     H3MFZL     2026-06-26 21:01:57     1900.00      paid        paid           1900.00          mpesa            98M                 2026-06-27 00:47:14    MERCY CHEPKORIR
+POS-1782497694056     8PBKNJ     2026-06-26 21:14:54     800.00       open        unpaid                                                                                                     
+POS-1782498132156     9PKVXV     2026-06-26 21:22:12     250.00       open        unpaid                                                                                                     
+POS-1782498346593     A7P9JK     2026-06-26 21:25:46     800.00       paid        paid           800.00           mpesa            BF6                 2026-06-27 00:17:46    MERCY CHEPKORIR
+MERGE-1782500521066   77LXQY     2026-06-26 22:02:01     1400.00      voided      voided                                                                                                     
+MERGE-1782500521066-1 77BHEJ     2026-06-26 22:03:19     400.00       paid        paid           400.00           mpesa            UDY                 2026-06-26 22:23:04    MERCY CHEPKORIR
+MERGE-1782500521066-2 DZVXRZ     2026-06-26 22:03:19     1300.00      paid        paid           1300.00          mpesa            GWB                 2026-06-26 23:33:41    MERCY CHEPKORIR
+POS-1782500933978     M858TV     2026-06-26 22:08:54     2000.00      paid        paid           2000.00          cash             cash-1782510160419  2026-06-27 00:42:40    MERCY CHEPKORIR
+POS-1782501276041     59ZQXH     2026-06-26 22:14:36     3850.00      paid        paid           3850.00          mpesa            1DP                 2026-06-27 00:22:14    MERCY CHEPKORIR
+POS-1782501917780     UGQWFT     2026-06-26 22:25:17     450.00       paid        paid           450.00           mpesa            K8N                 2026-06-27 00:18:42    MERCY CHEPKORIR
+POS-1782502379272     WQCSVQ     2026-06-26 22:32:59     100.00       paid        paid           100.00           cash             cash-1782508607541  2026-06-27 00:16:47    MERCY CHEPKORIR
+POS-1782503574551     7LQ4R7     2026-06-26 22:52:55     1500.00      paid        paid           100.00           cash             cash-1782507667570  2026-06-27 00:01:08    MERCY CHEPKORIR
+POS-1782503574551     7LQ4R7     2026-06-26 22:52:55     1500.00      paid        paid           1400.00          mpesa            SYE                 2026-06-27 00:01:11    MERCY CHEPKORIR
+POS-1782505698058     YKMZNU     2026-06-26 23:28:18     1100.00      paid        paid           1100.00          cash             FOW                 2026-06-27 02:24:31    MERCY CHEPKORIR
+POS-1782506096829     7HJN5T     2026-06-26 23:34:56     1900.00      paid        paid           1900.00          mpesa            6L2                 2026-06-27 01:51:20    MERCY CHEPKORIR
+POS-1782506136879     9PPEEF     2026-06-26 23:35:36     1500.00      paid        paid           1500.00          mpesa            5UG                 2026-06-27 00:45:51    MERCY CHEPKORIR
+POS-1782507767914     EEN2LA     2026-06-27 00:02:48     4200.00      paid        paid           4200.00          mpesa            41R                 2026-06-27 02:36:57    MERCY CHEPKORIR
+POS-1782510326149     79ZFVZ     2026-06-27 00:45:26     3200.00      open        unpaid                                                                                                     
+POS-1782510440640     UWQPVP     2026-06-27 00:47:20     2900.00      paid        paid           2900.00          mpesa            1VY                 2026-06-27 02:02:29    MERCY CHEPKORIR
+POS-1782511393131     KU8F7T     2026-06-27 01:03:13     0.00         open        unpaid                                                                                                     
+POS-1782512779498     8RCF4Z     2026-06-27 01:26:19     100.00       paid        paid           100.00           cash             cash-1782515805732  2026-06-27 02:16:46    MERCY CHEPKORIR
+POS-1782513348311     QRGPYC     2026-06-27 01:35:48     300.00       paid        paid           300.00           mpesa            QW0                 2026-06-27 02:27:29    MERCY CHEPKORIR
+POS-1782513434429     J57GHH     2026-06-27 01:37:14     500.00       paid        paid           500.00           mpesa            OKK                 2026-06-27 01:56:47    MERCY CHEPKORIR
+POS-1782515078720     MV4QB6     2026-06-27 02:04:38     350.00       paid        paid           50.00            mpesa            7FR                 2026-06-27 02:14:33    MERCY CHEPKORIR
+POS-1782515078720     MV4QB6     2026-06-27 02:04:38     350.00       paid        paid           300.00           cash             cash-1782515677681  2026-06-27 02:14:37    MERCY CHEPKORIR
+POS-1782515115096     GWVVHD     2026-06-27 02:05:15     500.00       paid        paid           500.00           mpesa            D07                 2026-06-27 02:15:32    MERCY CHEPKORIR
+
+

@@ -77,6 +77,13 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
     }
   }
 
+  /// Manual refresh entry point for callers outside this notifier (the KDS
+  /// screen's Refresh button and post-action refreshes like void
+  /// acknowledgement) — without this, those only ever touched the separate
+  /// History/Analytics FutureBuilder and never actually reloaded this
+  /// provider's order grid.
+  Future<void> refresh() => _fetch();
+
   Future<void> markItemReady(String orderId, String itemId) async {
     try {
       final repo = _ref.read(kitchenRepositoryProvider);

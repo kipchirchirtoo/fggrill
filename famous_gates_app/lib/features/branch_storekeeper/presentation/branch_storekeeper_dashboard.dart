@@ -9694,6 +9694,7 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
             'stock_take': detail['stock_take'] ?? [],
             'consumption': posCons['consumption'] ?? [],
             'cashier_shifts': posCons['cashier_shifts'] ?? [],
+            'unmatched_summary': posCons['unmatched_summary'] ?? {},
             'summary': detail['summary'] ?? {},
           };
         });
@@ -10481,10 +10482,35 @@ class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
     final list = _analyticsData['cashier_shifts'] as List?;
     final totalSales = list?.fold<double>(0, (sum, item) => sum + _fcNum(item['total_cost'])) ?? 0.0;
     final totalPortions = list?.fold<double>(0, (sum, item) => sum + _fcNum(item['total_portions'])) ?? 0.0;
+    final unmatched = _analyticsData['unmatched_summary'] as Map?;
+    final unmatchedCount = (unmatched?['count'] as num?)?.toInt() ?? 0;
+    final unmatchedValue = _fcNum(unmatched?['value']);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (unmatchedCount > 0)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.report_problem_outlined, color: Colors.red.shade800),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '$unmatchedCount sale(s) worth KES ${unmatchedValue.toStringAsFixed(2)} were sold via POS but never issued to this kitchen shift (e.g. an unissued pastry batch). Issue the matching stock before closing the shift, or this variance will show as unexplained shortage.',
+                    style: TextStyle(color: Colors.red.shade900, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -11326,6 +11352,42 @@ class _FoodControlDialog extends ConsumerStatefulWidget {
   ConsumerState<_FoodControlDialog> createState() => _FoodControlDialogState();
 }
 
+class _FoodControlOutput {
+  _FoodControlOutput({
+    required this.menuItem,
+    required this.name,
+    required this.quantity,
+    required this.unit,
+    required this.costPerOutput,
+    this.sku,
+    this.posOutletItemId,
+    this.poolItemId,
+    this.poolFraction,
+  });
+
+  final Map<String, dynamic> menuItem;
+  final String name;
+  final String? sku;
+  final String? posOutletItemId;
+  final double quantity;
+  final String unit;
+  final double costPerOutput;
+  final String? poolItemId;
+  final double? poolFraction;
+
+  Map<String, dynamic> toPayload(String rawItemName) => {
+        'recipe_name': '$rawItemName to $name',
+        'produced_item_name': name,
+        if (sku != null && sku!.isNotEmpty) 'produced_item_sku': sku,
+        'produced_quantity': quantity,
+        'produced_unit': unit,
+        if (posOutletItemId != null) 'pos_outlet_item_id': posOutletItemId,
+        'cost_per_output': costPerOutput,
+        if (poolItemId != null) 'pool_item_id': poolItemId,
+        if (poolFraction != null) 'pool_fraction': poolFraction,
+      };
+}
+
 class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
   final _rawSearchCtrl = TextEditingController();
   final _rawQtyCtrl = TextEditingController(text: '1');
@@ -11341,6 +11403,7 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
   bool _menuLoading = true;
   bool _requiresConfirmation = true;
   List<Map<String, dynamic>> _menuItems = [];
+  final List<_FoodControlOutput> _outputs = [];
   Map<String, dynamic>? _selectedRaw;
   Map<String, dynamic>? _selectedMenu;
   Map<String, dynamic>? _poolItem;
@@ -11419,6 +11482,57 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
     return yieldQty <= 0 ? 0 : rawCost / yieldQty;
   }
 
+  _FoodControlOutput? _buildCurrentOutput() {
+    final selected = _selectedMenu;
+    final name = _menuCtrl.text.trim();
+    final qty = _fcNum(_yieldQtyCtrl.text);
+    if (selected == null || name.isEmpty || qty <= 0) return null;
+    final sku = '${selected['sku'] ?? selected['item_sku'] ?? selected['id'] ?? ''}';
+    final posId = _uuid(selected['id']);
+    final poolId = _poolItem == null ? null : _uuid(_poolItem!['id']);
+    final poolFraction = poolId == null ? null : _fcNum(_poolFractionCtrl.text);
+    return _FoodControlOutput(
+      menuItem: selected,
+      name: name,
+      sku: sku,
+      posOutletItemId: posId,
+      quantity: qty,
+      unit: _yieldUnitCtrl.text.trim().isEmpty
+          ? 'Portions'
+          : _yieldUnitCtrl.text.trim(),
+      costPerOutput: _costPerOutput,
+      poolItemId: poolId,
+      poolFraction: poolFraction,
+    );
+  }
+
+  void _addCurrentOutput() {
+    final output = _buildCurrentOutput();
+    if (output == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a POS menu item and yield quantity first')),
+      );
+      return;
+    }
+    final exists = _outputs.any((o) =>
+        (o.posOutletItemId != null && o.posOutletItemId == output.posOutletItemId) ||
+        o.name.toLowerCase().trim() == output.name.toLowerCase().trim());
+    if (exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That POS menu item is already added')),
+      );
+      return;
+    }
+    setState(() {
+      _outputs.add(output);
+      _selectedMenu = null;
+      _menuCtrl.clear();
+      _yieldQtyCtrl.text = '1';
+      _poolItem = null;
+      _poolFractionCtrl.text = '1';
+    });
+  }
+
   @override
   void dispose() {
     _rawSearchCtrl.dispose();
@@ -11443,15 +11557,24 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
       );
       return;
     }
-    if (_selectedMenu == null || _menuCtrl.text.trim().isEmpty) {
+    final currentOutput = _buildCurrentOutput();
+    final outputs = widget.existing == null
+        ? [..._outputs, if (currentOutput != null) currentOutput]
+        : <_FoodControlOutput>[];
+    if (widget.existing == null && outputs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least one POS menu item')),
+      );
+      return;
+    }
+    if (widget.existing != null && currentOutput == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a POS menu item')),
       );
       return;
     }
     final rawQty = _fcNum(_rawQtyCtrl.text);
-    final yieldQty = _fcNum(_yieldQtyCtrl.text);
-    if (rawQty <= 0 || yieldQty <= 0) {
+    if (rawQty <= 0 || (widget.existing != null && _fcNum(_yieldQtyCtrl.text) <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Raw quantity and yield must be greater than zero')),
@@ -11465,30 +11588,25 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
       final rawSku = '${_selectedRaw!['item_sku'] ?? _selectedRaw!['sku']}';
       final rawName =
           '${_selectedRaw!['item_name'] ?? _selectedRaw!['name'] ?? _rawSearchCtrl.text}';
-      final producedName = _menuCtrl.text.trim();
-      final producedSku =
-          '${_selectedMenu!['sku'] ?? _selectedMenu!['item_sku'] ?? _selectedMenu!['id'] ?? ''}';
-      final posId = _uuid(_selectedMenu!['id']);
-      final poolId = _poolItem == null ? null : _uuid(_poolItem!['id']);
-      final poolFraction =
-          poolId == null ? null : _fcNum(_poolFractionCtrl.text);
+      final primaryOutput = widget.existing == null ? outputs.first : currentOutput!;
       if (widget.existing == null) {
         await repo.createProductionRecipe(
           rawItemSku: rawSku,
           rawItemName: rawName,
           rawQuantity: rawQty,
           rawUnit: _rawUnitCtrl.text.trim(),
-          producedItemName: producedName,
-          producedItemSku: producedSku,
-          producedQuantity: yieldQty,
-          producedUnit: _yieldUnitCtrl.text.trim(),
-          posOutletItemId: posId,
+          producedItemName: primaryOutput.name,
+          producedItemSku: primaryOutput.sku,
+          producedQuantity: primaryOutput.quantity,
+          producedUnit: primaryOutput.unit,
+          posOutletItemId: primaryOutput.posOutletItemId,
           allowedVariancePercent: _fcNum(_varianceCtrl.text),
           spoilageThresholdPercent: _fcNum(_spoilageCtrl.text),
-          costPerOutput: _costPerOutput,
+          costPerOutput: primaryOutput.costPerOutput,
           requiresYieldConfirmation: _requiresConfirmation,
-          poolItemId: poolId,
-          poolFraction: poolFraction,
+          poolItemId: primaryOutput.poolItemId,
+          poolFraction: primaryOutput.poolFraction,
+          outputs: outputs.map((o) => o.toPayload(rawName)).toList(),
         );
       } else {
         await repo.updateProductionRecipe(
@@ -11497,17 +11615,17 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
           rawItemName: rawName,
           rawQuantity: rawQty,
           rawUnit: _rawUnitCtrl.text.trim(),
-          producedItemName: producedName,
-          producedItemSku: producedSku,
-          producedQuantity: yieldQty,
-          producedUnit: _yieldUnitCtrl.text.trim(),
-          posOutletItemId: posId,
+          producedItemName: primaryOutput.name,
+          producedItemSku: primaryOutput.sku,
+          producedQuantity: primaryOutput.quantity,
+          producedUnit: primaryOutput.unit,
+          posOutletItemId: primaryOutput.posOutletItemId,
           allowedVariancePercent: _fcNum(_varianceCtrl.text),
           spoilageThresholdPercent: _fcNum(_spoilageCtrl.text),
-          costPerOutput: _costPerOutput,
+          costPerOutput: primaryOutput.costPerOutput,
           requiresYieldConfirmation: _requiresConfirmation,
-          poolItemId: poolId,
-          poolFraction: poolFraction,
+          poolItemId: primaryOutput.poolItemId,
+          poolFraction: primaryOutput.poolFraction,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -11554,8 +11672,9 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
                     '${s['item_name'] ?? s['name'] ?? s['item_sku'] ?? ''}',
                 onSelected: (s) => setState(() => _applyRaw(s)),
                 fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
-                  if (ctrl.text != _rawSearchCtrl.text)
+                  if (ctrl.text != _rawSearchCtrl.text) {
                     ctrl.text = _rawSearchCtrl.text;
+                  }
                   return TextField(
                     controller: ctrl,
                     focusNode: focus,
@@ -11691,6 +11810,34 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
                       style: const TextStyle(fontWeight: FontWeight.w800)),
                 )),
               ]),
+              if (!isEdit) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: _addCurrentOutput,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add this POS item'),
+                  ),
+                ),
+                if (_outputs.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _outputs.map((output) {
+                      return InputChip(
+                        label: Text(
+                          '${output.name} - ${_qtyText(output.quantity)} ${output.unit}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        avatar: const Icon(Icons.restaurant_menu, size: 16),
+                        onDeleted: () => setState(() => _outputs.remove(output)),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
               const SizedBox(height: 16),
               const Text('Step 4: Variance & Spoilage',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),

@@ -170,6 +170,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
           initialMethod: widget.initialMethod,
         )),
       ),
+      const DashboardTab(
+        label: 'Void Management',
+        icon: Icons.block,
+        content: _RequiresOpenShift(child: _VoidManagementTab()),
+      ),
       DashboardTab(
         label: 'Void Requests',
         icon: Icons.report_problem_outlined,
@@ -2930,6 +2935,429 @@ class _ExchangeRequestsTabState extends ConsumerState<_ExchangeRequestsTab> {
   void _snack(String message) {
     if (!mounted) return;
     AppNotifier.show(context, message);
+  }
+}
+
+// Cashier Void Management — the cashier searches any unpaid/partial bill in
+// the branch (by server name, shortcode, or order number) and voids it
+// immediately, whole bill or specific items. This is now the sole entry
+// point for voids; bartenders/waiters no longer have a "request void" button
+// (see outlet_pos_screen.dart).
+class _VoidManagementTab extends ConsumerStatefulWidget {
+  const _VoidManagementTab();
+
+  @override
+  ConsumerState<_VoidManagementTab> createState() => _VoidManagementTabState();
+}
+
+class _VoidManagementTabState extends ConsumerState<_VoidManagementTab> {
+  final _searchController = TextEditingController();
+  List<Map<String, dynamic>> _results = [];
+  bool _searching = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _results = [];
+        _error = null;
+      });
+      return;
+    }
+    setState(() {
+      _searching = true;
+      _error = null;
+    });
+    try {
+      final rows =
+          await ref.read(outletPosRepositoryProvider).searchVoidableBills(query);
+      if (!mounted) return;
+      setState(() {
+        _results = rows;
+        _searching = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = apiErrorMessage(error);
+        _searching = false;
+      });
+    }
+  }
+
+  Future<void> _openBillActions(Map<String, dynamic> bill) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.block, color: Colors.red),
+              title: const Text('Void Entire Bill'),
+              onTap: () => Navigator.pop(context, 'whole'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.remove_circle_outline),
+              title: const Text('Void Specific Item(s)'),
+              onTap: () => Navigator.pop(context, 'items'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'whole') {
+      await _voidWholeBillFlow(bill);
+    } else if (action == 'items') {
+      await _voidItemsFlow(bill);
+    }
+  }
+
+  String _billLabel(Map<String, dynamic> bill) =>
+      '${bill['short_code'] ?? bill['order_number'] ?? 'Bill'}';
+
+  Future<void> _voidWholeBillFlow(Map<String, dynamic> bill) async {
+    final total = (bill['total_amount'] as num?)?.toDouble() ?? 0;
+    final reasonResult = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _VoidReasonDialog(
+        title: 'Void Entire Bill',
+        subtitle: '${_billLabel(bill)} • KES ${total.toStringAsFixed(2)}',
+        confirmLabel: 'CONTINUE',
+      ),
+    );
+    if (reasonResult == null || !mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm void'),
+        content: Text(
+            'Void the entire bill ${_billLabel(bill)} for KES ${total.toStringAsFixed(2)}? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('VOID BILL'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(outletPosRepositoryProvider).cashierVoidWholeBill(
+            orderId: bill['id'] as String,
+            reasonCategory: reasonResult['reasonCategory']!,
+            note: reasonResult['note'],
+          );
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(
+            content: Text('Bill voided'), backgroundColor: Colors.green),
+      );
+      setState(() => _results.removeWhere((r) => r['id'] == bill['id']));
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text('Could not void bill: ${apiErrorMessage(error)}')),
+      );
+    }
+  }
+
+  Future<void> _voidItemsFlow(Map<String, dynamic> bill) async {
+    final rawItems = (bill['items'] as List?) ?? const [];
+    final items = rawItems
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+
+    final selected = await showModalBottomSheet<List<Map<String, dynamic>>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _VoidItemsPickerSheet(items: items),
+    );
+    if (selected == null || selected.isEmpty || !mounted) return;
+
+    final reasonResult = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _VoidReasonDialog(
+        title: 'Void ${selected.length} Item(s)',
+        subtitle: _billLabel(bill),
+        confirmLabel: 'VOID ITEM(S)',
+      ),
+    );
+    if (reasonResult == null || !mounted) return;
+
+    try {
+      await ref.read(outletPosRepositoryProvider).cashierVoidLineItems(
+            orderId: bill['id'] as String,
+            items: selected,
+            reasonCategory: reasonResult['reasonCategory']!,
+            note: reasonResult['note'],
+          );
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(
+            content: Text('Item(s) voided'), backgroundColor: Colors.green),
+      );
+      await _search(_searchController.text);
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(
+            content:
+                Text('Could not void item(s): ${apiErrorMessage(error)}')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Void Management', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          const Text(
+            'Search by server name, bill shortcode, or order number to void a bill or specific items. Only your branch\'s unpaid/partial bills are searchable.',
+            style: TextStyle(color: AppColors.kTextSecondary),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search server name, shortcode, or order number…',
+              prefixIcon: const Icon(Icons.search),
+              border: const OutlineInputBorder(),
+              suffixIcon: _searching
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : null,
+            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: _search,
+            onChanged: (value) {
+              if (value.trim().isEmpty) setState(() => _results = []);
+            },
+          ),
+          const SizedBox(height: 12),
+          if (_error != null) ErrorState(message: _error!),
+          Expanded(
+            child: _results.isEmpty
+                ? Center(
+                    child: Text(
+                      _searching ? 'Searching…' : 'Search for a bill to void',
+                      style: const TextStyle(color: AppColors.kTextSecondary),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: _results.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final bill = _results[index];
+                      final total = (bill['total_amount'] as num?)?.toDouble() ?? 0;
+                      return ListTile(
+                        title: Text(_billLabel(bill)),
+                        subtitle: Text(
+                            '${bill['outlet_name'] ?? ''} • ${bill['waiter_name'] ?? 'Unknown server'} • ${bill['table_number'] ?? bill['room_number'] ?? ''}'),
+                        trailing: Text('KES ${total.toStringAsFixed(2)}'),
+                        onTap: () => _openBillActions(bill),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoidReasonDialog extends StatefulWidget {
+  const _VoidReasonDialog({
+    required this.title,
+    required this.confirmLabel,
+    this.subtitle,
+  });
+
+  final String title;
+  final String confirmLabel;
+  final String? subtitle;
+
+  @override
+  State<_VoidReasonDialog> createState() => _VoidReasonDialogState();
+}
+
+class _VoidReasonDialogState extends State<_VoidReasonDialog> {
+  String _category = cashierVoidReasonCategories.keys.first;
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final requiresNote = _category == 'other';
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.subtitle != null) ...[
+            Text(widget.subtitle!, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+          ],
+          DropdownButtonFormField<String>(
+            initialValue: _category,
+            decoration: const InputDecoration(
+                labelText: 'Reason', border: OutlineInputBorder()),
+            items: cashierVoidReasonCategories.entries
+                .map((entry) =>
+                    DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                .toList(),
+            onChanged: (value) {
+              if (value != null) setState(() => _category = value);
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _noteController,
+            decoration: InputDecoration(
+              labelText: requiresNote ? 'Note (required)' : 'Note (optional)',
+              border: const OutlineInputBorder(),
+            ),
+            maxLines: 2,
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: (requiresNote && _noteController.text.trim().isEmpty)
+              ? null
+              : () => Navigator.pop(context, {
+                    'reasonCategory': _category,
+                    'note': _noteController.text.trim(),
+                  }),
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
+}
+
+class _VoidItemsPickerSheet extends StatefulWidget {
+  const _VoidItemsPickerSheet({required this.items});
+
+  final List<Map<String, dynamic>> items;
+
+  @override
+  State<_VoidItemsPickerSheet> createState() => _VoidItemsPickerSheetState();
+}
+
+class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
+  final Set<int> _selected = {};
+
+  double _activeQty(Map<String, dynamic> item) {
+    final qty = (item['quantity'] is num)
+        ? (item['quantity'] as num).toDouble()
+        : double.tryParse('${item['quantity']}') ?? 0;
+    final voided = (item['voided_qty'] is num)
+        ? (item['voided_qty'] as num).toDouble()
+        : double.tryParse('${item['voided_qty']}') ?? 0;
+    return qty - voided;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Select item(s) to void',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints:
+                  BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.items.length,
+                itemBuilder: (context, index) {
+                  final item = widget.items[index];
+                  final activeQty = _activeQty(item);
+                  if (activeQty <= 0) return const SizedBox.shrink();
+                  final unitPrice = (item['unit_price'] is num)
+                      ? (item['unit_price'] as num).toDouble()
+                      : double.tryParse('${item['unit_price']}') ?? 0;
+                  return CheckboxListTile(
+                    value: _selected.contains(index),
+                    onChanged: (checked) => setState(() {
+                      if (checked == true) {
+                        _selected.add(index);
+                      } else {
+                        _selected.remove(index);
+                      }
+                    }),
+                    title: Text('${item['name'] ?? 'Item'}'),
+                    subtitle: Text(
+                        'Qty ${activeQty.toStringAsFixed(activeQty.truncateToDouble() == activeQty ? 0 : 1)} × KES ${unitPrice.toStringAsFixed(2)} = KES ${(activeQty * unitPrice).toStringAsFixed(2)}'),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _selected.isEmpty
+                    ? null
+                    : () => Navigator.pop(
+                          context,
+                          _selected.map((index) {
+                            final item = widget.items[index];
+                            return {
+                              'item_index': index,
+                              'qty_to_void': _activeQty(item),
+                            };
+                          }).toList(),
+                        ),
+                child: Text('Continue with ${_selected.length} item(s)'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

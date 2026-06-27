@@ -799,22 +799,57 @@ export const createProductionRecipe = asyncWrap(async (req: Request, res: Respon
         pool_fraction
     } = req.body;
     const userId = (req as any).user?.id;
-    if (!branch_id || !raw_item_sku || !raw_item_name || !raw_quantity || !raw_unit || !produced_item_name || !produced_quantity) {
+    const outputs = Array.isArray(req.body.outputs) ? req.body.outputs : [];
+    const normalizedOutputs = outputs.length > 0
+        ? outputs
+        : [{
+            produced_item_name,
+            produced_item_sku,
+            produced_quantity,
+            produced_unit,
+            pos_outlet_item_id,
+            pool_item_id,
+            pool_fraction
+        }];
+
+    if (!branch_id || !raw_item_sku || !raw_item_name || !raw_quantity || !raw_unit || normalizedOutputs.length === 0) {
         throw new AppError('branch_id, raw item, raw quantity, produced item, and yield are required', 400);
     }
-    const { data, error } = await supabase.from('kitchen_production_recipes').insert({
-        branch_id, recipe_name, raw_item_sku, raw_item_name, raw_quantity: n(raw_quantity), raw_unit,
-        produced_item_name, produced_item_sku, produced_quantity: n(produced_quantity), produced_unit: produced_unit || 'portion',
-        pos_outlet_item_id: pos_outlet_item_id || null,
+    const invalidOutput = normalizedOutputs.find((output: any) =>
+        !output?.produced_item_name || n(output?.produced_quantity) <= 0
+    );
+    if (invalidOutput) {
+        throw new AppError('Every produced menu item must have a name and yield quantity greater than zero', 400);
+    }
+
+    const insertRows = normalizedOutputs.map((output: any) => ({
+        branch_id,
+        recipe_name: output.recipe_name || recipe_name || `${raw_item_name} to ${output.produced_item_name}`,
+        raw_item_sku,
+        raw_item_name,
+        raw_quantity: n(raw_quantity),
+        raw_unit,
+        produced_item_name: output.produced_item_name,
+        produced_item_sku: output.produced_item_sku || null,
+        produced_quantity: n(output.produced_quantity),
+        produced_unit: output.produced_unit || produced_unit || 'portion',
+        pos_outlet_item_id: output.pos_outlet_item_id || null,
         allowed_variance_percent: n(allowed_variance_percent || 2),
         spoilage_threshold_percent: n(spoilage_threshold_percent || 1),
-        cost_per_output: n(cost_per_output),
+        cost_per_output: n(output.cost_per_output ?? cost_per_output),
         requires_yield_confirmation: requires_yield_confirmation !== false,
         created_by: userId
-    }).select().single();
+    }));
+
+    const { data, error } = await supabase
+        .from('kitchen_production_recipes')
+        .insert(insertRows)
+        .select();
     if (error) throw new AppError(error.message, 500);
-    await applyPoolLink(pos_outlet_item_id, pool_item_id, pool_fraction);
-    res.status(201).json({ success: true, data });
+    await Promise.all(normalizedOutputs.map((output: any) =>
+        applyPoolLink(output.pos_outlet_item_id, output.pool_item_id, output.pool_fraction)
+    ));
+    res.status(201).json({ success: true, data: outputs.length > 0 ? data : data?.[0] });
 });
 
 export const updateProductionRecipe = asyncWrap(async (req: Request, res: Response) => {
@@ -933,9 +968,29 @@ export const getKitchenShiftPosConsumption = asyncWrap(async (req: Request, res:
 
     if (consError) throw new AppError(consError.message, 500);
 
+    // Sales recorded here but never issued to this kitchen shift (e.g. a
+    // pastry sold before the storekeeper ran "Issue to Kitchen") cannot be
+    // deducted from system_closing_stock at close time — flag them so the
+    // storekeeper can issue the stock (or investigate) before closing.
+    const { data: issuedSkuRows } = await supabase
+        .from('kitchen_shift_items')
+        .select('item_sku')
+        .eq('shift_id', shift_id);
+    const issuedSkus = new Set((issuedSkuRows || []).map((r: any) => r.item_sku));
+
+    let unmatchedCount = 0;
+    let unmatchedValue = 0;
+
     // 2. Group by cashier shift (pos_shift_id) to summarize sales per cashier shift
     const shiftsMap = new Map<string, any>();
     for (const item of (consumption || [])) {
+        const matched = issuedSkus.has(item.raw_item_sku);
+        item.matched_to_shift_stock = matched;
+        if (!matched) {
+            unmatchedCount += 1;
+            unmatchedValue += Number(item.portions_sold || 0) * Number(item.cost_price || 0);
+        }
+
         const ps = item.pos_shift as any;
         if (!ps) continue;
         const psId = ps.id;
@@ -952,12 +1007,14 @@ export const getKitchenShiftPosConsumption = asyncWrap(async (req: Request, res:
                 outlet_name: ps.outlet?.name || 'POS Outlet',
                 total_portions: 0,
                 total_cost: 0,
+                unmatched_count: 0,
                 items: []
             });
         }
         const grp = shiftsMap.get(psId);
         grp.total_portions += Number(item.portions_sold || 0);
         grp.total_cost += Number(item.portions_sold || 0) * Number(item.cost_price || 0);
+        if (!matched) grp.unmatched_count += 1;
         grp.items.push(item);
     }
 
@@ -965,7 +1022,8 @@ export const getKitchenShiftPosConsumption = asyncWrap(async (req: Request, res:
         success: true,
         data: {
             consumption: consumption || [],
-            cashier_shifts: Array.from(shiftsMap.values())
+            cashier_shifts: Array.from(shiftsMap.values()),
+            unmatched_summary: { count: unmatchedCount, value: Number(unmatchedValue.toFixed(2)) }
         }
     });
 });

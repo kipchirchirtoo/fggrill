@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
-import { loadCashierVoidAudit } from '../services/cashier-void-audit.service';
+import { loadCashierVoidAudit, compileShiftVoidAudit } from '../services/cashier-void-audit.service';
 import {
     loadAssignedPosOutlets,
     canAccessPosOutlet,
@@ -1905,6 +1905,7 @@ export const closeShift = async (
         // Close only THIS cashier's POS station shift(s) — the POS for their
         // outlet is "open" while their cashier shift is open (getActiveShift
         // bridge). Other outlets' cashiers keep their own shifts open.
+        let closedPosOutletShiftIds: string[] = [];
         try {
             let posCloseQuery = supabase
                 .from('pos_outlet_shifts')
@@ -1914,11 +1915,33 @@ export const closeShift = async (
             if (allowedOutletIds.length) {
                 posCloseQuery = posCloseQuery.in('outlet_id', allowedOutletIds);
             }
-            await posCloseQuery;
+            const { data: closedPosShifts } = await posCloseQuery.select('id');
+            closedPosOutletShiftIds = (closedPosShifts || []).map((row: any) => String(row.id)).filter(Boolean);
         } catch (posCloseErr) {
             logger.warn('Failed to close POS station shifts on cashier close', {
                 shiftId: id,
                 error: (posCloseErr as any)?.message
+            });
+        }
+
+        // Cashier Void Management — compile this shift's void activity into a
+        // standing audit row for the Branch Accountant's review queue. Uses the
+        // exact pos_outlet_shifts ids just closed above rather than a time-window
+        // heuristic, since we have them precisely at this point.
+        try {
+            await compileShiftVoidAudit({
+                cashierShiftId: id,
+                branchId: Number(shift.branch_id),
+                cashierId: shift.cashier_id,
+                shiftStart: shift.shift_start,
+                shiftEnd: updatedShift?.shift_end || new Date().toISOString(),
+                outletShiftIds: closedPosOutletShiftIds,
+                grossRevenue: toNumber(updatedShift?.total_sales ?? total_sales_final)
+            });
+        } catch (voidAuditErr) {
+            logger.warn('Failed to compile cashier shift void audit', {
+                shiftId: id,
+                error: (voidAuditErr as any)?.message
             });
         }
 

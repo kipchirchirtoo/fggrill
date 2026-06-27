@@ -117,6 +117,45 @@ const resolveKitchenBranchId = (req: express.Request): number | undefined => {
   return undefined;
 };
 
+// KDS History and Order Intelligence must reset per kitchen shift rather
+// than bleeding a flat multi-day window together — otherwise a "Rush Window"
+// or "Top Item" shown to today's cooks can really be from a shift days ago.
+// Scopes to the branch's currently open kitchen_shifts row; if none is open
+// right now (between shifts), falls back to the most recently closed one so
+// the screen isn't empty, rather than reaching further back into whatever
+// shift came before that. No kitchen shift ever opened for this branch
+// falls back to a 24h window.
+const resolveKitchenHistoryWindow = async (
+  branchId: number | undefined
+): Promise<string> => {
+  const fallback = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  if (!branchId) return fallback;
+
+  try {
+    const { data: openShift } = await supabase
+      .from('kitchen_shifts')
+      .select('opened_at')
+      .eq('branch_id', branchId)
+      .eq('status', 'open')
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (openShift?.opened_at) return openShift.opened_at;
+
+    const { data: lastShift } = await supabase
+      .from('kitchen_shifts')
+      .select('opened_at')
+      .eq('branch_id', branchId)
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastShift?.opened_at) return lastShift.opened_at;
+  } catch {
+    // kitchen_shifts not migrated yet on this environment — fall back below.
+  }
+  return fallback;
+};
+
 const posItemKey = (item: any, index: number): string => {
   const base = String(item?.outlet_item_id || item?.id || item?.menu_item_id || item?.sku || item?.name || 'item');
   const recallBatch = item?.recall_batch_id ? `:${item.recall_batch_id}` : '';
@@ -528,8 +567,9 @@ router.get('/kitchen/orders/history',
     try {
       const branchId = resolveKitchenBranchId(req);
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 250);
-      // Only look back 7 days for kitchen history; the limit still caps the result set.
-      const historySince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      // Scoped to the current kitchen shift so History and Order Intelligence
+      // reset per shift instead of accumulating across days indefinitely.
+      const historySince = await resolveKitchenHistoryWindow(branchId);
 
       let ordersQuery = supabase
         .from('restaurant_orders')

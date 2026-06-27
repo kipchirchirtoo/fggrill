@@ -801,7 +801,7 @@ const recordKitchenConsumption = async (
     .maybeSingle();
   if (!shift) return;
 
-  for (const item of orderItems) {
+  for (const [itemIndex, item] of orderItems.entries()) {
     const outletItemId = item.outlet_item_id;
     const portionsSold = numberValue(item.quantity);
     if (!outletItemId || portionsSold <= 0) continue;
@@ -829,6 +829,7 @@ const recordKitchenConsumption = async (
         pos_shift_id: posShiftId,
         pos_order_id: orderId,
         pos_outlet_item_id: outletItemId,
+        item_index: itemIndex,
         produced_item_sku: recipe.produced_item_sku,
         produced_item_name: recipe.produced_item_name,
         portions_sold: portionsSold,
@@ -905,8 +906,11 @@ const recordKitchenConsumption = async (
 
     if (shiftItemError) throw shiftItemError;
     if (!shiftItem) {
-      logger.warn(`No issued kitchen shift stock row found for direct finished-item sale ${inventoryItem.sku} on shift ${shift.id}`);
-      continue;
+      // No matching issued-stock row (e.g. a pastry sold before the storekeeper
+      // issued it to this shift) — still record the sale below so it is never
+      // silently lost from the food-control ledger; it just can't be matched
+      // against issued stock for variance until it is issued.
+      logger.warn(`No issued kitchen shift stock row found for direct finished-item sale ${inventoryItem.sku} on shift ${shift.id} — recording sale as unmatched`);
     }
 
     await supabase.from('kitchen_shift_pos_consumption').insert({
@@ -915,6 +919,7 @@ const recordKitchenConsumption = async (
       pos_shift_id: posShiftId,
       pos_order_id: orderId,
       pos_outlet_item_id: outletItemId,
+      item_index: itemIndex,
       produced_item_sku: String(producedItemSku || menuItem.sku || inventoryItem.sku),
       produced_item_name: String(outletItem.name || producedItemName || menuItem.name || inventoryItem.item_name || inventoryItem.sku),
       portions_sold: portionsSold,
@@ -925,10 +930,70 @@ const recordKitchenConsumption = async (
       cost_price: numberValue(inventoryItem.cost_price ?? inventoryItem.default_unit_cost)
     });
 
-    await supabase
+    if (shiftItem) {
+      await supabase
+        .from('kitchen_shift_items')
+        .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + consumedQuantity, updated_at: new Date().toISOString() })
+        .eq('id', shiftItem.id);
+    }
+  }
+};
+
+// Reverses kitchen_shift_pos_consumption rows (and the kitchen_shift_items.sold_quantity
+// they incremented) that recordKitchenConsumption wrote for a POS order — used by every
+// void/exchange path so closeKitchenShift()'s variance formula never permanently double-
+// counts a sale that was later cancelled. Best-effort and idempotent: a no-op if the order
+// never produced a consumption row (e.g. a drink with no kitchen recipe).
+// - Whole-bill void: call with no itemIndex/qtyToReverse — reverses every row for the order.
+// - Single line-item void: pass itemIndex (and qtyToReverse for a partial-quantity void) so
+//   only that line's share is reversed, leaving the rest of the bill's consumption intact.
+const reverseKitchenConsumptionForOrder = async (
+  orderId: string,
+  options: { itemIndex?: number; qtyToReverse?: number } = {}
+): Promise<void> => {
+  let query = supabase.from('kitchen_shift_pos_consumption').select('*').eq('pos_order_id', orderId);
+  if (options.itemIndex !== undefined) query = query.eq('item_index', options.itemIndex);
+  const { data: rows, error } = await query;
+  if (error) throw error;
+  if (!rows || !rows.length) return;
+
+  for (const row of rows) {
+    const currentPortions = numberValue(row.portions_sold);
+    const currentRawQty = numberValue(row.raw_quantity_consumed);
+    if (currentPortions <= 0) continue;
+
+    const qtyToReverse = options.qtyToReverse !== undefined
+      ? Math.min(options.qtyToReverse, currentPortions)
+      : currentPortions;
+    if (qtyToReverse <= 0) continue;
+
+    const rawQtyToReverse = (currentRawQty / currentPortions) * qtyToReverse;
+
+    const { data: shiftItem } = await supabase
       .from('kitchen_shift_items')
-      .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + consumedQuantity, updated_at: new Date().toISOString() })
-      .eq('id', shiftItem.id);
+      .select('id, sold_quantity')
+      .eq('shift_id', row.shift_id)
+      .eq('item_sku', row.raw_item_sku)
+      .maybeSingle();
+    if (shiftItem) {
+      await supabase
+        .from('kitchen_shift_items')
+        .update({
+          sold_quantity: Math.max(0, numberValue(shiftItem.sold_quantity) - rawQtyToReverse),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', shiftItem.id);
+    }
+
+    const remainingPortions = currentPortions - qtyToReverse;
+    if (remainingPortions <= 0) {
+      await supabase.from('kitchen_shift_pos_consumption').delete().eq('id', row.id);
+    } else {
+      await supabase
+        .from('kitchen_shift_pos_consumption')
+        .update({ portions_sold: remainingPortions, raw_quantity_consumed: currentRawQty - rawQtyToReverse })
+        .eq('id', row.id);
+    }
   }
 };
 
@@ -2851,6 +2916,8 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
 
     if (approved) {
       await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+      await reverseKitchenConsumptionForOrder(requestRow.order_id).catch((consumptionError) =>
+        logger.warn('reviewPosVoidRequest: reverseKitchenConsumptionForOrder failed', consumptionError as any));
       if (order.inventory_posted_at && !order.inventory_reversed_at) {
         await postPosInventorySale({
           branchId: Number(requestRow.branch_id),
@@ -4021,6 +4088,21 @@ export const approveItemExchange = async (req: Request, res: Response, next: Nex
       await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, requestRow.new_items, 1);
     }
 
+    // Kitchen consumption: reverse the returned item(s)' share on the original
+    // order, then link the replacement item(s) to the new linked order exactly
+    // like a fresh sale — same best-effort, never-blocks-approval semantics as
+    // recordKitchenConsumption() above.
+    await Promise.allSettled(
+      (Array.isArray(requestRow.old_items) ? requestRow.old_items : []).map((oldItem: any) =>
+        reverseKitchenConsumptionForOrder(requestRow.order_id, { itemIndex: oldItem.item_index, qtyToReverse: numberValue(oldItem.quantity) })
+          .catch((consumptionError) => logger.warn('approveItemExchange: reverseKitchenConsumptionForOrder failed', consumptionError as any))
+      )
+    );
+    if (Array.isArray(requestRow.new_items) && requestRow.new_items.length > 0) {
+      await recordKitchenConsumption(requestRow.new_items, Number(requestRow.branch_id), requestRow.shift_id, newOrder.id)
+        .catch((consumptionError) => logger.warn('approveItemExchange: recordKitchenConsumption failed', consumptionError as any));
+    }
+
     const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
     const approveMeta = { request_id: id, order_id: requestRow.order_id, exchange_order_id: newOrder.id, shift_id: requestRow.shift_id };
     await Promise.allSettled([
@@ -4599,6 +4681,401 @@ export const getShiftSummary = async (req: Request, res: Response, next: NextFun
     res.json({ success: true, data: sanitizeSummary(summary, canViewProfit(req)) });
   } catch (error) {
     logger.error('Failed to load outlet POS shift summary', error);
+    next(error);
+  }
+};
+
+// ── Cashier Void Management ─────────────────────────────────────────────────
+// Void ownership moved entirely to the cashier station: the cashier searches
+// for a bill directly (no waiting for a bartender/waiter "request void") and
+// voids it immediately — whole bill or specific line items. This sits
+// alongside (does not replace) the older request→cashier-ack→manager-approve
+// pipeline above: it reuses the same tables (pos_void_requests,
+// pos_item_void_requests, pos_item_void_log) and the same order-mutation
+// logic, just collapsing the multi-stage approval into one cashier-initiated
+// transaction, since the Branch Accountant's role here is a read-only
+// post-hoc audit (see cashier_shift_void_audits), not a pre-execution gate.
+
+export const CASHIER_VOID_REASON_CATEGORIES = [
+  'customer_changed_order',
+  'item_out_of_stock',
+  'wrong_item_ordered',
+  'duplicate_order',
+  'customer_cancelled',
+  'quality_issue',
+  'manager_instruction',
+  'billing_error',
+  'other'
+] as const;
+const CASHIER_VOID_REASON_CATEGORY_SET = new Set<string>(CASHIER_VOID_REASON_CATEGORIES);
+
+const canManageCashierVoids = (req: Request): boolean =>
+  isCashierStationRole(roleFor(req)) || REVIEW_ROLES.has(roleFor(req)) || isGlobalUser(req);
+
+const ensureCashierShiftOpenForVoid = async (req: Request, branchId: number): Promise<void> => {
+  if (isGlobalUser(req) || REVIEW_ROLES.has(roleFor(req))) return;
+  const { data, error } = await supabase
+    .from('cashier_shift_logs')
+    .select('id')
+    .eq('cashier_id', req.user!.id)
+    .eq('branch_id', branchId)
+    .eq('status', 'open')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new AppError('Open a cashier shift before processing a void', 400);
+};
+
+const validateVoidReason = (reasonCategory: unknown, reason: unknown, note: unknown): { reasonCategory: string; reason: string } => {
+  const category = String(reasonCategory || '').trim().toLowerCase();
+  if (!CASHIER_VOID_REASON_CATEGORY_SET.has(category)) {
+    throw new AppError(`Invalid reason_category. Must be one of: ${CASHIER_VOID_REASON_CATEGORIES.join(', ')}`, 400);
+  }
+  const noteText = String(note || '').trim();
+  const reasonText = String(reason || '').trim() || noteText;
+  if (category === 'other' && !noteText) {
+    throw new AppError('A note is required when reason_category is "other"', 400);
+  }
+  if (!reasonText) {
+    throw new AppError('A void reason is required', 400);
+  }
+  return { reasonCategory: category, reason: reasonText };
+};
+
+// Section 1: unified search across waiter/server name, bill shortcode, and
+// order number — branch-scoped only (per spec: any cashier in the branch can
+// void any outlet's bill, not just their own station's).
+export const searchVoidableBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!canManageCashierVoids(req)) throw new AppError('Forbidden: cashier role required', 403);
+    const branchId = branchIdFor(req);
+    if (!branchId && !isGlobalUser(req)) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const q = String(req.query.q || '').trim();
+    if (!q) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const like = `%${q.replace(/[%_]/g, '')}%`;
+
+    let query = supabase
+      .from('pos_shift_orders')
+      .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_id, waiter_name, table_number, room_number, order_type, total_amount, payment_status, items, branch_id, created_at')
+      .in('payment_status', ['unpaid', 'partial'])
+      .or(`order_number.ilike.${like},short_code.ilike.${like},waiter_name.ilike.${like}`)
+      .order('created_at', { ascending: false })
+      .limit(25);
+
+    if (!isGlobalUser(req)) {
+      query = query.eq('branch_id', branchId);
+    } else if (req.query.branch_id) {
+      query = query.eq('branch_id', Number(req.query.branch_id));
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const outletIds = [...new Set(rows.map((r: any) => r.outlet_id).filter(Boolean))];
+    const { data: outlets } = outletIds.length
+      ? await supabase.from('pos_outlets').select('id, name, outlet_type').in('id', outletIds)
+      : { data: [] as any[] };
+    const outletsById = new Map((outlets || []).map((o: any) => [o.id, o]));
+
+    res.json({
+      success: true,
+      data: rows.map((row: any) => ({
+        ...row,
+        outlet_name: outletsById.get(row.outlet_id)?.name || null,
+        outlet_type: outletsById.get(row.outlet_id)?.outlet_type || null,
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Section 2A: void the entire bill, immediately, no separate approval stage.
+export const cashierVoidWholeBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!canManageCashierVoids(req)) throw new AppError('Forbidden: cashier role required', 403);
+    const orderId = String(req.body.order_id || '');
+    if (!orderId) throw new AppError('order_id is required', 400);
+    const { reasonCategory, reason } = validateVoidReason(req.body.reason_category, req.body.reason, req.body.note);
+
+    const { data: order, error: orderErr } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+    if (orderErr || !order) throw new AppError('Bill not found', 404);
+    ensureBranchAccess(req, order.branch_id);
+    ensureEditableOrder(order, 'void');
+    await ensureCashierShiftOpenForVoid(req, Number(order.branch_id));
+
+    const now = new Date().toISOString();
+    const originalTotal = numberValue(order.total_amount);
+    const cashierId = req.user!.id;
+
+    const { data: voidRequest, error: insertErr } = await supabase
+      .from('pos_void_requests')
+      .insert({
+        shift_id: order.shift_id,
+        outlet_id: order.outlet_id,
+        order_id: order.id,
+        order_number: order.order_number,
+        branch_id: order.branch_id,
+        requested_by: cashierId,
+        reason,
+        reason_category: reasonCategory,
+        status: 'approved',
+        reviewed_by: cashierId,
+        reviewed_at: now,
+        updated_at: now
+      })
+      .select('*')
+      .single();
+    if (insertErr) throw insertErr;
+
+    await updateStockForItems(order.shift_id, order.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+    await reverseKitchenConsumptionForOrder(orderId).catch((consumptionError) =>
+      logger.warn('cashierVoidWholeBill: reverseKitchenConsumptionForOrder failed', consumptionError as any));
+    if (order.inventory_posted_at && !order.inventory_reversed_at) {
+      await postPosInventorySale({
+        branchId: Number(order.branch_id),
+        outletId: order.outlet_id,
+        shiftId: order.shift_id,
+        orderId: order.id,
+        items: Array.isArray(order.items) ? order.items : [],
+        actorId: cashierId,
+        reverse: true
+      });
+    }
+
+    const voidedItems = Array.isArray(order.items)
+      ? order.items.map((item: any) => ({ ...item, kitchen_status: 'voided' }))
+      : order.items;
+    const { data: updatedOrder, error: voidOrderErr } = await supabase
+      .from('pos_shift_orders')
+      .update({
+        status: 'voided',
+        payment_status: 'voided',
+        kitchen_status: 'voided',
+        items: voidedItems,
+        balance_amount: 0,
+        void_request_status: 'approved',
+        voided_at: now,
+        voided_by: cashierId,
+        void_reason: reason,
+        inventory_reversed_at: order.inventory_posted_at ? now : order.inventory_reversed_at || null,
+        inventory_reversed_by: order.inventory_posted_at ? cashierId : order.inventory_reversed_by || null,
+        updated_at: now
+      })
+      .eq('id', orderId)
+      .select('*')
+      .single();
+    if (voidOrderErr) throw voidOrderErr;
+
+    if (numberValue(order.amount_paid) > 0) {
+      const { error: reverseError } = await supabase.rpc('reverse_cashier_shift_for_order', { p_order_id: orderId });
+      if (reverseError) {
+        logger.warn('cashierVoidWholeBill: failed to reverse shift totals for voided order', {
+          orderId, amountPaid: order.amount_paid, error: reverseError.message
+        });
+      }
+    }
+
+    // Structured detail for the Branch Accountant deep-drill view — written here
+    // (at void time) because pos_shift_orders.total_amount gets zeroed above, so
+    // the original total would otherwise be lost. void_bills_audit already
+    // exists as a generic (void_id, action, actor_id, details jsonb) log; no new
+    // column/table needed for this.
+    await supabase.from('void_bills_audit').insert({
+      void_id: voidRequest.id,
+      action: 'cashier_void',
+      actor_id: cashierId,
+      details: {
+        order_number: order.order_number,
+        short_code: order.short_code,
+        waiter_id: order.waiter_id,
+        waiter_name: order.waiter_name,
+        outlet_id: order.outlet_id,
+        branch_id: order.branch_id,
+        original_total: originalTotal,
+        revised_total: 0,
+        reason_category: reasonCategory,
+        reason
+      }
+    });
+
+    await Promise.allSettled([
+      notificationService.notifyRole(
+        'branch_accountant',
+        'Bill voided by cashier',
+        `${order.order_number || order.short_code || 'A bill'} (KES ${originalTotal.toFixed(2)}) was voided by the cashier.`,
+        { type: 'warning', category: 'cashier_void', priority: 'medium', branchId: order.branch_id, metadata: { order_id: orderId, void_id: voidRequest.id } }
+      ),
+      order.waiter_id && notificationService.notifyUser(
+        order.waiter_id,
+        'Bill voided',
+        `Bill ${order.order_number || order.short_code || ''} was voided by the cashier. Updated bill is ready for reprint.`,
+        { type: 'info', category: 'cashier_void', priority: 'medium', metadata: { order_id: orderId } }
+      ),
+    ]);
+
+    res.json({ success: true, data: updatedOrder });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Section 2B: void specific line item(s) on a bill, immediately. Each item
+// gets its own pos_item_void_requests + pos_item_void_log row (matching the
+// existing schema/shape the Branch Accountant void-approvals screen and
+// PowerSync sync streams already read), just collapsed into one cashier
+// action instead of cashier-ack + manager-approve as two separate steps.
+export const cashierVoidLineItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!canManageCashierVoids(req)) throw new AppError('Forbidden: cashier role required', 403);
+    const orderId = String(req.body.order_id || '');
+    const items: Array<{ item_index: number; qty_to_void?: number }> = Array.isArray(req.body.items) ? req.body.items : [];
+    if (!orderId || items.length === 0) throw new AppError('order_id and at least one item are required', 400);
+    const { reasonCategory, reason } = validateVoidReason(req.body.reason_category, req.body.reason, req.body.note);
+
+    const { data: order, error: orderErr } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+    if (orderErr || !order) throw new AppError('Bill not found', 404);
+    ensureBranchAccess(req, order.branch_id);
+    ensureEditableOrder(order, 'void');
+    await ensureCashierShiftOpenForVoid(req, Number(order.branch_id));
+
+    const cashierId = req.user!.id;
+    const now = new Date().toISOString();
+    const orderItems: Array<Record<string, any>> = Array.isArray(order.items) ? order.items : [];
+    let updatedOrder: Record<string, any> | null = null;
+
+    for (const target of items) {
+      const itemIndex = Number(target.item_index);
+      const item = orderItems[itemIndex];
+      if (!item) throw new AppError(`Item at index ${itemIndex} no longer exists on this bill`, 404);
+      const { activeQty } = activeQtyForItem(item);
+      const qtyToVoid = numberValue(target.qty_to_void ?? activeQty);
+      if (qtyToVoid <= 0 || qtyToVoid > activeQty) {
+        throw new AppError(`Invalid qty_to_void for item at index ${itemIndex}`, 400);
+      }
+
+      const { data: requestRow, error: reqErr } = await supabase
+        .from('pos_item_void_requests')
+        .insert({
+          shift_id: order.shift_id,
+          outlet_id: order.outlet_id,
+          order_id: order.id,
+          order_number: order.order_number,
+          branch_id: order.branch_id,
+          item_index: itemIndex,
+          item_name: item.name || item.item_name || 'Item',
+          unit_price: numberValue(item.unit_price ?? item.price),
+          qty_before_void: activeQty,
+          qty_to_void: qtyToVoid,
+          reason,
+          reason_category: reasonCategory,
+          requested_by: cashierId,
+          status: 'pending'
+        })
+        .select('*')
+        .single();
+      if (reqErr) throw reqErr;
+
+      // Stage 1 (financial void): same RPC the cashier-acknowledge flow uses,
+      // so the math is identical whether the void started as a waiter request
+      // or, as here, directly from the cashier.
+      const { data: rpcOrder, error: rpcError } = await supabase.rpc('cashier_acknowledge_item_void', {
+        p_request_id: requestRow.id,
+        p_actioned_by: cashierId
+      });
+      if (rpcError) throw rpcError;
+
+      await reverseKitchenConsumptionForOrder(orderId, { itemIndex, qtyToReverse: qtyToVoid }).catch((consumptionError) =>
+        logger.warn('cashierVoidLineItems: reverseKitchenConsumptionForOrder failed', consumptionError as any));
+
+      // Stage 2 (compliance sign-off + audit log): applied immediately by the
+      // same cashier — no separate manager wait in this flow.
+      const { data: orderAfterAck, error: orderAfterAckErr } = await supabase
+        .from('pos_shift_orders')
+        .select('id, items, outlet_id, short_code')
+        .eq('id', orderId)
+        .single();
+      if (orderAfterAckErr || !orderAfterAck) throw orderAfterAckErr || new AppError('Order not found', 404);
+
+      const itemsAfterAck = Array.isArray(orderAfterAck.items) ? [...orderAfterAck.items] as Array<Record<string, any>> : [];
+      const ackedItem = itemsAfterAck[itemIndex] || {};
+      itemsAfterAck[itemIndex] = { ...ackedItem, void_pending_approval: false };
+
+      const { data: finalOrder, error: finalOrderErr } = await supabase
+        .from('pos_shift_orders')
+        .update({ items: itemsAfterAck, bill_reprint_count: 0, updated_at: now })
+        .eq('id', orderId)
+        .select('*')
+        .single();
+      if (finalOrderErr) throw finalOrderErr;
+      updatedOrder = finalOrder;
+
+      const { data: outletRow } = await supabase
+        .from('pos_outlets')
+        .select('outlet_type')
+        .eq('id', orderAfterAck.outlet_id)
+        .maybeSingle();
+
+      const qtyAfterVoid = numberValue(ackedItem.active_qty);
+      await supabase.from('pos_item_void_log').insert({
+        void_request_id: requestRow.id,
+        shift_id: order.shift_id,
+        order_id: order.id,
+        item_index: itemIndex,
+        item_name: requestRow.item_name,
+        unit_price: requestRow.unit_price,
+        qty_before_void: activeQty,
+        qty_voided: qtyToVoid,
+        qty_after_void: qtyAfterVoid,
+        amount_voided: qtyToVoid * numberValue(requestRow.unit_price),
+        authorized_by: cashierId,
+        requested_by: cashierId,
+        void_reason: reason,
+        reason_category: reasonCategory,
+        branch_id: order.branch_id,
+        outlet_type: outletRow?.outlet_type || null,
+        bill_code: orderAfterAck.short_code || null,
+        voided_at: now
+      });
+
+      await supabase
+        .from('pos_item_void_requests')
+        .update({ status: 'approved', actioned_by: cashierId, actioned_at: now, manager_id: cashierId, manager_reviewed_at: now, updated_at: now })
+        .eq('id', requestRow.id);
+
+      // Re-read for the next loop iteration so item_index lookups stay accurate.
+      orderItems.splice(0, orderItems.length, ...itemsAfterAck);
+    }
+
+    if (order.waiter_id) {
+      await notificationService.notifyUser(
+        order.waiter_id,
+        'Item(s) voided',
+        `${items.length} item(s) voided on bill ${order.order_number || order.short_code || ''} by the cashier. Updated bill is ready for reprint.`,
+        { type: 'info', category: 'cashier_void', priority: 'medium', metadata: { order_id: orderId } }
+      );
+    }
+
+    res.json({ success: true, data: updatedOrder });
+  } catch (error) {
     next(error);
   }
 };

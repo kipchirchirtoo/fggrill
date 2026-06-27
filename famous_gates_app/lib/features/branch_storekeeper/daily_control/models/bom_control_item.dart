@@ -14,6 +14,7 @@ class BomControlItem {
     required this.varianceQty,
     required this.varianceCost,
     required this.variancePercent,
+    required this.varianceType,
     required this.flag,
   });
 
@@ -29,6 +30,7 @@ class BomControlItem {
   final num varianceQty;
   final num varianceCost;
   final num? variancePercent;
+  final String varianceType;
   final String flag; // 'green' | 'orange' | 'red'
 
   factory BomControlItem.fromJson(Map<String, dynamic> json) {
@@ -47,6 +49,7 @@ class BomControlItem {
       varianceCost: asNum(json['variance_cost']),
       variancePercent:
           json['variance_percent'] == null ? null : asNum(json['variance_percent']),
+      varianceType: '${json['variance_type'] ?? 'ok'}',
       flag: '${json['flag'] ?? 'green'}',
     );
   }

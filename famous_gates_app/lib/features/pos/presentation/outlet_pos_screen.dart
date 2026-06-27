@@ -666,16 +666,22 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                               title: Text('Split bill'),
                             ),
                           ),
-                          PopupMenuItem(
-                            value: 'void',
-                            enabled: _canEditOrder(order) &&
-                                order.voidRequestStatus != 'pending',
-                            child: const ListTile(
-                              dense: true,
-                              leading: Icon(Icons.block),
-                              title: Text('Request void'),
+                          // Restaurant waiters can request a whole-bill void
+                          // (goes to the branch accountant for approval).
+                          // Bartenders (Main Bar/Executive Bar/Sports Bar) do
+                          // not get this — all bar voids go through the
+                          // Cashier Void Management screen instead.
+                          if (_isRestaurant)
+                            PopupMenuItem(
+                              value: 'void',
+                              enabled: _canEditOrder(order) &&
+                                  order.voidRequestStatus != 'pending',
+                              child: const ListTile(
+                                dense: true,
+                                leading: Icon(Icons.block),
+                                title: Text('Request void'),
+                              ),
                             ),
-                          ),
                           PopupMenuItem(
                             value: 'exchange',
                             enabled: _canExchangeOrder(order),
@@ -1004,6 +1010,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       builder: (context) => _BillDetailSheet(
         order: order,
         shiftId: _shift!.id,
+        isRestaurant: _isRestaurant,
         onPrintOriginal: () {
           Navigator.of(context).pop();
           _printOriginalBill(order);
@@ -1322,6 +1329,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     });
   }
 
+  // Restaurant-only: bartenders no longer get this entry point at all (see
+  // _isRestaurant gate on the popup menu item above) — all bar voids go
+  // through the Cashier Void Management screen instead.
   Future<void> _showVoidOrderDialog(OutletShiftOrder order) async {
     final reason = await showDialog<String>(
       context: context,
@@ -2001,6 +2011,7 @@ class _BillDetailSheet extends ConsumerStatefulWidget {
   const _BillDetailSheet({
     required this.order,
     required this.shiftId,
+    required this.isRestaurant,
     required this.onPrintOriginal,
     required this.onPrintDuplicate,
     required this.onPrintUpdated,
@@ -2008,6 +2019,9 @@ class _BillDetailSheet extends ConsumerStatefulWidget {
 
   final OutletShiftOrder order;
   final String shiftId;
+  // Only restaurant waiters can start a per-item void from this sheet —
+  // bartenders use the Cashier Void Management screen instead.
+  final bool isRestaurant;
   final VoidCallback onPrintOriginal;
   final VoidCallback onPrintDuplicate;
   final VoidCallback onPrintUpdated;
@@ -2377,7 +2391,14 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                     tileColor: isHiddenFromCustomer
                         ? Colors.orange.withValues(alpha: 0.06)
                         : null,
-                    leading: (_billEditable && activeVoid == null && activeQty > 0 && !_actioning)
+                    // Restaurant-only: per-item void entry point. Bartenders never
+                    // get this — all bar voids go through the Cashier Void Management
+                    // screen instead.
+                    leading: (widget.isRestaurant &&
+                            _billEditable &&
+                            activeVoid == null &&
+                            activeQty > 0 &&
+                            !_actioning)
                         ? IconButton(
                             icon: const Icon(Icons.remove_circle_outline, size: 20),
                             tooltip: 'Void item',
@@ -3114,3 +3135,4 @@ class _ReasonDialogState extends State<_ReasonDialog> {
     );
   }
 }
+

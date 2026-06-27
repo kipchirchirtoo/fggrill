@@ -172,6 +172,8 @@ export const analyzeShiftControls = async (req: Request, res: Response, next: Ne
     
     if (posErr) throw posErr;
 
+    const productionRules = await loadProductionYieldRules(Number(branch_id));
+
     // 3. Aggregate Sold Items
     const expectedUsageMap: Record<string, number> = {};
     const itemSales: Record<string, number> = {};
@@ -182,11 +184,19 @@ export const analyzeShiftControls = async (req: Request, res: Response, next: Ne
         items.forEach((item: { name: string; quantity: number }) => {
           const qty = Number(item.quantity || 1);
           itemSales[item.name] = (itemSales[item.name] || 0) + qty;
-          
-          const usages = getParentUsages(item.name, qty);
-          usages.forEach(u => {
-            expectedUsageMap[u.parent] = (expectedUsageMap[u.parent] || 0) + u.amount;
-          });
+
+          const dynamicRules = findYieldRulesForSoldItem(item.name, productionRules);
+          if (dynamicRules.length > 0) {
+            dynamicRules.forEach(rule => {
+              const rawNeeded = qty * (rule.raw_quantity / rule.produced_quantity);
+              expectedUsageMap[rule.raw_item_name] = (expectedUsageMap[rule.raw_item_name] || 0) + rawNeeded;
+            });
+          } else {
+            const usages = getParentUsages(item.name, qty);
+            usages.forEach(u => {
+              expectedUsageMap[u.parent] = (expectedUsageMap[u.parent] || 0) + u.amount;
+            });
+          }
         });
       }
     });
@@ -402,6 +412,93 @@ const findRecipeForSoldItem = <T extends { menu_item_name: string }>(
   return null;
 };
 
+type ProductionYieldRule = {
+  id: string;
+  raw_item_sku: string;
+  raw_item_name: string;
+  raw_quantity: number;
+  raw_unit: string;
+  produced_item_name: string;
+  produced_item_sku?: string | null;
+  produced_quantity: number;
+  produced_unit?: string | null;
+  pos_outlet_item_id?: string | null;
+};
+
+const loadProductionYieldRules = async (branchId: number): Promise<ProductionYieldRule[]> => {
+  const { data, error } = await supabase
+    .from('kitchen_production_recipes')
+    .select('id, raw_item_sku, raw_item_name, raw_quantity, raw_unit, produced_item_name, produced_item_sku, produced_quantity, produced_unit, pos_outlet_item_id, is_active')
+    .eq('branch_id', branchId)
+    .eq('is_active', true)
+    .order('raw_item_name', { ascending: true });
+
+  if (error) throw error;
+  return (data || [])
+    .map((row: any) => ({
+      ...row,
+      raw_quantity: Number(row.raw_quantity || 0),
+      produced_quantity: Number(row.produced_quantity || 0),
+    }))
+    .filter((row: ProductionYieldRule) =>
+      row.raw_item_sku &&
+      row.raw_item_name &&
+      row.raw_quantity > 0 &&
+      row.produced_item_name &&
+      row.produced_quantity > 0
+    );
+};
+
+const findYieldRulesForSoldItem = (
+  soldName: string,
+  rules: ProductionYieldRule[]
+): ProductionYieldRule[] => {
+  const normalizedSold = normalizeItemName(soldName);
+  if (!normalizedSold) return [];
+  const exact = rules.filter((rule) =>
+    normalizeItemName(rule.produced_item_name) === normalizedSold ||
+    normalizeItemName(rule.produced_item_sku || '') === normalizedSold
+  );
+  if (exact.length) return exact;
+  return rules.filter((rule) => {
+    const normalizedProduced = normalizeItemName(rule.produced_item_name);
+    return normalizedProduced.includes(normalizedSold) || normalizedSold.includes(normalizedProduced);
+  });
+};
+
+const addTheoreticalUsage = (
+  map: Record<string, { item_name: string; unit: string; qty: number }>,
+  sku: string,
+  itemName: string,
+  unit: string,
+  qty: number
+) => {
+  if (!sku || !Number.isFinite(qty) || qty <= 0) return;
+  const entry = map[sku] || { item_name: itemName || sku, unit: unit || '', qty: 0 };
+  entry.qty += qty;
+  map[sku] = entry;
+};
+
+type UsageBucket = Record<string, { item_name: string; qty: number }>;
+
+const addActualUsage = (
+  map: UsageBucket,
+  sku: string,
+  itemName: string,
+  qty: number
+) => {
+  if (!sku || !Number.isFinite(qty) || qty <= 0) return;
+  const entry = map[sku] || { item_name: itemName || sku, qty: 0 };
+  entry.qty += qty;
+  map[sku] = entry;
+};
+
+const shiftAliases = (shift: unknown): string[] => {
+  if (shift === 'A') return ['shift_a', 'morning', 'a'];
+  if (shift === 'B') return ['shift_b', 'night', 'evening', 'b'];
+  return [];
+};
+
 const varianceFlag = (varianceQty: number, theoreticalQty: number): 'green' | 'orange' | 'red' => {
   if (theoreticalQty <= 0) return varianceQty > 0 ? 'red' : 'green';
   const pct = Math.abs((varianceQty / theoreticalQty) * 100);
@@ -502,6 +599,7 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
       output_quantity: number;
       items: Array<{ item_sku: string; item_name: string; quantity_required: number; unit: string }>;
     }>;
+    const productionRules = await loadProductionYieldRules(branchId);
 
     // 3. Theoretical ingredient consumption = sum over sold menu items of
     // (recipe_items.quantity_required / recipes.output_quantity) * qty_sold.
@@ -522,6 +620,20 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
           const entry = theoreticalBySku[sku] || { item_name: ri.item_name, unit: ri.unit || '', qty: 0 };
           entry.qty += perUnit * sold.qty;
           theoreticalBySku[sku] = entry;
+        });
+        return;
+      }
+
+      const yieldRules = findYieldRulesForSoldItem(itemName, productionRules);
+      if (yieldRules.length > 0) {
+        yieldRules.forEach((rule) => {
+          addTheoreticalUsage(
+            theoreticalBySku,
+            rule.raw_item_sku,
+            rule.raw_item_name,
+            rule.raw_unit,
+            sold.qty * (rule.raw_quantity / rule.produced_quantity)
+          );
         });
         return;
       }
@@ -547,12 +659,11 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
       noRecipeItems.push({ item_name: itemName, qty_sold: sold.qty });
     });
 
-    // 4. Actual ingredient consumption — kitchen_session_issues for sessions
-    // on this branch/date. When a shift filter is applied, only sessions of
-    // that shift_type are included. Falls back to branch_stock movements
-    // (stock_history OUT entries for the same date) when no kitchen sessions
-    // exist, so the BOM tab still shows real stock usage even before the
-    // production-session workflow is adopted.
+    // 4. Actual ingredient consumption — combine every workflow that can issue
+    // stock to kitchen. Older deployments use kitchen_session_issues, newer
+    // Branch Storekeeper flows issue via kitchen_shifts/kitchen_shift_items,
+    // and some branches still record kitchen usage slips directly. Only fall
+    // back to stock_history when no direct kitchen issue workflow has data.
     const buildIssuesQuery = (includeShiftType: boolean) => {
       let query = supabase
         .from('kitchen_session_issues')
@@ -575,18 +686,86 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
     }
     if (issuesErr) throw issuesErr;
 
-    const actualBySku: Record<string, { item_name: string; qty: number }> = {};
+    const actualBySku: UsageBucket = {};
+    const issueSources: Array<{ source: string; rows: number; quantity: number }> = [];
     (issuesRaw || []).forEach((row: any) => {
-      const sku = row.item_sku;
-      if (!sku) return;
-      const entry = actualBySku[sku] || { item_name: row.item_name, qty: 0 };
-      entry.qty += Number(row.quantity_issued || 0);
-      actualBySku[sku] = entry;
+      addActualUsage(actualBySku, row.item_sku, row.item_name, Number(row.quantity_issued || 0));
     });
+    if ((issuesRaw || []).length > 0) {
+      issueSources.push({
+        source: 'kitchen_session_issues',
+        rows: (issuesRaw || []).length,
+        quantity: (issuesRaw || []).reduce((sum: number, row: any) => sum + Number(row.quantity_issued || 0), 0)
+      });
+    }
 
-    const hasKitchenSession = (issuesRaw || []).length > 0;
+    const kitchenShiftAliases = shiftAliases(shift);
+    try {
+      const shiftParams: any[] = [branchId, controlDate];
+      let shiftTypeClause = '';
+      if (kitchenShiftAliases.length > 0) {
+        shiftParams.push(kitchenShiftAliases);
+        shiftTypeClause = `AND LOWER(COALESCE(ks.shift_type, '')) = ANY($${shiftParams.length}::text[])`;
+      }
+      const { rows: shiftIssueRows } = await db.query(
+        `SELECT
+            ksi.item_sku,
+            COALESCE(ksi.item_name, si.item_name, ksi.item_sku) AS item_name,
+            COALESCE(SUM(COALESCE(ksi.opening_stock, 0) + COALESCE(ksi.additions, 0)), 0) AS issued_qty
+         FROM public.kitchen_shift_items ksi
+         JOIN public.kitchen_shifts ks ON ks.id = ksi.shift_id
+         LEFT JOIN public.simple_items si ON si.sku = ksi.item_sku
+         WHERE ks.branch_id = $1
+           AND ks.shift_date = $2::date
+           ${shiftTypeClause}
+         GROUP BY ksi.item_sku, COALESCE(ksi.item_name, si.item_name, ksi.item_sku)`,
+        shiftParams
+      );
+      (shiftIssueRows || []).forEach((row: any) => {
+        addActualUsage(actualBySku, row.item_sku, row.item_name, Number(row.issued_qty || 0));
+      });
+      if ((shiftIssueRows || []).length > 0) {
+        issueSources.push({
+          source: 'kitchen_shift_items',
+          rows: shiftIssueRows.length,
+          quantity: shiftIssueRows.reduce((sum: number, row: any) => sum + Number(row.issued_qty || 0), 0)
+        });
+      }
+    } catch (err: any) {
+      if (!['42P01', '42703'].includes(err?.code)) throw err;
+    }
 
-    // When no kitchen sessions have been opened for the day, fall back to
+    try {
+      const { rows: usageIssueRows } = await db.query(
+        `SELECT
+            kur.item_sku,
+            COALESCE(kur.item_name, si.item_name, kur.item_sku) AS item_name,
+            COALESCE(SUM(kur.received_quantity), 0) AS issued_qty
+         FROM public.kitchen_usage_records kur
+         LEFT JOIN public.simple_items si ON si.sku = kur.item_sku
+         WHERE kur.branch_id = $1
+           AND kur.usage_date = $2::date
+           AND LOWER(COALESCE(kur.status, '')) NOT IN ('cancelled', 'rejected', 'voided')
+         GROUP BY kur.item_sku, COALESCE(kur.item_name, si.item_name, kur.item_sku)`,
+        [branchId, controlDate]
+      );
+      (usageIssueRows || []).forEach((row: any) => {
+        addActualUsage(actualBySku, row.item_sku, row.item_name, Number(row.issued_qty || 0));
+      });
+      if ((usageIssueRows || []).length > 0) {
+        issueSources.push({
+          source: 'kitchen_usage_records',
+          rows: usageIssueRows.length,
+          quantity: usageIssueRows.reduce((sum: number, row: any) => sum + Number(row.issued_qty || 0), 0)
+        });
+      }
+    } catch (err: any) {
+      if (!['42P01', '42703'].includes(err?.code)) throw err;
+    }
+
+    const hasKitchenSession = issueSources.length > 0;
+
+    // When no direct kitchen issue workflow has data for the day, fall back to
     // branch_stock OUT movements so that actual cost is not reported as 0.
     if (!hasKitchenSession && Object.keys(theoreticalBySku).length > 0) {
       const { data: stockOut } = await supabase
@@ -597,13 +776,16 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
         .gte('created_at', dayStart)
         .lt('created_at', dayEnd);
       (stockOut || []).forEach((row: any) => {
-        const sku = row.item_sku;
-        if (!sku) return;
         const qty = Math.abs(Number(row.quantity_change || 0));
-        const entry = actualBySku[sku] || { item_name: sku, qty: 0 };
-        entry.qty += qty;
-        actualBySku[sku] = entry;
+        addActualUsage(actualBySku, row.item_sku, row.item_sku, qty);
       });
+      if ((stockOut || []).length > 0) {
+        issueSources.push({
+          source: 'stock_history_fallback',
+          rows: (stockOut || []).length,
+          quantity: (stockOut || []).reduce((sum: number, row: any) => sum + Math.abs(Number(row.quantity_change || 0)), 0)
+        });
+      }
     }
 
     // 5. Cost basis — simple_items.cost_price by SKU (the live, populated
@@ -614,16 +796,21 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
     const allSkus = [...new Set([...Object.keys(theoreticalBySku), ...Object.keys(actualBySku)])];
     let costBySku: Record<string, number> = {};
     if (allSkus.length > 0) {
-      const { data: costRows, error: costErr } = await supabase
-        .from('simple_items')
-        .select('sku, item_name, cost_price')
-        .or(`sku.in.(${allSkus.map(s => `"${s}"`).join(',')}),item_name.in.(${allSkus.map(s => `"${s}"`).join(',')})`)
-        .limit(500);
-      if (costErr) throw costErr;
+      const lowerNames = allSkus.map((s) => normalizeItemName(s));
+      const { rows: costRows } = await db.query(
+        `SELECT sku, item_name, cost_price
+         FROM public.simple_items
+         WHERE sku = ANY($1::text[])
+            OR item_name = ANY($1::text[])
+            OR LOWER(REGEXP_REPLACE(TRIM(item_name), '[^a-z0-9\\s]', ' ', 'g')) = ANY($2::text[])`,
+        [allSkus, lowerNames]
+      );
       (costRows || []).forEach((r: any) => {
         const price = Number(r.cost_price || 0);
         if (allSkus.includes(r.sku)) costBySku[r.sku] = price;
         if (allSkus.includes(r.item_name)) costBySku[r.item_name] = price;
+        const matchedByName = allSkus.find((sku) => normalizeItemName(sku) === normalizeItemName(r.item_name));
+        if (matchedByName) costBySku[matchedByName] = price;
       });
     }
 
@@ -638,6 +825,7 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
       const actualCost = actualQty * unitCost;
       const varianceQty = actualQty - theoreticalQty;
       const varianceCost = actualCost - theoreticalCost;
+      const varianceType = varianceQty > 0 ? 'wastage' : varianceQty < 0 ? 'shortage' : 'ok';
       return {
         item_sku: sku,
         item_name: theoretical?.item_name || actual?.item_name || sku,
@@ -651,6 +839,7 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
         variance_qty: Number(varianceQty.toFixed(3)),
         variance_cost: Number(varianceCost.toFixed(2)),
         variance_percent: theoreticalQty > 0 ? Number(((varianceQty / theoreticalQty) * 100).toFixed(1)) : null,
+        variance_type: varianceType,
         flag: varianceFlag(varianceQty, theoreticalQty)
       };
     });
@@ -690,6 +879,36 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
       const produced = Number(row.actual_quantity || 0) > 0 ? Number(row.actual_quantity) : Number(row.expected_quantity || 0);
       producedByItem[name] = (producedByItem[name] || 0) + produced;
     });
+
+    try {
+      const productionAliases = shiftAliases(shift);
+      const productionParams: any[] = [branchId, controlDate];
+      let productionShiftClause = '';
+      if (productionAliases.length > 0) {
+        productionParams.push(productionAliases);
+        productionShiftClause = `AND LOWER(COALESCE(ks.shift_type, '')) = ANY($${productionParams.length}::text[])`;
+      }
+      const { rows: shiftProductionRows } = await db.query(
+        `SELECT
+            ksp.produced_item_name,
+            COALESCE(SUM(ksp.produced_quantity), 0) AS produced_qty
+         FROM public.kitchen_shift_production ksp
+         JOIN public.kitchen_shifts ks ON ks.id = ksp.shift_id
+         WHERE ks.branch_id = $1
+           AND ks.shift_date = $2::date
+           ${productionShiftClause}
+         GROUP BY ksp.produced_item_name`,
+        productionParams
+      );
+      (shiftProductionRows || []).forEach((row: any) => {
+        const name = String(row.produced_item_name || '').trim();
+        if (!name) return;
+        const produced = Number(row.produced_qty || 0);
+        producedByItem[name] = (producedByItem[name] || 0) + produced;
+      });
+    } catch (err: any) {
+      if (!['42P01', '42703'].includes(err?.code)) throw err;
+    }
 
     const kitchenVsSalesNames = [...new Set([...Object.keys(producedByItem), ...Object.keys(soldByItem)])];
     const kitchenVsSales = kitchenVsSalesNames.map((name) => {
@@ -742,6 +961,13 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
         date: controlDate,
         shift: shift || null,
         has_kitchen_session: hasKitchenSession,
+        has_kitchen_issue_tracking: hasKitchenSession,
+        issue_sources: issueSources,
+        kitchen_issue_summary: {
+          total_issue_rows: issueSources.reduce((sum, source) => sum + source.rows, 0),
+          total_issued_qty: Number(issueSources.reduce((sum, source) => sum + source.quantity, 0).toFixed(3)),
+          sources: issueSources.map((source) => source.source)
+        },
         bom_control: bomControl,
         no_recipe_items: noRecipeItems,
         kitchen_vs_sales: kitchenVsSales,
