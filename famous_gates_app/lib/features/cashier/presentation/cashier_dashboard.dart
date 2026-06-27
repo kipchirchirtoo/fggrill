@@ -3283,6 +3283,10 @@ class _VoidItemsPickerSheet extends StatefulWidget {
 
 class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
   final Set<int> _selected = {};
+  // Defaults to 1 (not the full active qty) when an item is checked — a 2x
+  // line item must let the cashier void just 1 of the 2, not force the whole
+  // line out.
+  final Map<int, double> _qtyToVoid = {};
 
   double _activeQty(Map<String, dynamic> item) {
     final qty = (item['quantity'] is num)
@@ -3305,10 +3309,15 @@ class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
           children: [
             Text('Select item(s) to void',
                 style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            const Text(
+              'Adjust quantity per item — voiding a 2x line does not have to void both.',
+              style: TextStyle(color: AppColors.kTextSecondary, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             ConstrainedBox(
               constraints:
-                  BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+                  BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.55),
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: widget.items.length,
@@ -3319,18 +3328,54 @@ class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
                   final unitPrice = (item['unit_price'] is num)
                       ? (item['unit_price'] as num).toDouble()
                       : double.tryParse('${item['unit_price']}') ?? 0;
-                  return CheckboxListTile(
-                    value: _selected.contains(index),
-                    onChanged: (checked) => setState(() {
-                      if (checked == true) {
-                        _selected.add(index);
-                      } else {
-                        _selected.remove(index);
-                      }
-                    }),
-                    title: Text('${item['name'] ?? 'Item'}'),
-                    subtitle: Text(
-                        'Qty ${activeQty.toStringAsFixed(activeQty.truncateToDouble() == activeQty ? 0 : 1)} × KES ${unitPrice.toStringAsFixed(2)} = KES ${(activeQty * unitPrice).toStringAsFixed(2)}'),
+                  final isSelected = _selected.contains(index);
+                  final qty = _qtyToVoid[index] ?? 1;
+                  return Column(
+                    children: [
+                      CheckboxListTile(
+                        value: isSelected,
+                        onChanged: (checked) => setState(() {
+                          if (checked == true) {
+                            _selected.add(index);
+                            _qtyToVoid[index] = activeQty >= 1 ? 1 : activeQty;
+                          } else {
+                            _selected.remove(index);
+                            _qtyToVoid.remove(index);
+                          }
+                        }),
+                        title: Text('${item['name'] ?? 'Item'}'),
+                        subtitle: Text(
+                            'Active qty ${activeQty.toStringAsFixed(activeQty.truncateToDouble() == activeQty ? 0 : 1)} × KES ${unitPrice.toStringAsFixed(2)}'),
+                      ),
+                      if (isSelected)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 56, right: 16, bottom: 8),
+                          child: Row(
+                            children: [
+                              const Text('Qty to void:'),
+                              const SizedBox(width: 12),
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline),
+                                onPressed: qty > 1
+                                    ? () => setState(() => _qtyToVoid[index] = qty - 1)
+                                    : null,
+                              ),
+                              Text(
+                                qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1),
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                onPressed: qty < activeQty
+                                    ? () => setState(() => _qtyToVoid[index] = qty + 1)
+                                    : null,
+                              ),
+                              const Spacer(),
+                              Text('= KES ${(qty * unitPrice).toStringAsFixed(2)}'),
+                            ],
+                          ),
+                        ),
+                    ],
                   );
                 },
               ),
@@ -3344,10 +3389,9 @@ class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
                     : () => Navigator.pop(
                           context,
                           _selected.map((index) {
-                            final item = widget.items[index];
                             return {
                               'item_index': index,
-                              'qty_to_void': _activeQty(item),
+                              'qty_to_void': _qtyToVoid[index] ?? 1,
                             };
                           }).toList(),
                         ),
@@ -4412,6 +4456,158 @@ class _ShiftCreditEntry {
       };
 }
 
+// Shift expense entry — petty purchases/fuel/etc. paid out of this shift's
+// collections. Deliberately separate from _ShiftCreditEntry: expenses have
+// no staff member, just a free-text description and a payment method.
+class _ShiftExpenseEntry {
+  const _ShiftExpenseEntry({
+    required this.description,
+    required this.amount,
+    required this.paymentMethod,
+  });
+
+  final String description;
+  final num amount;
+  final String paymentMethod;
+
+  Map<String, dynamic> toJson() => {
+        'description': description,
+        'amount': amount,
+        'payment_method': paymentMethod,
+        'time': DateTime.now().toIso8601String(),
+      };
+}
+
+List<_ShiftExpenseEntry> _shiftExpenseEntries(Map<String, dynamic> shift) {
+  final entries = <_ShiftExpenseEntry>[];
+  final value = shift['expense_details'];
+  if (value is! List) return entries;
+  for (final raw in value) {
+    final row = _payload(raw);
+    if (row.isEmpty) continue;
+    final amount = _num(row['amount']);
+    if (amount <= 0) continue;
+    final description = _text(row, ['description', 'name']);
+    final method = _text(row, ['payment_method', 'method']).toLowerCase();
+    entries.add(_ShiftExpenseEntry(
+      description: description.isEmpty ? 'Expense' : description,
+      amount: amount,
+      paymentMethod: method.isEmpty ? 'cash' : method,
+    ));
+  }
+  return entries;
+}
+
+Widget _expenseEntryPanel(
+  BuildContext context, {
+  required TextEditingController description,
+  required TextEditingController amount,
+  required List<_ShiftExpenseEntry> entries,
+  required ValueChanged<String> onAdd,
+  required ValueChanged<int> onRemove,
+}) {
+  return _ExpenseEntryPanelBody(
+    description: description,
+    amount: amount,
+    entries: entries,
+    onAdd: onAdd,
+    onRemove: onRemove,
+  );
+}
+
+class _ExpenseEntryPanelBody extends StatefulWidget {
+  const _ExpenseEntryPanelBody({
+    required this.description,
+    required this.amount,
+    required this.entries,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final TextEditingController description;
+  final TextEditingController amount;
+  final List<_ShiftExpenseEntry> entries;
+  final ValueChanged<String> onAdd;
+  final ValueChanged<int> onRemove;
+
+  @override
+  State<_ExpenseEntryPanelBody> createState() => _ExpenseEntryPanelBodyState();
+}
+
+class _ExpenseEntryPanelBodyState extends State<_ExpenseEntryPanelBody> {
+  String _method = 'cash';
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 260,
+                  child: TextField(
+                    controller: widget.description,
+                    decoration: const InputDecoration(labelText: 'Expense description'),
+                  ),
+                ),
+                SizedBox(
+                  width: 110,
+                  child: TextField(
+                    controller: widget.amount,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Amount'),
+                  ),
+                ),
+                SizedBox(
+                  width: 140,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _method,
+                    items: const [
+                      DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                      DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                      DropdownMenuItem(value: 'card', child: Text('Card')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _method = value);
+                    },
+                    decoration: const InputDecoration(labelText: 'Paid via'),
+                  ),
+                ),
+                IconButton.filled(
+                  onPressed: () => widget.onAdd(_method),
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+            if (widget.entries.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              for (final entry in widget.entries.toList().asMap().entries)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(entry.value.description),
+                  subtitle: Text(
+                      '${_money(entry.value.amount)} • ${entry.value.paymentMethod}'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => widget.onRemove(entry.key),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ShiftStaffMember {
   const _ShiftStaffMember({
     required this.id,
@@ -4581,6 +4777,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   final paidStaffId = TextEditingController();
   final paidName = TextEditingController();
   final paidAmount = TextEditingController();
+  final expenseDescription = TextEditingController();
+  final expenseAmount = TextEditingController();
   final staffOptions = _shiftStaffMembers(staffMembers);
   final creditEntries = _shiftCreditEntries(
     shift,
@@ -4592,6 +4790,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
     detailKeys: const ['paid_bills_details', 'paid_bills'],
     staffMembers: staffOptions,
   );
+  final expenseEntries = _shiftExpenseEntries(shift);
 
   void disposeAll() {
     closingCash.dispose();
@@ -4604,6 +4803,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
     paidStaffId.dispose();
     paidName.dispose();
     paidAmount.dispose();
+    expenseDescription.dispose();
+    expenseAmount.dispose();
   }
 
   return showDialog<Map<String, dynamic>>(
@@ -4611,11 +4812,11 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) {
         final openingFloat = _num(shift['opening_float']);
-        final baseCashSales =
+        final rawCashSales =
             _num(shift['total_cash_sales'] ?? shift['total_cash']);
-        final baseMpesaSales =
+        final rawMpesaSales =
             _num(shift['total_mpesa_sales'] ?? shift['total_mpesa']);
-        final baseCardSales =
+        final rawCardSales =
             _num(shift['total_card_sales'] ?? shift['total_card']);
         // Paid credits recorded this shift, split by how the staff paid. Each
         // amount folds into the matching cashier collection tally.
@@ -4623,18 +4824,33 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
             .where((e) => (e.paymentMethod ?? 'cash').toLowerCase() == method)
             .fold<num>(0, (sum, entry) => sum + entry.amount);
         final cashPaidCredits = paidByMethod('cash');
-        final mpesaPaidCredits = paidByMethod('mpesa');
-        final cardPaidCredits = paidByMethod('card');
-        final cashSales = baseCashSales + cashPaidCredits;
-        final mpesaSales = baseMpesaSales + mpesaPaidCredits;
-        final cardSales = baseCardSales + cardPaidCredits;
         final paidBillsTotal =
             paidEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
         final creditBillsTotal =
             creditEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
+        // Expenses logged this shift, split by how they were paid out. Each
+        // reduces that method's reported sales — mirrors the backend's
+        // cash_sales_net/mpesa_sales_net/card_sales_net at close time.
+        num expenseByMethod(String method) => expenseEntries
+            .where((e) => e.paymentMethod.toLowerCase() == method)
+            .fold<num>(0, (sum, entry) => sum + entry.amount);
+        final cashExpenses = expenseByMethod('cash');
+        final mpesaExpenses = expenseByMethod('mpesa');
+        final cardExpenses = expenseByMethod('card');
+        final expenseTotal =
+            expenseEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
+        final baseCashSales = (rawCashSales - cashExpenses).clamp(0, rawCashSales);
+        final baseMpesaSales = (rawMpesaSales - mpesaExpenses).clamp(0, rawMpesaSales);
+        final baseCardSales = (rawCardSales - cardExpenses).clamp(0, rawCardSales);
         final actualCash = num.tryParse(closingCash.text.trim()) ?? 0;
-        // Only cash paid credits affect the drawer; cashSales already includes them.
-        final expectedCash = openingFloat + cashSales;
+        // Cash-drawer reconciliation legitimately includes paid credits (the
+        // cashier is physically holding that cash) and excludes cash spent on
+        // expenses (it physically left the drawer) — but this must stay
+        // separate from "sales" below, which only ever shows true revenue net
+        // of expenses, matching what the backend now persists. Otherwise a
+        // settled credit bill gets counted as a sale twice: once when the
+        // credit was originally issued, again here when it's collected.
+        final expectedCash = openingFloat + baseCashSales + cashPaidCredits;
         final variance = actualCash - expectedCash;
 
         return Dialog(
@@ -4667,11 +4883,12 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                       children: [
                         _KeyValueGrid(values: {
                           'Opening float': _money(openingFloat),
-                          'Cash sales': _money(cashSales),
-                          'M-Pesa sales': _money(mpesaSales),
-                          'Card sales': _money(cardSales),
+                          'Cash sales': _money(baseCashSales),
+                          'M-Pesa sales': _money(baseMpesaSales),
+                          'Card sales': _money(baseCardSales),
                           'Credit bills': _money(creditBillsTotal),
                           'Paid credits': _money(paidBillsTotal),
+                          'Expenses': _money(expenseTotal),
                           'Expected cash': _money(expectedCash),
                           'Variance': _money(variance),
                         }),
@@ -4756,6 +4973,37 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             ),
                           ],
                         ),
+                        const SizedBox(height: 24),
+                        Text('Expenses',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Petty purchases, fuel, etc. paid out of this shift\'s collections — reduces the matching sales total.',
+                          style: TextStyle(color: AppColors.kTextSecondary, fontSize: 12),
+                        ),
+                        const SizedBox(height: 12),
+                        _expenseEntryPanel(
+                          context,
+                          description: expenseDescription,
+                          amount: expenseAmount,
+                          entries: expenseEntries,
+                          onAdd: (method) => setDialogState(() {
+                            final amount =
+                                num.tryParse(expenseAmount.text.trim()) ?? 0;
+                            if (amount <= 0 || expenseDescription.text.trim().isEmpty) {
+                              return;
+                            }
+                            expenseEntries.add(_ShiftExpenseEntry(
+                              description: expenseDescription.text.trim(),
+                              amount: amount,
+                              paymentMethod: method,
+                            ));
+                            expenseDescription.clear();
+                            expenseAmount.clear();
+                          }),
+                          onRemove: (index) => setDialogState(
+                              () => expenseEntries.removeAt(index)),
+                        ),
                       ],
                     ),
                   ),
@@ -4789,6 +5037,10 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             'paid_bills_value': paidBillsTotal,
                             'paid_bills_count': paidEntries.length,
                             'paid_bills_details': paidEntries
+                                .map((entry) => entry.toJson())
+                                .toList(),
+                            'expense_total': expenseTotal,
+                            'expense_details': expenseEntries
                                 .map((entry) => entry.toJson())
                                 .toList(),
                             'unpaid_bills_value': creditBillsTotal,

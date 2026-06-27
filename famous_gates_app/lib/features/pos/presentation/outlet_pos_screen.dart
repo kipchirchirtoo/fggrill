@@ -16,6 +16,10 @@ import '../domain/models.dart';
 
 enum OutletPosSection { station, orders }
 
+// Temporarily disabled per ops request — flip back to true to restore the
+// "Merge bills" button on the orders tab.
+const bool _kMergeBillsEnabled = false;
+
 class OutletPOSScreen extends ConsumerStatefulWidget {
   const OutletPOSScreen({
     super.key,
@@ -562,19 +566,21 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               'and request void approval from the bill actions menu.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _mergeableOrders.length < 2 || _busy
-                    ? null
-                    : _showMergeOrdersDialog,
-                icon: const Icon(Icons.call_merge),
-                label: const Text('Merge bills'),
+            if (_kMergeBillsEnabled) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _mergeableOrders.length < 2 || _busy
+                      ? null
+                      : _showMergeOrdersDialog,
+                  icon: const Icon(Icons.call_merge),
+                  label: const Text('Merge bills'),
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 12),
-            for (final order in _orders)
+            for (final order in _visibleOrders)
               Card(
                 child: ListTile(
                   onTap: () => _showBillDetail(order),
@@ -697,7 +703,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                   ),
                 ),
               ),
-            if (_orders.isEmpty)
+            if (_visibleOrders.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 100),
                 child: Center(child: Text('No orders placed yet')),
@@ -1220,6 +1226,18 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         .clamp(0, order.totalAmount)
         .toDouble();
   }
+
+  // A whole-bill void zeroes the order out (status/payment_status='voided',
+  // balance/total collapsed to 0) — once that's happened there is nothing
+  // left to act on, and leaving it sitting in the order history is a
+  // loophole: it's a fully dead row a waiter/bartender could still tap into.
+  // Drop it from the list entirely rather than just disabling its actions.
+  List<OutletShiftOrder> get _visibleOrders => _orders.where((order) {
+        final isVoided =
+            order.status == 'voided' || order.paymentStatus == 'voided';
+        final isZeroed = order.totalAmount <= 0;
+        return !(isVoided && isZeroed);
+      }).toList();
 
   List<OutletShiftOrder> get _mergeableOrders =>
       _orders.where(_canEditOrder).toList();

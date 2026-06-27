@@ -1601,6 +1601,10 @@ export const closeShift = async (
             paid_bills_value,
             paid_bills_count,
             paid_bills_details,
+            // Expenses paid out of this shift's collections — reduce the
+            // matching payment method's reported sales (see expense
+            // deduction below).
+            expense_details,
             // Cash management
             cash_at_hand,
             cash_deposited,
@@ -1799,8 +1803,17 @@ export const closeShift = async (
         const cashDrops = toNumber(cash_deposited);
         const payouts = toNumber(req.body.payouts ?? req.body.paid_outs);
 
-        // Paid credits recorded this shift fold into the matching cashier
-        // collection method tally: M-Pesa to M-Pesa, cash to cash, etc.
+        // Paid credits recorded this shift (a customer settling an OLD credit
+        // bill) are real cash/mpesa/card landing in the cashier's hands this
+        // shift, so they correctly affect the CASH-DRAWER reconciliation
+        // below (total_cash_sales_final / expectedClosingFloat). They must
+        // NOT inflate reported "sales"/"revenue" figures though — that
+        // revenue was already recognised in the shift the credit was
+        // originally issued; counting it again here would double-count it
+        // company-wide. total_cash_sales / total_mpesa_sales / total_card_sales /
+        // total_sales (persisted below) therefore stay on the un-folded
+        // cash_sales/mpesa_sales/card_sales/total_sales values; only the
+        // *_final variants (drawer-reconciliation only) include paid credits.
         const paidBillsList: any[] = Array.isArray(paid_bills_details) ? paid_bills_details : [];
         const paidCreditsByMethod = (method: string) => paidBillsList
             .filter((b: any) => normalizePaymentMethod(b.payment_method) === method)
@@ -1808,12 +1821,27 @@ export const closeShift = async (
         const cashPaidCredits = paidCreditsByMethod('cash');
         const mpesaPaidCredits = paidCreditsByMethod('mpesa');
         const cardPaidCredits = paidCreditsByMethod('card');
-        const paidCreditsTotal = cashPaidCredits + mpesaPaidCredits + cardPaidCredits;
 
-        const total_cash_sales_final = cash_sales + cashPaidCredits;
-        const total_mpesa_sales_final = mpesa_sales + mpesaPaidCredits;
-        const total_card_sales_final = card_sales + cardPaidCredits;
-        const total_sales_final = total_sales + paidCreditsTotal;
+        // Expense entries the cashier logs during the shift (fuel, petty
+        // purchases, etc.) — each is tagged with how it was paid out, and
+        // reduces that same method's reported sales, per ops requirement.
+        // A cash expense also reduces the cash-drawer reconciliation, since
+        // that cash physically left the drawer.
+        const expensesList: any[] = Array.isArray(expense_details) ? expense_details : [];
+        const expensesByMethod = (method: string) => expensesList
+            .filter((e: any) => normalizePaymentMethod(e.payment_method) === method)
+            .reduce((s: number, e: any) => s + (parseFloat(e.amount) || 0), 0);
+        const cashExpenses = expensesByMethod('cash');
+        const mpesaExpenses = expensesByMethod('mpesa');
+        const cardExpenses = expensesByMethod('card');
+        const expenseTotal = expensesList.reduce((s: number, e: any) => s + (parseFloat(e.amount) || 0), 0);
+
+        const cash_sales_net = Math.max(0, cash_sales - cashExpenses);
+        const mpesa_sales_net = Math.max(0, mpesa_sales - mpesaExpenses);
+        const card_sales_net = Math.max(0, card_sales - cardExpenses);
+        const total_sales_net = Math.max(0, total_sales - expenseTotal);
+
+        const total_cash_sales_final = cash_sales_net + cashPaidCredits;
         const voidAudit = await loadCashierVoidAudit({
             branchId: Number(shift.branch_id),
             cashierId: shift.cashier_id,
@@ -1821,7 +1849,7 @@ export const closeShift = async (
             shiftStart: shift.shift_start,
             shiftEnd: new Date().toISOString()
         });
-        const gross_sales_final = total_sales_final + toNumber(voidAudit.summary.total_void_amount);
+        const gross_sales = total_sales_net + toNumber(voidAudit.summary.total_void_amount);
 
         // Strict accounting formula: Expected = Opening Float + Cash Sales (incl.
         // cash paid credits) - Cash Drops/Payouts. Only cash-affecting items count.
@@ -1860,12 +1888,19 @@ export const closeShift = async (
                 closing_float: actualClosingFloat,
                 expected_closing_float: expectedClosingFloat,
                 variance,
-                // Payment method totals (paid credits folded into each method)
-                total_cash_sales: total_cash_sales_final,
-                total_mpesa_sales: total_mpesa_sales_final,
-                total_card_sales: total_card_sales_final,
-                total_sales: total_sales_final,
+                // Payment method totals — true sales, net of expenses paid
+                // out this shift. Paid credits are NOT folded in here (see
+                // comment above); they're still captured separately via
+                // paid_bills_value/paid_bills_details below, and via
+                // cash-drawer reconciliation (closing_float/
+                // expected_closing_float/variance above).
+                total_cash_sales: cash_sales_net,
+                total_mpesa_sales: mpesa_sales_net,
+                total_card_sales: card_sales_net,
+                total_sales: total_sales_net,
                 transaction_count,
+                expense_total: expenseTotal,
+                expense_details: expensesList,
                 // Revenue by source
                 swimming_pool_revenue: swimming_pool_revenue || 0,
                 pool_token_revenue: pool_token_revenue || 0,
@@ -1936,7 +1971,7 @@ export const closeShift = async (
                 shiftStart: shift.shift_start,
                 shiftEnd: updatedShift?.shift_end || new Date().toISOString(),
                 outletShiftIds: closedPosOutletShiftIds,
-                grossRevenue: toNumber(updatedShift?.total_sales ?? total_sales_final)
+                grossRevenue: toNumber(updatedShift?.total_sales ?? total_sales_net)
             });
         } catch (voidAuditErr) {
             logger.warn('Failed to compile cashier shift void audit', {
@@ -1992,8 +2027,8 @@ export const closeShift = async (
                 ...updatedShift,
                 void_summary: voidAudit.summary,
                 void_lines: voidAudit.lines,
-                net_sales: total_sales_final,
-                gross_sales: gross_sales_final
+                net_sales: total_sales_net,
+                gross_sales: gross_sales
             }, userId);
         } catch (logbookError) {
             logger.error(`Failed to generate cashier shift logbook for ${id}`, logbookError);
@@ -2009,8 +2044,8 @@ export const closeShift = async (
                 ...updatedShift,
                 void_summary: voidAudit.summary,
                 void_lines: voidAudit.lines,
-                net_sales: total_sales_final,
-                gross_sales: gross_sales_final,
+                net_sales: total_sales_net,
+                gross_sales: gross_sales,
                 generated_logbook_id: generatedLogbook?.id || null,
                 automation_warnings: automationWarnings
             }
