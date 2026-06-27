@@ -673,14 +673,14 @@ export const getShiftLogs = async (
                     { data: barOrders },
                 ] = await Promise.all([
                     supabase.from('restaurant_orders')
-                        .select('total_amount, payment_method')
+                        .select('total_amount')
                         .eq('branch_id', branchId)
                         .eq('created_by', shift.cashier_id)
                         .gte('created_at', shift.shift_start)
                         .lte('created_at', shiftEnd)
                         .not('status', 'in', '(voided,cancelled)'),
                     supabase.from('bar_orders')
-                        .select('total_amount:total, payment_method')
+                        .select('total_amount:total')
                         .eq('branch_id', branchId)
                         .eq('created_by', shift.cashier_id)
                         .gte('created_at', shift.shift_start)
@@ -692,9 +692,9 @@ export const getShiftLogs = async (
                     ...(restOrders || []),
                     ...(barOrders || []),
                 ];
-                const totalCash  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'cash').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
-                const totalMpesa = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase().includes('mpesa') || (o.payment_method || '').toLowerCase().includes('m-pesa')).reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
-                const totalCard  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'card').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                const totalCash = toNumber(shift.total_cash_sales);
+                const totalMpesa = toNumber(shift.total_mpesa_sales);
+                const totalCard = toNumber(shift.total_card_sales);
                 const restBarTotal = allOrders.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
                 const totalSales = restBarTotal;
                 const txCount = allOrders.length;
@@ -828,13 +828,13 @@ export const getShiftLog = async (
                         { data: barOrders },
                     ] = await Promise.all([
                         supabase.from('restaurant_orders')
-                            .select('total_amount, payment_method')
+                            .select('total_amount')
                             .eq('branch_id', branchId)
                             .eq('created_by', shift.cashier_id)
                             .gte('created_at', shift.shift_start)
                             .lte('created_at', shiftEnd),
                         supabase.from('bar_orders')
-                            .select('total_amount:total, payment_method')
+                            .select('total_amount:total')
                             .eq('branch_id', branchId)
                             .eq('created_by', shift.cashier_id)
                             .gte('created_at', shift.shift_start)
@@ -842,9 +842,9 @@ export const getShiftLog = async (
                     ]);
 
                     const allOrders = [...(restOrders || []), ...(barOrders || [])];
-                    const totalCash  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'cash').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
-                    const totalMpesa = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase().includes('mpesa') || (o.payment_method || '').toLowerCase().includes('m-pesa')).reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
-                    const totalCard  = allOrders.filter((o: any) => (o.payment_method || '').toLowerCase() === 'card').reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+                    const totalCash = toNumber(enrichedShift.total_cash_sales);
+                    const totalMpesa = toNumber(enrichedShift.total_mpesa_sales);
+                    const totalCard = toNumber(enrichedShift.total_card_sales);
                     const totalSales = allOrders.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
 
                     if (totalSales > 0) {
@@ -968,13 +968,13 @@ export const getShiftLog = async (
                 { data: creditBillRecords },
             ] = await Promise.all([
                 supabase.from('restaurant_orders')
-                    .select('id, total_amount, payment_method, guest_name, order_type, created_at')
+                    .select('id, total_amount, guest_name, order_type, created_at')
                     .eq('branch_id', branchId)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd),
                 supabase.from('bar_orders')
-                    .select('id, total, subtotal, payment_method, guest_name, order_type, created_at')
+                    .select('id, total, subtotal, guest_name, order_type, created_at')
                     .eq('branch_id', branchId)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
@@ -1037,7 +1037,7 @@ export const getShiftLog = async (
                 ...(restOrders || []).map((o: any) => ({
                     id: o.id,
                     amount: toNumber(o.total_amount),
-                    payment_method: normalizePaymentMethod(o.payment_method),
+                    payment_method: 'other',
                     section: 'restaurant_sale',
                     source_table: 'restaurant_orders',
                     source_id: o.id,
@@ -1048,7 +1048,7 @@ export const getShiftLog = async (
                 ...(barOrders || []).map((o: any) => ({
                     id: o.id,
                     amount: toNumber(o.total ?? o.subtotal),
-                    payment_method: normalizePaymentMethod(o.payment_method),
+                    payment_method: 'other',
                     section: 'bar_sale',
                     source_table: 'bar_orders',
                     source_id: o.id,
