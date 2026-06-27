@@ -241,8 +241,9 @@ class KitchenOrderItem {
 
 /// Item-level void state surfaced on the KDS so kitchen staff know to stop
 /// (or continue) preparing a specific item while its void request works
-/// through the cashier-then-manager flow. `status` is one of: pending,
-/// void_acknowledged, approved, rejected, void_cashier_declined.
+/// through the kitchen-then-cashier-then-manager flow. `status` is one of:
+/// pending, kitchen_acknowledged, void_kitchen_declined, void_acknowledged,
+/// approved, rejected, void_cashier_declined.
 class KitchenItemVoidRequest {
   final String status;
   final String label;
@@ -257,12 +258,14 @@ class KitchenItemVoidRequest {
   });
 
   bool get isPending => status == 'pending';
+  bool get isKitchenAcknowledged => status == 'kitchen_acknowledged';
+  bool get isKitchenDeclined => status == 'void_kitchen_declined';
   bool get isAcknowledged => status == 'void_acknowledged';
   bool get isApproved => status == 'approved';
   bool get isRejected => status == 'rejected';
   bool get isCashierDeclined => status == 'void_cashier_declined';
   // Non-terminal: the kitchen should still stop work on this item.
-  bool get isActive => isPending || isAcknowledged;
+  bool get isActive => isPending || isKitchenAcknowledged || isAcknowledged;
 
   factory KitchenItemVoidRequest.fromJson(Map<String, dynamic> json) {
     return KitchenItemVoidRequest(

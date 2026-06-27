@@ -151,8 +151,8 @@ final cashierShiftTallyProvider =
 });
 
 /// Item-level void requests awaiting this cashier's acknowledgement
-/// (stage 1 of the two-stage void flow). Whole-bill voids are not included --
-/// those go straight to the branch accountant and never hit this queue.
+/// (stage 2 of the kitchen -> cashier -> branch accountant chain — kitchen
+/// must acknowledge first).
 final cashierPendingItemVoidsProvider =
     StreamProvider.autoDispose<List<ItemVoidRequest>>((ref) async* {
   final powerSync = ref.watch(powerSyncServiceProvider);
@@ -166,6 +166,33 @@ final cashierPendingItemVoidsProvider =
     return;
   }
   yield await ref.watch(outletPosRepositoryProvider).getPendingVoidsCashier();
+});
+
+/// Whole-bill void requests awaiting this cashier's acknowledgement (stage 2
+/// of the kitchen -> cashier -> branch accountant chain). Acknowledging here
+/// applies the real financial effect (stock, kitchen consumption, inventory,
+/// shift totals) so the cashier's own shift close already reflects the void.
+final cashierPendingWholeBillVoidsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref
+      .watch(outletPosRepositoryProvider)
+      .getPendingVoidsCashierWholeBill();
+});
+
+/// Read-only: item void requests still awaiting kitchen (stage 1) for this
+/// cashier's own station — so "nothing in my queue" reads as "kitchen
+/// hasn't acted yet" rather than "voiding is broken."
+final cashierAwaitingKitchenItemVoidsProvider =
+    FutureProvider.autoDispose<List<ItemVoidRequest>>((ref) async {
+  return ref.watch(outletPosRepositoryProvider).getAwaitingKitchenItemVoids();
+});
+
+/// Read-only: whole-bill void requests still awaiting kitchen (stage 1).
+final cashierAwaitingKitchenWholeBillVoidsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref
+      .watch(outletPosRepositoryProvider)
+      .getAwaitingKitchenWholeBillVoids();
 });
 
 /// Post-payment exchange requests awaiting this cashier's approve/reject

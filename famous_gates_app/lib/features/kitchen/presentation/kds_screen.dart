@@ -12,7 +12,12 @@ import '../data/repository.dart';
 import '../domain/models.dart';
 import '../domain/providers.dart';
 
-enum KitchenKdsSection { orders, history, analytics, notifications }
+enum KitchenKdsSection { orders, voidRequests, history, analytics, notifications }
+
+// Orders older than this with no clearing action (the backend's active-feed
+// already drops anything marked served/completed) are hidden from the live
+// Orders grid — they're stale tickets, not orders still being worked.
+const int _kStaleOrderMinutes = 100;
 
 class KDSScreen extends ConsumerStatefulWidget {
   const KDSScreen({super.key, this.initialSection = KitchenKdsSection.orders});
@@ -31,6 +36,12 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   // Track printed order IDs to avoid duplicate printing
   final Set<String> _printedOrderIds = {};
 
+  // Forces a rebuild every minute purely so the "stale order" cutoff below
+  // (orders older than _kStaleOrderMinutes that were never cleared/served)
+  // actually disappears close to real time, instead of only re-evaluating
+  // whenever a Realtime event or manual refresh happens to fire.
+  Timer? _staleSweepTimer;
+
   KitchenRepository get _repo => ref.read(kitchenRepositoryProvider);
 
   @override
@@ -41,6 +52,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     // No polling timer — KdsNotifier uses Supabase Realtime to trigger
     // refreshes automatically. The FutureBuilder here handles history,
     // analytics, and notifications sections only.
+    _staleSweepTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -54,6 +68,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
 
   @override
   void dispose() {
+    _staleSweepTimer?.cancel();
     super.dispose();
   }
 
@@ -235,6 +250,12 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           group: 'Kitchen Display',
         ),
         MasterNavItem(
+          section: KitchenKdsSection.voidRequests,
+          label: 'Void Requests',
+          icon: Icons.remove_circle_outline,
+          group: 'Kitchen Display',
+        ),
+        MasterNavItem(
           section: KitchenKdsSection.history,
           label: 'History',
           icon: Icons.history_outlined,
@@ -257,35 +278,39 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       child: _section == KitchenKdsSection.orders
           // Orders section is driven by kdsOrdersProvider (Realtime-backed)
           ? _buildOrdersSection()
-          : FutureBuilder<_KitchenModuleSnapshot>(
-              key: ValueKey('${_section.name}-$_notificationStatus'),
-              future: _future,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !snapshot.hasData) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: LoadingSkeleton(type: SkeletonType.list),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return ErrorState(
-                      message: '${snapshot.error}', onRetry: _refresh);
-                }
-                final data = snapshot.data ?? _KitchenModuleSnapshot.empty();
-                switch (_section) {
-                  case KitchenKdsSection.orders:
-                    // Unreachable — orders is handled above
-                    return const SizedBox.shrink();
-                  case KitchenKdsSection.history:
-                    return _history(data);
-                  case KitchenKdsSection.analytics:
-                    return _analytics(data);
-                  case KitchenKdsSection.notifications:
-                    return _notifications(data);
-                }
-              },
-            ),
+          : _section == KitchenKdsSection.voidRequests
+              // Self-contained: fetches/refreshes its own pending queues.
+              ? const _KdsVoidRequestsSection()
+              : FutureBuilder<_KitchenModuleSnapshot>(
+                  key: ValueKey('${_section.name}-$_notificationStatus'),
+                  future: _future,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        !snapshot.hasData) {
+                      return const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: LoadingSkeleton(type: SkeletonType.list),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return ErrorState(
+                          message: '${snapshot.error}', onRetry: _refresh);
+                    }
+                    final data = snapshot.data ?? _KitchenModuleSnapshot.empty();
+                    switch (_section) {
+                      case KitchenKdsSection.orders:
+                      case KitchenKdsSection.voidRequests:
+                        // Unreachable — handled above
+                        return const SizedBox.shrink();
+                      case KitchenKdsSection.history:
+                        return _history(data);
+                      case KitchenKdsSection.analytics:
+                        return _analytics(data);
+                      case KitchenKdsSection.notifications:
+                        return _notifications(data);
+                    }
+                  },
+                ),
     );
   }
 
@@ -303,7 +328,19 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     );
   }
 
-  Widget _orders(List<KitchenOrder> activeOrders) {
+  Widget _orders(List<KitchenOrder> rawActiveOrders) {
+    // The backend's active-orders feed already excludes anything cleared
+    // (kitchen_status served/completed) — so anything still in this list
+    // that's been sitting for over _kStaleOrderMinutes was never cleared
+    // and is just stale clutter on the wall display. Drop it rather than
+    // letting it pile up forever. Uses effectiveCreatedAt (not elapsed/
+    // createdAt) so a recalled order's clock resets to the recall time —
+    // otherwise a bill recalled after 90 minutes would vanish again in 10.
+    final activeOrders = rawActiveOrders
+        .where((order) =>
+            DateTime.now().difference(order.effectiveCreatedAt).inMinutes <=
+            _kStaleOrderMinutes)
+        .toList();
     // Newest orders first so chefs always see fresh tickets at the top.
     final orders = [...activeOrders]
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -577,6 +614,319 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       if (!mounted) return;
       AppNotifier.showSnackBar(context, SnackBar(content: Text('$error')));
       _refresh();
+    }
+  }
+}
+
+/// Stage 1 of the waiter void chain: Kitchen acknowledges/declines before
+/// the cashier or branch accountant ever see the request. Acknowledging
+/// here applies no financial effect yet — it just signals the kitchen has
+/// confirmed the item/bill can be pulled, and hands off to the cashier.
+class _KdsVoidRequestsSection extends ConsumerStatefulWidget {
+  const _KdsVoidRequestsSection();
+
+  @override
+  ConsumerState<_KdsVoidRequestsSection> createState() =>
+      _KdsVoidRequestsSectionState();
+}
+
+class _KdsVoidRequestsSectionState
+    extends ConsumerState<_KdsVoidRequestsSection> {
+  late Future<List<List<Map<String, dynamic>>>> _future;
+  final Set<String> _busyItemIds = {};
+  final Set<String> _busyBillIds = {};
+
+  KitchenRepository get _repo => ref.read(kitchenRepositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<List<Map<String, dynamic>>>> _load() => Future.wait([
+        _repo.getPendingItemVoidsKitchen(),
+        _repo.getPendingWholeBillVoidsKitchen(),
+      ]);
+
+  void _refresh() => setState(() => _future = _load());
+
+  String _money(num value) => 'KES ${value.toStringAsFixed(0)}';
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<List<Map<String, dynamic>>>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: LoadingSkeleton(type: SkeletonType.list),
+          );
+        }
+        if (snapshot.hasError) {
+          return ErrorState(message: '${snapshot.error}', onRetry: _refresh);
+        }
+        final itemRequests = snapshot.data?[0] ?? const [];
+        final billRequests = snapshot.data?[1] ?? const [];
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Void Requests',
+                        style: Theme.of(context).textTheme.titleLarge),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Refresh'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Waiters submit these when they void an item or a whole bill. '
+                'Acknowledge to confirm it can be pulled and send it on to the '
+                'cashier, or decline to keep it on the bill.',
+                style: TextStyle(color: Color(0xFFAAAFC4), fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              Text('Items', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              if (itemRequests.isEmpty)
+                const EmptyState(
+                  icon: Icons.check_circle_outline,
+                  message: 'No item void requests waiting on kitchen.',
+                )
+              else
+                Column(
+                    children: [for (final r in itemRequests) _itemCard(r)]),
+              const SizedBox(height: 24),
+              Text('Whole Bills',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              if (billRequests.isEmpty)
+                const EmptyState(
+                  icon: Icons.check_circle_outline,
+                  message: 'No bill void requests waiting on kitchen.',
+                )
+              else
+                Column(
+                    children: [for (final r in billRequests) _billCard(r)]),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _itemCard(Map<String, dynamic> r) {
+    final id = '${r['id'] ?? ''}';
+    final busy = _busyItemIds.contains(id);
+    final itemName = '${r['item_name'] ?? ''}';
+    final qty = double.tryParse('${r['qty_to_void'] ?? 0}') ?? 0;
+    final unitPrice = double.tryParse('${r['unit_price'] ?? 0}') ?? 0;
+    final orderNumber = '${r['order_number'] ?? ''}';
+    final requestedByName = '${r['requested_by_name'] ?? ''}';
+    final reason = '${r['reason'] ?? ''}';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$itemName  ×${qty.toStringAsFixed(qty % 1 == 0 ? 0 : 1)}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                Text(_money(qty * unitPrice),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              [
+                if (orderNumber.isNotEmpty) 'Order $orderNumber',
+                if (requestedByName.isNotEmpty) 'by $requestedByName',
+              ].join('  ·  '),
+              style: const TextStyle(color: Color(0xFFAAAFC4), fontSize: 13),
+            ),
+            if (reason.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Reason: $reason', style: const TextStyle(fontSize: 13)),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed:
+                      busy || id.isEmpty ? null : () => _declineItem(id),
+                  icon: const Icon(Icons.close, size: 16, color: Colors.red),
+                  label: const Text('Decline',
+                      style: TextStyle(color: Colors.red)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed:
+                      busy || id.isEmpty ? null : () => _acknowledgeItem(id),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.check, size: 16),
+                  label: const Text('Acknowledge'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _billCard(Map<String, dynamic> r) {
+    final id = '${r['id'] ?? ''}';
+    final busy = _busyBillIds.contains(id);
+    final orderNumber = '${r['order_number'] ?? ''}';
+    final totalAmount = double.tryParse('${r['total_amount'] ?? 0}') ?? 0;
+    final requestedByName = '${r['requested_by_name'] ?? ''}';
+    final reason = '${r['reason'] ?? ''}';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    orderNumber.isNotEmpty ? 'Bill $orderNumber' : 'Bill',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                Text(_money(totalAmount),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (requestedByName.isNotEmpty)
+              Text('by $requestedByName',
+                  style:
+                      const TextStyle(color: Color(0xFFAAAFC4), fontSize: 13)),
+            if (reason.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Reason: $reason', style: const TextStyle(fontSize: 13)),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed:
+                      busy || id.isEmpty ? null : () => _declineBill(id),
+                  icon: const Icon(Icons.close, size: 16, color: Colors.red),
+                  label: const Text('Decline',
+                      style: TextStyle(color: Colors.red)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed:
+                      busy || id.isEmpty ? null : () => _acknowledgeBill(id),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.check, size: 16),
+                  label: const Text('Acknowledge'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _acknowledgeItem(String id) async {
+    setState(() => _busyItemIds.add(id));
+    try {
+      await _repo.kitchenAcknowledgeItemVoid(id);
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context,
+          const SnackBar(content: Text('Acknowledged — sent to cashier.')));
+      _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context, SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _busyItemIds.remove(id));
+    }
+  }
+
+  Future<void> _declineItem(String id) async {
+    setState(() => _busyItemIds.add(id));
+    try {
+      await _repo.kitchenDeclineItemVoid(id);
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context,
+          const SnackBar(content: Text('Declined — item stays on the bill.')));
+      _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context, SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _busyItemIds.remove(id));
+    }
+  }
+
+  Future<void> _acknowledgeBill(String id) async {
+    setState(() => _busyBillIds.add(id));
+    try {
+      await _repo.kitchenAcknowledgeVoidRequest(id);
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context,
+          const SnackBar(content: Text('Acknowledged — sent to cashier.')));
+      _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context, SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _busyBillIds.remove(id));
+    }
+  }
+
+  Future<void> _declineBill(String id) async {
+    setState(() => _busyBillIds.add(id));
+    try {
+      await _repo.kitchenDeclineVoidRequest(id);
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context,
+          const SnackBar(content: Text('Declined — bill stays active.')));
+      _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(context, SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _busyBillIds.remove(id));
     }
   }
 }

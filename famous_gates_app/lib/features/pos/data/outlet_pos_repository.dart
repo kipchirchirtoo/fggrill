@@ -244,6 +244,47 @@ class OutletPosRepository {
     });
   }
 
+  // ── Whole-bill void chain: Cashier Stage 2 ──────────────────────────────
+  // Kitchen (KDS) acknowledges first; once kitchen_acknowledged, the cashier
+  // acknowledges here — this is where the financial effect (stock, kitchen
+  // consumption, inventory, shift totals) actually applies, so the cashier's
+  // own shift close reflects the void. Branch accountant gives final
+  // compliance approval afterwards.
+
+  Future<List<Map<String, dynamic>>> getPendingVoidsCashierWholeBill() async {
+    final response = await _dio.get('/pos/void-requests/pending/cashier');
+    return _list(response.data)
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> cashierAcknowledgeVoidRequest(
+      String requestId) async {
+    try {
+      final response =
+          await _dio.patch('/pos/void-requests/$requestId/cashier-acknowledge');
+      return Map<String, dynamic>.from(_data(response.data) as Map);
+    } on DioException catch (error) {
+      throw StateError(
+          _errorMessage(error, 'Could not acknowledge bill void request.'));
+    }
+  }
+
+  Future<void> cashierDeclineVoidRequest(
+    String requestId, {
+    String? rejectionReason,
+  }) async {
+    try {
+      await _dio.patch('/pos/void-requests/$requestId/cashier-decline', data: {
+        if (rejectionReason != null && rejectionReason.trim().isNotEmpty)
+          'rejection_reason': rejectionReason.trim(),
+      });
+    } on DioException catch (error) {
+      throw StateError(
+          _errorMessage(error, 'Could not decline bill void request.'));
+    }
+  }
+
   // ── Cashier Void Management ──────────────────────────────────────────────
   // The cashier searches for any unpaid/partial bill in the branch and voids
   // it immediately (whole bill or specific items) — no bartender/waiter
@@ -399,6 +440,27 @@ class OutletPosRepository {
     } on DioException catch (error) {
       throw StateError(_errorMessage(error, 'Could not decline void request.'));
     }
+  }
+
+  /// Read-only: item void requests still awaiting kitchen acknowledgment
+  /// (status 'pending', scoped to this cashier's own station) — surfaced so
+  /// a request that hasn't reached the cashier yet doesn't look stuck or
+  /// broken. No action endpoints are gated on this.
+  Future<List<ItemVoidRequest>> getAwaitingKitchenItemVoids() async {
+    final response = await _dio.get('/pos/voids/pending/kitchen');
+    return _list(response.data)
+        .map(
+            (item) => ItemVoidRequest.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  /// Read-only: whole-bill void requests still awaiting kitchen
+  /// acknowledgment. See [getAwaitingKitchenItemVoids].
+  Future<List<Map<String, dynamic>>> getAwaitingKitchenWholeBillVoids() async {
+    final response = await _dio.get('/pos/void-requests/pending/kitchen');
+    return _list(response.data)
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
   }
 
   /// Cashier Stage 1 queue — pending void requests for the caller's open shifts.
@@ -1073,6 +1135,10 @@ class ItemVoidRequest {
     this.requestedByName,
     this.actionedBy,
     this.actionedByName,
+    this.kitchenId,
+    this.kitchenName,
+    this.kitchenAcknowledgedAt,
+    this.kitchenAction,
     this.cashierId,
     this.cashierName,
     this.cashierAcknowledgedAt,
@@ -1102,12 +1168,17 @@ class ItemVoidRequest {
   final String? requestedByName;
   final String? actionedBy;
   final String? actionedByName;
-  // Stage 1
+  // Stage 1: kitchen (KDS)
+  final String? kitchenId;
+  final String? kitchenName;
+  final DateTime? kitchenAcknowledgedAt;
+  final String? kitchenAction;
+  // Stage 2: cashier
   final String? cashierId;
   final String? cashierName;
   final DateTime? cashierAcknowledgedAt;
   final String? cashierAction;
-  // Stage 2
+  // Stage 3: branch accountant / manager
   final String? managerId;
   final String? managerName;
   final DateTime? managerReviewedAt;
@@ -1116,11 +1187,14 @@ class ItemVoidRequest {
 
   double get amount => qtyToVoid * unitPrice;
   bool get isPending => status == 'pending';
+  bool get isKitchenAcknowledged => status == 'kitchen_acknowledged';
+  bool get isKitchenDeclined => status == 'void_kitchen_declined';
   bool get isAcknowledged => status == 'void_acknowledged';
   bool get isCashierDeclined => status == 'void_cashier_declined';
   bool get isApproved => status == 'approved';
   bool get isRejected => status == 'rejected';
-  bool get isTerminal => isApproved || isRejected || isCashierDeclined;
+  bool get isTerminal =>
+      isApproved || isRejected || isCashierDeclined || isKitchenDeclined;
 
   factory ItemVoidRequest.fromJson(Map<String, dynamic> json) {
     return ItemVoidRequest(
@@ -1145,6 +1219,11 @@ class ItemVoidRequest {
       requestedByName: json['requested_by_name'] as String?,
       actionedBy: json['actioned_by'] as String?,
       actionedByName: json['actioned_by_name'] as String?,
+      kitchenId: json['kitchen_id'] as String?,
+      kitchenName: json['kitchen_name'] as String?,
+      kitchenAcknowledgedAt:
+          DateTime.tryParse('${json['kitchen_acknowledged_at'] ?? ''}'),
+      kitchenAction: json['kitchen_action'] as String?,
       cashierId: json['cashier_id'] as String?,
       cashierName: json['cashier_name'] as String?,
       cashierAcknowledgedAt:

@@ -2423,10 +2423,16 @@ class _VoidRequestsTab extends ConsumerStatefulWidget {
 
 class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
   final Set<String> _busyIds = {};
+  final Set<String> _busyBillIds = {};
 
   @override
   Widget build(BuildContext context) {
     final requestsAsync = ref.watch(cashierPendingItemVoidsProvider);
+    final billRequestsAsync = ref.watch(cashierPendingWholeBillVoidsProvider);
+    final awaitingKitchenItemsAsync =
+        ref.watch(cashierAwaitingKitchenItemVoidsProvider);
+    final awaitingKitchenBillsAsync =
+        ref.watch(cashierAwaitingKitchenWholeBillVoidsProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -2439,8 +2445,12 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
                     style: Theme.of(context).textTheme.titleLarge),
               ),
               OutlinedButton.icon(
-                onPressed: () =>
-                    ref.invalidate(cashierPendingItemVoidsProvider),
+                onPressed: () {
+                  ref.invalidate(cashierPendingItemVoidsProvider);
+                  ref.invalidate(cashierPendingWholeBillVoidsProvider);
+                  ref.invalidate(cashierAwaitingKitchenItemVoidsProvider);
+                  ref.invalidate(cashierAwaitingKitchenWholeBillVoidsProvider);
+                },
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Refresh'),
               ),
@@ -2448,17 +2458,20 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Waiters submit these when they void an item from a live bill. '
-            'Acknowledge to send the request on to the manager for final '
-            'approval, or decline to stop it here and keep the item on the bill.',
+            'Kitchen acknowledges a waiter\'s void request first. Once '
+            'kitchen has acknowledged, it lands here — acknowledge to apply '
+            'the void and send it on to the branch accountant for final '
+            'approval, or decline to stop it here and keep the item/bill as-is.',
             style: TextStyle(color: AppColors.kTextSecondary, fontSize: 13),
           ),
           const SizedBox(height: 20),
+          Text('Items', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
           requestsAsync.when(
             data: (rows) => rows.isEmpty
                 ? const EmptyState(
                     icon: Icons.check_circle_outline,
-                    message: 'No void requests waiting on you.',
+                    message: 'No item void requests waiting on you.',
                   )
                 : Column(children: [for (final r in rows) _requestCard(r)]),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
@@ -2467,9 +2480,207 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
               onRetry: () => ref.invalidate(cashierPendingItemVoidsProvider),
             ),
           ),
+          awaitingKitchenItemsAsync.maybeWhen(
+            data: (rows) => rows.isEmpty
+                ? const SizedBox.shrink()
+                : _awaitingKitchenPanel(
+                    'Awaiting kitchen (item)',
+                    rows
+                        .map((r) =>
+                            '${r.itemName} ×${r.qtyToVoid.toStringAsFixed(r.qtyToVoid % 1 == 0 ? 0 : 1)}'
+                            '${(r.orderNumber ?? '').isNotEmpty ? ' — Order ${r.orderNumber}' : ''}')
+                        .toList(),
+                  ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 24),
+          Text('Whole Bills', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          billRequestsAsync.when(
+            data: (rows) => rows.isEmpty
+                ? const EmptyState(
+                    icon: Icons.check_circle_outline,
+                    message: 'No bill void requests waiting on you.',
+                  )
+                : Column(
+                    children: [for (final r in rows) _billRequestCard(r)]),
+            loading: () => const LoadingSkeleton(type: SkeletonType.list),
+            error: (error, _) => ErrorState(
+              message: apiErrorMessage(error),
+              onRetry: () =>
+                  ref.invalidate(cashierPendingWholeBillVoidsProvider),
+            ),
+          ),
+          awaitingKitchenBillsAsync.maybeWhen(
+            data: (rows) => rows.isEmpty
+                ? const SizedBox.shrink()
+                : _awaitingKitchenPanel(
+                    'Awaiting kitchen (whole bill)',
+                    rows
+                        .map((r) => 'Bill ${r['order_number'] ?? ''}')
+                        .toList(),
+                  ),
+            orElse: () => const SizedBox.shrink(),
+          ),
         ],
       ),
     );
+  }
+
+  /// Read-only "FYI" panel — these requests haven't reached the cashier yet
+  /// (kitchen hasn't acknowledged), so there's nothing to acknowledge/decline
+  /// here. Without this, an empty actionable list above reads as "voiding is
+  /// broken" rather than "kitchen hasn't acted yet."
+  Widget _awaitingKitchenPanel(String title, List<String> lines) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.kTextSecondary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: AppColors.kTextSecondary)),
+            const SizedBox(height: 4),
+            for (final line in lines)
+              Text('⏳ $line',
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.kTextSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _billRequestCard(Map<String, dynamic> r) {
+    final id = '${r['id'] ?? ''}';
+    final busy = _busyBillIds.contains(id);
+    final orderNumber = '${r['order_number'] ?? ''}';
+    final totalAmount = double.tryParse('${r['total_amount'] ?? 0}') ?? 0;
+    final requestedByName = '${r['requested_by_name'] ?? ''}';
+    final kitchenName = '${r['kitchen_name'] ?? ''}';
+    final reason = '${r['reason'] ?? ''}';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    orderNumber.isNotEmpty ? 'Bill $orderNumber' : 'Bill',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                Text(_money(totalAmount),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              [
+                if (requestedByName.isNotEmpty) 'by $requestedByName',
+                if (kitchenName.isNotEmpty) 'kitchen: $kitchenName',
+              ].join('  ·  '),
+              style: const TextStyle(
+                  color: AppColors.kTextSecondary, fontSize: 13),
+            ),
+            if (reason.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Reason: $reason', style: const TextStyle(fontSize: 13)),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: busy || id.isEmpty
+                      ? null
+                      : () => _declineBill(id),
+                  icon: const Icon(Icons.close,
+                      size: 16, color: AppColors.kError),
+                  label: const Text('Decline',
+                      style: TextStyle(color: AppColors.kError)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: busy || id.isEmpty
+                      ? null
+                      : () => _acknowledgeBill(id),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.check, size: 16),
+                  label: const Text('Acknowledge & Void'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _acknowledgeBill(String id) async {
+    setState(() => _busyBillIds.add(id));
+    try {
+      await ref
+          .read(outletPosRepositoryProvider)
+          .cashierAcknowledgeVoidRequest(id);
+      ref.invalidate(cashierPendingWholeBillVoidsProvider);
+      _snack('Bill voided — sent to branch accountant for final approval.');
+    } catch (error) {
+      _snack(apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busyBillIds.remove(id));
+    }
+  }
+
+  Future<void> _declineBill(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Decline bill void request?'),
+        content: const Text(
+            'The bill will stay active as-is. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Decline')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busyBillIds.add(id));
+    try {
+      await ref
+          .read(outletPosRepositoryProvider)
+          .cashierDeclineVoidRequest(id);
+      ref.invalidate(cashierPendingWholeBillVoidsProvider);
+      _snack('Bill void request declined.');
+    } catch (error) {
+      _snack(apiErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busyBillIds.remove(id));
+    }
   }
 
   Widget _requestCard(ItemVoidRequest r) {

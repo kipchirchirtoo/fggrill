@@ -153,7 +153,7 @@ class PowerSyncService {
       '''
       SELECT *
       FROM pos_item_void_requests
-      WHERE status = 'pending'
+      WHERE status = 'kitchen_acknowledged'
         AND branch_id = ?
       ORDER BY created_at ASC
       ''',
@@ -171,7 +171,7 @@ class PowerSyncService {
       '''
       SELECT *
       FROM pos_item_void_requests
-      WHERE status = 'pending'
+      WHERE status = 'kitchen_acknowledged'
         AND branch_id = ?
       ORDER BY created_at ASC
       ''',

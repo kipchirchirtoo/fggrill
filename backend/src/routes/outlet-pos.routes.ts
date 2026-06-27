@@ -5,7 +5,9 @@ import {
   approveItemExchange,
   approveItemVoidRequest,
   cashierAcknowledgeItemVoid,
+  cashierAcknowledgeVoidRequest,
   cashierDeclineItemVoid,
+  cashierDeclineVoidRequest,
   cashierVoidLineItems,
   cashierVoidWholeBill,
   closeShift,
@@ -20,6 +22,9 @@ import {
   getPendingItemVoidsForShift,
   getPendingPosVoidRequests,
   getPendingVoidsCashier,
+  getPendingVoidsCashierWholeBill,
+  getPendingVoidsKitchen,
+  getPendingVoidsKitchenWholeBill,
   getPendingVoidsManager,
   getOutletItems,
   getOutletStaff,
@@ -31,6 +36,10 @@ import {
   getStockCount,
   getVoidHistory,
   issueExchangeRefund,
+  kitchenAcknowledgeItemVoid,
+  kitchenAcknowledgeVoidRequest,
+  kitchenDeclineItemVoid,
+  kitchenDeclineVoidRequest,
   markCaptainOrderPrinted,
   markOriginalBillPrinted,
   mergeShiftOrders,
@@ -92,6 +101,11 @@ const allowedRoles = new Set([
   'branch_storekeeper',
   'storekeeper',
   'inventory_clerk',
+  'kitchen',
+  'pos_kitchen',
+  'kitchen_operations',
+  'head_chef',
+  'sous_chef',
   'kyogong_spa_cashier',
   'kyogong_executive_bar_cashier',
   'kyogong_sports_bar_cashier',
@@ -120,6 +134,14 @@ router.patch('/outlets/:outletId', updateOutlet);
 router.get('/outlets/:outletId/shifts/active', getActiveShift);
 router.post('/outlets/:outletId/shifts/open', openShift);
 
+// Whole-bill void chain: Kitchen (KDS) ack/decline -> Cashier ack/decline
+// (financial effect applied) -> Branch Accountant final review.
+router.get('/void-requests/pending/kitchen', getPendingVoidsKitchenWholeBill);
+router.patch('/void-requests/:requestId/kitchen-acknowledge', kitchenAcknowledgeVoidRequest);
+router.patch('/void-requests/:requestId/kitchen-decline', kitchenDeclineVoidRequest);
+router.get('/void-requests/pending/cashier', getPendingVoidsCashierWholeBill);
+router.patch('/void-requests/:requestId/cashier-acknowledge', cashierAcknowledgeVoidRequest);
+router.patch('/void-requests/:requestId/cashier-decline', cashierDeclineVoidRequest);
 router.get('/void-requests/pending', getPendingPosVoidRequests);
 router.post('/void-requests/:requestId/review', reviewPosVoidRequest);
 
@@ -138,10 +160,13 @@ router.patch('/void-audits/:id/flag', flagVoidAuditForManager);
 router.patch('/void-audits/:id/note', addVoidAuditNote);
 
 router.post('/voids/request', requestItemVoid);
+router.patch('/voids/:id/kitchen-acknowledge', kitchenAcknowledgeItemVoid);
+router.patch('/voids/:id/kitchen-decline', kitchenDeclineItemVoid);
 router.patch('/voids/:id/cashier-acknowledge', cashierAcknowledgeItemVoid);
 router.patch('/voids/:id/cashier-decline', cashierDeclineItemVoid);
 router.patch('/voids/:id/approve', approveItemVoidRequest);
 router.patch('/voids/:id/reject', rejectItemVoidRequest);
+router.get('/voids/pending/kitchen', getPendingVoidsKitchen);
 router.get('/voids/pending/cashier', getPendingVoidsCashier);
 router.get('/voids/pending/manager', getPendingVoidsManager);
 router.get('/voids/history', getVoidHistory);

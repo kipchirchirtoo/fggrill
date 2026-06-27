@@ -83,11 +83,14 @@ const isKitchenVisiblePosOrder = (order: any): boolean => {
   return orderStatus === 'voided' || paymentStatus === 'voided';
 };
 
-// Status -> {label, color} for the KDS void chip. Item-level voids go through
-// the full two-stage flow (cashier then manager); whole-bill voids skip the
-// cashier stage entirely, so they only ever use 3 of the 5 states.
+// Status -> {label, color} for the KDS void chip. Both item-level and
+// whole-bill voids now go through the same three-stage chain: Kitchen
+// acknowledge -> Cashier acknowledge (financial effect applied) -> Branch
+// Accountant final approval.
 const ITEM_VOID_STATUS_META: Record<string, { label: string; color: string }> = {
-  pending: { label: 'PENDING CASHIER', color: 'amber' },
+  pending: { label: 'PENDING KITCHEN', color: 'amber' },
+  kitchen_acknowledged: { label: 'PENDING CASHIER', color: 'amber' },
+  void_kitchen_declined: { label: 'KITCHEN DECLINED', color: 'grey' },
   void_acknowledged: { label: 'VOID ACKNOWLEDGED', color: 'orange' },
   approved: { label: 'APPROVED', color: 'green' },
   rejected: { label: 'REJECTED', color: 'red' },
@@ -95,7 +98,11 @@ const ITEM_VOID_STATUS_META: Record<string, { label: string; color: string }> = 
 };
 
 const WHOLE_BILL_VOID_STATUS_META: Record<string, { label: string; color: string }> = {
-  pending: { label: 'PENDING APPROVAL', color: 'amber' },
+  pending: { label: 'PENDING KITCHEN', color: 'amber' },
+  kitchen_acknowledged: { label: 'PENDING CASHIER', color: 'amber' },
+  void_kitchen_declined: { label: 'KITCHEN DECLINED', color: 'grey' },
+  cashier_acknowledged: { label: 'PENDING APPROVAL', color: 'orange' },
+  void_cashier_declined: { label: 'CASHIER DECLINED', color: 'grey' },
   approved: { label: 'APPROVED', color: 'green' },
   rejected: { label: 'REJECTED', color: 'red' }
 };

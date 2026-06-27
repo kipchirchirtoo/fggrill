@@ -231,6 +231,14 @@ const REVIEW_ROLES = new Set([
   'branch_manager'
 ]);
 
+// Waiter-initiated void chain (whole-bill and per-item): Kitchen (KDS) ack
+// -> Cashier ack (financial effect applied) -> Branch Accountant final
+// approval. KITCHEN_VOID_ROLES gates the new first stage; the cashier-
+// initiated instant-void tool (cashierVoidWholeBill/cashierVoidLineItems)
+// is a separate flow and does not use this chain.
+const KITCHEN_VOID_ROLES = new Set(['kitchen', 'pos_kitchen', 'kitchen_operations', 'head_chef', 'sous_chef']);
+const KITCHEN_VOID_NOTIFY_ROLES = ['kitchen', 'pos_kitchen'];
+
 const MANAGE_OUTLET_ROLES = new Set([
   'super_admin',
   'general_manager',
@@ -2745,45 +2753,34 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
     
     logger.info(`Order status updated - void_request_status: pending, kitchen_status: void_requested`);
 
-    await notificationService.notifyRole(
-      'branch_accountant',
-      'POS void approval required',
-      `${order.order_number || 'A POS bill'} needs void approval.`,
-      {
-        type: 'warning',
-        category: 'pos_void_request',
-        priority: 'high',
-        branchId: shift.branch_id,
-        metadata: { request_id: requestRow.id, order_id: orderId, shift_id: shiftId }
-      }
-    );
-
-    await notificationService.notifyRole(
-      'branch_manager',
-      'POS void request raised',
-      `${order.order_number || 'A POS bill'} has been stopped at the POS station and needs review.`,
-      {
-        type: 'warning',
-        category: 'pos_void_request',
-        priority: 'high',
-        branchId: shift.branch_id,
-        metadata: {
-          request_id: requestRow.id,
-          order_id: orderId,
-          shift_id: shiftId,
-          kitchen_status: 'void_requested'
-        }
-      }
+    // New chain: kitchen (KDS) reviews first, then cashier (financial effect
+    // applied so shift totals are correct), then branch accountant gives the
+    // final compliance sign-off. Only kitchen is actionable at this point.
+    await Promise.allSettled(
+      KITCHEN_VOID_NOTIFY_ROLES.map((role) =>
+        notificationService.notifyRole(
+          role,
+          'Bill void request — KDS review required',
+          `${order.order_number || 'A POS bill'} needs void acknowledgment in KDS.`,
+          {
+            type: 'warning',
+            category: 'pos_void_request',
+            priority: 'high',
+            branchId: shift.branch_id,
+            metadata: { request_id: requestRow.id, order_id: orderId, shift_id: shiftId, kitchen_status: 'void_requested' }
+          }
+        )
+      )
     );
 
     await notificationService.notifyRole(
       'auditor',
       'POS void request raised',
-      `${order.order_number || 'A POS bill'} is awaiting branch accountant void approval.`,
+      `${order.order_number || 'A POS bill'} void request raised — awaiting kitchen, then cashier, then branch accountant.`,
       {
-        type: 'warning',
+        type: 'info',
         category: 'pos_void_request',
-        priority: 'high',
+        priority: 'medium',
         branchId: shift.branch_id,
         metadata: {
           request_id: requestRow.id,
@@ -2793,7 +2790,7 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
         }
       }
     );
-    
+
     logger.info(`Void request completed successfully - request_id: ${requestRow.id}`);
 
     res.status(201).json({ success: true, data: requestRow });
@@ -2803,85 +2800,473 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
   }
 };
 
-export const getPendingPosVoidRequests = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// Shared enrichment for all three pending-queue stages of the whole-bill
+// void chain (kitchen / cashier / accountant) — same shape, different status
+// filter and branch scoping per caller.
+const fetchEnrichedPosVoidRequests = async (
+  status: string,
+  branchId: number | null,
+  scopeToBranch: boolean
+): Promise<Record<string, any>[]> => {
+  let query = supabase
+    .from('pos_void_requests')
+    .select('*')
+    .eq('status', status)
+    .order('created_at', { ascending: false });
+  if (scopeToBranch) {
+    if (branchId === null) return [];
+    query = query.eq('branch_id', branchId);
+  } else if (branchId !== null) {
+    query = query.eq('branch_id', branchId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = data || [];
+  const orderIds = [...new Set(rows.map((row: any) => row.order_id).filter(Boolean))];
+  const outletIds = [...new Set(rows.map((row: any) => row.outlet_id).filter(Boolean))];
+  const branchIds = [...new Set(rows.map((row: any) => row.branch_id).filter(Boolean))];
+  const userIds = [...new Set(rows.flatMap((row: any) => [row.requested_by, row.kitchen_id, row.cashier_id]).filter(Boolean))];
+
+  const [ordersResult, outletsResult, branchesResult, usersResult] = await Promise.all([
+    orderIds.length
+      ? supabase.from('pos_shift_orders').select('id, order_number, customer_name, total_amount, amount_paid, balance_amount, items').in('id', orderIds)
+      : Promise.resolve({ data: [], error: null }),
+    outletIds.length
+      ? supabase.from('pos_outlets').select('id, name').in('id', outletIds)
+      : Promise.resolve({ data: [], error: null }),
+    branchIds.length
+      ? supabase.from('branches').select('id, name').in('id', branchIds)
+      : Promise.resolve({ data: [], error: null }),
+    userIds.length
+      ? supabase.from('users').select('id, email, first_name, last_name').in('id', userIds)
+      : Promise.resolve({ data: [], error: null })
+  ]);
+
+  if (ordersResult.error) throw ordersResult.error;
+  if (outletsResult.error) throw outletsResult.error;
+  if (branchesResult.error) throw branchesResult.error;
+  if (usersResult.error) throw usersResult.error;
+
+  const ordersById = new Map((ordersResult.data || []).map((order: any) => [order.id, order]));
+  const outletsById = new Map((outletsResult.data || []).map((outlet: any) => [outlet.id, outlet]));
+  const branchesById = new Map((branchesResult.data || []).map((branch: any) => [branch.id, branch]));
+  const usersById = new Map((usersResult.data || []).map((user: any) => [user.id, user]));
+  return rows.map((row: any) => {
+    const order = ordersById.get(row.order_id) || {};
+    const outlet = outletsById.get(row.outlet_id) || {};
+    const branch = branchesById.get(row.branch_id) || {};
+    const user = usersById.get(row.requested_by) || {};
+    const kitchenUser = row.kitchen_id ? usersById.get(row.kitchen_id) : null;
+    const cashierUser = row.cashier_id ? usersById.get(row.cashier_id) : null;
+    const requestedByName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    return {
+      ...row,
+      order_number: row.order_number || order.order_number,
+      customer_name: order.customer_name,
+      total_amount: order.total_amount,
+      amount_paid: order.amount_paid,
+      balance_amount: order.balance_amount,
+      void_items: order.items || [],
+      outlet_name: outlet.name,
+      branch_name: branch.name,
+      requested_by_email: user.email,
+      requested_by_name: requestedByName || user.email,
+      kitchen_name: kitchenUser ? `${kitchenUser.first_name || ''} ${kitchenUser.last_name || ''}`.trim() || kitchenUser.email : null,
+      cashier_name: cashierUser ? `${cashierUser.first_name || ''} ${cashierUser.last_name || ''}`.trim() || cashierUser.email : null
+    };
+  });
+};
+
+// ── Stage 1: Kitchen (KDS) pending queue for whole-bill voids ──────────────
+// Cashiers also get read-only visibility (no action endpoints are gated by
+// this) so a bill that hasn't reached them yet doesn't look stuck/broken.
+export const getPendingVoidsKitchenWholeBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant approval required', 403);
-    let query = supabase
-      .from('pos_void_requests')
-      .select('*')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false });
-    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
-    if (!isGlobalUser(req)) {
-      if (branchId === null) {
-        res.json({ success: true, data: [] });
-        return;
-      }
-      query = query.eq('branch_id', branchId);
-    } else if (req.query.branch_id) {
-      query = query.eq('branch_id', Number(req.query.branch_id));
+    if (
+      !KITCHEN_VOID_ROLES.has(roleFor(req)) &&
+      !REVIEW_ROLES.has(roleFor(req)) &&
+      !isCashierStationRole(roleFor(req)) &&
+      !isGlobalUser(req)
+    ) {
+      throw new AppError('Forbidden: kitchen access required', 403);
     }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = data || [];
-    const orderIds = [...new Set(rows.map((row: any) => row.order_id).filter(Boolean))];
-    const outletIds = [...new Set(rows.map((row: any) => row.outlet_id).filter(Boolean))];
-    const branchIds = [...new Set(rows.map((row: any) => row.branch_id).filter(Boolean))];
-    const userIds = [...new Set(rows.map((row: any) => row.requested_by).filter(Boolean))];
-
-    const [ordersResult, outletsResult, branchesResult, usersResult] = await Promise.all([
-      orderIds.length
-        ? supabase.from('pos_shift_orders').select('id, order_number, customer_name, total_amount, amount_paid, balance_amount, items').in('id', orderIds)
-        : Promise.resolve({ data: [], error: null }),
-      outletIds.length
-        ? supabase.from('pos_outlets').select('id, name').in('id', outletIds)
-        : Promise.resolve({ data: [], error: null }),
-      branchIds.length
-        ? supabase.from('branches').select('id, name').in('id', branchIds)
-        : Promise.resolve({ data: [], error: null }),
-      userIds.length
-        ? supabase.from('users').select('id, email, first_name, last_name').in('id', userIds)
-        : Promise.resolve({ data: [], error: null })
-    ]);
-
-    if (ordersResult.error) throw ordersResult.error;
-    if (outletsResult.error) throw outletsResult.error;
-    if (branchesResult.error) throw branchesResult.error;
-    if (usersResult.error) throw usersResult.error;
-
-    const ordersById = new Map((ordersResult.data || []).map((order: any) => [order.id, order]));
-    const outletsById = new Map((outletsResult.data || []).map((outlet: any) => [outlet.id, outlet]));
-    const branchesById = new Map((branchesResult.data || []).map((branch: any) => [branch.id, branch]));
-    const usersById = new Map((usersResult.data || []).map((user: any) => [user.id, user]));
-    const enriched = rows.map((row: any) => {
-      const order = ordersById.get(row.order_id) || {};
-      const outlet = outletsById.get(row.outlet_id) || {};
-      const branch = branchesById.get(row.branch_id) || {};
-      const user = usersById.get(row.requested_by) || {};
-      const requestedByName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
-      return {
-        ...row,
-        order_number: row.order_number || order.order_number,
-        customer_name: order.customer_name,
-        total_amount: order.total_amount,
-        amount_paid: order.amount_paid,
-        balance_amount: order.balance_amount,
-        void_items: order.items || [],
-        outlet_name: outlet.name,
-        branch_name: branch.name,
-        requested_by_email: user.email,
-        requested_by_name: requestedByName || user.email
-      };
-    });
-
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const enriched = await fetchEnrichedPosVoidRequests('pending', branchId, !isGlobalUser(req));
     res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
   }
 };
+
+// ── Stage 2: Cashier pending queue for whole-bill voids ────────────────────
+export const getPendingVoidsCashierWholeBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: cashier access required', 403);
+    }
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const enriched = await fetchEnrichedPosVoidRequests('kitchen_acknowledged', branchId, !isGlobalUser(req));
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Stage 3: Branch accountant final pending queue for whole-bill voids ────
+export const getPendingPosVoidRequests = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant approval required', 403);
+    const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
+    const enriched = await fetchEnrichedPosVoidRequests('cashier_acknowledged', branchId, !isGlobalUser(req));
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Stage 1: Kitchen (KDS) acknowledge/decline a whole-bill void request ───
+// No financial effect yet — kitchen is only confirming the bill can be
+// pulled before the cashier and accountant see it.
+
+export const kitchenAcknowledgeVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!KITCHEN_VOID_ROLES.has(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: kitchen acknowledgment required', 403);
+    }
+    const { requestId } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_void_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Void request already processed', 409);
+
+    const now = new Date().toISOString();
+    const { data: updatedRow, error: updateErr } = await supabase
+      .from('pos_void_requests')
+      .update({
+        status: 'kitchen_acknowledged',
+        kitchen_id: req.user.id,
+        kitchen_acknowledged_at: now,
+        kitchen_action: 'acknowledged',
+        updated_at: now
+      })
+      .eq('id', requestId)
+      .eq('status', 'pending')
+      .select('*')
+      .single();
+    if (updateErr || !updatedRow) throw updateErr || new AppError('Void request already processed', 409);
+
+    const { data: outletRow } = await supabase
+      .from('pos_outlets')
+      .select('outlet_type')
+      .eq('id', requestRow.outlet_id)
+      .maybeSingle();
+    const cashierRoleToNotify = resolveStationCashierRole(outletRow?.outlet_type);
+    const kitchenName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Kitchen';
+
+    await Promise.allSettled([
+      notificationService.notifyRole(
+        cashierRoleToNotify,
+        'Bill void awaiting cashier',
+        `${requestRow.order_number || 'A POS bill'} — kitchen acknowledged the void. Acknowledge or decline.`,
+        { type: 'warning', category: 'pos_void_request', priority: 'high', branchId: requestRow.branch_id,
+          metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id } }
+      ),
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void acknowledged by kitchen',
+        `Kitchen (${kitchenName}) acknowledged your void request for ${requestRow.order_number || 'the bill'}. Awaiting cashier.`,
+        { type: 'info', category: 'pos_void_request', priority: 'medium',
+          metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id } }
+      ),
+    ]);
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const kitchenDeclineVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!KITCHEN_VOID_ROLES.has(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: kitchen action required', 403);
+    }
+    const { requestId } = req.params;
+    const rejectionReason = String(req.body.rejection_reason || req.body.reason || '').trim();
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_void_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+    if (requestRow.status !== 'pending') throw new AppError('Void request already processed', 409);
+
+    const now = new Date().toISOString();
+    const { data: updatedRow, error: updateErr } = await supabase
+      .from('pos_void_requests')
+      .update({
+        status: 'void_kitchen_declined',
+        kitchen_id: req.user.id,
+        kitchen_acknowledged_at: now,
+        kitchen_action: 'declined',
+        rejection_reason: rejectionReason || null,
+        updated_at: now
+      })
+      .eq('id', requestId)
+      .eq('status', 'pending')
+      .select('*')
+      .single();
+    if (updateErr || !updatedRow) throw updateErr || new AppError('Void request already processed', 409);
+
+    await supabase
+      .from('pos_shift_orders')
+      .update({ void_request_status: 'rejected', kitchen_status: 'pending', updated_at: now })
+      .eq('id', requestRow.order_id);
+
+    const kitchenName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Kitchen';
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void request declined by kitchen',
+        `Kitchen (${kitchenName}) declined the void for ${requestRow.order_number || 'the bill'}${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back in the active queue.`,
+        { type: 'warning', category: 'pos_void_request', priority: 'medium',
+          metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason } }
+      );
+    }
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Stage 2: Cashier acknowledge/decline a whole-bill void request ─────────
+// Acknowledge applies the real financial effect (the heavy lifting that
+// reviewPosVoidRequest used to do entirely on its own): stock reversal,
+// kitchen-consumption reversal, inventory reversal, voiding the order, and
+// reversing the cashier shift totals — so the cashier's own shift closes
+// with the void already reflected. The branch accountant's later approval
+// is a compliance sign-off and does not repeat any of this.
+
+export const cashierAcknowledgeVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: cashier acknowledgment required', 403);
+    }
+    const { requestId } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_void_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+
+    const { data: outletRow } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', requestRow.outlet_id)
+      .single();
+    if (outletRow) {
+      await ensureCashierOutletAccess(req, outletRow);
+    }
+
+    if (requestRow.status !== 'kitchen_acknowledged') {
+      const hint = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by kitchen yet'
+        : 'Void request already processed';
+      throw new AppError(hint, 409);
+    }
+
+    const order = await loadShiftOrder(requestRow.shift_id, requestRow.order_id);
+    const now = new Date().toISOString();
+
+    const { data: updatedReqRow, error: updateRequestError } = await supabase
+      .from('pos_void_requests')
+      .update({
+        status: 'cashier_acknowledged',
+        cashier_id: req.user.id,
+        cashier_acknowledged_at: now,
+        cashier_action: 'acknowledged',
+        updated_at: now
+      })
+      .eq('id', requestId)
+      .eq('status', 'kitchen_acknowledged')
+      .select('*')
+      .single();
+    if (updateRequestError || !updatedReqRow) throw updateRequestError || new AppError('Void request already processed', 409);
+
+    await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+    await reverseKitchenConsumptionForOrder(requestRow.order_id).catch((consumptionError) =>
+      logger.warn('cashierAcknowledgeVoidRequest: reverseKitchenConsumptionForOrder failed', consumptionError as any));
+    if (order.inventory_posted_at && !order.inventory_reversed_at) {
+      await postPosInventorySale({
+        branchId: Number(requestRow.branch_id),
+        outletId: requestRow.outlet_id,
+        shiftId: requestRow.shift_id,
+        orderId: requestRow.order_id,
+        items: Array.isArray(order.items) ? order.items : [],
+        actorId: req.user.id,
+        reverse: true
+      });
+    }
+    const voidedItems = Array.isArray(order.items)
+      ? order.items.map((item: any) => ({ ...item, kitchen_status: 'voided' }))
+      : order.items;
+    const { error: voidOrderError } = await supabase
+      .from('pos_shift_orders')
+      .update({
+        status: 'voided',
+        payment_status: 'voided',
+        kitchen_status: 'voided',
+        items: voidedItems,
+        balance_amount: 0,
+        voided_at: now,
+        voided_by: req.user.id,
+        void_reason: requestRow.reason,
+        inventory_reversed_at: order.inventory_posted_at ? now : order.inventory_reversed_at || null,
+        inventory_reversed_by: order.inventory_posted_at ? req.user.id : order.inventory_reversed_by || null,
+        updated_at: now
+      })
+      .eq('id', requestRow.order_id);
+    if (voidOrderError) throw voidOrderError;
+
+    // Defensive reverse-increment guard. ensureEditableOrder currently blocks
+    // voiding a paid bill, so amount_paid is almost always 0 here. This guard
+    // future-proofs the system: if that restriction is ever relaxed or
+    // bypassed, the shift totals will still reflect reality rather than
+    // counting voided revenue forever — and lets the cashier close their
+    // shift with the correct totals right away.
+    if (numberValue(order.amount_paid) > 0) {
+      const { error: reverseError } = await supabase.rpc('reverse_cashier_shift_for_order', {
+        p_order_id: requestRow.order_id
+      });
+      if (reverseError) {
+        logger.warn('cashierAcknowledgeVoidRequest: failed to reverse shift totals for voided order', {
+          orderId: requestRow.order_id,
+          amountPaid: order.amount_paid,
+          error: reverseError.message
+        });
+      }
+    }
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    const ackMeta = { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      notificationService.notifyRole(
+        'branch_accountant',
+        'Bill void awaiting final approval',
+        `${order.order_number || 'A POS bill'} was voided by cashier ${cashierName} — awaiting your final approval.`,
+        { type: 'warning', category: 'pos_void_request', priority: 'high', branchId: requestRow.branch_id, metadata: ackMeta }
+      ),
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void acknowledged by cashier',
+        `Cashier ${cashierName} voided ${order.order_number || 'your bill'}. Awaiting branch accountant final approval.`,
+        { type: 'info', category: 'pos_void_request', priority: 'medium', metadata: ackMeta }
+      ),
+    ]);
+
+    res.json({ success: true, data: updatedReqRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const cashierDeclineVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: cashier action required', 403);
+    }
+    const { requestId } = req.params;
+    const rejectionReason = String(req.body.rejection_reason || req.body.reason || '').trim();
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_void_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+
+    const { data: outletRow } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', requestRow.outlet_id)
+      .single();
+    if (outletRow) {
+      await ensureCashierOutletAccess(req, outletRow);
+    }
+
+    if (requestRow.status !== 'kitchen_acknowledged') {
+      const hint = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by kitchen yet'
+        : 'Void request already processed';
+      throw new AppError(hint, 409);
+    }
+
+    const now = new Date().toISOString();
+    const { data: updatedRow, error: updateErr } = await supabase
+      .from('pos_void_requests')
+      .update({
+        status: 'void_cashier_declined',
+        cashier_id: req.user.id,
+        cashier_acknowledged_at: now,
+        cashier_action: 'declined',
+        rejection_reason: rejectionReason || null,
+        updated_at: now
+      })
+      .eq('id', requestId)
+      .eq('status', 'kitchen_acknowledged')
+      .select('*')
+      .single();
+    if (updateErr || !updatedRow) throw updateErr || new AppError('Void request already processed', 409);
+
+    await supabase
+      .from('pos_shift_orders')
+      .update({ void_request_status: 'rejected', kitchen_status: 'pending', updated_at: now })
+      .eq('id', requestRow.order_id);
+
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void request declined by cashier',
+        `Cashier ${cashierName} declined the void for ${requestRow.order_number || 'the bill'}${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back in the active queue.`,
+        { type: 'warning', category: 'pos_void_request', priority: 'medium',
+          metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason } }
+      );
+    }
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Stage 3: Branch accountant final approval ───────────────────────────────
+// The financial void already happened at Stage 2 (cashier acknowledge).
+// Approve here is a compliance sign-off only. Reject flags the void as
+// non-compliant for manual follow-up — by this point stock, kitchen
+// consumption, inventory, and shift totals have already moved, so rejection
+// does not attempt to silently auto-reverse them.
 
 export const reviewPosVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -2897,119 +3282,53 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
       .eq('id', requestId)
       .single();
     if (error || !requestRow) throw new AppError('Void request not found', 404);
-    if (requestRow.status !== 'pending') throw new AppError('Void request already processed', 400);
+    if (requestRow.status !== 'cashier_acknowledged') {
+      const hint = requestRow.status === 'pending' || requestRow.status === 'kitchen_acknowledged'
+        ? 'Void request has not been acknowledged by the cashier yet'
+        : 'Void request already processed';
+      throw new AppError(hint, 409);
+    }
     ensureBranchAccess(req, requestRow.branch_id);
 
     const order = await loadShiftOrder(requestRow.shift_id, requestRow.order_id);
+    const now = new Date().toISOString();
 
     const { error: updateRequestError } = await supabase
       .from('pos_void_requests')
       .update({
         status: approved ? 'approved' : 'rejected',
         reviewed_by: req.user.id,
-        reviewed_at: new Date().toISOString(),
+        reviewed_at: now,
         rejection_reason: approved ? null : rejectionReason,
-        updated_at: new Date().toISOString()
+        updated_at: now
       })
-      .eq('id', requestId);
+      .eq('id', requestId)
+      .eq('status', 'cashier_acknowledged');
     if (updateRequestError) throw updateRequestError;
 
+    await supabase
+      .from('pos_shift_orders')
+      .update({ void_request_status: approved ? 'approved' : 'rejected', updated_at: now })
+      .eq('id', requestRow.order_id);
+
     if (approved) {
-      await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
-      await reverseKitchenConsumptionForOrder(requestRow.order_id).catch((consumptionError) =>
-        logger.warn('reviewPosVoidRequest: reverseKitchenConsumptionForOrder failed', consumptionError as any));
-      if (order.inventory_posted_at && !order.inventory_reversed_at) {
-        await postPosInventorySale({
-          branchId: Number(requestRow.branch_id),
-          outletId: requestRow.outlet_id,
-          shiftId: requestRow.shift_id,
-          orderId: requestRow.order_id,
-          items: Array.isArray(order.items) ? order.items : [],
-          actorId: req.user.id,
-          reverse: true
-        });
-      }
-      const voidedItems = Array.isArray(order.items)
-        ? order.items.map((item: any) => ({ ...item, kitchen_status: 'voided' }))
-        : order.items;
-      const { error: voidOrderError } = await supabase
-        .from('pos_shift_orders')
-        .update({
-          status: 'voided',
-          payment_status: 'voided',
-          kitchen_status: 'voided',
-          items: voidedItems,
-          balance_amount: 0,
-          void_request_status: 'approved',
-          voided_at: new Date().toISOString(),
-          voided_by: req.user.id,
-          void_reason: requestRow.reason,
-          inventory_reversed_at: order.inventory_posted_at ? new Date().toISOString() : order.inventory_reversed_at || null,
-          inventory_reversed_by: order.inventory_posted_at ? req.user.id : order.inventory_reversed_by || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', requestRow.order_id);
-      if (voidOrderError) throw voidOrderError;
-
-      // Defensive reverse-increment guard. ensureEditableOrder currently blocks
-      // voiding a paid bill, so amount_paid is almost always 0 here. This guard
-      // future-proofs the system: if that restriction is ever relaxed or bypassed,
-      // the shift totals will still reflect reality rather than counting
-      // voided revenue forever.
-      if (numberValue(order.amount_paid) > 0) {
-        const { error: reverseError } = await supabase.rpc('reverse_cashier_shift_for_order', {
-          p_order_id: requestRow.order_id
-        });
-        if (reverseError) {
-          logger.warn('reviewPosVoidRequest: failed to reverse shift totals for voided order', {
-            orderId: requestRow.order_id,
-            amountPaid: order.amount_paid,
-            error: reverseError.message
-          });
-        }
-      }
-
       await notificationService.notifyRole(
         'auditor',
         'POS void approved',
-        `${order.order_number || 'A POS bill'} was voided and moved out of unpaid captain orders.`,
+        `${order.order_number || 'A POS bill'} void was given final approval and is fully closed out.`,
         {
-          type: 'warning',
+          type: 'success',
           category: 'pos_void_request',
-          priority: 'high',
+          priority: 'medium',
           branchId: requestRow.branch_id,
-          metadata: {
-            request_id: requestId,
-            order_id: requestRow.order_id,
-            shift_id: requestRow.shift_id,
-            kitchen_status: 'voided',
-            void_reason: requestRow.reason
-          }
-        }
-      );
-      await notificationService.notifyRole(
-        'branch_manager',
-        'POS void approved',
-        `${order.order_number || 'A POS bill'} was voided and moved out of unpaid captain orders.`,
-        {
-          type: 'warning',
-          category: 'pos_void_request',
-          priority: 'high',
-          branchId: requestRow.branch_id,
-          metadata: {
-            request_id: requestId,
-            order_id: requestRow.order_id,
-            shift_id: requestRow.shift_id,
-            kitchen_status: 'voided',
-            void_reason: requestRow.reason
-          }
+          metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, void_reason: requestRow.reason }
         }
       );
       if (requestRow.requested_by) {
         await notificationService.notifyUser(
           requestRow.requested_by,
           'Void request APPROVED ✓',
-          `Your void request for bill ${order.order_number || requestRow.order_id} was approved. The bill has been cancelled.`,
+          `Your void request for bill ${order.order_number || requestRow.order_id} received final approval.`,
           {
             type: 'success',
             category: 'pos_void_request',
@@ -3019,63 +3338,53 @@ export const reviewPosVoidRequest = async (req: Request, res: Response, next: Ne
         );
       }
     } else {
-      await supabase
-        .from('pos_shift_orders')
-        .update({
-          void_request_status: 'rejected',
-          kitchen_status: 'pending',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', requestRow.order_id);
-      await notificationService.notifyRole(
-        'auditor',
-        'POS void rejected',
-        `${order.order_number || 'A POS bill'} void request was rejected and returned to active POS orders.`,
-        {
-          type: 'info',
-          category: 'pos_void_request',
-          priority: 'medium',
-          branchId: requestRow.branch_id,
-          metadata: {
-            request_id: requestId,
-            order_id: requestRow.order_id,
-            shift_id: requestRow.shift_id,
-            kitchen_status: 'pending',
-            rejection_reason: rejectionReason
+      // Flag for manual follow-up rather than silently reversing — the void
+      // (stock, kitchen consumption, inventory, shift totals) is already
+      // applied by this point.
+      await Promise.allSettled([
+        notificationService.notifyRole(
+          'auditor',
+          'POS void flagged non-compliant',
+          `${order.order_number || 'A POS bill'} void was REJECTED at final approval but the bill is already voided and shift totals already adjusted. Manual correction required.`,
+          {
+            type: 'error',
+            category: 'pos_void_request',
+            priority: 'high',
+            branchId: requestRow.branch_id,
+            metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
           }
-        }
-      );
-      await notificationService.notifyRole(
-        'branch_manager',
-        'POS void rejected',
-        `${order.order_number || 'A POS bill'} void request was rejected and returned to active POS orders.`,
-        {
-          type: 'info',
-          category: 'pos_void_request',
-          priority: 'medium',
-          branchId: requestRow.branch_id,
-          metadata: {
-            request_id: requestId,
-            order_id: requestRow.order_id,
-            shift_id: requestRow.shift_id,
-            kitchen_status: 'pending',
-            rejection_reason: rejectionReason
+        ),
+        notificationService.notifyRole(
+          'branch_manager',
+          'POS void flagged non-compliant',
+          `${order.order_number || 'A POS bill'} void was REJECTED by ${req.user.first_name || 'the accountant'} at final approval. Bill is already voided — manual correction required.`,
+          {
+            type: 'error',
+            category: 'pos_void_request',
+            priority: 'high',
+            branchId: requestRow.branch_id,
+            metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
           }
-        }
-      );
-      if (requestRow.requested_by) {
-        await notificationService.notifyUser(
+        ),
+        requestRow.cashier_id && notificationService.notifyUser(
+          requestRow.cashier_id,
+          'Void flagged non-compliant',
+          `The void you acknowledged for ${order.order_number || 'a bill'} was rejected at final approval${rejectionReason ? `: ${rejectionReason}` : ''}. It needs manual correction.`,
+          { type: 'error', category: 'pos_void_request', priority: 'high',
+            metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason } }
+        ),
+        requestRow.requested_by && notificationService.notifyUser(
           requestRow.requested_by,
-          'Void request REJECTED',
-          `Your void request for bill ${order.order_number || requestRow.order_id} was rejected${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back in the active queue.`,
+          'Void request REJECTED at final approval',
+          `Your void request for bill ${order.order_number || requestRow.order_id} was rejected at final approval${rejectionReason ? `: ${rejectionReason}` : ''}.`,
           {
             type: 'warning',
             category: 'pos_void_request',
             priority: 'medium',
             metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason }
           }
-        );
-      }
+        ),
+      ]);
     }
 
     res.json({ success: true, data: { id: requestId, status: approved ? 'approved' : 'rejected' } });
@@ -3118,6 +3427,73 @@ const activeQtyForItem = (item: Record<string, any>): { quantity: number; voided
   const quantity = numberValue(item.quantity ?? item.qty);
   const voidedQty = numberValue(item.voided_qty);
   return { quantity, voidedQty, activeQty: quantity - voidedQty };
+};
+
+// Resolves which cashier role to notify once kitchen has acknowledged a void
+// request, based on the outlet station type (same mapping requestItemVoid
+// used to notify the cashier directly before the kitchen stage existed).
+const resolveStationCashierRole = (outletType: unknown): string => {
+  const type = String(outletType || '').toLowerCase();
+  for (const [roleKey, outletTypes] of Object.entries(POS_STATION_CASHIER_ROLE_TYPES)) {
+    if (outletTypes.includes(type)) return roleKey;
+  }
+  return 'cashier';
+};
+
+// Restricts a pos_item_void_requests query to the calling cashier's own
+// station (assigned outlets, active outlet, or outlet type) — same scoping
+// getPendingVoidsCashier has always used for station-specific roles like
+// main_bar_cashier/restaurant_cashier so they don't see other stations'
+// requests. Shared with the kitchen-pending queue's read-only "awaiting
+// kitchen" preview for cashiers (see getPendingVoidsKitchen).
+const scopeQueryToCashierStation = async (
+  query: any,
+  req: Request,
+  branchId: number | null
+): Promise<any> => {
+  const normalizedRole = roleFor(req);
+  if (!isCashierStationRole(normalizedRole) || normalizedRole === 'cashier') {
+    return query;
+  }
+
+  // 1. Try active open shifts first
+  const { data: myShifts } = await supabase
+    .from('pos_outlet_shifts')
+    .select('id')
+    .eq('cashier_id', req.user.id)
+    .eq('status', 'open');
+  const myShiftIds = (myShifts || []).map((s: any) => s.id);
+  if (myShiftIds.length > 0) {
+    return query.in('shift_id', myShiftIds);
+  }
+
+  // 2. Fall back to active_outlet_id
+  const activeOutletId = (req.user as any)?.active_outlet_id || req.query.outlet_id;
+  if (activeOutletId) {
+    return query.eq('outlet_id', activeOutletId);
+  }
+
+  // 3. Fall back to assigned outlets
+  const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
+  const assignedIds = assignedOutlets.map((o) => o.id).filter(Boolean);
+  if (assignedIds.length > 0) {
+    return query.in('outlet_id', assignedIds);
+  }
+
+  // 4. Fall back to role-based outlet types
+  const allowedTypes = POS_STATION_CASHIER_ROLE_TYPES[normalizedRole] || [];
+  if (allowedTypes.length > 0) {
+    const { data: outlets } = await supabase
+      .from('pos_outlets')
+      .select('id')
+      .eq('branch_id', branchId)
+      .in('outlet_type', allowedTypes);
+    const outletIds = (outlets || []).map((o: any) => o.id);
+    if (outletIds.length > 0) {
+      return query.in('outlet_id', outletIds);
+    }
+  }
+  return query.eq('outlet_id', '00000000-0000-0000-0000-000000000000');
 };
 
 export const requestItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -3184,23 +3560,9 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       .single();
     if (error || !requestRow) throw error || new AppError('Failed to create item void request', 500);
 
-    // Stage 1: notify the cashier who has the open shift for this specific
-    // outlet (shift.cashier_id) AND any general branch-level specific cashier role
-    // users. The station cashier (e.g. main_bar_cashier) gets a targeted
-    // user notification; the general cashier gets a role broadcast so they
-    // see the request in real time rather than waiting for the next poll.
-    const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-    const outletType = String(outlet?.outlet_type || '').toLowerCase();
-    let cashierRoleToNotify = 'cashier';
-    
-    // Dynamically match specific cashier role based on the outlet type
-    for (const [roleKey, outletTypes] of Object.entries(POS_STATION_CASHIER_ROLE_TYPES)) {
-      if (outletTypes.includes(outletType)) {
-        cashierRoleToNotify = roleKey;
-        break;
-      }
-    }
-
+    // Stage 1 of the chain: kitchen (KDS) must acknowledge before the cashier
+    // ever sees this request. The cashier is notified later, once kitchen
+    // acknowledges (see kitchenAcknowledgeItemVoid).
     const voidNotifMeta = {
       request_id: requestRow.id,
       order_id: orderId,
@@ -3209,28 +3571,14 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       item_name: String(item.name || ''),
       qty_to_void: qtyToVoid
     };
-    const shiftCashierId = (shift as any).cashier_id;
     const voidNotifTitle = 'Item void request';
-    const voidNotifMsg = `${String(item.name || 'An item')} on bill ${order.order_number || orderId} — void requested (qty: ${qtyToVoid}). Acknowledge or decline.`;
+    const voidNotifMsg = `${String(item.name || 'An item')} on bill ${order.order_number || orderId} — void requested (qty: ${qtyToVoid}). Acknowledge or decline in KDS.`;
     const voidNotifOpts = { type: 'warning' as const, category: 'pos_item_void_request', priority: 'high' as const, metadata: voidNotifMeta };
-    await Promise.allSettled([
-      // Notify the station cashier who opened this specific POS outlet shift.
-      shiftCashierId && notificationService.notifyUser(
-        shiftCashierId,
-        voidNotifTitle,
-        voidNotifMsg,
-        voidNotifOpts
-      ),
-      // Also broadcast to branch-level specific cashier role so the cashier
-      // sees new void requests in real time regardless of which POS station
-      // raised them.
-      notificationService.notifyRole(
-        cashierRoleToNotify,
-        voidNotifTitle,
-        voidNotifMsg,
-        { ...voidNotifOpts, branchId: (shift as any).branch_id }
-      ),
-    ]);
+    await Promise.allSettled(
+      KITCHEN_VOID_NOTIFY_ROLES.map((role) =>
+        notificationService.notifyRole(role, voidNotifTitle, voidNotifMsg, { ...voidNotifOpts, branchId: (shift as any).branch_id })
+      )
+    );
 
     res.status(201).json({ success: true, data: requestRow });
   } catch (error) {
@@ -3561,7 +3909,128 @@ export const rejectItemVoidRequest = async (req: Request, res: Response, next: N
   }
 };
 
-// ── Stage 1: Cashier acknowledge/decline ───────────────────────────────────
+// ── Stage 1: Kitchen (KDS) acknowledge/decline ─────────────────────────────
+// The waiter's request lands here first. Kitchen must acknowledge before the
+// cashier is even notified — no financial effect happens at this stage.
+
+export const kitchenAcknowledgeItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!KITCHEN_VOID_ROLES.has(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: kitchen acknowledgment required', 403);
+    }
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+
+    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+
+    const now = new Date().toISOString();
+    const { data: updatedRow, error: updateErr } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'kitchen_acknowledged',
+        kitchen_id: req.user.id,
+        kitchen_acknowledged_at: now,
+        kitchen_action: 'acknowledged',
+        updated_at: now
+      })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select('*')
+      .single();
+    if (updateErr || !updatedRow) throw updateErr || new AppError('Void request already actioned', 409);
+
+    const { data: outletRow } = await supabase
+      .from('pos_outlets')
+      .select('outlet_type')
+      .eq('id', requestRow.outlet_id)
+      .maybeSingle();
+    const cashierRoleToNotify = resolveStationCashierRole(outletRow?.outlet_type);
+
+    const kitchenName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Kitchen';
+    const ackMeta = { request_id: id, order_id: requestRow.order_id, shift_id: requestRow.shift_id };
+    await Promise.allSettled([
+      requestRow.requested_by && notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void acknowledged by kitchen',
+        `Kitchen (${kitchenName}) acknowledged the void for "${requestRow.item_name}" on bill ${requestRow.order_number || ''}. Awaiting cashier.`,
+        { type: 'info', category: 'pos_item_void_request', priority: 'medium', metadata: ackMeta }
+      ),
+      notificationService.notifyRole(
+        cashierRoleToNotify,
+        'Item void awaiting cashier',
+        `"${requestRow.item_name}" on bill ${requestRow.order_number || ''} — kitchen acknowledged void. Acknowledge or decline.`,
+        { type: 'warning', category: 'pos_item_void_request', priority: 'high', branchId: requestRow.branch_id, metadata: ackMeta }
+      ),
+    ]);
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const kitchenDeclineItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    if (!KITCHEN_VOID_ROLES.has(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+      throw new AppError('Forbidden: kitchen action required', 403);
+    }
+    const { id } = req.params;
+
+    const { data: requestRow, error } = await supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !requestRow) throw new AppError('Void request not found', 404);
+    ensureBranchAccess(req, requestRow.branch_id);
+
+    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+
+    const now = new Date().toISOString();
+    const { data: updatedRow, error: updateErr } = await supabase
+      .from('pos_item_void_requests')
+      .update({
+        status: 'void_kitchen_declined',
+        kitchen_id: req.user.id,
+        kitchen_acknowledged_at: now,
+        kitchen_action: 'declined',
+        updated_at: now
+      })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select('*')
+      .single();
+    if (updateErr || !updatedRow) throw updateErr || new AppError('Void request already actioned', 409);
+
+    const kitchenName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Kitchen';
+    if (requestRow.requested_by) {
+      await notificationService.notifyUser(
+        requestRow.requested_by,
+        'Void request declined by kitchen',
+        `Kitchen (${kitchenName}) declined the void for "${requestRow.item_name}" on bill ${requestRow.order_number || ''} — item stays on the bill.`,
+        { type: 'error', category: 'pos_item_void_request', priority: 'medium',
+          metadata: { request_id: id, order_id: requestRow.order_id } }
+      );
+    }
+
+    res.json({ success: true, data: updatedRow });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Stage 2: Cashier acknowledge/decline ───────────────────────────────────
+// Financial effect is applied here (bill total/balance reduced) so the
+// cashier's shift totals are correct by the time they close their shift.
 
 export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -3589,7 +4058,12 @@ export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, ne
       await ensureCashierOutletAccess(req, outletRow);
     }
 
-    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+    if (requestRow.status !== 'kitchen_acknowledged') {
+      const hint = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by kitchen yet'
+        : 'Void request already actioned';
+      throw new AppError(hint, 409);
+    }
 
     const now = new Date().toISOString();
 
@@ -3673,7 +4147,12 @@ export const cashierDeclineItemVoid = async (req: Request, res: Response, next: 
       await ensureCashierOutletAccess(req, outletRow);
     }
 
-    if (requestRow.status !== 'pending') throw new AppError('Void request already actioned', 409);
+    if (requestRow.status !== 'kitchen_acknowledged') {
+      const hint = requestRow.status === 'pending'
+        ? 'Void request has not been acknowledged by kitchen yet'
+        : 'Void request already actioned';
+      throw new AppError(hint, 409);
+    }
 
     const now = new Date().toISOString();
     const { error: updateErr } = await supabase
@@ -3707,7 +4186,9 @@ export const cashierDeclineItemVoid = async (req: Request, res: Response, next: 
 
 // ── Cashier Stage 1 queue ──────────────────────────────────────────────────
 
-export const getPendingVoidsCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// ── Kitchen Stage 1 queue ───────────────────────────────────────────────────
+
+export const getPendingVoidsKitchen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
     const branchId = branchIdFor(req);
@@ -3718,63 +4199,49 @@ export const getPendingVoidsCashier = async (req: Request, res: Response, next: 
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
 
+    if (branchId) query = query.eq('branch_id', branchId);
+
+    // Cashiers get read-only visibility into what's still awaiting kitchen
+    // (scoped to their own station) so a request that hasn't reached them
+    // yet doesn't look broken/stuck — they just can't act on it here.
+    query = await scopeQueryToCashierStation(query, req, branchId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = data || [];
+    const userIds = Array.from(new Set(rows.map((r: any) => r.requested_by).filter(Boolean)));
+    const namesById = await userDisplayNamesById(userIds as string[]);
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      requested_by_name: namesById.get(String(r.requested_by)) || null
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPendingVoidsCashier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = branchIdFor(req);
+
+    let query = supabase
+      .from('pos_item_void_requests')
+      .select('*')
+      .eq('status', 'kitchen_acknowledged')
+      .order('created_at', { ascending: true });
+
     if (branchId) {
       query = query.eq('branch_id', branchId);
     }
 
-    const userRole = roleFor(req);
-    const normalizedRole = userRole.trim().toLowerCase();
-
     // Specific cashier station roles (e.g. main_bar_cashier, restaurant_cashier)
     // should only see void requests relevant to their assigned/active outlet stations.
     // Managers, accountants, auditors, and general cashiers ('cashier') can see all.
-    if (isCashierStationRole(normalizedRole) && normalizedRole !== 'cashier') {
-      // 1. Try active open shifts first
-      const { data: myShifts } = await supabase
-        .from('pos_outlet_shifts')
-        .select('id')
-        .eq('cashier_id', req.user.id)
-        .eq('status', 'open');
-
-      const myShiftIds = (myShifts || []).map((s: any) => s.id);
-      
-      if (myShiftIds.length > 0) {
-        query = query.in('shift_id', myShiftIds);
-      } else {
-        // 2. Fall back to active_outlet_id
-        const activeOutletId = (req.user as any)?.active_outlet_id || req.query.outlet_id;
-        if (activeOutletId) {
-          query = query.eq('outlet_id', activeOutletId);
-        } else {
-          // 3. Fall back to assigned outlets
-          const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
-          const assignedIds = assignedOutlets.map((o) => o.id).filter(Boolean);
-          
-          if (assignedIds.length > 0) {
-            query = query.in('outlet_id', assignedIds);
-          } else {
-            // 4. Fall back to role-based outlet types
-            const allowedTypes = POS_STATION_CASHIER_ROLE_TYPES[normalizedRole] || [];
-            if (allowedTypes.length > 0) {
-              const { data: outlets } = await supabase
-                .from('pos_outlets')
-                .select('id')
-                .eq('branch_id', branchId)
-                .in('outlet_type', allowedTypes);
-              
-              const outletIds = (outlets || []).map(o => o.id);
-              if (outletIds.length > 0) {
-                query = query.in('outlet_id', outletIds);
-              } else {
-                query = query.eq('outlet_id', '00000000-0000-0000-0000-000000000000');
-              }
-            } else {
-              query = query.eq('outlet_id', '00000000-0000-0000-0000-000000000000');
-            }
-          }
-        }
-      }
-    }
+    query = await scopeQueryToCashierStation(query, req, branchId);
 
     const { data, error } = await query;
     if (error) throw error;

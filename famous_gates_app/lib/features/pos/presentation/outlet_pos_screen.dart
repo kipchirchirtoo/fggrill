@@ -2135,7 +2135,9 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
   ItemVoidRequest? _activeVoidFor(int itemIndex) {
     for (final request in _voidRequests) {
       if (request.itemIndex == itemIndex &&
-          (request.isPending || request.isAcknowledged)) {
+          (request.isPending ||
+              request.isKitchenAcknowledged ||
+              request.isAcknowledged)) {
         return request;
       }
     }
@@ -2309,7 +2311,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
     final canPrintOriginal = order.paymentStatus == 'unpaid';
     final canPrintDuplicate = order.paymentStatus == 'unpaid' && order.canReprintBill;
     final pendingTotal = _voidRequests
-        .where((r) => r.isPending || r.isAcknowledged)
+        .where((r) =>
+            r.isPending || r.isKitchenAcknowledged || r.isAcknowledged)
         .fold<double>(0, (sum, r) => sum + r.amount);
 
     return SafeArea(
@@ -2364,8 +2367,13 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                 ),
                 child: Text(
                   () {
-                    final hasCashierPending = _voidRequests.any((r) => r.isPending);
+                    final hasKitchenPending = _voidRequests.any((r) => r.isPending);
+                    final hasCashierPending =
+                        _voidRequests.any((r) => r.isKitchenAcknowledged);
                     final hasManagerPending = _voidRequests.any((r) => r.isAcknowledged);
+                    if (hasKitchenPending) {
+                      return '⏳ Item void awaiting kitchen acknowledgment. May reduce total by ${formatKes(pendingTotal)}.';
+                    }
                     if (_isCashier && hasCashierPending) {
                       return '⚠️ Item void awaiting your acknowledgment. May reduce total by ${formatKes(pendingTotal)}.';
                     }
@@ -2446,7 +2454,7 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                               children: [
                                 if (activeVoid.isPending) ...[
                                   Chip(
-                                    label: const Text('⏳ AWAITING CASHIER',
+                                    label: const Text('⏳ AWAITING KITCHEN',
                                         style: TextStyle(fontSize: 11)),
                                     backgroundColor: Colors.orange.withValues(alpha: 0.15),
                                     visualDensity: VisualDensity.compact,
@@ -2454,6 +2462,18 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                                   ),
                                   Text(
                                     '${activeVoid.reason} • ${activeVoid.requestedByName ?? 'Unknown'}',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ] else if (activeVoid.isKitchenAcknowledged) ...[
+                                  Chip(
+                                    label: const Text('⏳ AWAITING CASHIER',
+                                        style: TextStyle(fontSize: 11)),
+                                    backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  Text(
+                                    '${activeVoid.reason} • kitchen: ${activeVoid.kitchenName ?? 'Unknown'}',
                                     style: Theme.of(context).textTheme.bodySmall,
                                   ),
                                   if (_isCashier) ...[

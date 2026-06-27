@@ -144,4 +144,82 @@ class KitchenRepository {
   Future<void> markAllNotificationsRead() async {
     await _dio.patch('/notifications/mark-all-read');
   }
+
+  // ── Void requests: Kitchen is Stage 1 of the waiter void chain ───────────
+  // (Kitchen acknowledge/decline -> Cashier acknowledge/decline -> Branch
+  // Accountant final approval). Covers both per-item and whole-bill voids.
+
+  List<Map<String, dynamic>> _parseMapList(dynamic data) {
+    final list = data is List
+        ? data
+        : (data is Map ? (data['data'] ?? []) : []);
+    return (list as List)
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingItemVoidsKitchen() async {
+    try {
+      final response = await _dio.get('/pos/voids/pending/kitchen');
+      return _parseMapList(response.data);
+    } catch (e) {
+      debugPrint('KitchenRepository.getPendingItemVoidsKitchen error: $e');
+      throw Exception('Unable to load pending item void requests: ${_errorMessage(e)}');
+    }
+  }
+
+  Future<Map<String, dynamic>> kitchenAcknowledgeItemVoid(String id) async {
+    try {
+      final response = await _dio.patch('/pos/voids/$id/kitchen-acknowledge');
+      final data = response.data;
+      return data is Map
+          ? Map<String, dynamic>.from(data['data'] ?? data)
+          : <String, dynamic>{};
+    } on DioException catch (e) {
+      throw StateError(_errorMessage(e));
+    }
+  }
+
+  Future<void> kitchenDeclineItemVoid(String id) async {
+    try {
+      await _dio.patch('/pos/voids/$id/kitchen-decline');
+    } on DioException catch (e) {
+      throw StateError(_errorMessage(e));
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingWholeBillVoidsKitchen() async {
+    try {
+      final response = await _dio.get('/pos/void-requests/pending/kitchen');
+      return _parseMapList(response.data);
+    } catch (e) {
+      debugPrint('KitchenRepository.getPendingWholeBillVoidsKitchen error: $e');
+      throw Exception('Unable to load pending bill void requests: ${_errorMessage(e)}');
+    }
+  }
+
+  Future<Map<String, dynamic>> kitchenAcknowledgeVoidRequest(String id) async {
+    try {
+      final response =
+          await _dio.patch('/pos/void-requests/$id/kitchen-acknowledge');
+      final data = response.data;
+      return data is Map
+          ? Map<String, dynamic>.from(data['data'] ?? data)
+          : <String, dynamic>{};
+    } on DioException catch (e) {
+      throw StateError(_errorMessage(e));
+    }
+  }
+
+  Future<void> kitchenDeclineVoidRequest(String id, {String? reason}) async {
+    try {
+      await _dio.patch('/pos/void-requests/$id/kitchen-decline', data: {
+        if (reason != null && reason.trim().isNotEmpty)
+          'rejection_reason': reason.trim(),
+      });
+    } on DioException catch (e) {
+      throw StateError(_errorMessage(e));
+    }
+  }
 }
