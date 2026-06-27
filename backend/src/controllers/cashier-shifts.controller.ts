@@ -45,6 +45,35 @@ function parsePositiveInt(value: unknown): number | null {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function isNullifiedZeroPosOrder(order: any): boolean {
+    const totalAmount = Number(order?.total_amount || 0);
+    const amountPaid = Number(order?.amount_paid || 0);
+    const balanceAmount = Number(order?.balance_amount || 0);
+    const status = String(order?.status || '').toLowerCase();
+    const paymentStatus = String(order?.payment_status || '').toLowerCase();
+    const items = Array.isArray(order?.items) ? order.items : [];
+
+    if (!['open', 'unpaid', 'partial'].includes(status) && !['unpaid', 'partial'].includes(paymentStatus)) {
+        return false;
+    }
+
+    if (totalAmount !== 0 || amountPaid !== 0 || balanceAmount !== 0) {
+        return false;
+    }
+
+    if (!items.length) {
+        return true;
+    }
+
+    return items.every((item: any) => {
+        const activeQty = Number(item?.active_qty ?? item?.quantity ?? item?.qty ?? 0);
+        const activeTotal = Number(item?.active_total ?? item?.line_total ?? 0);
+        return item?.is_fully_voided === true
+            || (activeQty <= 0 && activeTotal <= 0)
+            || Number(item?.voided_qty || 0) >= Number(item?.quantity || item?.qty || 0);
+    });
+}
+
 function isShiftManager(role?: unknown): boolean {
     const normalized = String(role || '').toLowerCase();
     return SHIFT_MANAGER_ROLES.has(normalized) || isGlobalRole(normalized);
@@ -1674,12 +1703,12 @@ export const closeShift = async (
             if (ownerPosShiftIds.length) {
                 const { data: posOrders, error: posErr } = await supabase
                     .from('pos_shift_orders')
-                    .select('id')
+                    .select('id, items, total_amount, amount_paid, balance_amount, status, payment_status')
                     .in('shift_id', ownerPosShiftIds)
                     .in('payment_status', ['unpaid', 'partial'])
                     .neq('status', 'cancelled');
                 if (posErr) throw posErr;
-                unpaidPosOrders = posOrders?.length || 0;
+                unpaidPosOrders = (posOrders || []).filter((order: any) => !isNullifiedZeroPosOrder(order)).length;
             }
         }
 

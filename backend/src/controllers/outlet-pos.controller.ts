@@ -473,6 +473,35 @@ const orderItemsTotal = (items: Array<Record<string, any>>): number =>
     return sum + numberValue(item.quantity ?? item.qty) * numberValue(item.unit_price ?? item.price);
   }, 0);
 
+const isNullifiedZeroShiftOrder = (order: Record<string, any>): boolean => {
+  const totalAmount = numberValue(order.total_amount);
+  const amountPaid = numberValue(order.amount_paid);
+  const balanceAmount = numberValue(order.balance_amount);
+  const status = String(order.status || '').toLowerCase();
+  const paymentStatus = String(order.payment_status || '').toLowerCase();
+  const items = Array.isArray(order.items) ? order.items : [];
+
+  if (!['open', 'unpaid', 'partial'].includes(status) && !['unpaid', 'partial'].includes(paymentStatus)) {
+    return false;
+  }
+
+  if (totalAmount !== 0 || amountPaid !== 0 || balanceAmount !== 0) {
+    return false;
+  }
+
+  if (!items.length) {
+    return true;
+  }
+
+  return items.every((item: any) => {
+    const activeQty = numberValue(item?.active_qty ?? item?.quantity ?? item?.qty);
+    const activeTotal = numberValue(item?.active_total ?? item?.line_total);
+    return item?.is_fully_voided === true
+      || (activeQty <= 0 && activeTotal <= 0)
+      || numberValue(item?.voided_qty) >= numberValue(item?.quantity ?? item?.qty);
+  });
+};
+
 const sanitizeSummary = (summary: Record<string, any>, includeProfit: boolean): Record<string, any> => {
   if (includeProfit) return summary;
   const {
@@ -2138,6 +2167,41 @@ export const getShiftOrder = async (req: Request, res: Response, next: NextFunct
     const order = await loadShiftOrder(shiftId, orderId);
     ensureOrderOwnerAccess(req, order);
     res.json({ success: true, data: order });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const nullifyZeroShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { shiftId, orderId } = req.params;
+    await ensureShiftAccess(req, shiftId);
+    const order = await loadShiftOrder(shiftId, orderId);
+    ensureOrderOwnerAccess(req, order);
+
+    if (!isNullifiedZeroShiftOrder(order)) {
+      throw new AppError('Only fully-voided zero-value ghost bills can be nullified', 400);
+    }
+
+    const nullifyReason = String(req.body.reason || 'Nullified ghost bill with zero value').trim();
+    const { data, error } = await supabase
+      .from('pos_shift_orders')
+      .update({
+        status: 'voided',
+        payment_status: 'voided',
+        void_reason: nullifyReason,
+        voided_at: new Date().toISOString(),
+        voided_by: req.user?.id || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId)
+      .eq('shift_id', shiftId)
+      .select('*')
+      .single();
+
+    if (error || !data) throw error || new AppError('Failed to nullify zero-value bill', 500);
+    res.json({ success: true, data });
   } catch (error) {
     next(error);
   }

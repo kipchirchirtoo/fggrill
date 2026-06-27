@@ -62,6 +62,35 @@ function posOrderLocation(order: any, fallbackStation: string): string {
     return fallbackStation;
 }
 
+function isNullifiedZeroPosOrder(order: any): boolean {
+    const totalAmount = Number(order?.total_amount || 0);
+    const amountPaid = Number(order?.amount_paid || 0);
+    const balanceAmount = Number(order?.balance_amount || 0);
+    const status = String(order?.status || '').toLowerCase();
+    const paymentStatus = String(order?.payment_status || '').toLowerCase();
+    const items = Array.isArray(order?.items) ? order.items : [];
+
+    if (!['open', 'unpaid', 'partial'].includes(status) && !['unpaid', 'partial'].includes(paymentStatus)) {
+        return false;
+    }
+
+    if (totalAmount !== 0 || amountPaid !== 0 || balanceAmount !== 0) {
+        return false;
+    }
+
+    if (!items.length) {
+        return true;
+    }
+
+    return items.every((item: any) => {
+        const activeQty = Number(item?.active_qty ?? item?.quantity ?? item?.qty ?? 0);
+        const activeTotal = Number(item?.active_total ?? item?.line_total ?? 0);
+        return item?.is_fully_voided === true
+            || (activeQty <= 0 && activeTotal <= 0)
+            || Number(item?.voided_qty || 0) >= Number(item?.quantity || item?.qty || 0);
+    });
+}
+
 const PUBLIC_SHORT_CODE_PATTERN = /^(?:[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}|[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}|\d{4,8})$/;
 
 type CashierShortCodeResolution = {
@@ -8235,7 +8264,9 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 items: o.items || [],
                 is_waiter_order: true
             })),
-            ...posOrders.map((o: any) => {
+            ...posOrders
+            .filter((o: any) => wantsVoidedOrders || !isNullifiedZeroPosOrder(o))
+            .map((o: any) => {
                 const items = Array.isArray(o.items) ? o.items : [];
                 const shift = shiftLookup[o.shift_id];
                 const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
@@ -8398,7 +8429,9 @@ export const getUnpaidPosOrders = async (req: Request, res: Response, next: Next
         const { data: posOrders, error: posErr } = await posOrdersQuery;
         if (posErr) throw posErr;
 
-        const mapped = (posOrders || []).map((o: any) => {
+        const mapped = (posOrders || [])
+        .filter((o: any) => wantsVoidedOrders || !isNullifiedZeroPosOrder(o))
+        .map((o: any) => {
             const items = Array.isArray(o.items) ? o.items : [];
             const shift = shiftLookup[o.shift_id];
             const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
