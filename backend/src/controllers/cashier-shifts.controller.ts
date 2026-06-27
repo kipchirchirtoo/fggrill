@@ -968,13 +968,13 @@ export const getShiftLog = async (
                 { data: creditBillRecords },
             ] = await Promise.all([
                 supabase.from('restaurant_orders')
-                    .select('id, total_amount, guest_name, order_type, created_at')
+                    .select('*')
                     .eq('branch_id', branchId)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
                     .lte('created_at', shiftEnd),
                 supabase.from('bar_orders')
-                    .select('id, total, subtotal, customer_name, created_at')
+                    .select('*')
                     .eq('branch_id', branchId)
                     .eq('created_by', shift.cashier_id)
                     .gte('created_at', shift.shift_start)
