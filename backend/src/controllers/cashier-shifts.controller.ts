@@ -1744,15 +1744,18 @@ export const closeShift = async (
             throw new AppError(`Cannot close shift: ${totalUnpaid} unsettled bill(s) remain. Settle every bill (cash, M-Pesa or card) or record it as a credit bill before closing the shift.`, 400);
         }
 
-        // Block close if any item-level void requests are still in Stage 1
-        // (pending — cashier has not yet acknowledged or declined). The cashier
-        // shift spans all POS outlet stations in the branch, so we scope by
-        // branch_id rather than shift_id.
+        // Block close if any item-level void requests are sitting in this
+        // cashier's own queue ('kitchen_acknowledged' — kitchen has signed
+        // off, cashier has not yet acknowledged or declined). Requests still
+        // at 'pending' haven't reached the cashier yet (kitchen's queue, not
+        // theirs) so they don't block this close. The cashier shift spans
+        // all POS outlet stations in the branch, so we scope by branch_id
+        // rather than shift_id.
         const { data: pendingItemVoids, error: pendingItemVoidsError } = await supabase
             .from('pos_item_void_requests')
             .select('id, order_number, item_name, qty_to_void, requested_by')
             .eq('branch_id', shift.branch_id)
-            .eq('status', 'pending');
+            .eq('status', 'kitchen_acknowledged');
         if (pendingItemVoidsError) throw pendingItemVoidsError;
         if (pendingItemVoids && pendingItemVoids.length > 0) {
             const voidList = pendingItemVoids

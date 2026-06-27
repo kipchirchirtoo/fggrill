@@ -5674,7 +5674,10 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
         }
 
         // Block close while any item-level void request anywhere in this
-        // branch is still pending. cashier_shifts has no FK to the
+        // branch is sitting in this cashier's own queue ('kitchen_acknowledged'
+        // -- kitchen has signed off, cashier has not yet acknowledged or
+        // declined). Requests still at 'pending' haven't reached the cashier
+        // yet (kitchen's queue, not theirs). cashier_shifts has no FK to the
         // pos_outlet_shifts the void requests are raised against (a single
         // cashier shift spans every outlet station in the branch), so this
         // is scoped by branch_id rather than shift_id.
@@ -5682,7 +5685,7 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
             .from('pos_item_void_requests')
             .select('id, order_number, item_name, qty_to_void, requested_by')
             .eq('branch_id', shift.branch_id)
-            .eq('status', 'pending');
+            .eq('status', 'kitchen_acknowledged');
         if (pendingItemVoidsError) throw pendingItemVoidsError;
 
         if (pendingItemVoids && pendingItemVoids.length > 0) {

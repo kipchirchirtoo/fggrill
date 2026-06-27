@@ -4970,21 +4970,23 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
     // pending-item-void guard scoped by branch_id. Left in place rather than
     // deleted in case this route becomes reachable later.
     //
-    // Block close while any item-level void request on this shift is still
-    // pending -- approving/rejecting after close would mutate a bill that's
-    // already been swept into the shift summary. Escalate to the branch
+    // Block close while any item-level void request on this shift is sitting
+    // in the cashier's own queue ('kitchen_acknowledged') -- approving/
+    // declining after close would mutate a bill that's already been swept
+    // into the shift summary. Requests still at 'pending' haven't reached
+    // the cashier yet (kitchen's queue, not theirs). Escalate to the branch
     // accountant so the backlog gets cleared rather than silently stalling.
     const { data: pendingItemVoids, error: pendingItemVoidsError } = await supabase
       .from('pos_item_void_requests')
       .select('id')
       .eq('shift_id', shiftId)
-      .eq('status', 'pending');
+      .eq('status', 'kitchen_acknowledged');
     if (pendingItemVoidsError) throw pendingItemVoidsError;
     if (pendingItemVoids && pendingItemVoids.length > 0) {
       await notificationService.notifyRole(
         'branch_accountant',
         'Shift close blocked by pending item voids',
-        `${pendingItemVoids.length} item void request(s) on this shift still need approval or rejection before it can close.`,
+        `${pendingItemVoids.length} item void request(s) on this shift still need cashier acknowledgement or decline before it can close.`,
         {
           type: 'warning',
           category: 'pos_item_void_request',
@@ -4993,7 +4995,7 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
           metadata: { shift_id: shiftId, pending_request_ids: pendingItemVoids.map((row: Record<string, any>) => row.id) }
         }
       );
-      throw new AppError(`Cannot close shift: ${pendingItemVoids.length} pending item void request(s) must be approved or rejected first.`, 400);
+      throw new AppError(`Cannot close shift: ${pendingItemVoids.length} item void request(s) must be acknowledged or declined first.`, 400);
     }
 
     // Block close until every order on this station is settled (paid or
@@ -5439,6 +5441,14 @@ export const cashierVoidLineItems = async (req: Request, res: Response, next: Ne
         throw new AppError(`Invalid qty_to_void for item at index ${itemIndex}`, 400);
       }
 
+      // Inserted straight at 'kitchen_acknowledged' (not 'pending') with the
+      // cashier recorded as the kitchen actor too — this tool is the cashier
+      // voiding directly with no waiter request and no separate kitchen
+      // step, so it synthetically clears the kitchen-acknowledgment gate
+      // that cashier_acknowledge_item_void now requires (added for the
+      // waiter -> kitchen -> cashier -> accountant chain). Without this the
+      // RPC call below throws "already processed" and the bill total never
+      // gets reduced.
       const { data: requestRow, error: reqErr } = await supabase
         .from('pos_item_void_requests')
         .insert({
@@ -5455,7 +5465,10 @@ export const cashierVoidLineItems = async (req: Request, res: Response, next: Ne
           reason,
           reason_category: reasonCategory,
           requested_by: cashierId,
-          status: 'pending'
+          status: 'kitchen_acknowledged',
+          kitchen_id: cashierId,
+          kitchen_acknowledged_at: now,
+          kitchen_action: 'acknowledged'
         })
         .select('*')
         .single();
