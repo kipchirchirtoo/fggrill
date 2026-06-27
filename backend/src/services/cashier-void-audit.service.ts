@@ -112,7 +112,7 @@ export async function loadCashierVoidAudit(
     input.cashierId
       ? supabase
           .from('bar_orders')
-          .select('id, order_number, total, subtotal, customer_name, guest_name, order_type, created_at, status, payment_status')
+          .select('id, order_number, total, subtotal, customer_name, order_type, created_at, status, payment_status')
           .eq('branch_id', input.branchId)
           .eq('created_by', input.cashierId)
           .gte('created_at', input.shiftStart)
@@ -174,7 +174,7 @@ export async function loadCashierVoidAudit(
       id: row.id || null,
       section: 'bar_void',
       reference: text(row.order_number || row.id, 'Bar order'),
-      customer_name: text(row.customer_name || row.guest_name || row.order_type, 'Bar order'),
+      customer_name: text(row.customer_name || row.order_type, 'Bar order'),
       payment_method: 'other',
       amount: n(row.total ?? row.subtotal),
       status: text(row.status || row.payment_status, 'voided'),
