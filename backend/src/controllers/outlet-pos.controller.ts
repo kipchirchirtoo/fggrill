@@ -481,6 +481,23 @@ const orderItemsTotal = (items: Array<Record<string, any>>): number =>
     return sum + numberValue(item.quantity ?? item.qty) * numberValue(item.unit_price ?? item.price);
   }, 0);
 
+const activeOrderItemsTotal = (items: Array<Record<string, any>>): number =>
+  items.reduce((sum, item) => {
+    const activeTotal = numberValue(item.active_total);
+    if (activeTotal > 0) return sum + activeTotal;
+
+    const quantity = numberValue(item.quantity ?? item.qty);
+    const voidedQty = numberValue(item.voided_qty);
+    const activeQty = item.active_qty !== undefined && item.active_qty !== null
+      ? numberValue(item.active_qty)
+      : Math.max(quantity - voidedQty, 0);
+    const unitPrice = numberValue(item.unit_price ?? item.price);
+    if (activeQty > 0 && unitPrice > 0) return sum + activeQty * unitPrice;
+
+    if (item.is_fully_voided === true || voidedQty >= quantity) return sum;
+    return sum + numberValue(item.line_total ?? item.total_price ?? item.total);
+  }, 0);
+
 const isNullifiedZeroShiftOrder = (order: Record<string, any>): boolean => {
   const totalAmount = numberValue(order.total_amount);
   const amountPaid = numberValue(order.amount_paid);
@@ -5335,6 +5352,7 @@ export const cashierVoidWholeBill = async (req: Request, res: Response, next: Ne
         payment_status: 'voided',
         kitchen_status: 'voided',
         items: voidedItems,
+        total_amount: 0,
         balance_amount: 0,
         void_request_status: 'approved',
         voided_at: now,
@@ -5490,7 +5508,7 @@ export const cashierVoidLineItems = async (req: Request, res: Response, next: Ne
       // same cashier — no separate manager wait in this flow.
       const { data: orderAfterAck, error: orderAfterAckErr } = await supabase
         .from('pos_shift_orders')
-        .select('id, items, outlet_id, short_code')
+        .select('id, items, outlet_id, short_code, amount_paid')
         .eq('id', orderId)
         .single();
       if (orderAfterAckErr || !orderAfterAck) throw orderAfterAckErr || new AppError('Order not found', 404);
@@ -5498,10 +5516,18 @@ export const cashierVoidLineItems = async (req: Request, res: Response, next: Ne
       const itemsAfterAck = Array.isArray(orderAfterAck.items) ? [...orderAfterAck.items] as Array<Record<string, any>> : [];
       const ackedItem = itemsAfterAck[itemIndex] || {};
       itemsAfterAck[itemIndex] = { ...ackedItem, void_pending_approval: false };
+      const revisedTotal = activeOrderItemsTotal(itemsAfterAck);
+      const revisedBalance = Math.max(revisedTotal - numberValue(orderAfterAck.amount_paid), 0);
 
       const { data: finalOrder, error: finalOrderErr } = await supabase
         .from('pos_shift_orders')
-        .update({ items: itemsAfterAck, bill_reprint_count: 0, updated_at: now })
+        .update({
+          items: itemsAfterAck,
+          total_amount: revisedTotal,
+          balance_amount: revisedBalance,
+          bill_reprint_count: 0,
+          updated_at: now
+        })
         .eq('id', orderId)
         .select('*')
         .single();
