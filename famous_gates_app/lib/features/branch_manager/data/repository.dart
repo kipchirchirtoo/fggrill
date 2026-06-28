@@ -167,16 +167,56 @@ class BranchManagerRepository {
   }
 
   Future<BranchManagerStats> getDashboardStats() async {
-    final results = await Future.wait<Map<String, dynamic>>([
-      _safeMap(() => getMap('/finance/dashboard')),
-      _safeMap(() => getMap('/cashier/stats')),
-      _safeMap(() => getMap('/store/dashboard/branch')),
+    final today = _ymd(DateTime.now());
+    final results = await Future.wait<dynamic>([
+      branchSalesAnalytics(startDate: today, endDate: today),
+      getList('/restaurant/orders', query: {
+        'date': today,
+        'limit': 100,
+      }),
+      getList('/rooms'),
+      getList('/store/branch-stock/low'),
     ]);
-    final merged = <String, dynamic>{};
-    for (final result in results) {
-      merged.addAll(result);
-    }
-    return BranchManagerStats.fromJson(merged);
+
+    final sales = results[0] as Map<String, dynamic>;
+    final salesSummary = _asMap(sales['summary']);
+    final orders = List<Map<String, dynamic>>.from(results[1] as List);
+    final activeOrders = orders.where((order) {
+      final status = '${order['status'] ?? order['payment_status'] ?? ''}'
+          .trim()
+          .toLowerCase();
+      return !{
+        'paid',
+        'completed',
+        'complete',
+        'cancelled',
+        'canceled',
+        'voided',
+        'closed'
+      }.contains(status);
+    }).length;
+    final rooms = List<Map<String, dynamic>>.from(results[2] as List);
+    final lowStock = List<Map<String, dynamic>>.from(results[3] as List);
+    final occupiedRooms = rooms.where((room) {
+      final status = '${room['status'] ?? room['room_status'] ?? ''}'
+          .trim()
+          .toLowerCase();
+      return status == 'occupied' || status == 'checked_in';
+    }).length;
+
+    return BranchManagerStats(
+      todayRevenue: _numFrom(salesSummary, const [
+        'total_sales',
+        'today_revenue',
+        'todayRevenue',
+        'revenue',
+      ]).toDouble(),
+      activeOrders: activeOrders,
+      occupancyRate: rooms.isEmpty ? 0 : (occupiedRooms / rooms.length) * 100,
+      lowStockItems: lowStock.length,
+      totalRooms: rooms.length,
+      occupiedRooms: occupiedRooms,
+    );
   }
 
   Future<List<RecentActivity>> getRecentActivity({int limit = 10}) async {
@@ -213,7 +253,13 @@ class BranchManagerRepository {
       'end_date': endDate,
       'filters': filters,
     });
-    return unwrapMap(response.data);
+    final outer = _asMap(response.data);
+    final data = _asMap(outer['data']);
+    return {
+      ...data,
+      if (outer['metadata'] is Map)
+        'metadata': Map<String, dynamic>.from(outer['metadata'] as Map),
+    };
   }
 
   Future<File> exportBranchSales({
@@ -392,9 +438,21 @@ class BranchManagerRepository {
 
   Future<Map<String, dynamic>> staffMember(String id) => getMap('/staff/$id');
 
-  Future<void> createStaff(Map<String, dynamic> data) async {
-    await postMap('/staff', data: data);
+  Future<Map<String, dynamic>> createStaff(Map<String, dynamic> data) =>
+      postMap('/staff', data: data);
+
+  Future<List<Map<String, dynamic>>> users({String? search, String? role}) {
+    return getList('/users', query: {
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (role != null && role != 'all') 'role': role,
+    });
   }
+
+  Future<Map<String, dynamic>> createUser(Map<String, dynamic> data) =>
+      postMap('/users', data: data);
+
+  Future<Map<String, dynamic>> updateUser(String id, Map<String, dynamic> data) =>
+      putMap('/users/$id', data: data);
 
   Future<void> updateStaff(String id, Map<String, dynamic> data) async {
     await putMap('/staff/$id', data: data);
@@ -647,6 +705,21 @@ class BranchManagerRepository {
       return <Map<String, dynamic>>[];
     }
   }
+
+  num _numFrom(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      final value = row[key];
+      if (value is num) return value;
+      if (value is String) {
+        final parsed = num.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+    }
+    return 0;
+  }
+
+  String _ymd(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   String _csv(String value) => '"${value.replaceAll('"', '""')}"';
 

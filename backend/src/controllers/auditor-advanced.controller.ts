@@ -506,11 +506,11 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
         if (effectiveBranchId) requestsQuery = requestsQuery.eq('branch_id', effectiveBranchId);
         const { data: requests, error: requestsError } = await requestsQuery;
 
-        // 2. Fetch pending credit bills — filter at DB level
+        // 2. Fetch pending credit bills — 'pending' or 'open' (live DB uses 'open')
         let billsQuery = supabase
             .from('staff_credit_bills')
             .select('*')
-            .eq('status', 'pending');
+            .in('status', ['pending', 'open']);
         if (effectiveBranchId) billsQuery = billsQuery.eq('branch_id', effectiveBranchId);
         const { data: bills, error: billsError } = await billsQuery;
 
@@ -540,6 +540,15 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             ? await stockCountsQuery.eq('branch_id', effectiveBranchId)
             : await stockCountsQuery;
 
+        // 6. Fetch stock_requests — the primary approval workflow in production
+        let stockRequestsQuery = supabase
+            .from('stock_requests')
+            .select('id, branch_id, request_number, request_type, status, priority, workflow_status, created_by, created_at, updated_at, needed_by_date, document_number')
+            .order('created_at', { ascending: false })
+            .limit(200);
+        if (effectiveBranchId) stockRequestsQuery = stockRequestsQuery.eq('branch_id', effectiveBranchId);
+        const { data: stockReqs } = await stockRequestsQuery;
+
         if (requestsError) throw requestsError;
         if (billsError) throw billsError;
         if (advancesError) throw advancesError;
@@ -548,11 +557,17 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
 
         const filteredRequests = requests || [];
         const filteredBills = bills || [];
+        const filteredStockReqs = (stockReqs || []).map((r: any) => ({
+            ...r,
+            category: 'Stock Request',
+            request_number: r.request_number || r.document_number,
+        }));
 
         // Combine into a flat list of pending items
         const pendingItems = [
+            ...filteredStockReqs,
             ...filteredRequests.map((r: any) => ({ ...r, category: 'General Request' })),
-            ...filteredBills.map((b: any) => ({ ...b, category: 'Credit Bill' })),
+            ...filteredBills.map((b: any) => ({ ...b, category: 'Credit Bill', bill_number: b.bill_number })),
             ...(advances || []).map((a: any) => ({ ...a, category: 'Advance' })),
             ...(loans || []).map((l: any) => ({ ...l, category: 'Loan' })),
             ...(stockCounts || []).map((s: any) => ({ ...s, category: 'Stock Take' }))
@@ -563,6 +578,7 @@ export const getPendingApprovals = async (req: Request, res: Response, next: Nex
             count: pendingItems.length,
             data: pendingItems,
             summary: {
+                stock_requests: filteredStockReqs.length,
                 requests: filteredRequests.length,
                 bills: filteredBills.length,
                 advances: advances?.length || 0,

@@ -15,14 +15,18 @@ export const getStaffPerformance = async (
     try {
         const { branch_id, period, department } = req.query;
         const periodDays = parseInt(period as string) || 30;
-        const startDate = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
+        // Use DATE string (YYYY-MM-DD) — attendance_date is a DATE column, not TIMESTAMPTZ
+        const startDate = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0];
 
         console.log('🔍 [Staff Performance] Fetching performance:', { branch_id, period: periodDays, department });
 
-        // Fetch staff for the branch
+        // Query staff_profiles — staff_attendance.staff_id references staff_profiles(id),
+        // not users(id). Querying users gave wrong IDs and zero attendance for everyone.
         let staffQuery = supabase
-            .from('users')
-            .select('id, first_name, last_name, email, role, department, branch_id, created_at')
+            .from('staff_profiles')
+            .select('id, user_id, first_name, last_name, email, role, department, branch_id')
             .eq('status', 'active');
 
         if (branch_id && branch_id !== '0') {
@@ -42,71 +46,81 @@ export const getStaffPerformance = async (
 
         console.log(`✅ [Staff Performance] Found ${staff?.length || 0} staff members`);
 
-        // Fetch performance data for each staff member
-        const performanceData = await Promise.all(
-            (staff || []).map(async (member) => {
-                // Attendance data
-                const { data: attendance } = await supabase
+        const staffIds = (staff || []).map((s: any) => s.id).filter(Boolean);
+
+        // Batch-fetch attendance and tasks for all staff in two queries instead of N+1
+        const [attendanceResult, tasksResult] = await Promise.all([
+            staffIds.length
+                ? supabase
                     .from('staff_attendance')
-                    .select('*')
-                    .eq('staff_id', member.id)
-                    .gte('attendance_date', startDate);
-
-                const totalDays = periodDays;
-                const presentDays = attendance?.filter(a => a.status === 'present').length || 0;
-                const lateDays = attendance?.filter(a => a.status === 'late').length || 0;
-                const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
-                const punctualityScore = presentDays > 0 ? ((presentDays - lateDays) / presentDays) * 100 : 100;
-
-                // Task completion (housekeeping tasks)
-                const { data: tasks } = await supabase
+                    .select('staff_id, status')
+                    .in('staff_id', staffIds)
+                    .gte('attendance_date', startDate)
+                : Promise.resolve({ data: [] }),
+            staffIds.length
+                ? supabase
                     .from('housekeeping_tasks')
-                    .select('*')
-                    .eq('assigned_to', member.id)
-                    .gte('created_at', startDate);
+                    .select('assigned_to, status')
+                    .in('assigned_to', staffIds)
+                    .gte('created_at', startDate)
+                : Promise.resolve({ data: [] }),
+        ]);
 
-                const totalTasks = tasks?.length || 0;
-                const completedTasks = tasks?.filter(t => t.status === 'completed').length || 0;
-                const taskCompletionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+        // Group by staff_id
+        const attendanceByStaff = new Map<string, any[]>();
+        for (const row of (attendanceResult.data || [])) {
+            const arr = attendanceByStaff.get(row.staff_id) ?? [];
+            arr.push(row);
+            attendanceByStaff.set(row.staff_id, arr);
+        }
+        const tasksByStaff = new Map<string, any[]>();
+        for (const row of (tasksResult.data || [])) {
+            const arr = tasksByStaff.get(row.assigned_to) ?? [];
+            arr.push(row);
+            tasksByStaff.set(row.assigned_to, arr);
+        }
 
-                // Revenue contribution (for waiters/bartenders)
-                let revenueContribution = 0;
-                if (member.role === 'restaurant' || member.role === 'bartender') {
-                    const { data: orders } = await supabase
-                        .from(member.role === 'restaurant' ? 'restaurant_orders' : 'bar_orders')
-                        .select('total, total_amount')
-                        .eq('staff_id', member.id)
-                        .gte('created_at', startDate);
+        // Build per-member metrics
+        const performanceData = (staff || []).map((member: any) => {
+            const attendance = attendanceByStaff.get(member.id) ?? [];
+            const totalDays = periodDays;
+            const presentDays = attendance.filter((a: any) => a.status === 'present').length;
+            const lateDays = attendance.filter((a: any) => a.status === 'late').length;
+            const attendanceRate = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
+            // Default to 0 (not 100) when there are no attendance records —
+            // 100 was inflating every score by 30 points for staff with no data.
+            const punctualityScore = presentDays > 0
+                ? ((presentDays - lateDays) / presentDays) * 100
+                : 0;
 
-                    revenueContribution = orders?.reduce((sum, o) => sum + Number(o.total || o.total_amount || 0), 0) || 0;
-                }
+            const tasks = tasksByStaff.get(member.id) ?? [];
+            const totalTasks = tasks.length;
+            const completedTasks = tasks.filter((t: any) => t.status === 'completed').length;
+            const taskCompletionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
-                // Calculate overall performance score
-                const performanceScore = (
-                    attendanceRate * 0.4 +
-                    punctualityScore * 0.3 +
-                    taskCompletionRate * 0.3
-                );
+            const performanceScore =
+                attendanceRate * 0.4 +
+                punctualityScore * 0.3 +
+                taskCompletionRate * 0.3;
 
-                return {
-                    staff_id: member.id,
-                    staff_name: `${member.first_name} ${member.last_name}`,
-                    email: member.email,
-                    role: member.role,
-                    department: member.department,
-                    attendance_rate: Math.round(attendanceRate * 10) / 10,
-                    punctuality_score: Math.round(punctualityScore * 10) / 10,
-                    task_completion_rate: Math.round(taskCompletionRate * 10) / 10,
-                    performance_score: Math.round(performanceScore * 10) / 10,
-                    revenue_contribution: revenueContribution,
-                    present_days: presentDays,
-                    late_days: lateDays,
-                    total_tasks: totalTasks,
-                    completed_tasks: completedTasks,
-                    period_days: periodDays
-                };
-            })
-        );
+            return {
+                staff_id: member.id,
+                staff_name: `${member.first_name} ${member.last_name}`,
+                email: member.email,
+                role: member.role,
+                department: member.department,
+                attendance_rate: Math.round(attendanceRate * 10) / 10,
+                punctuality_score: Math.round(punctualityScore * 10) / 10,
+                task_completion_rate: Math.round(taskCompletionRate * 10) / 10,
+                performance_score: Math.round(performanceScore * 10) / 10,
+                revenue_contribution: 0,
+                present_days: presentDays,
+                late_days: lateDays,
+                total_tasks: totalTasks,
+                completed_tasks: completedTasks,
+                period_days: periodDays,
+            };
+        });
 
         // Sort by performance score
         performanceData.sort((a, b) => b.performance_score - a.performance_score);

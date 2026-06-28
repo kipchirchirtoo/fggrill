@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../features/auth/domain/auth_notifier.dart';
@@ -560,12 +561,24 @@ class _MasterTopBar extends ConsumerWidget {
                 ref.read(authNotifierProvider.notifier).logout();
               } else if (value == 'printer') {
                 showPrinterSettingsDialog(context);
+              } else if (value == 'settings') {
+                context.push('/settings');
               }
             },
             itemBuilder: (context) => [
               PopupMenuItem(
                 enabled: false,
                 child: Text(email.isEmpty ? name : email),
+              ),
+              PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(PhosphorIcons.gear(), size: 18),
+                    const SizedBox(width: 12),
+                    const Text('Settings'),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: 'printer',

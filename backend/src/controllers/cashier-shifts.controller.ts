@@ -822,23 +822,49 @@ export const getShiftLog = async (
             // Step 2: fallback — aggregate from source revenue tables by time window only
             if (!rpcOk) {
                 try {
+                    // Resolve outlet type(s) for this shift so we only aggregate
+                    // the outlet(s) this cashier actually ran during this shift.
+                    let fallbackOutletTypes: Set<string> = new Set();
+                    try {
+                        const { data: fbOutletRows } = await supabase
+                            .from('pos_outlet_shifts')
+                            .select('outlet_id, outlet:pos_outlets(outlet_type)')
+                            .eq('branch_id', branchId)
+                            .eq('cashier_id', shift.cashier_id)
+                            .gte('opened_at', shift.shift_start)
+                            .lte('opened_at', shiftEnd);
+                        for (const row of (fbOutletRows || [])) {
+                            const ot = String((row as any).outlet?.outlet_type || '').toLowerCase();
+                            if (ot) fallbackOutletTypes.add(ot);
+                        }
+                    } catch (_) {}
+
+                    const fbIsBarType = (t: string) => ['bar', 'bar_store', 'spirits', 'main_bar', 'exec_bar', 'pool_bar'].includes(t);
+                    const fbIsRestType = (t: string) => ['restaurant', 'dining', 'room_service', 'kitchen'].includes(t);
+                    const fbFetchRest = fallbackOutletTypes.size === 0 || Array.from(fallbackOutletTypes).some(fbIsRestType);
+                    const fbFetchBar = fallbackOutletTypes.size === 0 || Array.from(fallbackOutletTypes).some(fbIsBarType);
+
                     // Fallback: aggregate from source revenue tables
                     const [
                         { data: restOrders },
                         { data: barOrders },
                     ] = await Promise.all([
-                        supabase.from('restaurant_orders')
-                            .select('total_amount')
-                            .eq('branch_id', branchId)
-                            .eq('created_by', shift.cashier_id)
-                            .gte('created_at', shift.shift_start)
-                            .lte('created_at', shiftEnd),
-                        supabase.from('bar_orders')
-                            .select('total_amount:total')
-                            .eq('branch_id', branchId)
-                            .eq('created_by', shift.cashier_id)
-                            .gte('created_at', shift.shift_start)
-                            .lte('created_at', shiftEnd),
+                        fbFetchRest
+                            ? supabase.from('restaurant_orders')
+                                .select('total_amount')
+                                .eq('branch_id', branchId)
+                                .eq('created_by', shift.cashier_id)
+                                .gte('created_at', shift.shift_start)
+                                .lte('created_at', shiftEnd)
+                            : Promise.resolve({ data: [], error: null }),
+                        fbFetchBar
+                            ? supabase.from('bar_orders')
+                                .select('total_amount:total')
+                                .eq('branch_id', branchId)
+                                .eq('created_by', shift.cashier_id)
+                                .gte('created_at', shift.shift_start)
+                                .lte('created_at', shiftEnd)
+                            : Promise.resolve({ data: [], error: null }),
                     ]);
 
                     const allOrders = [...(restOrders || []), ...(barOrders || [])];
@@ -961,29 +987,63 @@ export const getShiftLog = async (
                 shiftEnd
             });
 
-            // --- fetch POS evidence created during the shift ---
+            // --- resolve which POS outlet type(s) belong to THIS shift ---
+            // Only show orders from the outlet(s) this cashier actually ran
+            // during this specific shift. Without this, a restaurant-only cashier
+            // and a bar-only cashier with overlapping time windows both see each
+            // other's orders combined into one 584-line evidence table.
+            let shiftOutletTypes: Set<string> = new Set();
+            try {
+                const { data: outletShiftRows } = await supabase
+                    .from('pos_outlet_shifts')
+                    .select('outlet_id, outlet:pos_outlets(outlet_type)')
+                    .eq('branch_id', branchId)
+                    .eq('cashier_id', shift.cashier_id)
+                    .gte('opened_at', shift.shift_start)
+                    .lte('opened_at', shiftEnd);
+
+                for (const row of (outletShiftRows || [])) {
+                    const ot = String((row as any).outlet?.outlet_type || '').toLowerCase();
+                    if (ot) shiftOutletTypes.add(ot);
+                }
+            } catch (_) {
+                // If lookup fails, fall back to fetching both (safe degradation)
+            }
+
+            // Determine which legacy order tables to query based on outlet type.
+            // bar_store, bar, spirits etc. → bar_orders; restaurant → restaurant_orders.
+            // If no outlet types resolved (old shifts / fallback), query both.
+            const isBarType = (t: string) => ['bar', 'bar_store', 'spirits', 'main_bar', 'exec_bar', 'pool_bar'].includes(t);
+            const isRestType = (t: string) => ['restaurant', 'dining', 'room_service', 'kitchen'].includes(t);
+
+            const fetchRestOrders = shiftOutletTypes.size === 0
+                || Array.from(shiftOutletTypes).some(isRestType);
+            const fetchBarOrders = shiftOutletTypes.size === 0
+                || Array.from(shiftOutletTypes).some(isBarType);
+
+            // --- fetch POS evidence scoped to this shift's outlet type(s) ---
             const [
                 { data: restOrders },
                 { data: barOrders },
                 { data: creditBillRecords },
             ] = await Promise.all([
-                supabase.from('restaurant_orders')
-                    .select('*')
-                    .eq('branch_id', branchId)
-                    .eq('created_by', shift.cashier_id)
-                    .gte('created_at', shift.shift_start)
-                    .lte('created_at', shiftEnd),
-                supabase.from('bar_orders')
-                    .select('*')
-                    .eq('branch_id', branchId)
-                    .eq('created_by', shift.cashier_id)
-                    .gte('created_at', shift.shift_start)
-                    .lte('created_at', shiftEnd),
-                // Scoped to this cashier + this shift only — sibling queries
-                // above already filter by created_by + the shift window;
-                // this one previously only filtered by branch_id + time
-                // window, so another cashier's credit bills created during
-                // an overlapping shift at the same branch would leak in.
+                fetchRestOrders
+                    ? supabase.from('restaurant_orders')
+                        .select('*')
+                        .eq('branch_id', branchId)
+                        .eq('created_by', shift.cashier_id)
+                        .gte('created_at', shift.shift_start)
+                        .lte('created_at', shiftEnd)
+                    : Promise.resolve({ data: [], error: null }),
+                fetchBarOrders
+                    ? supabase.from('bar_orders')
+                        .select('*')
+                        .eq('branch_id', branchId)
+                        .eq('created_by', shift.cashier_id)
+                        .gte('created_at', shift.shift_start)
+                        .lte('created_at', shiftEnd)
+                    : Promise.resolve({ data: [], error: null }),
+                // Scoped to this cashier + this shift only.
                 supabase.from('credit_bills')
                     .select('id, credit_number, staff_name, employee_id, department, total_amount, balance_amount, status, approval_status, created_at')
                     .eq('branch_id', branchId)

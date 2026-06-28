@@ -17,6 +17,7 @@ import {
     updateProductionRecipe,
     deactivateProductionRecipe,
     listProductionRecipes,
+    listRecipeLinkableMenuItems,
     getKitchenShiftStats,
     getProductionSessionView,
     getKitchenShiftPosConsumption

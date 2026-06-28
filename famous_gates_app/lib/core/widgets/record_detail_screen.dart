@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
@@ -1700,16 +1700,23 @@ bool _isAuditKey(String key) {
 }
 
 bool _isRelationKey(String key, dynamic value) {
+  if (value is Map) return true;
   final lower = key.toLowerCase();
+  // Plain display strings (e.g. staff_name, department) stay in Business
+  // Information. Only bare foreign-key references go to People & Branches.
+  final isDisplayLabel = lower.endsWith('_name') ||
+      lower.endsWith('_label') ||
+      lower == 'department' ||
+      lower == 'role' ||
+      lower == 'email';
+  if (isDisplayLabel) return false;
   return lower.contains('branch') ||
       lower.contains('supplier') ||
       lower.contains('customer') ||
       lower.contains('guest') ||
       lower.contains('staff') ||
       lower.contains('employee') ||
-      lower.contains('user') ||
-      lower.contains('department') ||
-      value is Map;
+      lower.contains('user');
 }
 
 Color _statusColor(String status) {

@@ -16015,11 +16015,12 @@ class _KitchenVarianceSectionState
           return _Page(
             title: 'Kitchen Variance Review',
             subtitle:
-                'Closed kitchen shifts confirmed by the chef, awaiting your approval and liability decision.',
+                'Daily Control variance from real sales (always available), plus formal kitchen shifts confirmed by the chef and awaiting your liability decision.',
             actions: [_RefreshButton(onPressed: _refresh)],
             children: [
+              const _DailyControlVarianceCard(),
               _ResponsiveGrid(children: [
-                _MetricCard('Pending Review', '${shifts.length}',
+                _MetricCard('Pending Formal Review', '${shifts.length}',
                     Icons.pending_actions, Colors.orange),
                 _MetricCard('Total Variance Exposure', _money(totalExposure),
                     Icons.warning_amber, Colors.red),
@@ -16034,7 +16035,7 @@ class _KitchenVarianceSectionState
                           color: Colors.green.shade400, size: 32),
                       const SizedBox(width: 12),
                       const Text(
-                          'No kitchen shifts pending variance review.'),
+                          'No kitchen shifts pending formal variance review.'),
                     ]),
                   ),
                 ),
@@ -16435,6 +16436,557 @@ class _KitchenVarianceReviewDialogState
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         writeOffReason: writeOffReason,
       );
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      _showError('Failed to submit: $e');
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+}
+
+/// Daily Control's recipe-based variance (theoretical vs actual ingredient
+/// consumption, computed straight from real POS sales) for a chosen
+/// branch/date/shift — shown regardless of whether a formal kitchen_shifts
+/// record ever completed the open->close->chef-confirm lifecycle that
+/// [_KitchenVarianceSection] above requires. In practice almost no shift
+/// completes that lifecycle, so this is the variance data that actually
+/// exists day to day.
+class _DailyControlVarianceCard extends ConsumerStatefulWidget {
+  const _DailyControlVarianceCard();
+
+  @override
+  ConsumerState<_DailyControlVarianceCard> createState() =>
+      _DailyControlVarianceCardState();
+}
+
+class _DailyControlVarianceCardState
+    extends ConsumerState<_DailyControlVarianceCard> {
+  DateTime _date = DateTime.now();
+  String? _shift;
+  late Future<Map<String, dynamic>> _future = _load();
+
+  String get _dateStr => DateFormat('yyyy-MM-dd').format(_date);
+
+  Future<Map<String, dynamic>> _load() => ref
+      .read(branchAccountantRepositoryProvider)
+      .getDailyControlVariance(date: _dateStr, shift: _shift);
+
+  void _refresh() => setState(() => _future = _load());
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2023, 1, 1),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _date = picked;
+        _future = _load();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      title: 'Daily Control Variance',
+      child: FutureBuilder<Map<String, dynamic>>(
+        future: _future,
+        builder: (context, snap) {
+          final filterBar = Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _pickDate,
+                  icon: const Icon(Icons.calendar_today, size: 16),
+                  label: Text(_dateStr),
+                ),
+                DropdownButton<String?>(
+                  value: _shift,
+                  hint: const Text('Full day'),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Full day')),
+                    DropdownMenuItem(value: 'A', child: Text('Shift A')),
+                    DropdownMenuItem(value: 'B', child: Text('Shift B')),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _shift = v;
+                    _future = _load();
+                  }),
+                ),
+                _RefreshButton(onPressed: _refresh),
+              ],
+            ),
+          );
+
+          if (snap.connectionState == ConnectionState.waiting) {
+            return Column(children: [
+              filterBar,
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ]);
+          }
+          if (snap.hasError) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                filterBar,
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('Failed to load: ${snap.error}',
+                      style: const TextStyle(color: Colors.red)),
+                ),
+              ],
+            );
+          }
+
+          final data = snap.data ?? {};
+          final bomControl = ((data['bom_control'] as List?) ?? [])
+              .cast<Map<String, dynamic>>();
+          final shiftTeam = ((data['shift_team'] as List?) ?? [])
+              .cast<Map<String, dynamic>>();
+          final hasShiftRecord = data['has_kitchen_shift_record'] == true;
+          final flagged =
+              bomControl.where((row) => '${row['flag']}' != 'green').toList();
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              filterBar,
+              if (shiftTeam.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Team: ${shiftTeam.map((s) => '${s['name']} (${s['role']})').join(', ')}',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.kTextSecondary),
+                  ),
+                )
+              else if (!hasShiftRecord)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'No kitchen shift record for this date/shift — billing will use the full branch staff list instead.',
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                  ),
+                ),
+              if (flagged.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(children: [
+                    Icon(Icons.check_circle_outline,
+                        color: Colors.green.shade400, size: 28),
+                    const SizedBox(width: 10),
+                    const Text(
+                        'No flagged ingredient variance for this date/shift.'),
+                  ]),
+                )
+              else
+                _SimpleTable(
+                  columns: const [
+                    'Ingredient',
+                    'Theoretical',
+                    'Actual',
+                    'Variance',
+                    'Cost Impact',
+                    'Flag',
+                    'Actions'
+                  ],
+                  rows: flagged.map((row) {
+                    final varianceQty = _num(row['variance_qty']);
+                    return [
+                      _text(row, ['item_name']),
+                      '${_num(row['theoretical_qty']).toStringAsFixed(2)} ${row['unit'] ?? ''}',
+                      '${_num(row['actual_qty']).toStringAsFixed(2)} ${row['unit'] ?? ''}',
+                      '${varianceQty >= 0 ? '+' : ''}${varianceQty.toStringAsFixed(2)}',
+                      _money(_num(row['variance_cost']).abs()),
+                      _StatusPill('${row['flag']}'),
+                      FilledButton.tonal(
+                        onPressed: () => _bill(row, shiftTeam),
+                        child: const Text('Bill Staff'),
+                      ),
+                    ];
+                  }).toList(),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _bill(
+      Map<String, dynamic> row, List<Map<String, dynamic>> shiftTeam) async {
+    var staffOptions = shiftTeam;
+    if (staffOptions.isEmpty) {
+      try {
+        final branchStaff =
+            await ref.read(branchAccountantRepositoryProvider).getBranchStaff();
+        staffOptions = branchStaff
+            .map((s) => {
+                  'user_id': s['id'],
+                  'name': '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                      .trim(),
+                  'role': s['role'] ?? s['position'] ?? '',
+                })
+            .toList();
+      } catch (_) {
+        // Leave staffOptions empty — the dialog shows "no staff available".
+      }
+    }
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DailyControlBillStaffDialog(
+        date: _dateStr,
+        shift: _shift,
+        row: row,
+        staff: staffOptions,
+      ),
+    );
+    if (result == true) _refresh();
+  }
+}
+
+class _DailyControlBillStaffDialog extends ConsumerStatefulWidget {
+  const _DailyControlBillStaffDialog({
+    required this.date,
+    required this.shift,
+    required this.row,
+    required this.staff,
+  });
+
+  final String date;
+  final String? shift;
+  final Map<String, dynamic> row;
+  final List<Map<String, dynamic>> staff;
+
+  @override
+  ConsumerState<_DailyControlBillStaffDialog> createState() =>
+      _DailyControlBillStaffDialogState();
+}
+
+class _DailyControlBillStaffDialogState
+    extends ConsumerState<_DailyControlBillStaffDialog> {
+  String _liabilityAction = 'single_staff';
+  String? _selectedUserId;
+  final Map<String, TextEditingController> _splitCtrls = {};
+  final _writeOffReasonCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _posting = false;
+
+  num get _varianceCost => _num(widget.row['variance_cost']).abs();
+
+  @override
+  void initState() {
+    super.initState();
+    for (final st in widget.staff) {
+      _splitCtrls['${st['user_id']}'] = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _splitCtrls.values) {
+      c.dispose();
+    }
+    _writeOffReasonCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 640),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Bill Staff — ${widget.row['item_name']}',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700)),
+              Text(
+                '${widget.date}${widget.shift != null ? '  •  Shift ${widget.shift}' : ''}  •  Variance cost ${_money(_varianceCost)}',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _liabilityRadio(
+                          'single_staff', 'Charge a single staff member'),
+                      if (_liabilityAction == 'single_staff')
+                        _singleStaffPicker(),
+                      _liabilityRadio(
+                          'custom_split', 'Split liability (custom amounts)'),
+                      if (_liabilityAction == 'custom_split')
+                        _customSplitInputs(),
+                      _liabilityRadio(
+                          'split_shift', 'Split equally across the team'),
+                      if (_liabilityAction == 'split_shift')
+                        _splitShiftPreview(),
+                      _liabilityRadio('write_off', 'Write off (no recovery)'),
+                      if (_liabilityAction == 'write_off')
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 32, top: 4, bottom: 8),
+                          child: TextField(
+                            controller: _writeOffReasonCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Write-off reason (required)',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            maxLines: 2,
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _notesCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Notes (optional)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _posting ? null : _submit,
+                      icon: _posting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.check),
+                      label: Text(_posting ? 'Submitting...' : 'Submit'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _liabilityRadio(String value, String label) {
+    return RadioListTile<String>(
+      value: value,
+      groupValue: _liabilityAction,
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(label, style: const TextStyle(fontSize: 13)),
+      onChanged: (v) =>
+          setState(() => _liabilityAction = v ?? _liabilityAction),
+    );
+  }
+
+  Widget _singleStaffPicker() {
+    if (widget.staff.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 32, bottom: 8),
+        child: Text('No staff available to bill.',
+            style: TextStyle(color: Colors.grey, fontSize: 12)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(left: 32, bottom: 8),
+      child: DropdownButtonFormField<String>(
+        initialValue: _selectedUserId,
+        isExpanded: true,
+        decoration: const InputDecoration(
+            labelText: 'Staff member', isDense: true, border: OutlineInputBorder()),
+        items: widget.staff
+            .map((st) => DropdownMenuItem(
+                  value: '${st['user_id']}',
+                  child: Text('${st['name']} (${st['role'] ?? ''})',
+                      overflow: TextOverflow.ellipsis),
+                ))
+            .toList(),
+        onChanged: (v) => setState(() => _selectedUserId = v),
+      ),
+    );
+  }
+
+  Widget _customSplitInputs() {
+    if (widget.staff.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 32, bottom: 8),
+        child: Text('No staff available to split liability across.',
+            style: TextStyle(color: Colors.grey, fontSize: 12)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(left: 32, bottom: 8),
+      child: Column(
+        children: widget.staff.map((st) {
+          final id = '${st['user_id']}';
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Expanded(
+                    child: Text('${st['name']} (${st['role'] ?? ''})',
+                        style: const TextStyle(fontSize: 13))),
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: _splitCtrls[id],
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        prefixText: 'KES ', isDense: true, border: OutlineInputBorder()),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _splitShiftPreview() {
+    if (widget.staff.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 32, bottom: 8),
+        child: Text('No staff available to split liability across.',
+            style: TextStyle(color: Colors.grey, fontSize: 12)),
+      );
+    }
+    final each = _varianceCost / widget.staff.length;
+    return Padding(
+      padding: const EdgeInsets.only(left: 32, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: widget.staff
+            .map((st) => Text(
+                '${st['name']} (${st['role'] ?? ''}) — ${_money(each)}',
+                style: const TextStyle(fontSize: 13)))
+            .toList(),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    List<Map<String, dynamic>> allocations = [];
+    String? writeOffReason;
+
+    switch (_liabilityAction) {
+      case 'single_staff':
+        if (_selectedUserId == null) {
+          _showError('Select a staff member to charge.');
+          return;
+        }
+        allocations = [
+          {
+            'user_id': _selectedUserId,
+            'amount': _varianceCost,
+            'description':
+                'Kitchen variance — ${widget.row['item_name']} (${widget.date})',
+          }
+        ];
+        break;
+      case 'custom_split':
+        allocations = widget.staff
+            .map((st) {
+              final id = '${st['user_id']}';
+              final amount =
+                  double.tryParse(_splitCtrls[id]?.text.trim() ?? '') ?? 0;
+              return {
+                'user_id': id,
+                'amount': amount,
+                'description':
+                    'Kitchen variance split — ${widget.row['item_name']}',
+              };
+            })
+            .where((a) => (a['amount'] as double) > 0)
+            .toList();
+        if (allocations.isEmpty) {
+          _showError('Enter at least one staff amount to split.');
+          return;
+        }
+        break;
+      case 'split_shift':
+        if (widget.staff.isEmpty) {
+          _showError('No staff available to split liability across.');
+          return;
+        }
+        final each = _varianceCost / widget.staff.length;
+        allocations = widget.staff
+            .map((st) => {
+                  'user_id': '${st['user_id']}',
+                  'amount': each,
+                  'description':
+                      'Kitchen variance — equal split — ${widget.row['item_name']}',
+                })
+            .toList();
+        break;
+      case 'write_off':
+        writeOffReason = _writeOffReasonCtrl.text.trim();
+        if (writeOffReason.isEmpty) {
+          _showError('A write-off reason is required.');
+          return;
+        }
+        break;
+    }
+
+    setState(() => _posting = true);
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .billDailyControlVariance(
+            date: widget.date,
+            shift: widget.shift,
+            itemName: '${widget.row['item_name']}',
+            itemSku: widget.row['item_sku']?.toString(),
+            varianceCost: _varianceCost,
+            liabilityAction: _liabilityAction,
+            allocations: allocations,
+            notes: _notesCtrl.text.trim().isEmpty
+                ? null
+                : _notesCtrl.text.trim(),
+            writeOffReason: writeOffReason,
+          );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       _showError('Failed to submit: $e');

@@ -73,24 +73,24 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   }
 
   Future<_KitchenModuleSnapshot> _load() async {
+    // Do NOT fetch active orders here — the live orders grid is driven
+    // exclusively by kdsOrdersProvider (Realtime-backed). Fetching a
+    // second copy via _repo.getOrders() would pollute _printedOrderIds
+    // before kdsOrdersProvider fires its first data event, causing
+    // ref.listen's auto-print to silently skip every order that arrived
+    // on initial load (they'd already be in the dedup set).
     final results = await Future.wait<dynamic>([
-      _repo.getOrders(),
       _repo.getHistory(limit: 150),
       _repo.getNotifications(
         status: _notificationStatus,
         category: 'restaurant_order',
       ),
     ]);
-    final snapshot = _KitchenModuleSnapshot(
-      activeOrders: (results[0] as List<KitchenOrder>),
-      history: (results[1] as List<KitchenOrder>),
-      notifications: (results[2] as List<Map<String, dynamic>>),
+    return _KitchenModuleSnapshot(
+      activeOrders: const [],
+      history: (results[0] as List<KitchenOrder>),
+      notifications: (results[1] as List<Map<String, dynamic>>),
     );
-
-    // Auto-print new captain orders when they arrive
-    _autoPrintNewCaptainOrders(snapshot.activeOrders);
-
-    return snapshot;
   }
 
   void _refresh() {
@@ -110,6 +110,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   void _autoPrintNewCaptainOrders(List<KitchenOrder> orders) {
     try {
       for (final order in orders) {
+        // Only captain (POS) orders need a kitchen ticket — regular restaurant
+        // orders are not printed here (they're submitted directly by wait staff).
+        if (!order.isCaptainOrder) continue;
+
         final printKey = order.kdsPrintKey;
 
         // Skip if this order or recalled batch was already printed by this KDS.

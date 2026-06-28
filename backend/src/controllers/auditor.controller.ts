@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+﻿import { Request, Response, NextFunction } from 'express';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -159,29 +159,32 @@ const normalizeAuditDocument = (row: any, source: string, type: string) => {
 
 export const getAuditorDashboard = async (req: Request, res: Response): Promise<void> => {
   const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
-  const [exceptions, approvals, voidBills, logbooks, watchlist] = await Promise.all([
+  // void_bills table is empty; pending logbooks in cashier_logbooks are the real voided/pending records.
+  // approval_requests is empty; stock_requests contains the real pending approval data.
+  // auditor_watchlist table doesn't exist — safeRows will return [] gracefully.
+  const [exceptions, stockRequests, logbooks, watchlist] = await Promise.all([
     safeRows('audit_exceptions'),
-    safeRows('approval_requests'),
-    safeRows('void_bills'),
+    safeRows('stock_requests'),
     safeRows('cashier_logbooks'),
     safeRows('auditor_watchlist'),
   ]);
 
   const scopedExceptions = exceptions.filter((row) => branchMatches(row, branchId));
-  const scopedApprovals = approvals.filter((row) => branchMatches(row, branchId));
-  const scopedVoidBills = voidBills.filter((row) => branchMatches(row, branchId));
+  const scopedRequests = stockRequests.filter((row) => branchMatches(row, branchId));
   const scopedLogbooks = logbooks.filter((row) => branchMatches(row, branchId));
   const scopedWatchlist = watchlist.filter((row) => branchMatches(row, branchId));
+  const pendingLogbooks = scopedLogbooks.filter((row) => pendingLike(row.status));
+  const pendingRequests = scopedRequests.filter((row) => pendingLike(row.status));
 
   res.json({
     success: true,
     data: {
-      void_bills: scopedVoidBills.length,
+      void_bills: pendingLogbooks.length,
       price_overrides: scopedExceptions.filter((row) => `${row.severity || row.risk_level || ''}`.toLowerCase() === 'critical').length,
-      large_discounts: scopedApprovals.filter((row) => pendingLike(row.status)).length,
-      pending_approvals: scopedApprovals.filter((row) => pendingLike(row.status)).length,
+      large_discounts: pendingRequests.length,
+      pending_approvals: pendingRequests.length,
       open_exceptions: scopedExceptions.filter((row) => `${row.status || ''}`.toLowerCase() !== 'resolved').length,
-      pending_logbooks: scopedLogbooks.filter((row) => pendingLike(row.status)).length,
+      pending_logbooks: pendingLogbooks.length,
       watchlist: scopedWatchlist.filter((row) => `${row.status || ''}`.toLowerCase() !== 'resolved').length,
     },
   });
@@ -260,19 +263,19 @@ export const getInvoiceVerification = async (req: Request, res: Response): Promi
 
 export const getCreditBillsForAudit = async (req: Request, res: Response): Promise<void> => {
   const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
-  const [cashierBills, payrollBills, creditBills, staffBills] = await Promise.all([
-    safeRows('cashier_credit_bills'),
-    safeRows('payroll_credit_bills'),
+  // cashier_credit_bills and payroll_credit_bills do not exist in production.
+  // Guest credit bills are in credit_bills; employee credit bills in staff_credit_bills.
+  const [creditBills, staffBills] = await Promise.all([
     safeRows('credit_bills'),
     safeRows('staff_credit_bills'),
   ]);
 
-  const guestBills = [...cashierBills, ...creditBills]
+  const guestBills = creditBills
     .filter((row) => branchMatches(row, branchId))
-    .map((row) => normalizeAuditDocument(row, row._source || 'cashier_credit_bills', 'guest_credit_bill'));
-  const employeeBills = [...payrollBills, ...staffBills]
+    .map((row) => normalizeAuditDocument(row, 'credit_bills', 'guest_credit_bill'));
+  const employeeBills = staffBills
     .filter((row) => branchMatches(row, branchId))
-    .map((row) => normalizeAuditDocument(row, row._source || 'payroll_credit_bills', 'employee_credit_bill'));
+    .map((row) => normalizeAuditDocument(row, 'staff_credit_bills', 'employee_credit_bill'));
   const records = [...guestBills, ...employeeBills]
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
@@ -1193,308 +1196,128 @@ export const getSalesVerification = async (req: Request, res: Response, next: Ne
  */
 export const getFinancialReconciliation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    console.log('ðŸ” [Financial Reconciliation] Starting with params:', req.query);
     const { branch_id, date } = req.query;
-    const targetDate = date || new Date().toISOString().split('T')[0];
-    console.log('ðŸ” [Financial Reconciliation] Target date:', targetDate);
+    const targetDate = (date as string) || new Date().toISOString().split('T')[0];
 
-    // 1. Get all payments for the date (remove branch_id filter as it doesn't exist on payments)
-    console.log('ðŸ” [Financial Reconciliation] Fetching payments...');
-    const { data: rawPayments, error: payError } = await supabase.from('payments').select('*')
-      .gte('created_at', `${targetDate}T00:00:00`)
-      .lte('created_at', `${targetDate}T23:59:59`);
-
-    if (payError) {
-      console.error('âŒ [Financial Reconciliation] Payments query error:', payError);
-      throw payError;
-    }
-    console.log(`âœ… [Financial Reconciliation] Found ${rawPayments?.length || 0} payments`);
-
-    console.log('ðŸ” [Financial Reconciliation] Fetching pool token sales...');
-    const { data: poolSales, error: poolSalesError } = await supabase.from('restaurant_pool_token_sales')
+    // Primary source: cashier_logbooks (payments table is empty in production).
+    // These contain total_mpesa, total_cash, total_card, closing_float per shift.
+    let logbookQuery = supabase
+      .from('cashier_logbooks')
       .select('*')
-      .gte('created_at', `${targetDate}T00:00:00`)
-      .lte('created_at', `${targetDate}T23:59:59`);
+      .order('created_at', { ascending: false })
+      .limit(200);
 
-    if (poolSalesError) {
-      console.error('âŒ [Financial Reconciliation] Pool sales query error:', poolSalesError);
-      throw poolSalesError;
-    }
-    console.log(`âœ… [Financial Reconciliation] Found ${poolSales?.length || 0} pool token sales`);
+    if (branch_id && branch_id !== '0') logbookQuery = logbookQuery.eq('branch_id', branch_id);
 
-    // Fetch cashier details for pool sales separately
-    const poolCashierIds = [...new Set(poolSales?.map(s => s.cashier_id).filter(Boolean))];
-    const { data: poolCashiers } = poolCashierIds.length 
-      ? await supabase.from('users').select('id, first_name, last_name').in('id', poolCashierIds)
-      : { data: [] };
-    const poolCashierMap = Object.fromEntries(poolCashiers?.map(u => [u.id, u]) || []);
+    const { data: logbooks, error: lbErr } = await logbookQuery;
+    if (lbErr) throw lbErr;
 
-    // 2. Collect IDs for related entities to infer branch and cashier
-    console.log('ðŸ” [Financial Reconciliation] Collecting related entity IDs...');
-    const bookingIds = [...new Set(rawPayments?.map(p => p.booking_id).filter(Boolean))];
-    const invoiceIds = [...new Set(rawPayments?.map(p => p.invoice_id).filter(Boolean))];
-    const restOrderIds = [...new Set(rawPayments?.map(p => p.restaurant_order_id).filter(Boolean))];
-    const barOrderIds = [...new Set(rawPayments?.map(p => p.bar_order_id).filter(Boolean))];
-    const posIds = [...new Set(rawPayments?.map(p => p.pos_transaction_id).filter(Boolean))];
-    console.log('ðŸ” [Financial Reconciliation] IDs collected:', { bookingIds: bookingIds.length, invoiceIds: invoiceIds.length, restOrderIds: restOrderIds.length, barOrderIds: barOrderIds.length, posIds: posIds.length });
-
-    // 3. Parallel fetch of related entities
-    console.log('ðŸ” [Financial Reconciliation] Fetching related entities...');
-    const [
-      { data: bookings },
-      { data: invoices },
-      { data: restOrders },
-      { data: barOrders },
-      { data: posTxns }
-    ] = await Promise.all([
-      bookingIds.length ? supabase.from('reservations').select('id, branch_id, created_by, auditor_id, audited_at, audit_notes').in('id', bookingIds) : { data: [] },
-      invoiceIds.length ? supabase.from('accounting_ar_invoices').select('id, created_by, auditor_id, audited_at, audit_notes').in('id', invoiceIds) : { data: [] },
-      restOrderIds.length ? supabase.from('restaurant_orders').select('id, branch_id, staff_id, auditor_id, audited_at, audit_notes').in('id', restOrderIds) : { data: [] },
-      barOrderIds.length ? supabase.from('bar_orders').select('id, branch_id, staff_id, auditor_id, audited_at, audit_notes').in('id', barOrderIds) : { data: [] },
-      posIds.length ? supabase.from('pos_transactions').select('id, branch_id, cashier_id, auditor_id, audited_at, audit_notes').in('id', posIds) : { data: [] }
-    ]);
-    console.log('âœ… [Financial Reconciliation] Related entities fetched:', { bookings: bookings?.length || 0, invoices: invoices?.length || 0, restOrders: restOrders?.length || 0, barOrders: barOrders?.length || 0, posTxns: posTxns?.length || 0 });
-
-    // 4. Create lookup maps
-    const bookingMap = Object.fromEntries(bookings?.map(b => [b.id, b]) || []);
-    const invoiceMap = Object.fromEntries(invoices?.map(i => [i.id, i]) || []);
-    const restOrderMap = Object.fromEntries(restOrders?.map(o => [o.id, o]) || []);
-    const barOrderMap = Object.fromEntries(barOrders?.map(o => [o.id, o]) || []);
-    const posMap = Object.fromEntries(posTxns?.map(p => [p.id, p]) || []);
-
-    // 5. Enrich payments with inferred data
-    let enrichedPayments = rawPayments?.map(p => {
-      let inferredBranchId = null;
-      let inferredUserId = null;
-
-      if (p.booking_id && bookingMap[p.booking_id]) {
-        inferredBranchId = bookingMap[p.booking_id].branch_id;
-        inferredUserId = bookingMap[p.booking_id].created_by;
-      } else if (p.restaurant_order_id && restOrderMap[p.restaurant_order_id]) {
-        inferredBranchId = restOrderMap[p.restaurant_order_id].branch_id;
-        inferredUserId = restOrderMap[p.restaurant_order_id].staff_id;
-      } else if (p.bar_order_id && barOrderMap[p.bar_order_id]) {
-        inferredBranchId = barOrderMap[p.bar_order_id].branch_id;
-        inferredUserId = barOrderMap[p.bar_order_id].staff_id;
-      } else if (p.pos_transaction_id && posMap[p.pos_transaction_id]) {
-        inferredBranchId = posMap[p.pos_transaction_id].branch_id;
-        inferredUserId = posMap[p.pos_transaction_id].cashier_id;
-      } else if (p.invoice_id && invoiceMap[p.invoice_id]) {
-        // Invoices don't have branch_id usually, treat as null (Head Office) or derive from user if needed
-        inferredUserId = invoiceMap[p.invoice_id].created_by;
-      }
-
-      const related = p.booking_id ? bookingMap[p.booking_id] :
-        (p.restaurant_order_id ? restOrderMap[p.restaurant_order_id] :
-          (p.bar_order_id ? barOrderMap[p.bar_order_id] :
-            (p.pos_transaction_id ? posMap[p.pos_transaction_id] : (p.invoice_id ? invoiceMap[p.invoice_id] : null))));
-
-      return {
-        ...p,
-        branch_id: inferredBranchId,
-        user_id: inferredUserId,
-        auditor_id: related?.auditor_id || p.metadata?.auditor_id,
-        audited_at: related?.audited_at || p.metadata?.audited_at,
-        audit_notes: related?.audit_notes || p.metadata?.audit_notes
-      };
-    }) || [];
-
-    // 6. Filter by requested branch
-    if (branch_id && branch_id !== '0') {
-      enrichedPayments = enrichedPayments.filter(p => String(p.branch_id) === String(branch_id));
-    }
-
-    // 6b. Add pool token sales as virtual payments
-    const virtualPoolPayments = (poolSales || [])
-      .filter(s => !branch_id || branch_id === '0' || String(s.branch_id) === String(branch_id))
-      .map(s => ({
-        id: s.id,
-        amount: Number(s.quantity || 0) * Number(s.amount_per_token || 0),
-        payment_method: s.payment_method,
-        status: 'completed',
-        reference: `POOL-TOKEN-${s.id.slice(0, 8)}`,
-        created_at: s.created_at,
-        branch_id: s.branch_id,
-        created_by: s.cashier_id,
-        is_pool_token: true,
-        cashier: poolCashierMap[s.cashier_id]
-      }));
-
-    enrichedPayments = [...enrichedPayments, ...virtualPoolPayments];
-
-    // 7. Fetch user and branch details for display
-    const userIds = [...new Set(enrichedPayments.map(p => p.user_id || p.created_by).filter(Boolean))];
-    const branchIds = [...new Set(enrichedPayments.map(p => p.branch_id).filter(Boolean))];
-    console.log('ðŸ” [Financial Reconciliation] Fetching user and branch details...', { userIds: userIds.length, branchIds: branchIds.length });
-
-    const [{ data: users }, { data: branches }] = await Promise.all([
-      userIds.length ? supabase.from('users').select('id, first_name, last_name, role').in('id', userIds) : { data: [] },
-      branchIds.length ? supabase.from('branches').select('id, name').in('id', branchIds) : { data: [] }
+    // Hydrate cashier and branch names
+    const cashierIds = [...new Set((logbooks || []).map((l: any) => l.cashier_id).filter(Boolean))];
+    const branchIdList  = [...new Set((logbooks || []).map((l: any) => l.branch_id).filter(Boolean))];
+    const [cashierById, branchById] = await Promise.all([
+      fetchUsersById(cashierIds),
+      fetchBranchesById(branchIdList),
     ]);
 
-    const userMap = Object.fromEntries(users?.map(u => [u.id, u]) || []);
-    const branchMap = Object.fromEntries(branches?.map(b => [b.id, b]) || []);
-
-    const payments = enrichedPayments.map(p => ({
-      ...p,
-      cashier: userMap[p.user_id || p.created_by],
-      branch: branchMap[p.branch_id]
-    }));
-
-    // 8. Breakdown by mode
-    const breakdown = {
-      cash: payments.filter(p => p.payment_method === 'cash').reduce((sum, p) => sum + Number(p.amount), 0),
-      mpesa: payments.filter(p => p.payment_method === 'mpesa' || p.payment_method === 'mpesa_manual').reduce((sum, p) => sum + Number(p.amount), 0),
-      card: payments.filter(p => p.payment_method === 'card_manual').reduce((sum, p) => sum + Number(p.amount), 0),
-      other: payments.filter(p => !['cash', 'mpesa', 'mpesa_manual', 'card_manual'].includes(p.payment_method)).reduce((sum, p) => sum + Number(p.amount), 0),
-      total: payments.reduce((sum, p) => sum + Number(p.amount), 0)
-    };
-
-    // 9. Group by Cashier
+    // Build cashier summaries from logbooks
     const cashierGroups: Record<string, any> = {};
-    payments.forEach(p => {
-      const cashierId = p.user_id || p.created_by || 'system';
-      const cashierName = p.cashier ? `${p.cashier.first_name} ${p.cashier.last_name}` : ((p.user_id || p.created_by) ? 'Unknown User' : 'System');
-      const branchName = p.branch?.name || (p.branch_id ? 'Unknown Branch' : 'Main / Global');
-
-      if (!cashierGroups[cashierId]) {
-        cashierGroups[cashierId] = {
-          cashier_id: cashierId,
+    (logbooks || []).forEach((lb: any) => {
+      const key = lb.cashier_id || 'unknown';
+      const cashierName = cashierById[key]?.display_name || 'Unknown Cashier';
+      const branchName  = branchById[`${lb.branch_id}`]?.name || 'Unknown Branch';
+      if (!cashierGroups[key]) {
+        cashierGroups[key] = {
+          cashier_id: key,
           cashier_name: cashierName,
           branch_name: branchName,
+          branch_id: lb.branch_id,
           total_amount: 0,
+          total_cash: 0,
+          total_mpesa: 0,
+          total_card: 0,
+          total_sales: 0,
+          closing_float: 0,
           payment_count: 0,
-          payments: []
         };
       }
-
-      cashierGroups[cashierId].total_amount += Number(p.amount);
-      cashierGroups[cashierId].payment_count += 1;
-      cashierGroups[cashierId].payments.push(p);
+      const g = cashierGroups[key];
+      g.total_cash    += Number(lb.total_cash   || 0);
+      g.total_mpesa   += Number(lb.total_mpesa  || 0);
+      g.total_card    += Number(lb.total_card   || 0);
+      const rowTotal   = Number(lb.total_cash||0)+Number(lb.total_mpesa||0)+Number(lb.total_card||0);
+      g.total_sales   += Number(lb.total_sales  || rowTotal);
+      g.total_amount  += rowTotal;
+      g.closing_float += Number(lb.closing_float || 0);
+      g.payment_count += 1;
     });
-
     const cashierSummaries = Object.values(cashierGroups);
 
-    // 10. Compare with total sales (Sales logic remains filtered by DB as those tables have branch_id)
-    let restSalesQuery = supabase.from('restaurant_orders')
-      .select('total_amount, branch_id')
-      .eq('status', 'completed')
-      .gte('created_at', `${targetDate}T00:00:00`)
-      .lte('created_at', `${targetDate}T23:59:59`);
+    // Build branch summaries
+    const branchGroups: Record<string, any> = {};
+    cashierSummaries.forEach((cs: any) => {
+      const key = `${cs.branch_id || 'main'}`;
+      if (!branchGroups[key]) {
+        branchGroups[key] = {
+          branch_id: cs.branch_id,
+          branch_name: cs.branch_name,
+          total_payments: 0,
+          total_cash: 0,
+          total_mpesa: 0,
+          total_card: 0,
+          total_sales: 0,
+          variance: 0,
+        };
+      }
+      branchGroups[key].total_payments += cs.total_amount;
+      branchGroups[key].total_cash     += cs.total_cash;
+      branchGroups[key].total_mpesa    += cs.total_mpesa;
+      branchGroups[key].total_card     += cs.total_card;
+      branchGroups[key].total_sales    += cs.total_sales;
+    });
+    const branchSummaries = Object.values(branchGroups).map((bg: any) => ({
+      ...bg,
+      variance: bg.total_payments - bg.total_sales,
+    }));
 
-    let barSalesQuery = supabase.from('bar_orders')
-      .select('total, branch_id')
-      .eq('status', 'completed')
-      .gte('created_at', `${targetDate}T00:00:00`)
-      .lte('created_at', `${targetDate}T23:59:59`);
+    const totalPayments = cashierSummaries.reduce((s: number, c: any) => s + c.total_amount, 0);
+    const totalSales    = cashierSummaries.reduce((s: number, c: any) => s + c.total_sales, 0);
 
-    if (branch_id && branch_id !== '0') {
-      restSalesQuery = restSalesQuery.eq('branch_id', branch_id);
-      barSalesQuery = barSalesQuery.eq('branch_id', branch_id);
-    }
-
-    const { data: restSales } = await restSalesQuery;
-    const { data: barSales } = await barSalesQuery;
-    // poolSales already fetched earlier
-
-    const totalSales = (restSales?.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) || 0) +
-      (barSales?.reduce((sum, o) => sum + Number(o.total || 0), 0) || 0) +
-      (poolSales?.reduce((sum, s) => sum + (Number(s.quantity || 0) * Number(s.amount_per_token || 0)), 0) || 0);
-
-    // 11. Build recent transactions list
-    const paramsLimit = req.query.limit as string;
-    const limit = paramsLimit === 'all' ? undefined : (parseInt(paramsLimit) || 50);
-
-    let recentTransactions = payments.map(p => ({
-      id: p.id,
-      reference_number: p.reference,
-      payment_method: p.payment_method,
-      amount: p.amount,
-      status: p.status,
-      cashier_name: p.cashier ? `${p.cashier.first_name} ${p.cashier.last_name}` : 'System',
-      branch_name: p.branch?.name || 'Main',
-      is_pool_token: (p as any).is_pool_token || false,
-      created_at: p.created_at
-    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    if (limit) {
-      recentTransactions = recentTransactions.slice(0, limit);
-    }
-
-    // 12. Group by branch if no specific branch requested
-    let branchSummaries: any[] = [];
-    if (!branch_id || branch_id === '0') {
-      const branchGroups: Record<string, any> = {};
-
-      const getGroup = (id: string, nameFallback: string) => {
-        if (!branchGroups[id]) {
-          branchGroups[id] = {
-            branch_id: id,
-            branch_name: nameFallback,
-            total_payments: 0,
-            payment_count: 0,
-            cash: 0,
-            mpesa: 0,
-            card: 0,
-            total_sales: 0
-          };
-        }
-        return branchGroups[id];
-      };
-
-      payments.forEach(p => {
-        const bg = getGroup(p.branch_id || 'main', p.branch?.name || 'Main Office');
-        bg.total_payments += Number(p.amount);
-        bg.payment_count += 1;
-
-        if (p.payment_method === 'cash') {
-          bg.cash += Number(p.amount);
-        } else if (p.payment_method?.includes('mpesa')) {
-          bg.mpesa += Number(p.amount);
-        } else if (p.payment_method?.includes('card')) {
-          bg.card += Number(p.amount);
-        }
-      });
-
-      // Add Sales Data
-      restSales?.forEach(o => {
-        const bg = getGroup(o.branch_id || 'main', 'Main Office');
-        bg.total_sales += Number(o.total_amount || 0);
-      });
-
-      barSales?.forEach(o => {
-        const bg = getGroup(o.branch_id || 'main', 'Main Office');
-        bg.total_sales += Number(o.total || 0);
-      });
-
-      // Finalize with Variance
-      branchSummaries = Object.values(branchGroups).map((bg: any) => ({
-        ...bg,
-        variance: bg.total_payments - bg.total_sales
-      }));
-    }
+    // Build recent transactions list from logbooks
+    const recentTransactions = (logbooks || []).slice(0, 50).map((lb: any) => ({
+      id: lb.id,
+      reference_number: lb.logbook_number,
+      logbook_number: lb.logbook_number,
+      cashier_name: cashierById[lb.cashier_id]?.display_name || 'Unknown',
+      branch_name: branchById[`${lb.branch_id}`]?.name || 'Unknown',
+      total_cash: lb.total_cash,
+      total_mpesa: lb.total_mpesa,
+      total_card: lb.total_card,
+      closing_float: lb.closing_float,
+      total_amount: Number(lb.total_cash||0)+Number(lb.total_mpesa||0)+Number(lb.total_card||0),
+      status: lb.status,
+      created_at: lb.created_at,
+      log_date: lb.log_date,
+    }));
 
     res.status(200).json({
       success: true,
       data: {
         date: targetDate,
-        payments_by_mode: breakdown,
-        total_payments: breakdown.total,
+        total_payments: totalPayments,
         sales: totalSales,
-        variance: breakdown.total - totalSales,
+        variance: totalPayments - totalSales,
         cashier_summaries: cashierSummaries,
         recent_transactions: recentTransactions,
-        branch_summaries: branchSummaries
+        branch_summaries: branchSummaries,
+        records: recentTransactions,
       }
     });
-    console.log('âœ… [Financial Reconciliation] Response sent successfully');
   } catch (error) {
-    console.error('âŒ [Financial Reconciliation] Error occurred:', error);
-    console.error('âŒ [Financial Reconciliation] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('Error in getFinancialReconciliation:', error);
     next(error);
   }
 };
-
 export const getRevenueOversight = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { branch_id, start_date, end_date } = req.query;
@@ -1711,15 +1534,59 @@ export const getExpenditureVerification = async (req: Request, res: Response, ne
   try {
     const { branch_id, status } = req.query;
 
-    let query = supabase.from('expenses').select('*').order('expense_date', { ascending: false });
+    // expenses table is empty in production — use purchase_orders as the expenditure source
+    let query = supabase
+      .from('purchase_orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
 
-    if (branch_id) query = query.eq('branch_id', branch_id);
+    if (branch_id && branch_id !== '0') query = query.eq('branch_id', branch_id);
     if (status) query = query.eq('status', status);
 
-    const { data, error } = await query;
+    const { data: orders, error } = await query;
     if (error) throw error;
 
-    res.status(200).json({ success: true, count: data?.length || 0, data });
+    // Hydrate supplier names
+    const supplierIds = [...new Set((orders || []).map((o: any) => o.supplier_id).filter(Boolean))];
+    let supplierMap: Record<string, string> = {};
+    if (supplierIds.length > 0) {
+      const { data: suppliers } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .in('id', supplierIds);
+      supplierMap = Object.fromEntries((suppliers || []).map((s: any) => [s.id, s.name]));
+    }
+
+    // Hydrate branch names
+    const branchIds = [...new Set((orders || []).map((o: any) => o.branch_id).filter(Boolean))];
+    const branchById = await fetchBranchesById(branchIds);
+
+    const data = (orders || []).map((o: any) => ({
+      ...o,
+      supplier_name: supplierMap[o.supplier_id] || 'Unknown Supplier',
+      branch_name: branchById[`${o.branch_id}`]?.name || 'All Branches',
+      reference_number: o.po_number,
+      document_number: o.po_number,
+    }));
+
+    const summary = {
+      total: data.length,
+      total_amount: data.reduce((sum: number, o: any) => sum + (Number(o.total_amount) || 0), 0),
+      approved: data.filter((o: any) => o.status === 'approved' || o.status === 'fully_received').length,
+      pending: data.filter((o: any) => ['draft', 'pending', 'submitted'].includes(`${o.status}`.toLowerCase())).length,
+    };
+
+    res.status(200).json({
+      success: true,
+      count: data.length,
+      data: {
+        summary,
+        purchase_orders: data,
+        orders: data,
+        data,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -3874,73 +3741,75 @@ export const getAnomalyDetail = async (req: Request, res: Response, next: NextFu
 // @access  Private (Auditor)
 export const getDailyLogsStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { status } = req.query;
+    const { status, branch_id } = req.query;
 
-    // Map frontend status to database status
-    // Frontend uses 'pending_audit', database uses 'submitted'
-    const dbStatus = status === 'pending_audit' ? 'submitted' : status;
+    logger.info('Fetching daily logs (cashier_shift_logs) with filters:', { status, branch_id });
 
-    logger.info('Fetching daily logs with status:', { status, dbStatus });
-
+    // finance_daily_logs table is empty in production — the actual daily log
+    // data lives in cashier_shift_logs (one row per shift close event).
     let query = supabase
-      .from('finance_daily_logs')
-      .select(`
-        *,
-        branch:branches!branch_id(id, name, code),
-        lines:finance_daily_log_lines(*)
-      `)
-      .order('log_date', { ascending: false });
+      .from('cashier_shift_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
 
-    if (dbStatus) {
-      query = query.eq('status', dbStatus);
+    if (branch_id && branch_id !== '0') {
+      query = query.eq('branch_id', branch_id);
     }
 
     const { data, error } = await query;
 
     if (error) {
-      logger.error('Error fetching daily logs:', error);
+      logger.error('Error fetching cashier_shift_logs for daily logs:', error);
       throw error;
     }
 
-    // Transform data to match frontend expectations
-    const transformedData = data?.map(log => ({
+    // Hydrate branch names
+    const branchIds = [...new Set((data || []).map((r: any) => r.branch_id).filter(Boolean))];
+    const branchById = await fetchBranchesById(branchIds);
+
+    // Hydrate cashier names
+    const cashierIds = [...new Set((data || []).map((r: any) => r.cashier_id).filter(Boolean))];
+    const cashierById = await fetchUsersById(cashierIds);
+
+    const transformedData = (data || []).map((log: any) => ({
       id: log.id,
       branch_id: log.branch_id,
-      branch_name: log.branch?.name || 'Unknown Branch',
-      log_date: log.log_date,
-      opening_balance: log.opening_balance,
-      closing_balance: log.closing_balance,
-      total_payments: log.total_payments,
-      total_expenses: log.total_expenses,
-      notes: log.notes,
-      status: log.status,
-      creator_name: 'Unknown',
-      creator_email: null,
+      branch_name: branchById[`${log.branch_id}`]?.name || log.branch_name || 'Unknown Branch',
+      log_date: log.shift_start ? log.shift_start.split('T')[0] : log.created_at?.split('T')[0],
+      shift_number: log.shift_number,
+      cashier_id: log.cashier_id,
+      cashier_name: cashierById[`${log.cashier_id}`]?.display_name || log.cashier_name || 'Unknown',
+      opening_balance: log.opening_float,
+      closing_balance: log.closing_float,
+      expected_closing_float: log.expected_closing_float,
+      variance: log.variance,
+      total_cash: log.total_cash_sales,
+      total_mpesa: log.total_mpesa_sales,
+      total_card: log.total_card_sales,
+      total_sales: log.total_sales,
+      total_payments: log.total_sales,
+      transaction_count: log.transaction_count,
+      notes: log.reconciliation_notes || log.verification_notes,
+      status: log.status || 'submitted',
       verified_by: log.verified_by,
       verified_at: log.verified_at,
-      rejection_reason: log.rejection_reason,
+      reconciled_by: log.reconciled_by,
+      reconciled_at: log.reconciled_at,
+      submitted_at: log.submitted_at,
+      shift_start: log.shift_start,
+      shift_end: log.shift_end,
       created_at: log.created_at,
       updated_at: log.updated_at,
-      lines: log.lines?.map((line: any) => ({
-        id: line.id,
-        type: line.entry_type,
-        reference_number: line.reference_id,
-        payee: line.description,
-        description: line.description,
-        amount: line.amount,
-        payment_method: line.payment_method,
-        category: line.category,
-        section: line.section
-      })) || []
     }));
 
     res.status(200).json({
       success: true,
-      count: transformedData?.length || 0,
+      count: transformedData.length,
       data: transformedData
     });
 
-    logger.info(`Retrieved ${transformedData?.length || 0} daily logs with status: ${dbStatus}`);
+    logger.info(`Retrieved ${transformedData.length} daily logs from cashier_shift_logs`);
   } catch (error) {
     logger.error('Exception in getDailyLogsStatus:', error);
     next(error);

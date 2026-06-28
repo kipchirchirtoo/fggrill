@@ -5,6 +5,38 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import { applyBranchFilter } from '../utils/branchIsolation';
 
+const GLOBAL_USER_ADMIN_ROLES = new Set(['super_admin', 'general_manager']);
+const BRANCH_MANAGER_BLOCKED_ROLES = new Set([
+  'super_admin',
+  'general_manager',
+  'director',
+  'auditor',
+  'hr_manager',
+  'central_storekeeper',
+  'finance_manager'
+]);
+
+const roleForRequest = (req: Request): string =>
+  String((req as any).user?.role || '').toLowerCase();
+
+const branchIdForRequest = (req: Request): number | null => {
+  const raw = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const isBranchManagerRequest = (req: Request): boolean =>
+  roleForRequest(req) === 'branch_manager';
+
+const isGlobalUserAdminRequest = (req: Request): boolean =>
+  GLOBAL_USER_ADMIN_ROLES.has(roleForRequest(req));
+
+const branchManagerCanAssignRole = (role: unknown): boolean =>
+  !BRANCH_MANAGER_BLOCKED_ROLES.has(String(role || '').toLowerCase());
+
+const sameBranch = (a: unknown, b: unknown): boolean =>
+  Number(a) === Number(b) && Number.isFinite(Number(a)) && Number.isFinite(Number(b));
+
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Private/Admin
@@ -22,6 +54,26 @@ export const getUsers = async (
       `);
 
     query = applyBranchFilter(query, req);
+
+    if (req.query.role && req.query.role !== 'all') {
+      query = query.eq('role', String(req.query.role));
+    }
+    if (req.query.status && req.query.status !== 'all') {
+      query = query.eq('status', String(req.query.status));
+    }
+    if (req.query.search) {
+      const search = String(req.query.search).trim();
+      if (search) {
+        query = query.or([
+          `first_name.ilike.%${search}%`,
+          `last_name.ilike.%${search}%`,
+          `email.ilike.%${search}%`,
+          `role.ilike.%${search}%`,
+          `department.ilike.%${search}%`,
+          `employee_id.ilike.%${search}%`
+        ].join(','));
+      }
+    }
 
     const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -97,6 +149,14 @@ export const getUser = async (
       res.status(404).json({
         success: false,
         message: 'User not found'
+      });
+      return;
+    }
+
+    if (!isGlobalUserAdminRequest(req) && !sameBranch(data.branch_id, branchIdForRequest(req))) {
+      res.status(403).json({
+        success: false,
+        message: 'Forbidden: user belongs to another branch'
       });
       return;
     }
@@ -187,6 +247,32 @@ export const createUser = async (
       empId = empId || sp.employee_number;
       dept = dept || sp.department;
       userEmail = userEmail || sp.email;
+    }
+
+    if (isBranchManagerRequest(req)) {
+      const managerBranchId = branchIdForRequest(req);
+      if (!managerBranchId) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch manager account is not assigned to a branch'
+        });
+        return;
+      }
+      bId = bId ?? managerBranchId;
+      if (!sameBranch(bId, managerBranchId) || (staffProfile && !sameBranch(staffProfile.branch_id, managerBranchId))) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch managers can only create accounts for staff in their own branch'
+        });
+        return;
+      }
+      if (!branchManagerCanAssignRole(userRole)) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch managers cannot create global or executive user roles'
+        });
+        return;
+      }
     }
 
     // Validate required fields
@@ -311,7 +397,7 @@ export const updateUser = async (
 
     const { data: existingUser, error: existingUserError } = await supabase
       .from('users')
-      .select('id, email')
+      .select('id, email, role, branch_id')
       .eq('id', req.params.id)
       .single();
 
@@ -321,6 +407,34 @@ export const updateUser = async (
         message: 'User not found'
       });
       return;
+    }
+
+    if (isBranchManagerRequest(req)) {
+      const managerBranchId = branchIdForRequest(req);
+      if (!managerBranchId || !sameBranch(existingUser.branch_id, managerBranchId)) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch managers can only update users in their own branch'
+        });
+        return;
+      }
+
+      const requestedBranchId = fields.branch_id ?? fields.branchId;
+      if (requestedBranchId !== undefined && !sameBranch(requestedBranchId, managerBranchId)) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch managers cannot move users to another branch'
+        });
+        return;
+      }
+
+      if (fields.role !== undefined && !branchManagerCanAssignRole(fields.role)) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch managers cannot assign global or executive roles'
+        });
+        return;
+      }
     }
 
     let selectedStaffProfile: any = null;
@@ -345,6 +459,14 @@ export const updateUser = async (
         res.status(409).json({
           success: false,
           message: 'This staff profile is already linked to another user account'
+        });
+        return;
+      }
+
+      if (isBranchManagerRequest(req) && !sameBranch(staffProfile.branch_id, branchIdForRequest(req))) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch managers can only link staff from their own branch'
         });
         return;
       }

@@ -6235,18 +6235,39 @@ class _BillList extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 for (final item in items)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(_text(item,
-                        ['item_name', 'name', 'description', 'drink_name'])),
-                    trailing: Text(
-                      '${_num(item['quantity'] ?? item['qty']).toStringAsFixed(0)} x ${_money(item['unit_price'] ?? item['price'])}',
-                    ),
-                    subtitle: Text(_money(item['total_price'] ??
-                        item['line_total'] ??
-                        item['total'])),
-                  ),
+                  Builder(builder: (context) {
+                    final rawQty = _num(item['quantity'] ?? item['qty']);
+                    final voidedQty = _num(item['voided_qty'] ?? 0);
+                    final activeQty = _num(item['active_qty'] ?? (rawQty - voidedQty));
+                    final unitPrice = _num(item['unit_price'] ?? item['price']);
+                    final isFullyVoided = activeQty <= 0;
+                    final displayQty = isFullyVoided ? rawQty : activeQty;
+                    final activeTotal = _num(item['active_total'] ?? (activeQty * unitPrice));
+                    final originalTotal = _num(item['total_price'] ?? item['line_total'] ?? item['total']);
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        _text(item, ['item_name', 'name', 'description', 'drink_name']) +
+                            (voidedQty > 0 && !isFullyVoided
+                                ? ' (${voidedQty.toStringAsFixed(0)} voided)'
+                                : ''),
+                        style: isFullyVoided
+                            ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.red)
+                            : null,
+                      ),
+                      trailing: Text(
+                        '${displayQty.toStringAsFixed(0)} x ${_money(unitPrice)}',
+                        style: isFullyVoided
+                            ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.red)
+                            : null,
+                      ),
+                      subtitle: Text(
+                        isFullyVoided ? 'VOIDED • was ${_money(originalTotal)}' : _money(activeTotal),
+                        style: isFullyVoided ? const TextStyle(color: Colors.red) : null,
+                      ),
+                    );
+                  }),
               ],
               const SizedBox(height: 8),
               if (onPay != null || onPrint != null)
@@ -6326,13 +6347,33 @@ class _BillSummary extends StatelessWidget {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, index) {
               final item = items[index];
+              final rawQty = _num(item['quantity'] ?? item['qty']);
+              final voidedQty = _num(item['voided_qty'] ?? 0);
+              final activeQty = _num(item['active_qty'] ?? (rawQty - voidedQty));
+              final unitPrice = _num(item['unit_price'] ?? item['price']);
+              final isFullyVoided = activeQty <= 0;
+              final displayQty = isFullyVoided ? rawQty : activeQty;
+              final activeTotal = _num(item['active_total'] ?? (activeQty * unitPrice));
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
-                title: Text(_text(item, ['name', 'description', 'item_name'])),
-                subtitle: Text('Qty ${_num(item['quantity'] ?? item['qty'])}'),
-                trailing: Text(_money(
-                    item['total'] ?? item['line_total'] ?? item['price'])),
+                title: Text(
+                  _text(item, ['name', 'description', 'item_name']) +
+                      (voidedQty > 0 && !isFullyVoided ? ' (${voidedQty.toStringAsFixed(0)} voided)' : ''),
+                  style: isFullyVoided
+                      ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.red)
+                      : null,
+                ),
+                subtitle: Text(
+                  'Qty ${displayQty.toStringAsFixed(0)}',
+                  style: isFullyVoided ? const TextStyle(color: Colors.red) : null,
+                ),
+                trailing: Text(
+                  isFullyVoided ? 'VOIDED' : _money(activeTotal),
+                  style: isFullyVoided
+                      ? const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)
+                      : null,
+                ),
               );
             },
           ),
@@ -7437,12 +7478,12 @@ Future<void> _printCashierBillReceipt({
 List<CartItem> _receiptItemsFromBill(Map<String, dynamic> bill, num amount) {
   final items = _billItems(bill)
       .map((item) {
-        final quantity = (_num(item['quantity'] ?? item['qty'])).round();
-        final total = _num(item['total'] ??
-            item['total_price'] ??
-            item['line_total'] ??
-            item['amount']);
+        final rawQty = _num(item['quantity'] ?? item['qty']);
+        final voidedQty = _num(item['voided_qty'] ?? 0);
+        final activeQty = _num(item['active_qty'] ?? (rawQty - voidedQty));
+        if (activeQty <= 0) return null;
         final unitPrice = _num(item['unit_price'] ?? item['price']);
+        final activeTotal = _num(item['active_total'] ?? activeQty * unitPrice);
         final name = _text(
           item,
           ['name', 'description', 'item_name', 'drink_name'],
@@ -7453,10 +7494,10 @@ List<CartItem> _receiptItemsFromBill(Map<String, dynamic> bill, num amount) {
           name: name,
           unitPrice: unitPrice > 0
               ? unitPrice.toDouble()
-              : (quantity > 0
-                  ? (total / quantity).toDouble()
-                  : total.toDouble()),
-          qty: quantity > 0 ? quantity : 1,
+              : (activeQty > 0
+                  ? (activeTotal / activeQty).toDouble()
+                  : activeTotal.toDouble()),
+          qty: activeQty.round() > 0 ? activeQty.round() : 1,
         );
       })
       .whereType<CartItem>()

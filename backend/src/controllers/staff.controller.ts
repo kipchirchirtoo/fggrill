@@ -6,11 +6,36 @@ import crypto from 'crypto';
 import { AttendanceService } from '../services/attendance.service';
 import { applyBranchFilter } from '../utils/branchIsolation';
 
+const BRANCH_MANAGER_BLOCKED_USER_ROLES = new Set([
+  'super_admin',
+  'general_manager',
+  'director',
+  'auditor',
+  'hr_manager',
+  'central_storekeeper',
+  'finance_manager'
+]);
+
 // Helper to sanitize UUID fields that might come as "null" string from frontend
 const sanitizeUUID = (val: any) => {
   if (val === 'null' || val === '' || val === 'undefined' || val === null) return null;
   return val;
 };
+
+const roleForRequest = (req: Request): string =>
+  String((req as any).user?.role || '').toLowerCase();
+
+const branchIdForRequest = (req: Request): number | null => {
+  const raw = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const sameBranch = (a: unknown, b: unknown): boolean =>
+  Number(a) === Number(b) && Number.isFinite(Number(a)) && Number.isFinite(Number(b));
+
+const canBranchManagerCreateRole = (role: unknown): boolean =>
+  !BRANCH_MANAGER_BLOCKED_USER_ROLES.has(String(role || '').toLowerCase());
 
 const resolveProfilePhotoUrl = (photo?: string | null): string => {
   if (!photo) return '';
@@ -429,7 +454,7 @@ export const getStaffMember = async (
   }
 };
 
-// @desc    Create new staff member (staff profile only, no user account)
+// @desc    Create new staff member, optionally with a linked login account
 // @route   POST /api/staff
 // @access  Private (Admin, Manager)
 export const createStaffMember = async (
@@ -464,6 +489,12 @@ export const createStaffMember = async (
       next_of_kin_phone,
       next_of_kin_relationship,
       supervisor_id,
+      create_user_account,
+      createAccount,
+      user_role,
+      login_role,
+      password,
+      pos_pin,
       // Legacy field support (frontends may still send these)
       firstName,
       lastName,
@@ -475,7 +506,32 @@ export const createStaffMember = async (
     const staffFirstName = first_name || firstName;
     const staffLastName = last_name || lastName;
     const staffNationalId = national_id || nationalId;
-    const staffBranchId = branch_id || branchId;
+    let staffBranchId = branch_id || branchId;
+    const callerRole = roleForRequest(req);
+    const callerBranchId = branchIdForRequest(req);
+    const shouldCreateUserAccount =
+      create_user_account === true ||
+      create_user_account === 'true' ||
+      createAccount === true ||
+      createAccount === 'true';
+
+    if (callerRole === 'branch_manager') {
+      if (!callerBranchId) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch manager account is not assigned to a branch'
+        });
+        return;
+      }
+      if (staffBranchId && !sameBranch(staffBranchId, callerBranchId)) {
+        res.status(403).json({
+          success: false,
+          message: 'Branch managers can only register staff in their own branch'
+        });
+        return;
+      }
+      staffBranchId = callerBranchId;
+    }
 
     // Validate required fields
     if (!staffFirstName || !staffLastName || !staffNationalId || !department) {
@@ -510,26 +566,22 @@ export const createStaffMember = async (
     const finalDepartment = validDepartments.includes(normalizedDepartment)
       ? normalizedDepartment
       : department; // Keep original if it's a custom value from the DB
+    const requestedLoginRole = String(user_role || login_role || position || finalDepartment || 'employee').toLowerCase();
 
+    if (callerRole === 'branch_manager' && shouldCreateUserAccount && !canBranchManagerCreateRole(requestedLoginRole)) {
+      res.status(403).json({
+        success: false,
+        message: 'Branch managers cannot create global or executive user roles'
+      });
+      return;
+    }
 
-    // Branch Manager staff limit enforcement (max 10 staff per branch)
-    const callerRole = (req as any).user?.role;
-    if (callerRole === 'branch_manager' && staffBranchId) {
-      const { count, error: countError } = await supabase
-        .from('staff_profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('branch_id', parseInt(staffBranchId))
-        .eq('employment_status', 'active');
-
-      if (countError) {
-        logger.error('Error counting branch staff:', countError);
-      } else if ((count || 0) >= 10) {
-        res.status(400).json({
-          success: false,
-          message: 'Staff limit reached. Branch managers can only add up to 10 staff members per branch.'
-        });
-        return;
-      }
+    if (shouldCreateUserAccount && !email) {
+      res.status(400).json({
+        success: false,
+        message: 'Email is required when creating a login account'
+      });
+      return;
     }
 
     // Generate Staff ID
@@ -623,12 +675,97 @@ export const createStaffMember = async (
       throw new Error(`Failed to create staff profile: ${staffError.message}`);
     }
 
+    let linkedUser: any = null;
+    let temporaryPassword: string | undefined;
+    if (shouldCreateUserAccount) {
+      const userPassword = password || generateStrongPassword();
+      temporaryPassword = password ? undefined : userPassword;
+
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password: userPassword,
+        email_confirm: true,
+        user_metadata: { first_name: staffFirstName, last_name: staffLastName }
+      });
+
+      if (authError || !authData?.user) {
+        await supabase.from('staff_profiles').delete().eq('id', staffProfile.id);
+        res.status(500).json({
+          success: false,
+          message: authError?.message || 'Failed to create staff login account',
+          details: authError
+        });
+        return;
+      }
+
+      const userId = authData.user.id;
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(userPassword, salt);
+
+      const { data: userProfile, error: userProfileError } = await supabase
+        .from('users')
+        .upsert({
+          id: userId,
+          email,
+          first_name: staffFirstName,
+          last_name: staffLastName,
+          role: requestedLoginRole,
+          branch_id: staffBranchId ? parseInt(String(staffBranchId), 10) : null,
+          phone_number: phone || null,
+          employee_id: idNumber,
+          department: finalDepartment,
+          status: 'active',
+          pos_pin: pos_pin || null,
+          password_hash: passwordHash,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' })
+        .select()
+        .single();
+
+      if (userProfileError || !userProfile) {
+        await supabase.auth.admin.deleteUser(userId);
+        await supabase.from('staff_profiles').delete().eq('id', staffProfile.id);
+        res.status(500).json({
+          success: false,
+          message: 'Failed to create linked user profile',
+          details: userProfileError?.message
+        });
+        return;
+      }
+
+      const { data: linkedStaff, error: linkError } = await supabase
+        .from('staff_profiles')
+        .update({ user_id: userId, email, updated_at: new Date().toISOString() })
+        .eq('id', staffProfile.id)
+        .select()
+        .single();
+
+      if (linkError) {
+        await supabase.auth.admin.deleteUser(userId);
+        await supabase.from('users').delete().eq('id', userId);
+        await supabase.from('staff_profiles').delete().eq('id', staffProfile.id);
+        res.status(500).json({
+          success: false,
+          message: 'Failed to link staff profile to login account',
+          details: linkError.message
+        });
+        return;
+      }
+
+      linkedUser = userProfile;
+      Object.assign(staffProfile, linkedStaff || {});
+    }
+
     res.status(201).json({
       success: true,
       data: {
-        staff: staffProfile
+        staff: staffProfile,
+        user: linkedUser,
+        temp_password: temporaryPassword
       },
-      message: 'Staff member created successfully'
+      message: shouldCreateUserAccount
+        ? 'Staff member and login account created successfully'
+        : 'Staff member created successfully'
     });
 
     logger.info(`Staff member created: ${staffFirstName} ${staffLastName} in ${department}`);

@@ -10,7 +10,7 @@ const asyncWrap = (fn: (req: Request, res: Response) => Promise<void>) =>
 const n = (v: any) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const absMoney = (v: any) => Math.abs(n(v));
 
-async function resolveStaffProfileId(value: any): Promise<string | null> {
+export async function resolveStaffProfileId(value: any): Promise<string | null> {
     if (!value) return null;
     const id = String(value);
     const { data: direct } = await supabase
@@ -72,7 +72,7 @@ async function createWastageAlert(payload: {
     if (error) logger.error('createWastageAlert insert failed', error);
 }
 
-async function staffProfileSummaries(userIds: string[]) {
+export async function staffProfileSummaries(userIds: string[]) {
     const ids = [...new Set((userIds || []).filter(Boolean))];
     if (!ids.length) return [];
     const [{ data: users }, { data: profiles }] = await Promise.all([
@@ -909,6 +909,24 @@ export const listProductionRecipes = asyncWrap(async (req: Request, res: Respons
     let q = supabase.from('kitchen_production_recipes').select('*').eq('is_active', true).order('recipe_name');
     if (branch_id) q = q.eq('branch_id', branch_id);
     const { data, error } = await q;
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: data || [] });
+});
+
+// POS menu items a Food Control recipe can be linked to. Sourced from
+// pos_outlet_items (the real sales catalog — pos_shift_orders.items[].outlet_item_id
+// references this table's id) rather than restaurant_menu_items, which is a
+// separate, unrelated catalog with no populated FK back to pos_outlet_items.
+// Recipes linked against the wrong table's id would never match a real sale.
+export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id } = req.query;
+    if (!branch_id) throw new AppError('branch_id required', 400);
+    const { data, error } = await supabase
+        .from('pos_outlet_items')
+        .select('id, name, sku, unit, item_group')
+        .eq('branch_id', branch_id)
+        .eq('is_active', true)
+        .order('name', { ascending: true });
     if (error) throw new AppError(error.message, 500);
     res.json({ success: true, data: data || [] });
 });

@@ -74,5 +74,39 @@ router.put('/updatedetails', protect, updateDetails);
 router.put('/updatepassword', protect, updatePassword);
 router.post('/forgotpassword', forgotPassword);
 router.post('/switch-context', protect, switchContext);
+router.put('/update-pin', protect, async (req, res, next) => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ success: false, message: 'Not authorized' });
+      return;
+    }
+    const { currentPin, newPin } = req.body;
+    if (!newPin || !/^\d{4}$/.test(String(newPin))) {
+      res.status(400).json({ success: false, message: 'New PIN must be exactly 4 digits' });
+      return;
+    }
+    const { data: user, error: fetchErr } = await supabase
+      .from('users')
+      .select('pos_pin')
+      .eq('id', req.user.id)
+      .single();
+    if (fetchErr || !user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+    if (user.pos_pin && String(user.pos_pin) !== String(currentPin)) {
+      res.status(400).json({ success: false, message: 'Current PIN is incorrect' });
+      return;
+    }
+    const { error: updateErr } = await supabase
+      .from('users')
+      .update({ pos_pin: String(newPin), updated_at: new Date().toISOString() })
+      .eq('id', req.user.id);
+    if (updateErr) throw updateErr;
+    res.json({ success: true, message: 'PIN updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

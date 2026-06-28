@@ -35,8 +35,9 @@ router.post(
   uploadProfilePhoto
 );
 
-// Admin only routes
-router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]));
+// User administration routes. Branch managers are allowed here, but the
+// controller keeps them scoped to their own branch and blocks global roles.
+router.use(authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]));
 
 router.route('/')
   .get(getUsers)

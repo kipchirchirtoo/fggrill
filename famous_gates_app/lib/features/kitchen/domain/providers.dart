@@ -17,12 +17,18 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
 
   final Ref _ref;
   StreamSubscription<OrderItemRealtimeEvent>? _realtimeSub;
-  // Fallback timer used only when Realtime is unavailable.
+  // Polling timer — always active, parallel to Realtime, so cards appear
+  // within 5 s even while Realtime is still connecting/authenticating.
   Timer? _fallbackTimer;
 
   Future<void> start() async {
     await _fetch();
-    await _subscribeRealtime();
+    // Start fallback polling immediately — parallel to Realtime, not only
+    // when Realtime fails. This guarantees cards appear within 5 s even
+    // during the Realtime auth/connect window. Realtime events still
+    // trigger an extra _fetch() for near-instant updates once connected.
+    _startFallbackPolling();
+    _subscribeRealtime();
   }
 
   Future<void> _subscribeRealtime() async {
@@ -33,8 +39,7 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
 
     if (branchId == null) {
       debugPrint(
-          '⚠️ KdsNotifier: No branchId found — falling back to polling.');
-      _startFallbackPolling();
+          '⚠️ KdsNotifier: No branchId found — polling only.');
       return;
     }
 
@@ -49,9 +54,7 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
         _fetch();
       },
       onError: (Object err) {
-        debugPrint('❌ KDS Realtime subscription error: $err');
-        // Fallback gracefully if realtime breaks.
-        _startFallbackPolling();
+        debugPrint('❌ KDS Realtime subscription error: $err — polling continues.');
       },
     );
 
@@ -64,7 +67,7 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
   void _startFallbackPolling() {
     _fallbackTimer?.cancel();
     _fallbackTimer =
-        Timer.periodic(const Duration(seconds: 10), (_) => _fetch());
+        Timer.periodic(const Duration(seconds: 5), (_) => _fetch());
   }
 
   Future<void> _fetch() async {

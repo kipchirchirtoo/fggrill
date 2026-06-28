@@ -1397,6 +1397,54 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
+  /// Daily Control's variance data (recipe-based theoretical vs actual
+  /// ingredient consumption, computed from real POS sales) for a given
+  /// branch/date/shift — independent of whether that shift ever completed
+  /// the formal kitchen_shifts open->close->chef-confirm lifecycle that
+  /// [getPendingKitchenShiftReviews] requires.
+  Future<Map<String, dynamic>> getDailyControlVariance({
+    required String date,
+    String? shift,
+  }) async {
+    final branchId = await getBranchId();
+    return _getMap('/kitchen/daily-control', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      'date': date,
+      if (shift != null) 'shift': shift,
+    });
+  }
+
+  /// Charge the staff responsible for a Daily Control variance line. See
+  /// billDailyControlVariance on the backend — creates staff_credit_bills
+  /// directly, with no kitchen_shifts lifecycle gating.
+  Future<Map<String, dynamic>> billDailyControlVariance({
+    required String date,
+    String? shift,
+    required String itemName,
+    String? itemSku,
+    num? varianceCost,
+    required String liabilityAction,
+    List<Map<String, dynamic>> allocations = const [],
+    String? notes,
+    String? writeOffReason,
+  }) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/kitchen/daily-control/bill-staff', data: {
+      'branch_id': branchId,
+      'date': date,
+      if (shift != null) 'shift': shift,
+      'item_name': itemName,
+      if (itemSku != null) 'item_sku': itemSku,
+      if (varianceCost != null) 'variance_cost': varianceCost,
+      'liability_action': liabilityAction,
+      if (allocations.isNotEmpty) 'allocations': allocations,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      if (writeOffReason != null && writeOffReason.trim().isNotEmpty)
+        'write_off_reason': writeOffReason.trim(),
+    });
+    return _asMap(res.data);
+  }
+
   Future<List<Map<String, dynamic>>> getShiftPnLs({
     String status = 'all',
   }) async {

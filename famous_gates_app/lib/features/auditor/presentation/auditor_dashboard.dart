@@ -665,15 +665,21 @@ class _CentralStoreInventoryTabState
 
   static const _categories = [
     'all',
-    'Foodstuffs',
-    'Beverages',
-    'Perishable goods',
-    'Vegetables',
-    'Fruits',
-    'Cleaning',
-    'Stationery',
-    'Gas',
-    'Other',
+    'DRY GOODS',
+    'BAR DRINKS',
+    'WHISKY',
+    'SPIRITS',
+    'WINES',
+    'BEERS',
+    'CANNED BEERS',
+    'SOFT DRINKS',
+    'GIN',
+    'COGNAC',
+    'LIQUERS',
+    'ENERGY DRINKS',
+    'PASTRY',
+    'CLEANING MATERIALS',
+    'NON CONSUMABLES',
   ];
 
   @override

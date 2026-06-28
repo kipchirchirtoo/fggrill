@@ -353,55 +353,30 @@ export const createItem = async (
       categoryCode = getCategoryCode(category || 'General');
     }
 
-    // Check if item exists by barcode first (if barcode provided)
-    if (barcode) {
-      const { data: existingByBarcode } = await supabase
-        .from('simple_items')
-        .select('*')
-        .eq('barcode', barcode)
-        .single();
-
-      if (existingByBarcode) {
-        // Barcode already exists - return error or update
-        if (existingByBarcode.is_active) {
-          res.status(400).json({
-            success: false,
-            message: `Barcode already assigned to: ${existingByBarcode.item_name || existingByBarcode.sku}`
-          });
-          return;
-        }
-      }
-    }
-
-    // Check if SKU exists (even if inactive)
+    // Check if SKU exists in inventory_items (simple_items is a VIEW on it)
     const { data: existingItem } = await supabase
-      .from('simple_items')
-      .select('*')
+      .from('inventory_items')
+      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, quantity, store_type, is_active')
       .eq('sku', sku)
-      .single();
+      .maybeSingle();
 
     if (existingItem) {
       if (!existingItem.is_active) {
-        // Reactivate with new data
+        // Reactivate with new data using inventory_items column names
         const { data, error } = await supabase
-          .from('simple_items')
+          .from('inventory_items')
           .update({
-            description: description || existingItem.description,
-            retail_price: retail_price ?? cost_price ?? existingItem.retail_price ?? 0,
-            quantity: quantity !== undefined ? quantity : existingItem.quantity,
-            barcode: barcode || existingItem.barcode,
             item_name: item_name || existingItem.item_name,
+            description: description || existingItem.description,
+            default_selling_price: retail_price ?? cost_price ?? existingItem.default_selling_price ?? 0,
+            quantity: quantity !== undefined ? quantity : (existingItem.quantity ?? 0),
             category: category || existingItem.category,
-            category_code: categoryCode,
-            unit_of_measure: unit_of_measure || existingItem.unit_of_measure,
-            cost_price: cost_price || existingItem.cost_price,
-            supplier: supplier || existingItem.supplier,
-            reorder_level: reorder_level || existingItem.reorder_level,
-            image_url: image_url || existingItem.image_url,
+            unit: unit_of_measure || existingItem.unit,
+            default_unit_cost: cost_price ?? existingItem.default_unit_cost,
+            reorder_level: reorder_level ?? existingItem.reorder_level,
             store_type: store_type || existingItem.store_type || 'foodstuffs',
             is_active: true,
-            is_auto_sku: isAutoSku,
-            last_updated: new Date().toISOString()
+            updated_at: new Date().toISOString()
           })
           .eq('sku', existingItem.sku)
           .select()
@@ -410,32 +385,19 @@ export const createItem = async (
         if (error) throw error;
 
         // Log history if quantity changed
-        if (quantity !== undefined && quantity !== existingItem.quantity) {
-          // Generate order number for this stock-in
+        if (quantity !== undefined && quantity !== (existingItem.quantity ?? 0)) {
           const orderNum = await generateOrderNumber('STKIN');
-
-          const { error } = await supabase.from('stock_history').insert({
+          const { error: histErr } = await supabase.from('stock_history').insert({
             item_sku: existingItem.sku,
             change_type: 'IN',
-            quantity_change: quantity - existingItem.quantity,
-            previous_quantity: existingItem.quantity,
+            quantity_change: quantity - (existingItem.quantity ?? 0),
+            previous_quantity: existingItem.quantity ?? 0,
             new_quantity: quantity,
             reason: 'REACTIVATION',
             reference: orderNum,
             user_id: req.user?.id
           });
-
-
-          if (error) {
-
-
-            console.error('Database error:', error);
-
-
-            throw error;
-
-
-          }
+          if (histErr) logger.warn(`createItem reactivate: stock_history insert failed: ${histErr.message}`);
         }
 
         res.status(200).json({ success: true, data, reactivated: true });
@@ -455,36 +417,37 @@ export const createItem = async (
       stockInOrderNum = await generateOrderNumber('STKIN');
     }
 
-    // Create new item
+    // Create new item — insert into inventory_items (simple_items is a VIEW on it)
     const { data, error } = await supabase
-      .from('simple_items')
+      .from('inventory_items')
       .insert([{
         sku,
-        description: description || item_name,
-        retail_price: retail_price ?? cost_price ?? 0,
-        quantity: quantity || 0,
-        barcode,
         item_name: item_name || description,
+        description: description || item_name,
         category,
-        category_code: categoryCode,
-        unit_of_measure,
-        cost_price,
-        supplier,
-        reorder_level,
-        image_url,
+        unit: unit_of_measure || 'units',
+        item_type: 'stockable',
+        default_unit_cost: cost_price ?? 0,
+        default_selling_price: retail_price ?? cost_price ?? 0,
+        reorder_level: reorder_level || 0,
         store_type: store_type || 'foodstuffs',
         is_active: true,
-        is_auto_sku: isAutoSku,
-        last_updated: new Date().toISOString()
+        updated_at: new Date().toISOString()
       }])
       .select()
       .single();
 
     if (error) throw error;
 
-    // Log initial stock with order number
+    // Log initial stock with order number and set quantity on inventory_items
     if (quantity > 0) {
-      const { error } = await supabase.from('stock_history').insert({
+      // Update quantity on inventory_items directly
+      await supabase
+        .from('inventory_items')
+        .update({ quantity })
+        .eq('sku', sku);
+
+      const { error: histErr } = await supabase.from('stock_history').insert({
         item_sku: sku,
         change_type: 'IN',
         quantity_change: quantity,
@@ -495,12 +458,8 @@ export const createItem = async (
         user_id: req.user?.id
       });
 
-      if (error) {
-
-        console.error('Database error:', error);
-
-        throw error;
-
+      if (histErr) {
+        logger.warn(`createItem: stock_history insert failed (non-fatal): ${histErr.message}`);
       }
     }
 
@@ -527,27 +486,42 @@ export const updateItem = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // First get current item to compare quantity
+    // Read from inventory_items — simple_items is a VIEW on it
     const { data: currentItem } = await supabase
-      .from('simple_items')
-      .select('*')
+      .from('inventory_items')
+      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, quantity, store_type, is_active')
       .eq('sku', req.params.id)
-      .single();
+      .maybeSingle();
 
     if (!currentItem) {
       res.status(404).json({ message: "Item not found" });
       return;
     }
 
-    const { quantity, reason, reference, notes, ...otherFields } = req.body;
+    const { quantity, reason, reference, notes,
+            unit_of_measure, cost_price, retail_price, item_name,
+            ...otherFields } = req.body;
+
+    // Build update payload with correct inventory_items column names
+    const updatePayload: any = {
+      ...otherFields,
+      updated_at: new Date().toISOString()
+    };
+    if (item_name !== undefined) updatePayload.item_name = item_name;
+    if (unit_of_measure !== undefined) updatePayload.unit = unit_of_measure;
+    if (cost_price !== undefined) updatePayload.default_unit_cost = cost_price;
+    if (retail_price !== undefined) updatePayload.default_selling_price = retail_price;
+    if (quantity !== undefined) updatePayload.quantity = quantity;
+    // Remove simple_items-only fields that don't exist in inventory_items
+    delete updatePayload.last_updated;
+    delete updatePayload.is_auto_sku;
+    delete updatePayload.category_code;
+    delete updatePayload.barcode;
+    delete updatePayload.supplier;
 
     const { data, error } = await supabase
-      .from('simple_items')
-      .update({
-        ...otherFields,
-        quantity: quantity !== undefined ? quantity : currentItem.quantity,
-        last_updated: new Date().toISOString()
-      })
+      .from('inventory_items')
+      .update(updatePayload)
       .eq('sku', req.params.id)
       .select()
       .single();
@@ -686,8 +660,8 @@ export const deleteItem = async (
 ): Promise<void> => {
   try {
     const { error } = await supabase
-      .from('simple_items')
-      .update({ is_active: false })
+      .from('inventory_items')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('sku', req.params.id);
 
     if (error) throw error;

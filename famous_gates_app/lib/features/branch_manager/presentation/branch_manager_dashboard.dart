@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
@@ -32,6 +32,7 @@ enum BranchManagerSection {
   guests,
   guestDetail,
   staff,
+  users,
   staffPerformance,
   staffDetail,
   staffAttendance,
@@ -139,7 +140,7 @@ class _BranchManagerDashboardState
       switch (_section) {
         case BranchManagerSection.overview:
           final results = await Future.wait<dynamic>([
-            _safe(_repo.getDashboardStats, const BranchManagerStats()),
+            _repo.getDashboardStats(),
             _safe(_repo.getRecentActivity, <RecentActivity>[]),
             _safe(_repo.getDashboardFeed, <Map<String, dynamic>>[]),
           ]);
@@ -150,7 +151,7 @@ class _BranchManagerDashboardState
                     'description': item.description,
                     'user_name': item.userName,
                     'amount': item.amount,
-                    'time': item.timeAgo,
+                    'created_at': item.timeAgo,
                   })
               .toList();
           _feed = List<Map<String, dynamic>>.from(results[2] as List);
@@ -163,10 +164,7 @@ class _BranchManagerDashboardState
             endDate: _ymd(_to),
             filters: {'search': _search, 'period': _period},
           );
-          _rows = _listFrom(_summary['transactions'] ??
-              _summary['rows'] ??
-              _summary['sales'] ??
-              _summary['data']);
+          _rows = _listFrom(_summary['transactions']);
           break;
         case BranchManagerSection.cashierClearance:
           _rows = await _repo.getCashierClearances(
@@ -229,6 +227,13 @@ class _BranchManagerDashboardState
           _rows = await _repo.staff(department: _status, search: _search);
           _secondaryRows = await _safe(
             () => _repo.staffAttendance(date: _ymd(DateTime.now())),
+            <Map<String, dynamic>>[],
+          );
+          break;
+        case BranchManagerSection.users:
+          _rows = await _repo.users(search: _search, role: _status);
+          _secondaryRows = await _safe(
+            () => _repo.staff(search: _search),
             <Map<String, dynamic>>[],
           );
           break;
@@ -426,16 +431,30 @@ class _BranchManagerDashboardState
   }
 
   List<MasterNavItem<BranchManagerSection>> get _navItems => [
+        // ── Overview ──────────────────────────────────────────────────────────
         const MasterNavItem(
           section: BranchManagerSection.overview,
           label: 'Executive Dashboard',
           icon: Icons.dashboard_outlined,
           group: null,
         ),
+        // ── Financial Performance ─────────────────────────────────────────────
         MasterNavItem(
           section: BranchManagerSection.analytics,
           label: 'Sales Analytics',
           icon: PhosphorIcons.chartLine(),
+          group: 'Financial Performance',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.salesPayments,
+          label: 'Sales & Payments',
+          icon: PhosphorIcons.currencyDollar(),
+          group: 'Financial Performance',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.soldItems,
+          label: 'Sold Items',
+          icon: PhosphorIcons.shoppingBag(),
           group: 'Financial Performance',
         ),
         MasterNavItem(
@@ -450,9 +469,10 @@ class _BranchManagerDashboardState
           icon: Icons.swap_horiz,
           group: 'Financial Performance',
         ),
+        // ── Guest Services ────────────────────────────────────────────────────
         MasterNavItem(
           section: BranchManagerSection.checkin,
-          label: 'Check-in/Check-out',
+          label: 'Check-in / Check-out',
           icon: PhosphorIcons.signIn(),
           group: 'Guest Services',
         ),
@@ -487,8 +507,15 @@ class _BranchManagerDashboardState
           group: 'Guest Services',
         ),
         MasterNavItem(
+          section: BranchManagerSection.reviews,
+          label: 'Guest Reviews',
+          icon: PhosphorIcons.star(),
+          group: 'Guest Services',
+        ),
+        // ── Food & Beverage ───────────────────────────────────────────────────
+        MasterNavItem(
           section: BranchManagerSection.restaurant,
-          label: 'Restaurant Overview',
+          label: 'Restaurant Orders',
           icon: PhosphorIcons.forkKnife(),
           group: 'Food & Beverage',
         ),
@@ -498,18 +525,56 @@ class _BranchManagerDashboardState
           icon: Icons.groups_outlined,
           group: 'Food & Beverage',
         ),
-        const MasterNavItem(
-          section: BranchManagerSection.housekeeping,
-          label: 'Housekeeping',
-          icon: Icons.cleaning_services_outlined,
-          group: 'Facilities & Operations',
+        MasterNavItem(
+          section: BranchManagerSection.menu,
+          label: 'Restaurant Menu',
+          icon: PhosphorIcons.listBullets(),
+          group: 'Food & Beverage',
         ),
         MasterNavItem(
-          section: BranchManagerSection.maintenance,
-          label: 'Maintenance',
-          icon: PhosphorIcons.wrench(),
-          group: 'Facilities & Operations',
+          section: BranchManagerSection.barMenu,
+          label: 'Bar Menu',
+          icon: PhosphorIcons.wine(),
+          group: 'Food & Beverage',
         ),
+        MasterNavItem(
+          section: BranchManagerSection.orderIntelligence,
+          label: 'Order Intelligence',
+          icon: PhosphorIcons.chartBar(),
+          group: 'Food & Beverage',
+        ),
+        // ── Kitchen Operations ────────────────────────────────────────────────
+        MasterNavItem(
+          section: BranchManagerSection.kitchenStock,
+          label: 'Stock Ledger',
+          icon: PhosphorIcons.bookOpen(),
+          group: 'Kitchen Operations',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenRequisitions,
+          label: 'Request Stock',
+          icon: PhosphorIcons.shoppingCart(),
+          group: 'Kitchen Operations',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenRecipes,
+          label: 'Recipes & BOM',
+          icon: PhosphorIcons.cookingPot(),
+          group: 'Kitchen Operations',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenUsage,
+          label: 'Usage Tracking',
+          icon: PhosphorIcons.clipboardText(),
+          group: 'Kitchen Operations',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.kitchenWastage,
+          label: 'Kitchen Wastage',
+          icon: PhosphorIcons.trash(),
+          group: 'Kitchen Operations',
+        ),
+        // ── Inventory Control ─────────────────────────────────────────────────
         MasterNavItem(
           section: BranchManagerSection.stock,
           label: 'Stock Overview',
@@ -534,10 +599,30 @@ class _BranchManagerDashboardState
           icon: PhosphorIcons.trash(),
           group: 'Inventory Control',
         ),
+        // ── Facilities & Operations ───────────────────────────────────────────
+        const MasterNavItem(
+          section: BranchManagerSection.housekeeping,
+          label: 'Housekeeping',
+          icon: Icons.cleaning_services_outlined,
+          group: 'Facilities & Operations',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.maintenance,
+          label: 'Maintenance',
+          icon: PhosphorIcons.wrench(),
+          group: 'Facilities & Operations',
+        ),
+        // ── Human Resources ───────────────────────────────────────────────────
         MasterNavItem(
           section: BranchManagerSection.staff,
           label: 'Staff Directory',
           icon: PhosphorIcons.users(),
+          group: 'Human Resources',
+        ),
+        MasterNavItem(
+          section: BranchManagerSection.users,
+          label: 'User Accounts',
+          icon: Icons.badge_outlined,
           group: 'Human Resources',
         ),
         MasterNavItem(
@@ -554,39 +639,16 @@ class _BranchManagerDashboardState
         ),
         const MasterNavItem(
           section: BranchManagerSection.staffPerformance,
-          label: 'Performance',
+          label: 'Performance KPIs',
           icon: Icons.speed_outlined,
           group: 'Human Resources',
         ),
+        // ── Reports ───────────────────────────────────────────────────────────
         MasterNavItem(
-          section: BranchManagerSection.kitchenStock,
-          label: 'Stock Ledger',
-          icon: PhosphorIcons.bookOpen(),
-          group: 'Kitchen Ops',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenRequisitions,
-          label: 'Request Stock',
-          icon: PhosphorIcons.shoppingCart(),
-          group: 'Kitchen Ops',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenRecipes,
-          label: 'Recipes & BOM',
-          icon: PhosphorIcons.cookingPot(),
-          group: 'Kitchen Ops',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenUsage,
-          label: 'Usage Tracking',
-          icon: PhosphorIcons.clipboardText(),
-          group: 'Kitchen Ops',
-        ),
-        MasterNavItem(
-          section: BranchManagerSection.kitchenWastage,
-          label: 'Record Wastage',
-          icon: PhosphorIcons.trash(),
-          group: 'Kitchen Ops',
+          section: BranchManagerSection.reports,
+          label: 'Reports & Exports',
+          icon: PhosphorIcons.fileText(),
+          group: 'Reports',
         ),
       ];
 
@@ -598,6 +660,13 @@ class _BranchManagerDashboardState
         return _analytics();
       case BranchManagerSection.salesPayments:
         return const BranchSalesPaymentsView();
+      case BranchManagerSection.soldItems:
+        return _genericPage(
+          title: 'Sold Items',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          actionsBuilder: _actionsFor,
+        );
       case BranchManagerSection.newReservation:
         return _reservationBuilder();
       case BranchManagerSection.reservationDetail:
@@ -621,6 +690,126 @@ class _BranchManagerDashboardState
           title: 'Today Departures',
           subtitle: 'Checked-in guests due out on ${_ymd(_date)}.',
         );
+      case BranchManagerSection.reservations:
+        return _genericPage(
+          title: 'Reservations',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.rooms:
+        return _genericPage(
+          title: 'Room Status',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.guests:
+        return _genericPage(
+          title: 'Guest Directory',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.staff:
+        return _genericPage(
+          title: 'Staff Directory',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.users:
+        return _genericPage(
+          title: 'User Accounts',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.cashierClearance:
+        return _genericPage(
+          title: 'Cashier Clearance',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.stock:
+        return _genericPage(
+          title: 'Stock Overview',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.stockOut:
+        return _genericPage(
+          title: 'Stock Issuance',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.wastage:
+        return _genericPage(
+          title: 'Wastage Tracking',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.restaurant:
+        return _genericPage(
+          title: 'Restaurant Orders',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.menu:
+        return _genericPage(
+          title: 'Restaurant Menu',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.barMenu:
+        return _genericPage(
+          title: 'Bar Menu',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.housekeeping:
+        return _genericPage(
+          title: 'Housekeeping',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.maintenance:
+        return _genericPage(
+          title: 'Maintenance',
+          subtitle: _subtitle(_section),
+          fields: _fieldsFor(_section),
+          createLabel: _createLabel(_section),
+          onCreate: _createHandler(_section),
+          actionsBuilder: _actionsFor,
+        );
+      case BranchManagerSection.leave:
+        return _leaveManagement();
       case BranchManagerSection.reports:
         return _reports();
       case BranchManagerSection.reviews:
@@ -636,8 +825,6 @@ class _BranchManagerDashboardState
         return _stockAnalytics();
       case BranchManagerSection.staffPerformance:
         return _staffPerformance();
-      case BranchManagerSection.leave:
-        return _leaveManagement();
       case BranchManagerSection.staffDocuments:
         return _genericPage(
           title: 'Staff Documents',
@@ -769,9 +956,14 @@ class _BranchManagerDashboardState
   }
 
   Widget _analytics() {
-    final total = _num(_summary, ['total_revenue', 'revenue', 'gross_sales']);
-    final orders = _num(_summary, ['total_orders', 'orders', 'transactions']);
-    final average = orders == 0 ? 0 : total / orders;
+    final summary = _summaryMap();
+    final total =
+        _num(summary, ['total_sales', 'total_revenue', 'revenue', 'gross_sales']);
+    final orders = _num(summary,
+        ['transaction_count', 'total_orders', 'orders', 'transactions']);
+    final apiAverage =
+        _num(summary, ['avg_transaction_value', 'average_ticket']);
+    final average = apiAverage == 0 && orders > 0 ? total / orders : apiAverage;
     return _page(
       title: 'Sales Analytics',
       subtitle:
@@ -2182,8 +2374,11 @@ class _BranchManagerDashboardState
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
-          _subtitleForRow(record)
-              .ifEmpty(_text(record, ['type', 'status', 'created_at'])),
+          _subtitleForRow(record).ifEmpty([
+            _text(record, ['type', 'status']),
+            if (record['created_at'] != null)
+              _displayValue(record, 'created_at'),
+          ].where((s) => s.isNotEmpty).join(' • ')),
           maxLines: 1,
           overflow: TextOverflow.ellipsis),
       trailing: amount.isEmpty
@@ -2445,6 +2640,13 @@ class _BranchManagerDashboardState
           _miniButton('Clock in', () => _staffClock(id, true)),
           _miniButton('Clock out', () => _staffClock(id, false)),
           _miniButton('Edit', () => _editGeneric(row)),
+          if (_text(row, ['user_id']).isEmpty)
+            _miniButton('Create login', () => _showCreateUserForStaffDialog(row)),
+        ];
+      case BranchManagerSection.users:
+        return [
+          _miniButton('View', () => _showRow(row)),
+          _miniButton('Reset password', () => _showResetUserPasswordDialog(row)),
         ];
       case BranchManagerSection.leave:
       case BranchManagerSection.staffLeave:
@@ -2487,8 +2689,16 @@ class _BranchManagerDashboardState
             _miniButton('Complete', () => _maintenanceAction(id, 'completed')),
         ];
       case BranchManagerSection.waiterSales:
-      case BranchManagerSection.staffPerformance:
         return [_miniButton('Detail', () => _showRow(row))];
+      case BranchManagerSection.staffPerformance:
+        return [_miniButton('Detail', () {
+          final id = _id(row);
+          if (id.isNotEmpty) {
+            _openDetail(BranchManagerSection.staffDetail, id);
+          } else {
+            _showRow(row);
+          }
+        })];
       default:
         return [_miniButton('View', () => _showRow(row))];
     }
@@ -2528,18 +2738,9 @@ class _BranchManagerDashboardState
               onSubmit: _repo.createGuest,
             );
       case BranchManagerSection.staff:
-        return () => _showFormDialog(
-              title: 'Add Staff',
-              fields: const [
-                'first_name',
-                'last_name',
-                'email',
-                'phone',
-                'role',
-                'department'
-              ],
-              onSubmit: _repo.createStaff,
-            );
+        return _showStaffRegistrationDialog;
+      case BranchManagerSection.users:
+        return () => _showCreateUserForStaffDialog();
       case BranchManagerSection.leave:
         return () => _showFormDialog(
               title: 'New Leave Request',
@@ -2700,6 +2901,379 @@ class _BranchManagerDashboardState
     }, success: '$title saved');
   }
 
+  Widget _dialogField(TextEditingController controller, String label,
+      {bool number = false}) {
+    return SizedBox(
+      width: 290,
+      child: TextField(
+        controller: controller,
+        keyboardType: number
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.text,
+        decoration: InputDecoration(labelText: label),
+      ),
+    );
+  }
+
+  Future<void> _showStaffRegistrationDialog() async {
+    final fnCtrl = TextEditingController();
+    final lnCtrl = TextEditingController();
+    final idCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final salaryCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
+
+    String dept = 'restaurant';
+    String position = 'waiter';
+    String shift = 'morning';
+    String empType = 'permanent';
+    String userRole = 'waiter';
+    bool createAccount = true;
+
+    const depts = [
+      'restaurant', 'bar_lounge', 'kitchen', 'housekeeping', 'reception',
+      'front_office', 'maintenance', 'finance', 'accounts', 'management',
+      'hr', 'security', 'store', 'procurement', 'logistics', 'administration',
+      'food_beverage', 'it', 'general', 'operations',
+    ];
+    const positions = [
+      'waiter', 'bartender', 'chef', 'receptionist', 'housekeeper',
+      'supervisor', 'manager', 'cashier', 'security_guard', 'driver',
+      'accountant', 'storekeeper', 'maintenance_technician', 'kitchen_staff',
+      'barista', 'porter', 'cleaner', 'laundry_attendant', 'employee',
+    ];
+    const shifts = ['morning', 'afternoon', 'night', 'full_day', 'split'];
+    const empTypes = ['permanent', 'contract', 'casual', 'intern', 'part_time'];
+    const loginRoles = [
+      'waiter', 'bartender', 'cashier', 'receptionist', 'housekeeper',
+      'chef', 'storekeeper', 'kitchen_operations', 'branch_manager',
+      'hr_manager', 'auditor', 'employee',
+    ];
+
+    Widget dropRow(String label, String value, List<String> options,
+        void Function(String) onChanged) {
+      return StatefulBuilder(builder: (ctx2, setSt) {
+        return DropdownButtonFormField<String>(
+          initialValue: options.contains(value) ? value : options.first,
+          decoration: InputDecoration(labelText: label),
+          items: options
+              .map((o) => DropdownMenuItem(value: o, child: Text(o.replaceAll('_', ' '))))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) {
+              onChanged(v);
+              setSt(() {});
+            }
+          },
+        );
+      });
+    }
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDs) => AlertDialog(
+          title: const Text('Add Staff Member'),
+          content: SizedBox(
+            width: 640,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Personal Details',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 10, runSpacing: 10, children: [
+                    _dialogField(fnCtrl, 'First Name *'),
+                    _dialogField(lnCtrl, 'Last Name *'),
+                    _dialogField(idCtrl, 'National ID *'),
+                    _dialogField(emailCtrl, 'Email'),
+                    _dialogField(phoneCtrl, 'Phone'),
+                  ]),
+                  const SizedBox(height: 14),
+                  const Text('Employment Details',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 10, runSpacing: 10, children: [
+                    SizedBox(
+                      width: 290,
+                      child: dropRow('Department *', dept, depts,
+                          (v) => setDs(() => dept = v)),
+                    ),
+                    SizedBox(
+                      width: 290,
+                      child: dropRow('Position / Role *', position, positions,
+                          (v) => setDs(() => position = v)),
+                    ),
+                    SizedBox(
+                      width: 290,
+                      child: dropRow('Shift', shift, shifts,
+                          (v) => setDs(() => shift = v)),
+                    ),
+                    SizedBox(
+                      width: 290,
+                      child: dropRow('Employment Type', empType, empTypes,
+                          (v) => setDs(() => empType = v)),
+                    ),
+                    _dialogField(salaryCtrl, 'Basic Salary (KES)', number: true),
+                  ]),
+                  const SizedBox(height: 14),
+                  SwitchListTile(
+                    value: createAccount,
+                    onChanged: (v) => setDs(() => createAccount = v),
+                    title: const Text('Create login account'),
+                    subtitle: const Text(
+                        'Creates a Supabase Auth + app user account linked to this staff profile.'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  if (createAccount) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 10, runSpacing: 10, children: [
+                      SizedBox(
+                        width: 290,
+                        child: dropRow('Login Role', userRole, loginRoles,
+                            (v) => setDs(() => userRole = v)),
+                      ),
+                      _dialogField(
+                          passwordCtrl, 'Password (blank = auto-generate)'),
+                      _dialogField(pinCtrl, 'POS PIN (4 digits)'),
+                    ]),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (fnCtrl.text.trim().isEmpty ||
+                    lnCtrl.text.trim().isEmpty ||
+                    idCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                      content:
+                          Text('First name, last name and national ID are required')));
+                  return;
+                }
+                final data = <String, dynamic>{
+                  'first_name': fnCtrl.text.trim(),
+                  'last_name': lnCtrl.text.trim(),
+                  'national_id': idCtrl.text.trim(),
+                  if (emailCtrl.text.trim().isNotEmpty)
+                    'email': emailCtrl.text.trim(),
+                  if (phoneCtrl.text.trim().isNotEmpty)
+                    'phone': phoneCtrl.text.trim(),
+                  'department': dept,
+                  'position': position,
+                  'shift': shift,
+                  'employment_type': empType,
+                  if (salaryCtrl.text.trim().isNotEmpty)
+                    'basic_salary':
+                        num.tryParse(salaryCtrl.text.trim()) ??
+                            salaryCtrl.text.trim(),
+                  'create_user_account': createAccount,
+                  if (createAccount) 'user_role': userRole,
+                  if (createAccount &&
+                      passwordCtrl.text.trim().isNotEmpty)
+                    'password': passwordCtrl.text.trim(),
+                  if (createAccount &&
+                      pinCtrl.text.trim().isNotEmpty)
+                    'pos_pin': pinCtrl.text.trim(),
+                };
+                Navigator.pop(ctx, data);
+              },
+              child: const Text('Register Staff'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    for (final c in [
+      fnCtrl, lnCtrl, idCtrl, emailCtrl, phoneCtrl,
+      salaryCtrl, passwordCtrl, pinCtrl
+    ]) {
+      c.dispose();
+    }
+    if (result == null) return;
+
+    await _run(() async {
+      final created = await _repo.createStaff(result);
+      await _load();
+      final tempPassword = '${created['temp_password'] ?? ''}'.trim();
+      if (tempPassword.isNotEmpty) {
+        await _showGeneratedPasswordDialog(tempPassword);
+      }
+    }, success: 'Staff registered');
+  }
+
+  Future<void> _showCreateUserForStaffDialog([Map<String, dynamic>? staff]) async {
+    final staffOptions = staff == null
+        ? await _loadIdOptions('staff_profile_id')
+        : <_SelectOption>[];
+    String staffProfileId = staff == null ? '' : _id(staff);
+    String selectedRole = staff == null
+        ? 'employee'
+        : _text(staff, ['role', 'position']).ifEmpty('employee');
+    const loginRoleOptions = [
+      'waiter', 'bartender', 'cashier', 'receptionist', 'housekeeper',
+      'chef', 'storekeeper', 'kitchen_operations', 'branch_manager',
+      'hr_manager', 'auditor', 'employee',
+    ];
+    final passwordController = TextEditingController();
+    final pinController = TextEditingController();
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Create User Account'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (staff == null) ...[
+                  _searchableSelectField(
+                    label: 'Staff Profile',
+                    value: staffProfileId,
+                    options: staffOptions,
+                    onChanged: (value) =>
+                        setDialogState(() => staffProfileId = value),
+                  ),
+                  const SizedBox(height: 10),
+                ] else
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_titleFor(_normalizeRecord(staff))),
+                    subtitle: Text(_text(staff, ['email', 'department'])),
+                  ),
+                StatefulBuilder(builder: (ctx2, setSt2) {
+                  return DropdownButtonFormField<String>(
+                    initialValue: loginRoleOptions.contains(selectedRole)
+                        ? selectedRole
+                        : 'employee',
+                    decoration: const InputDecoration(labelText: 'Login Role'),
+                    items: loginRoleOptions
+                        .map((r) => DropdownMenuItem(
+                              value: r,
+                              child: Text(r.replaceAll('_', ' ')),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        selectedRole = v;
+                        setSt2(() {});
+                      }
+                    },
+                  );
+                }),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: passwordController,
+                  decoration: const InputDecoration(
+                      labelText: 'Password (blank = auto-generate)'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: pinController,
+                  decoration: const InputDecoration(labelText: 'POS PIN'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: staffProfileId.isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, {
+                        'staffProfileId': staffProfileId,
+                        'role': selectedRole,
+                        if (passwordController.text.trim().isNotEmpty)
+                          'password': passwordController.text.trim(),
+                        if (pinController.text.trim().isNotEmpty)
+                          'pos_pin': pinController.text.trim(),
+                      }),
+              child: const Text('Create Account'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+
+    passwordController.dispose();
+    pinController.dispose();
+    if (result == null) return;
+
+    await _run(() async {
+      final created = await _repo.createUser(result);
+      await _load();
+      final tempPassword = '${created['temp_password'] ?? ''}'.trim();
+      if (tempPassword.isNotEmpty) {
+        await _showGeneratedPasswordDialog(tempPassword);
+      }
+    }, success: 'User account created');
+  }
+
+  Future<void> _showResetUserPasswordDialog(Map<String, dynamic> row) async {
+    final id = _id(row);
+    if (id.isEmpty) return;
+    final controller = TextEditingController();
+    final password = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'New Password'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (password == null || password.isEmpty) return;
+    await _run(() async {
+      await _repo.updateUser(id, {'password': password});
+    }, success: 'Password reset');
+  }
+
+  Future<void> _showGeneratedPasswordDialog(String password) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Temporary Password'),
+        content: SelectableText(password),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _searchableSelectField({
     required String label,
     required String value,
@@ -2836,8 +3410,9 @@ class _BranchManagerDashboardState
             );
           }).toList();
         case 'staff_id':
+        case 'staff_profile_id':
           final staff = await _repo.staff();
-          return staff.map((s) {
+          return staff.where((s) => _text(s, ['user_id']).isEmpty).map((s) {
             final row = _normalizeRecord(s);
             return _SelectOption(
               value: '${s['id']}',
@@ -3287,10 +3862,13 @@ class _BranchManagerDashboardState
         return const ['guest_name', 'room_number', 'booking_reference'];
       case BranchManagerSection.rooms:
         return const ['room_number', 'name'];
+      case BranchManagerSection.analytics:
+        return const ['code', 'order_number', 'short_code', 'source', 'category'];
       case BranchManagerSection.guests:
       case BranchManagerSection.guestDetail:
         return const ['full_name', 'guest_name', 'phone'];
       case BranchManagerSection.staff:
+      case BranchManagerSection.users:
       case BranchManagerSection.staffDetail:
       case BranchManagerSection.staffPerformance:
       case BranchManagerSection.staffKpis:
@@ -3309,9 +3887,9 @@ class _BranchManagerDashboardState
       case BranchManagerSection.waiterSales:
         return const ['waiter_name', 'staff_name', 'full_name'];
       case BranchManagerSection.cashierClearance:
-        return const ['cashier_name', 'shift', 'date'];
+        return const ['cashier_name', 'shift_start', 'shift', 'date'];
       default:
-        return const ['name', 'title'];
+        return const ['description', 'user_name', 'name', 'title'];
     }
   }
 
@@ -3369,6 +3947,11 @@ class _BranchManagerDashboardState
     alias('grandTotal', 'grand_total');
     alias('amountPaid', 'amount_paid');
     alias('balanceAmount', 'balance_amount');
+    alias('expected_closing_float', 'expected_cash');
+    alias('closing_float', 'actual_cash');
+    alias('expected_cash', 'expected_amount');
+    alias('actual_cash', 'actual_amount');
+    alias('transaction_date', 'date');
     alias('createdAt', 'created_at');
     alias('updatedAt', 'updated_at');
     alias('hk_status', 'housekeeping_status');
@@ -3593,6 +4176,7 @@ class _BranchManagerDashboardState
         addField('id_number');
         break;
       case BranchManagerSection.staff:
+      case BranchManagerSection.users:
       case BranchManagerSection.staffDetail:
       case BranchManagerSection.staffPerformance:
       case BranchManagerSection.staffKpis:
@@ -3632,9 +4216,10 @@ class _BranchManagerDashboardState
         addField('average_order_value');
         break;
       case BranchManagerSection.cashierClearance:
-        addField('date');
-        addField('expected_amount');
-        addField('actual_amount');
+        addField('shift_start');
+        addField('shift_end');
+        addField('expected_cash');
+        addField('actual_cash');
         addField('variance');
         addField('status');
         break;
@@ -3830,7 +4415,7 @@ class _ExchangeHistorySectionState
   String _itemsSummary(List<dynamic> items) {
     return items
         .whereType<Map>()
-        .map((item) => '${item['name'] ?? ''} ×${item['quantity'] ?? ''}')
+        .map((item) => '${item['name'] ?? ''} x${item['quantity'] ?? ''}')
         .join(', ');
   }
 
@@ -4076,6 +4661,8 @@ String _label(BranchManagerSection section) {
       return 'Guest Detail';
     case BranchManagerSection.staff:
       return 'Staff';
+    case BranchManagerSection.users:
+      return 'User Accounts';
     case BranchManagerSection.staffPerformance:
       return 'Staff Performance';
     case BranchManagerSection.staffDetail:
@@ -4147,6 +4734,8 @@ String _subtitle(BranchManagerSection section) {
       return 'Guest directory with profile, stay history, create, update, and delete actions.';
     case BranchManagerSection.staff:
       return 'Branch staff directory with CRUD, clock-in/clock-out, and detail workflows.';
+    case BranchManagerSection.users:
+      return 'Branch login accounts linked to staff profiles, with branch-safe account creation.';
     case BranchManagerSection.staffPerformance:
       return 'Team performance KPIs by period and department.';
     case BranchManagerSection.attendance:
@@ -4180,8 +4769,10 @@ List<String> _fieldsFor(BranchManagerSection section) {
   switch (section) {
     case BranchManagerSection.analytics:
       return const [
-        'date',
-        'order_number',
+        'transaction_date',
+        'code',
+        'source',
+        'outlet',
         'payment_method',
         'order_type',
         'category',
@@ -4189,11 +4780,11 @@ List<String> _fieldsFor(BranchManagerSection section) {
       ];
     case BranchManagerSection.cashierClearance:
       return const [
-        'date',
+        'shift_start',
+        'shift_end',
         'cashier_name',
-        'shift',
-        'expected_amount',
-        'actual_amount',
+        'expected_cash',
+        'actual_cash',
         'variance',
         'status'
       ];
@@ -4253,7 +4844,18 @@ List<String> _fieldsFor(BranchManagerSection section) {
         'role',
         'department',
         'status',
-        'email'
+        'email',
+        'user_id'
+      ];
+    case BranchManagerSection.users:
+      return const [
+        'full_name',
+        'first_name',
+        'last_name',
+        'email',
+        'role',
+        'status',
+        'linked_staff_name'
       ];
     case BranchManagerSection.staffPerformance:
     case BranchManagerSection.staffKpis:
@@ -4398,6 +5000,8 @@ String? _createLabel(BranchManagerSection section) {
       return 'Add Guest';
     case BranchManagerSection.staff:
       return 'Add Staff';
+    case BranchManagerSection.users:
+      return 'Create Account';
     case BranchManagerSection.leave:
       return 'New Request';
     case BranchManagerSection.stock:
@@ -4432,8 +5036,17 @@ List<String> _statusOptions(BranchManagerSection section) {
       return const ['all', 'available', 'occupied', 'maintenance', 'cleaning'];
     case BranchManagerSection.staff:
     case BranchManagerSection.staffPerformance:
+    case BranchManagerSection.users:
       return const [
         'all',
+        'cashier',
+        'restaurant_cashier',
+        'branch_storekeeper',
+        'branch_accountant',
+        'receptionist',
+        'waiter',
+        'chef',
+        'kitchen_operations',
         'front_desk',
         'housekeeping',
         'restaurant',
@@ -4473,6 +5086,7 @@ bool _usesSearch(BranchManagerSection section) {
     BranchManagerSection.rooms,
     BranchManagerSection.guests,
     BranchManagerSection.staff,
+    BranchManagerSection.users,
     BranchManagerSection.stock,
     BranchManagerSection.menu,
     BranchManagerSection.barMenu,

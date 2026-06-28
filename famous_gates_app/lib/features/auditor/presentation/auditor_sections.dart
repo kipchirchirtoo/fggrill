@@ -1353,6 +1353,88 @@ dynamic _derivedValue(Map<String, dynamic> row, String key) {
         row['reference_number'] ??
         row['id'];
   }
+  if (key == 'bill_date') {
+    return row['bill_date'] ?? row['credit_date'] ?? row['log_date'] ?? row['created_at'];
+  }
+  if (key == 'total_mpesa') {
+    return row['total_mpesa'] ?? row['mpesa_total'] ?? row['total_mpesa_sales'];
+  }
+  if (key == 'closing_float') {
+    return row['closing_float'] ?? row['closing_balance'] ?? row['cash_at_hand'];
+  }
+  if (key == 'finance_status') {
+    return row['finance_status'] ?? row['payment_status'] ?? row['status'];
+  }
+  if (key == 'request_number') {
+    return row['request_number'] ??
+        row['document_number'] ??
+        row['request_no'] ??
+        row['reference_number'] ??
+        row['id'];
+  }
+  if (key == 'po_number') {
+    return row['po_number'] ?? row['document_number'] ?? row['reference_number'] ?? row['id'];
+  }
+  if (key == 'logbook_number') {
+    return row['logbook_number'] ?? row['reference_number'] ?? row['id'];
+  }
+  if (key == 'dispatch_number') {
+    return row['dispatch_number'] ??
+        row['dispatch_document_number'] ??
+        row['reference_number'] ??
+        row['id'];
+  }
+  if (key == 'dispatched_at') {
+    return row['dispatched_at'] ?? row['created_at'];
+  }
+  if (key == 'delivered_at') {
+    return row['delivered_at'] ?? row['confirmed_at'];
+  }
+  if (key == 'receipt_status') {
+    return row['receipt_status'] ?? row['workflow_status'] ?? row['status'];
+  }
+  if (key == 'count_date') {
+    return row['count_date'] ?? row['created_at'];
+  }
+  if (key == 'take_type') {
+    return row['take_type'] ?? row['count_type'] ?? row['store_type'];
+  }
+  if (key == 'total_variance_value') {
+    return row['total_variance_value'] ?? row['variance_value'] ?? row['variance'];
+  }
+  if (key == 'total_variance_quantity') {
+    return row['total_variance_quantity'] ?? row['variance_quantity'] ?? 0;
+  }
+  if (key == 'item_sku') {
+    return row['item_sku'] ?? row['sku'] ?? row['barcode'];
+  }
+  if (key == 'vehicle_number') {
+    return row['vehicle_number'] ?? row['vehicle_reg'];
+  }
+  if (key == 'shift_number') {
+    return row['shift_number'] ?? row['reference_number'] ?? row['logbook_number'];
+  }
+  if (key == 'total_card') {
+    return row['total_card'] ?? row['card_total'] ?? row['total_card_sales'];
+  }
+  if (key == 'variance') {
+    return row['variance'] ?? row['variance_amount'];
+  }
+  if (key == 'priority') {
+    return row['priority'] ?? row['urgency'];
+  }
+  if (key == 'request_type') {
+    return row['request_type'] ?? row['type'] ?? row['category'];
+  }
+  if (key == 'counterparty_name') {
+    return row['counterparty_name'] ??
+        row['supplier_name'] ??
+        row['vendor_name'] ??
+        row['customer_name'] ??
+        row['staff_name'] ??
+        _nestedName(row['supplier']) ??
+        _nestedName(row['customer']);
+  }
   return null;
 }
 
@@ -1490,6 +1572,53 @@ Map<String, dynamic> _normalizeRow(Map<String, dynamic> row) {
       return variance != 0;
     }).length;
   });
+
+  row.putIfAbsent('request_number',
+      () => row['document_number'] ?? row['request_no'] ?? row['reference_number'] ?? row['id']);
+  row.putIfAbsent('po_number',
+      () => row['document_number'] ?? row['reference_number'] ?? row['id']);
+  row.putIfAbsent('logbook_number',
+      () => row['reference_number'] ?? row['id']);
+  row.putIfAbsent('dispatch_number',
+      () => row['dispatch_document_number'] ?? row['reference_number'] ?? row['id']);
+  row.putIfAbsent('dispatched_at',
+      () => row['created_at']);
+  row.putIfAbsent('delivered_at',
+      () => row['confirmed_at']);
+  row.putIfAbsent('receipt_status',
+      () => row['workflow_status'] ?? row['status']);
+  row.putIfAbsent('count_date',
+      () => row['created_at']);
+  row.putIfAbsent('take_type',
+      () => row['count_type'] ?? row['store_type']);
+  row.putIfAbsent('total_variance_value',
+      () => row['variance_value'] ?? row['variance']);
+  row.putIfAbsent('total_variance_quantity',
+      () => row['variance_quantity']);
+  row.putIfAbsent('item_sku',
+      () => row['sku'] ?? row['barcode']);
+  row.putIfAbsent('vehicle_number',
+      () => row['vehicle_reg']);
+  row.putIfAbsent('shift_number',
+      () => row['logbook_number'] ?? row['reference_number']);
+  row.putIfAbsent('total_mpesa',
+      () => row['mpesa_total'] ?? row['total_mpesa_sales']);
+  row.putIfAbsent('total_card',
+      () => row['card_total'] ?? row['total_card_sales']);
+  row.putIfAbsent('closing_float',
+      () => row['closing_balance'] ?? row['cash_at_hand']);
+  row.putIfAbsent('finance_status',
+      () => row['payment_status'] ?? row['status']);
+  row.putIfAbsent('bill_date',
+      () => row['credit_date'] ?? row['log_date'] ?? row['created_at']);
+  row.putIfAbsent('priority',
+      () => row['urgency']);
+  row.putIfAbsent('request_type',
+      () => row['type'] ?? row['category']);
+  row.putIfAbsent('counterparty_name',
+      () => row['supplier_name'] ?? row['vendor_name'] ?? row['customer_name'] ?? row['staff_name']);
+  row.putIfAbsent('variance',
+      () => row['variance_amount']);
 
   return row;
 }
@@ -3039,29 +3168,34 @@ class AuditorFinancialVerificationSection extends StatelessWidget {
         subtitle:
             'Reconciling daily collection gateways against operational sales records',
         icon: PhosphorIcons.currencyDollar(),
-        endpoint: '/cashier/logbook/pending',
-        listKeys: const ['logbooks', 'records', 'data', 'items'],
+        endpoint: '/auditor/verify/finances',
+        listKeys: const [
+          'cashier_summaries',
+          'branch_summaries',
+          'recent_transactions',
+          'records',
+          'data',
+          'items'
+        ],
         summaryKeys: const ['summary', 'stats'],
         columns: const [
           'branch_name',
           'cashier_name',
-          'log_date',
+          'total_amount',
           'total_sales',
-          'total_cash',
-          'status'
+          'variance',
+          'payment_count'
         ],
         enableExport: true,
         syncLabel: 'Sync Records',
-        searchPlaceholder: 'Search logbook, cashier, branch or payment...',
-        emptyTitle: 'No logbooks pending verification',
+        searchPlaceholder: 'Search cashier, branch or payment method...',
+        emptyTitle: 'No financial records pending verification',
         emptySubtitle: 'All records are current',
         actions: [
           _viewAction,
           _investigateAction,
-          _cashierLogbookAction('Approve', 'approve', AppColors.kSuccess),
-          _cashierLogbookAction('Reject', 'reject', AppColors.kError),
-          _flagAction(),
-          _raiseExceptionAction(fallbackType: 'logbook'),
+          _flagAction(fallbackType: 'financial_record'),
+          _raiseExceptionAction(fallbackType: 'financial_record'),
         ],
       );
 }
@@ -3726,22 +3860,31 @@ class AuditorBankingLogsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _AuditorDataSection(
         title: 'Banking Review',
-        subtitle: 'Daily logs, deposits and banking verification',
+        subtitle: 'Daily shift logs, deposits and banking verification',
         icon: PhosphorIcons.bank(),
         endpoint: '/auditor/daily-logs',
+        listKeys: const ['data', 'logs', 'records', 'items'],
         columns: const [
+          'shift_number',
           'branch_name',
+          'cashier_name',
           'log_date',
-          'total_payments',
-          'closing_balance',
+          'total_sales',
+          'total_cash',
+          'total_mpesa',
+          'variance',
           'status'
         ],
+        enableExport: true,
+        searchPlaceholder: 'Search shift, cashier or branch...',
+        emptyTitle: 'No shift logs found',
+        emptySubtitle: 'Shift logs will appear here once cashiers close their shifts',
         actions: [
           _viewAction,
           _investigateAction,
           _dailyLogAction('Verify', 'verified', AppColors.kSuccess),
           _dailyLogAction('Reject', 'rejected', AppColors.kError),
-          _raiseExceptionAction(fallbackType: 'logbook'),
+          _raiseExceptionAction(fallbackType: 'shift_log'),
         ],
       );
 }
@@ -4362,13 +4505,14 @@ class AuditorStockAuditSection extends StatelessWidget {
         subtitle: 'Physical stock, theoretical stock and variance review',
         icon: PhosphorIcons.package(),
         endpoint: '/auditor/verify/stock-levels',
-        listKeys: const ['stock_items', 'inventory'],
+        listKeys: const ['stock_items', 'data', 'inventory', 'items'],
         summaryKeys: const ['summary'],
         columns: const [
           'item_name',
           'branch_name',
+          'item_sku',
           'quantity',
-          'expected_quantity',
+          'reorder_level',
           'variance'
         ],
         enableExport: true,
@@ -4422,13 +4566,14 @@ class AuditorBarStockSection extends StatelessWidget {
         subtitle: 'Review bar stock takes, variances and audit adjustments',
         icon: PhosphorIcons.wine(),
         endpoint: '/auditor/verify/bar-stock',
-        listKeys: const ['stock_takes', 'audits', 'items'],
+        listKeys: const ['data', 'stock_takes', 'audits', 'items'],
         summaryKeys: const ['summary', 'stats'],
         columns: const [
           'branch_name',
-          'bar_name',
-          'created_at',
-          'variance_count',
+          'count_date',
+          'take_type',
+          'total_variance_value',
+          'total_variance_quantity',
           'status'
         ],
         actions: [
@@ -4449,13 +4594,21 @@ class AuditorPurchasesSection extends StatelessWidget {
         subtitle: 'Procurement, supplier invoices and expenditure audit',
         icon: PhosphorIcons.shoppingBag(),
         endpoint: '/auditor/verify/expenditure',
-        listKeys: const ['purchase_orders', 'invoices', 'expenses', 'items'],
+        listKeys: const [
+          'data',
+          'purchase_orders',
+          'orders',
+          'invoices',
+          'expenses',
+          'items'
+        ],
         summaryKeys: const ['summary', 'totals'],
         columns: const [
-          'reference_number',
+          'po_number',
           'supplier_name',
           'branch_name',
           'total_amount',
+          'finance_status',
           'status'
         ],
         actions: [
@@ -4507,11 +4660,19 @@ class AuditorApprovalsSection extends StatelessWidget {
         subtitle: 'Pending stock, invoice and operational approvals',
         icon: PhosphorIcons.checkCircle(),
         endpoint: '/auditor/approvals/pending',
-        listKeys: const ['requests', 'approvals', 'items'],
+        listKeys: const [
+          'data',
+          'requests',
+          'approvals',
+          'stock_requests',
+          'items'
+        ],
+        summaryKeys: const ['summary', 'stats'],
         columns: const [
-          'request_type',
+          'request_number',
           'branch_name',
-          'requested_by',
+          'request_type',
+          'priority',
           'status',
           'created_at'
         ],
@@ -4621,12 +4782,15 @@ class AuditorDeliveriesSection extends StatelessWidget {
         subtitle: 'Dispatch deliveries and receiving audit trail',
         icon: PhosphorIcons.truck(),
         endpoint: '/dispatch/auditor/deliveries',
+        listKeys: const ['data', 'records', 'deliveries', 'items'],
         columns: const [
           'dispatch_number',
           'branch_name',
-          'driver_name',
-          'status',
-          'created_at'
+          'vehicle_number',
+          'dispatched_at',
+          'delivered_at',
+          'receipt_status',
+          'status'
         ],
         actions: [
           _viewAction,
@@ -5494,17 +5658,21 @@ class AuditorCreditBillsSection extends StatelessWidget {
         icon: PhosphorIcons.creditCard(),
         endpoint: '/auditor/credit-bills',
         listKeys: const [
+          'records',
+          'credit_bills',
           'employee_bills',
           'guest_bills',
-          'credit_bills',
           'bills'
         ],
+        summaryKeys: const ['summary', 'stats'],
         columns: const [
-          'employee_name',
-          'customer_name',
+          'bill_number',
+          'counterparty_name',
+          'branch_name',
           'amount',
-          'status',
-          'created_at'
+          'balance',
+          'bill_date',
+          'status'
         ],
         actions: [
           _viewAction,
@@ -5525,13 +5693,15 @@ class AuditorCashierLogbooksSection extends StatelessWidget {
         subtitle: 'Submitted cashier logbooks pending audit action',
         icon: PhosphorIcons.notebook(),
         endpoint: '/cashier/logbook/pending',
-        listKeys: const ['logbooks', 'logs', 'items'],
+        listKeys: const ['data', 'logbooks', 'logs', 'items'],
         columns: const [
+          'logbook_number',
           'branch_name',
           'cashier_name',
-          'type',
-          'status',
-          'created_at'
+          'log_date',
+          'total_mpesa',
+          'closing_float',
+          'status'
         ],
         actions: [
           _viewAction,

@@ -63,26 +63,40 @@ class BarOrderItem {
   final String name;
   final int quantity;
   final double unitPrice;
+  final double voidedQty;
 
   const BarOrderItem({
     required this.drinkId,
     required this.name,
     required this.quantity,
     required this.unitPrice,
+    this.voidedQty = 0,
   });
 
   double get lineTotal => unitPrice * quantity;
 
+  double get activeQty {
+    final aq = quantity - voidedQty;
+    return aq < 0 ? 0 : aq;
+  }
+
+  double get activeTotal => unitPrice * activeQty;
+
   factory BarOrderItem.fromJson(Map<String, dynamic> json) {
+    final rawQty = (json['quantity'] as num?)?.toDouble() ??
+        (json['qty'] as num?)?.toDouble() ??
+        1.0;
+    final voidedQty = (json['voided_qty'] as num?)?.toDouble() ?? 0.0;
+    final activeQtyFromServer = (json['active_qty'] as num?)?.toDouble();
+    final resolvedActive = activeQtyFromServer ?? (rawQty - voidedQty);
     return BarOrderItem(
-      drinkId: '${json['drink_id'] ?? json['drinkId'] ?? json['id']}',
+      drinkId: '${json['drink_id'] ?? json['drinkId'] ?? json['outlet_item_id'] ?? json['id']}',
       name: '${json['name'] ?? ''}',
-      quantity: (json['quantity'] as num?)?.toInt() ??
-          (json['qty'] as num?)?.toInt() ??
-          1,
+      quantity: rawQty.toInt(),
       unitPrice: (json['unit_price'] as num?)?.toDouble() ??
           (json['price'] as num?)?.toDouble() ??
           0,
+      voidedQty: rawQty - resolvedActive < 0 ? 0 : rawQty - resolvedActive,
     );
   }
 

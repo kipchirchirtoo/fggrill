@@ -149,17 +149,25 @@ class _OrderCard extends ConsumerWidget {
                   style: const TextStyle(color: AppColors.kTextSecondary)),
             ],
             const SizedBox(height: 8),
-            ...order.items.map((item) => Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Text('${item.quantity}x ${item.name}'),
-                      const Spacer(),
-                      Text(
-                          'KES ${(item.unitPrice * item.quantity).toStringAsFixed(0)}'),
-                    ],
-                  ),
-                )),
+            ...order.items.map((item) {
+                  final activeQty = item.activeQty;
+                  final isFullyVoided = activeQty <= 0;
+                  if (isFullyVoided) return const SizedBox.shrink();
+                  final activeTotal = item.activeTotal;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${activeQty.toStringAsFixed(activeQty.truncateToDouble() == activeQty ? 0 : 1)}x ${item.name}'
+                          '${item.voidedQty > 0 ? " (${item.voidedQty.toStringAsFixed(0)} voided)" : ""}',
+                        ),
+                        const Spacer(),
+                        Text('KES ${activeTotal.toStringAsFixed(0)}'),
+                      ],
+                    ),
+                  );
+                }),
             const Divider(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

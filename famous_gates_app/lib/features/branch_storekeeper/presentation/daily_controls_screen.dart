@@ -22,9 +22,8 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
   bool _isLoading = false;
   List<dynamic> _controls = [];
   Map<String, dynamic> _salesSummary = {};
-  int? _kitchenSessionId;
-  bool _hasStocktake = false;
-  String? _stocktakeStatus;
+  List<dynamic> _shiftTeam = [];
+  bool _hasKitchenShiftRecord = false;
 
   final List<String> _shiftOptions = ['A', 'B'];
 
@@ -67,8 +66,8 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
       _isLoading = true;
       _controls = [];
       _salesSummary = {};
-      _hasStocktake = false;
-      _stocktakeStatus = null;
+      _shiftTeam = [];
+      _hasKitchenShiftRecord = false;
     });
 
     try {
@@ -77,8 +76,15 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
       final branchId = await storage.read(key: AuthRepository.branchIdKey) ?? '';
       final dateStr = _selectedDate.toIso8601String().split('T')[0];
 
+      // Daily Control — recipe/BOM-based theoretical vs actual ingredient
+      // consumption computed straight from real POS sales, combining every
+      // kitchen issuance workflow (kitchen_session_issues, kitchen_shift_items,
+      // kitchen_usage_records). Replaces the old shift-controls/analyze
+      // endpoint, which only ever read kitchen_session_issues — a workflow
+      // that's effectively unused in practice, so it always showed 0 actual
+      // usage regardless of real kitchen activity.
       final response = await http.get(
-        Uri.parse('${AppConfig.mainApiUrl}/kitchen/shift-controls/analyze?branch_id=$branchId&shift_date=$dateStr&shift_type=$_selectedShift'),
+        Uri.parse('${AppConfig.mainApiUrl}/kitchen/daily-control?branch_id=$branchId&date=$dateStr&shift=$_selectedShift'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -88,11 +94,13 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body)['data'];
         setState(() {
-          _controls = data['controls'] ?? [];
-          _salesSummary = data['sales_summary'] ?? {};
-          _kitchenSessionId = data['kitchen_session_id'];
-          _hasStocktake = data['has_stocktake'] ?? false;
-          _stocktakeStatus = data['stocktake_status'];
+          _controls = data['bom_control'] ?? [];
+          _salesSummary = {
+            'total_food_qty_sold': data['summary']?['total_food_qty_sold'],
+            'total_food_revenue': data['summary']?['total_food_revenue'],
+          };
+          _shiftTeam = data['shift_team'] ?? [];
+          _hasKitchenShiftRecord = data['has_kitchen_shift_record'] ?? false;
         });
       } else {
         _showError('Failed to load controls: ${json.decode(response.body)['message'] ?? response.statusCode}');
@@ -121,8 +129,10 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
   }
 
   void _openCreditBillDialog(Map<String, dynamic> control) {
-    // Only allow billing if there is a shortage (variance > 0)
-    if ((control['variance'] ?? 0) <= 0) {
+    // Only allow billing for shortages (actual usage logged below what the
+    // recipe says the sales should have consumed) — not for wastage/overage,
+    // which the old endpoint never treated as billable either.
+    if (control['variance_type'] != 'shortage') {
       _showError('Can only bill staff for shortages');
       return;
     }
@@ -133,6 +143,7 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
         control: control,
         date: _selectedDate,
         shiftType: _selectedShift,
+        shiftTeam: _shiftTeam,
         onSuccess: () {
           Navigator.of(ctx).pop();
           _showSuccess('Staff billed successfully. Awaiting Accountant approval.');
@@ -207,37 +218,26 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
             ),
           ),
           
-          if (_kitchenSessionId == null && !_isLoading)
+          if (!_hasKitchenShiftRecord && !_isLoading)
             Container(
               padding: const EdgeInsets.all(12),
               color: Colors.amber[100],
               width: double.infinity,
               child: const Text(
-                'Warning: No Kitchen Session found for this shift. Raw ingredient actual usage may be 0.',
-                style: TextStyle(color: Colors.amber),
+                'Warning: No kitchen shift record found for this date/shift. Billing will use the full branch staff list instead of the shift team.',
+                style: TextStyle(color: Colors.black87),
                 textAlign: TextAlign.center,
               ),
             ),
 
-          if (!_hasStocktake && !_isLoading)
+          if (_shiftTeam.isNotEmpty && !_isLoading)
             Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.red[50],
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.teal[50],
               width: double.infinity,
-              child: const Text(
-                'Warning: No Kitchen Stocktake found for this shift. Prepared counter controls will not be shown.',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-            )
-          else if (_stocktakeStatus == 'draft' && !_isLoading)
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.amber[50],
-              width: double.infinity,
-              child: const Text(
-                'Warning: Kitchen Stocktake is in DRAFT. Prepared counter controls may be incomplete.',
-                style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
+              child: Text(
+                'Team: ${_shiftTeam.map((s) => '${s['name']} (${s['role']})').join(', ')}',
+                style: TextStyle(color: Colors.teal[900], fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -253,10 +253,10 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
                         itemCount: _controls.length,
                         itemBuilder: (context, index) {
                           final control = _controls[index];
-                          final expected = (control['expected_usage'] ?? 0).toDouble();
-                          final actual = (control['actual_usage'] ?? 0).toDouble();
-                          final variance = (control['variance'] ?? 0).toDouble();
-                          final isShortage = variance > 0;
+                          final expected = (control['theoretical_qty'] ?? 0).toDouble();
+                          final actual = (control['actual_qty'] ?? 0).toDouble();
+                          final variance = (control['variance_qty'] ?? 0).toDouble();
+                          final isShortage = control['variance_type'] == 'shortage';
 
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
@@ -303,8 +303,8 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
                                       _buildStatColumn('Expected', expected.toStringAsFixed(2), Colors.blue[700]!),
                                       _buildStatColumn('Actual Used', actual.toStringAsFixed(2), Colors.purple[700]!),
                                       _buildStatColumn(
-                                        'Variance', 
-                                        variance.toStringAsFixed(2), 
+                                        'Variance',
+                                        variance.abs().toStringAsFixed(2),
                                         isShortage ? Colors.red[700]! : Colors.green[700]!
                                       ),
                                     ],
@@ -349,12 +349,14 @@ class _CreditBillDialog extends ConsumerStatefulWidget {
     required this.date,
     required this.shiftType,
     required this.onSuccess,
+    this.shiftTeam = const [],
   }) : super(key: key);
 
   final Map<String, dynamic> control;
   final DateTime date;
   final String shiftType;
   final VoidCallback onSuccess;
+  final List<dynamic> shiftTeam;
 
   @override
   ConsumerState<_CreditBillDialog> createState() => __CreditBillDialogState();
@@ -364,17 +366,32 @@ class __CreditBillDialogState extends ConsumerState<_CreditBillDialog> {
   final _amountController = TextEditingController();
   final _reasonController = TextEditingController();
   String? _selectedStaffId;
-  List<dynamic> _staffList = [];
+  List<Map<String, dynamic>> _staffList = [];
   bool _isLoading = false;
+
+  num get _shortageQty => (widget.control['variance_qty'] as num? ?? 0).abs();
 
   @override
   void initState() {
     super.initState();
-    _fetchStaff();
-    final variance = widget.control['variance'];
+    if (widget.shiftTeam.isNotEmpty) {
+      // Prefer the actual shift team over the full branch roster — this is
+      // the "team in the shift" the bill should be charged against.
+      _staffList = widget.shiftTeam
+          .cast<Map<String, dynamic>>()
+          .map((s) => {
+                'id': s['user_id'],
+                'first_name': '${s['name'] ?? ''}',
+                'last_name': '(${s['role'] ?? 'staff'})',
+              })
+          .toList();
+    } else {
+      _fetchStaff();
+    }
     final itemName = widget.control['item_name'];
     final dateStr = widget.date.toIso8601String().split('T')[0];
-    _reasonController.text = 'Shortage of $variance $itemName in Kitchen Shift ${widget.shiftType} on $dateStr';
+    _reasonController.text =
+        'Shortage of $_shortageQty $itemName in Kitchen Shift ${widget.shiftType} on $dateStr';
   }
 
   Future<void> _fetchStaff() async {
@@ -394,7 +411,7 @@ class __CreditBillDialogState extends ConsumerState<_CreditBillDialog> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body)['data'];
         setState(() {
-          _staffList = data;
+          _staffList = List<Map<String, dynamic>>.from(data);
         });
       }
     } catch (e) {
@@ -430,7 +447,7 @@ class __CreditBillDialogState extends ConsumerState<_CreditBillDialog> {
           'shift_date': widget.date.toIso8601String().split('T')[0],
           'shift_type': widget.shiftType,
           'item_name': widget.control['item_name'],
-          'variance': widget.control['variance'],
+          'variance': _shortageQty,
           'staff_id': _selectedStaffId,
           'amount': double.tryParse(_amountController.text) ?? 0,
           'reason': _reasonController.text,
@@ -461,7 +478,6 @@ class __CreditBillDialogState extends ConsumerState<_CreditBillDialog> {
   @override
   Widget build(BuildContext context) {
     final itemName = widget.control['item_name'];
-    final variance = widget.control['variance'];
 
     return AlertDialog(
       title: const Text('Credit Bill Staff'),
@@ -470,7 +486,7 @@ class __CreditBillDialogState extends ConsumerState<_CreditBillDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('Item: $itemName'),
-            Text('Shortage: $variance', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text('Shortage: $_shortageQty', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Select Staff Member'),

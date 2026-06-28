@@ -134,6 +134,11 @@ class _TableMapViewState extends ConsumerState<TableMapView>
                   ),
                 ),
               IconButton(
+                tooltip: 'Settings',
+                onPressed: () => context.push('/settings'),
+                icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+              ),
+              IconButton(
                 onPressed: () async {
                   final confirmed = await showDialog<bool>(
                     context: context,

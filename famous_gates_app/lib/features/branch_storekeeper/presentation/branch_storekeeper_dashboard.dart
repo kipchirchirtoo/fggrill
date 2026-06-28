@@ -11448,7 +11448,7 @@ class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
   Future<void> _loadMenuItems() async {
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final items = await repo.getMenuItems();
+      final items = await repo.getRecipeLinkableMenuItems();
       if (mounted) {
         setState(() {
           _menuItems = items;

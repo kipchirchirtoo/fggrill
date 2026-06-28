@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/supabase';
 import { AppError } from '../../middleware/errorHandler';
 import db from '../../db';
+import { staffProfileSummaries, resolveStaffProfileId } from '../kitchen-shift.controller';
 
 // Recipe mapping matching what was updated in food_controls_analysis.md
 const RECIPE_MAP: Record<string, { parent: string; yield: number }> = {
@@ -449,6 +450,18 @@ const loadProductionYieldRules = async (branchId: number): Promise<ProductionYie
     );
 };
 
+// Exact, ID-based link (set via the Food Control "Link to POS Menu Item"
+// picker) — unambiguous, so every rule sharing that outlet item id applies
+// (a single produced item can legitimately have more than one raw-ingredient
+// row, e.g. potatoes + cooking oil both yielding "Chips").
+const findYieldRulesForOutletItemIds = (
+  outletItemIds: Set<string>,
+  rules: ProductionYieldRule[]
+): ProductionYieldRule[] => {
+  if (!outletItemIds.size) return [];
+  return rules.filter((rule) => rule.pos_outlet_item_id && outletItemIds.has(rule.pos_outlet_item_id));
+};
+
 const findYieldRulesForSoldItem = (
   soldName: string,
   rules: ProductionYieldRule[]
@@ -460,10 +473,24 @@ const findYieldRulesForSoldItem = (
     normalizeItemName(rule.produced_item_sku || '') === normalizedSold
   );
   if (exact.length) return exact;
-  return rules.filter((rule) => {
+
+  // Fuzzy fallback only — names here are unlinked recipes, so substring
+  // overlap is ambiguous (e.g. "Chips" matches "Chips + Rice", "Chips
+  // Portion" and "Chips Special" all at once). Applying every match would
+  // multiply theoretical consumption for that sold item, so keep only the
+  // single closest match (smallest difference in normalized name length)
+  // instead of summing all of them.
+  const candidates = rules.filter((rule) => {
     const normalizedProduced = normalizeItemName(rule.produced_item_name);
     return normalizedProduced.includes(normalizedSold) || normalizedSold.includes(normalizedProduced);
   });
+  if (candidates.length <= 1) return candidates;
+  const best = candidates.reduce((closest, rule) => {
+    const diff = Math.abs(normalizeItemName(rule.produced_item_name).length - normalizedSold.length);
+    const closestDiff = Math.abs(normalizeItemName(closest.produced_item_name).length - normalizedSold.length);
+    return diff < closestDiff ? rule : closest;
+  });
+  return [best];
 };
 
 const addTheoreticalUsage = (
@@ -553,6 +580,25 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
 
     const shiftFilter = shift === 'A' ? 'shift_a' : shift === 'B' ? 'shift_b' : null;
 
+    // Shift team — who to hold accountable for variance on this date/shift.
+    // Independent of the formal kitchen_shifts open->close->chef-confirm->
+    // accountant-review lifecycle (most shifts never complete it), so this
+    // simply reads whichever kitchen_shifts row(s) exist for the date/shift,
+    // in any status, rather than requiring one to be fully closed out.
+    let shiftTeamQuery = supabase
+      .from('kitchen_shifts')
+      .select('id, shift_number, status, shift_type, store_keeper_id, assigned_chef_ids')
+      .eq('branch_id', branchId)
+      .eq('shift_date', controlDate);
+    if (shiftFilter) shiftTeamQuery = shiftTeamQuery.eq('shift_type', shiftFilter);
+    const { data: matchingShifts } = await shiftTeamQuery;
+    const teamUserIds = (matchingShifts || []).flatMap((s: any) => [
+      s.store_keeper_id,
+      ...((s.assigned_chef_ids || []) as string[])
+    ]);
+    const shiftTeam = await staffProfileSummaries(teamUserIds);
+    const hasKitchenShiftRecord = (matchingShifts || []).length > 0;
+
     // 1. POS sales for the day/shift — pos_shift_orders is the live source of
     // truth for sales in this system (restaurant_orders/restaurant_order_items
     // exist but are empty in production; all real orders flow through
@@ -567,7 +613,7 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
       .lt('created_at', dayEnd);
     if (posErr) throw posErr;
 
-    const soldByItem: Record<string, { qty: number; revenue: number }> = {};
+    const soldByItem: Record<string, { qty: number; revenue: number; outletItemIds: Set<string> }> = {};
     (posOrders || []).forEach((order: any) => {
       const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
       if (!Array.isArray(items)) return;
@@ -577,9 +623,10 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
         if (!name) return;
         const qty = Number(item.quantity || 0);
         const revenue = Number(item.line_total ?? qty * Number(item.unit_price || 0));
-        const entry = soldByItem[name] || { qty: 0, revenue: 0 };
+        const entry = soldByItem[name] || { qty: 0, revenue: 0, outletItemIds: new Set<string>() };
         entry.qty += qty;
         entry.revenue += revenue;
+        if (item.outlet_item_id) entry.outletItemIds.add(String(item.outlet_item_id));
         soldByItem[name] = entry;
       });
     });
@@ -610,6 +657,23 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
     const noRecipeItems: Array<{ item_name: string; qty_sold: number }> = [];
 
     Object.entries(soldByItem).forEach(([itemName, sold]) => {
+      // Priority 0: exact POS-menu-item-id link set via Food Control's
+      // "Link to POS Menu Item" picker — unambiguous, so it wins over both
+      // the legacy recipes table and fuzzy name matching below.
+      const idMatchedRules = findYieldRulesForOutletItemIds(sold.outletItemIds, productionRules);
+      if (idMatchedRules.length > 0) {
+        idMatchedRules.forEach((rule) => {
+          addTheoreticalUsage(
+            theoreticalBySku,
+            rule.raw_item_sku,
+            rule.raw_item_name,
+            rule.raw_unit,
+            sold.qty * (rule.raw_quantity / rule.produced_quantity)
+          );
+        });
+        return;
+      }
+
       const recipe = findRecipeForSoldItem(itemName, recipes);
       if (recipe && recipe.output_quantity > 0 && recipe.items?.length) {
         // Live DB recipe path
@@ -962,6 +1026,8 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
         shift: shift || null,
         has_kitchen_session: hasKitchenSession,
         has_kitchen_issue_tracking: hasKitchenSession,
+        has_kitchen_shift_record: hasKitchenShiftRecord,
+        shift_team: shiftTeam,
         issue_sources: issueSources,
         kitchen_issue_summary: {
           total_issue_rows: issueSources.reduce((sum, source) => sum + source.rows, 0),
@@ -985,6 +1051,96 @@ export const getDailyControlData = async (req: Request, res: Response, next: Nex
           target_food_cost_percent: targetPercent,
           top_variance_items: topVarianceItems
         }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/kitchen/daily-control/bill-staff
+// Branch Accountant action: charge the staff responsible for a Daily Control
+// variance line (a bom_control row from getDailyControlData above —
+// recipe-based theoretical vs actual ingredient consumption for a given
+// branch/date/shift). Deliberately independent of the kitchen_shifts
+// open->close->chef-confirm->accountant-review lifecycle (see
+// accountantReviewShift in kitchen-shift.controller.ts for that parallel,
+// lifecycle-gated liability flow) — in practice almost no shift ever
+// completes that lifecycle, while Daily Control computes real variance from
+// actual sales every day regardless, so this lets the accountant act
+// directly on it.
+export const billDailyControlVariance = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const {
+      branch_id, date, shift, item_name, item_sku, variance_cost,
+      liability_action, allocations, notes, write_off_reason
+    } = req.body;
+
+    if (!branch_id || !date || !item_name) {
+      throw new AppError('branch_id, date, and item_name are required', 400);
+    }
+    const branchId = Number(branch_id);
+    if (!Number.isInteger(branchId)) {
+      throw new AppError('branch_id must be an integer', 400);
+    }
+
+    const action = liability_action || 'approve_only';
+    if (action === 'write_off' && !String(write_off_reason || notes || '').trim()) {
+      throw new AppError('Write-off reason is required', 400);
+    }
+
+    const normalizedAllocations = Array.isArray(allocations) ? allocations : [];
+    if (action !== 'write_off' && action !== 'approve_only' && normalizedAllocations.length === 0) {
+      throw new AppError('At least one staff allocation is required for this liability action', 400);
+    }
+
+    const userId = (req as any).user?.id;
+    const creditBills: any[] = [];
+
+    if (action !== 'write_off' && action !== 'approve_only') {
+      for (const allocation of normalizedAllocations) {
+        const amount = Math.abs(Number(allocation.amount || 0));
+        if (amount <= 0) continue;
+        const staffId = await resolveStaffProfileId(
+          allocation.staff_profile_id || allocation.staff_id || allocation.user_id
+        );
+        if (!staffId) continue;
+        const { data: bill, error: billError } = await supabase
+          .from('staff_credit_bills')
+          .insert({
+            staff_id: staffId,
+            branch_id: branchId,
+            amount,
+            balance: amount,
+            paid_amount: 0,
+            description: allocation.description ||
+              `Kitchen variance — ${item_name} (${date}${shift ? ` shift ${shift}` : ''})`,
+            bill_date: date,
+            status: 'accountant_confirmed',
+            approved_at: new Date().toISOString(),
+            approved_by: userId
+          })
+          .select()
+          .maybeSingle();
+        if (billError) throw new AppError(billError.message, 500);
+        if (bill) creditBills.push(bill);
+      }
+      if (creditBills.length === 0) {
+        throw new AppError('No valid staff allocation resolved to a billable staff profile', 400);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        branch_id: branchId,
+        date,
+        shift: shift || null,
+        item_name,
+        item_sku: item_sku || null,
+        variance_cost: variance_cost != null ? Number(variance_cost) : null,
+        liability_action: action,
+        credit_bills: creditBills
       }
     });
   } catch (error) {

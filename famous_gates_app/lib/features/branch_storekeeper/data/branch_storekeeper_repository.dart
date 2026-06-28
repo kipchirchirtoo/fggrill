@@ -1215,6 +1215,20 @@ class BranchStorekeeperRepository {
     return _unwrapList(response.data);
   }
 
+  /// POS menu items a Food Control recipe can be linked to — sourced from the
+  /// real sales catalog (`pos_outlet_items`, what `outlet_item_id` on a sold
+  /// line item actually points to), not the unrelated `restaurant_menu_items`
+  /// table `getMenuItems()` reads from.
+  Future<List<Map<String, dynamic>>> getRecipeLinkableMenuItems() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/recipes/menu-items',
+      queryParameters: {'branch_id': branchId},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
   Future<Map<String, dynamic>> createProductionRecipe({
     required String rawItemSku,
     required String rawItemName,

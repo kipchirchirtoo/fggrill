@@ -56,7 +56,7 @@ class SettingsScreen extends ConsumerWidget {
                 _SettingsItem(
                   icon: PhosphorIcons.lockKey(),
                   label: 'Change Lock PIN',
-                  onTap: () => _showChangeLockPin(context),
+                  onTap: () => _showChangeLockPin(context, ref),
                 ),
                 _SettingsItem(
                   icon: PhosphorIcons.bell(),
@@ -273,114 +273,10 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showChangeLockPin(BuildContext context) {
-    final currentPinCtrl = TextEditingController();
-    final newPinCtrl = TextEditingController();
-    final confirmPinCtrl = TextEditingController();
-
+  void _showChangeLockPin(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Lock PIN'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: currentPinCtrl,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'Current PIN (4 digits)',
-                counterText: '',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: newPinCtrl,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'New PIN (4 digits)',
-                counterText: '',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmPinCtrl,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'Confirm New PIN',
-                counterText: '',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final storedPin = await _storage.read(key: 'fg_lock_pin') ?? '';
-              if (storedPin.isNotEmpty && currentPinCtrl.text != storedPin) {
-                if (ctx.mounted) {
-                  AppNotifier.showSnackBar(
-                    ctx,
-                    const SnackBar(
-                      content: Text('Current PIN is incorrect'),
-                      backgroundColor: AppColors.kError,
-                    ),
-                  );
-                }
-                return;
-              }
-              if (newPinCtrl.text.length != 4) {
-                if (ctx.mounted) {
-                  AppNotifier.showSnackBar(
-                    ctx,
-                    const SnackBar(
-                      content: Text('New PIN must be 4 digits'),
-                      backgroundColor: AppColors.kError,
-                    ),
-                  );
-                }
-                return;
-              }
-              if (newPinCtrl.text != confirmPinCtrl.text) {
-                if (ctx.mounted) {
-                  AppNotifier.showSnackBar(
-                    ctx,
-                    const SnackBar(
-                      content: Text('PINs do not match'),
-                      backgroundColor: AppColors.kError,
-                    ),
-                  );
-                }
-                return;
-              }
-              await _storage.write(key: 'fg_lock_pin', value: newPinCtrl.text);
-              if (ctx.mounted) Navigator.of(ctx).pop();
-              if (context.mounted) {
-                AppNotifier.showSnackBar(
-                  context,
-                  const SnackBar(
-                    content: Text('PIN updated successfully'),
-                    backgroundColor: AppColors.kSuccess,
-                  ),
-                );
-              }
-            },
-            child: const Text('Update PIN'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _ChangePinDialog(ref: ref),
     );
   }
 
@@ -994,6 +890,167 @@ class _SettingsItem extends StatelessWidget {
               ? const Icon(Icons.chevron_right, color: AppColors.kTextSecondary)
               : null),
       onTap: onTap,
+    );
+  }
+}
+
+class _ChangePinDialog extends StatefulWidget {
+  final WidgetRef ref;
+  const _ChangePinDialog({required this.ref});
+
+  @override
+  State<_ChangePinDialog> createState() => _ChangePinDialogState();
+}
+
+class _ChangePinDialogState extends State<_ChangePinDialog> {
+  final _currentPinCtrl = TextEditingController();
+  final _newPinCtrl = TextEditingController();
+  final _confirmPinCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  bool _loading = false;
+  String? _errorMsg;
+
+  @override
+  void dispose() {
+    _currentPinCtrl.dispose();
+    _newPinCtrl.dispose();
+    _confirmPinCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _loading = true;
+      _errorMsg = null;
+    });
+    try {
+      await widget.ref.read(dioProvider).put('/auth/update-pin', data: {
+        'currentPin': _currentPinCtrl.text,
+        'newPin': _newPinCtrl.text,
+      });
+      await _storage.write(key: 'fg_lock_pin', value: _newPinCtrl.text);
+      if (mounted) {
+        Navigator.of(context).pop();
+        AppNotifier.showSnackBar(
+          context,
+          const SnackBar(
+            content: Text('PIN updated successfully'),
+            backgroundColor: AppColors.kSuccess,
+          ),
+        );
+      }
+    } catch (e) {
+      final msg = e.toString();
+      String display = 'Failed to update PIN';
+      final match = RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(msg);
+      if (match != null) {
+        display = match.group(1) ?? display;
+      } else if (msg.contains('Current PIN is incorrect')) {
+        display = 'Current PIN is incorrect';
+      } else if (msg.contains('4 digits')) {
+        display = 'New PIN must be exactly 4 digits';
+      }
+      if (mounted) setState(() => _errorMsg = display);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change Lock PIN'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_errorMsg != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.kError.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _errorMsg!,
+                  style: const TextStyle(color: AppColors.kError, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            TextFormField(
+              controller: _currentPinCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'Current PIN (4 digits)',
+                counterText: '',
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v.length != 4) return 'Must be 4 digits';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _newPinCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'New PIN (4 digits)',
+                counterText: '',
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v.length != 4) return 'Must be exactly 4 digits';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmPinCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'Confirm New PIN',
+                counterText: '',
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v != _newPinCtrl.text) return 'PINs do not match';
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _submit,
+          child: _loading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Update PIN'),
+        ),
+      ],
     );
   }
 }
