@@ -17,7 +17,8 @@ export const POS_STATION_CASHIER_ROLE_TYPES: Record<string, string[]> = {
   kyogong_reception_cashier: ['cashier', 'kyogong_reception'],
   kyogong_spa_cashier: ['kyogong_spa'],
   kyogong_executive_bar_cashier: ['executive_bar', 'kyogong_executive_bar'],
-  kyogong_sports_bar_cashier: ['main_bar', 'kyogong_sports_bar']
+  kyogong_sports_bar_cashier: ['main_bar', 'kyogong_sports_bar'],
+  choma_zone_cashier: ['choma_zone']
 };
 
 const EXPLICIT_ASSIGNMENT_CASHIER_ROLES = new Set([
@@ -153,6 +154,8 @@ export const stationDisplayName = (outletType: unknown): string => {
       return 'Reception Cashier';
     case 'kyogong_spa':
       return 'Kyogong Spa';
+    case 'choma_zone':
+      return 'Choma Zone';
     default:
       return 'POS Station';
   }

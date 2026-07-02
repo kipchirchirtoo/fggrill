@@ -121,7 +121,7 @@ class _PosOutletMenuSectionState extends ConsumerState<PosOutletMenuSection> {
   Widget _header() {
     return Row(
       children: [
-        Icon(Icons.storefront, color: AppColors.kPrimary, size: 28),
+        const Icon(Icons.storefront, color: AppColors.kPrimary, size: 28),
         const SizedBox(width: 12),
         const Expanded(
           child: Column(
@@ -188,16 +188,26 @@ class _PosOutletMenuSectionState extends ConsumerState<PosOutletMenuSection> {
             initialValue: _outletId,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'POS outlet'),
-            items: _outlets.map((outlet) {
-              return DropdownMenuItem<String>(
-                value: '${outlet['id']}',
-                child: Text(_outletLabel(outlet)),
-              );
-            }).toList(),
-            onChanged: (value) {
-              setState(() => _outletId = value);
-              _load();
-            },
+            items: _outlets.isEmpty
+                ? [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      enabled: false,
+                      child: Text('No outlets available'),
+                    ),
+                  ]
+                : _outlets.map((outlet) {
+                    return DropdownMenuItem<String>(
+                      value: '${outlet['id']}',
+                      child: Text(_outletLabel(outlet)),
+                    );
+                  }).toList(),
+            onChanged: _outlets.isEmpty
+                ? null
+                : (value) {
+                    setState(() => _outletId = value);
+                    _load();
+                  },
           ),
         ),
         SizedBox(
@@ -307,6 +317,7 @@ class _PosOutletMenuSectionState extends ConsumerState<PosOutletMenuSection> {
     );
     if (saved != true) return;
     await _load();
+    if (!mounted) return;
   }
 
   String _outletLabel(Map<String, dynamic> outlet) {
@@ -531,7 +542,7 @@ class _PosOutletItemDialogState extends ConsumerState<_PosOutletItemDialog> {
             ? 'Manual'
             : _category.text.trim(),
         'unit': _unit.text.trim().isEmpty ? 'each' : _unit.text.trim(),
-        'selling_price': num.parse(_price.text.trim()),
+        'selling_price': num.tryParse(_price.text.trim()) ?? 0,
         'cost_price': num.tryParse(_cost.text.trim()) ?? 0,
         'opening_stock': num.tryParse(_opening.text.trim()) ?? 0,
         'current_stock': num.tryParse(_current.text.trim()) ?? 0,

@@ -325,7 +325,10 @@ class BehavioralIntelligenceSection extends ConsumerWidget {
     // Group anomalies by date
     final grouped = <String, int>{};
     for (final anomaly in anomalies) {
-      final date = DateTime.parse(anomaly['detected_at'] as String);
+      final rawDate = anomaly['detected_at']?.toString();
+      if (rawDate == null || rawDate.isEmpty) continue;
+      final date = DateTime.tryParse(rawDate);
+      if (date == null) continue;
       final key = DateFormat('MMM dd').format(date);
       grouped[key] = (grouped[key] ?? 0) + 1;
     }
@@ -526,8 +529,11 @@ class BehavioralIntelligenceSection extends ConsumerWidget {
                   DataColumn(label: Text('Description')),
                   DataColumn(label: Text('Severity')),
                 ],
-                rows: anomalies.take(20).map((anomaly) {
-                  final date = DateTime.parse(anomaly['detected_at'] as String);
+                rows: anomalies.take(20).where((anomaly) {
+                  final rawDate = anomaly['detected_at']?.toString();
+                  return rawDate != null && rawDate.isNotEmpty && DateTime.tryParse(rawDate) != null;
+                }).map((anomaly) {
+                  final date = DateTime.tryParse(anomaly['detected_at']!.toString())!;
                   final severity = anomaly['severity'] as String? ?? 'LOW';
 
                   return DataRow(

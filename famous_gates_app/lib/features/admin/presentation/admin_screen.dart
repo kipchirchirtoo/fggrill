@@ -290,6 +290,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       AdminSection.requisitions: const RequisitionsSection(),
       AdminSection.packing: const PackingSection(),
       AdminSection.dispatchNotes: const DispatchNotesSection(),
+      AdminSection.directIssue: const DirectIssueSection(),
+      AdminSection.pendingBackorders: const PendingBackordersSection(),
       AdminSection.purchaseOrders: const PurchaseOrdersSection(),
       AdminSection.goodsReceiptGRN: const GoodsReceiptGRNSection(),
       AdminSection.centralStockTakes: const CentralStockTakesSection(),

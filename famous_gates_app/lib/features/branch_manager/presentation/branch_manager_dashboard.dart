@@ -8,6 +8,7 @@ import '../../../core/utils/readable_record.dart';
 import '../../../core/widgets/branch_sales_payments_view.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/record_detail_screen.dart';
+import '../../branch_health/presentation/branch_health_screen.dart';
 import '../../kitchen_operations/presentation/kitchen_operations_dashboard.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
@@ -59,6 +60,7 @@ enum BranchManagerSection {
   kitchenUsage,
   kitchenWastage,
   exchangeHistory,
+  dataHealth,
 }
 
 class BranchManagerDashboard extends ConsumerStatefulWidget {
@@ -339,6 +341,7 @@ class _BranchManagerDashboardState
         case BranchManagerSection.kitchenUsage:
         case BranchManagerSection.kitchenWastage:
         case BranchManagerSection.exchangeHistory:
+        case BranchManagerSection.dataHealth:
           break;
       }
     } catch (error) {
@@ -538,6 +541,12 @@ class _BranchManagerDashboardState
           group: 'Food & Beverage',
         ),
         MasterNavItem(
+          section: BranchManagerSection.dataHealth,
+          label: 'Data Health',
+          icon: PhosphorIcons.heartbeat(),
+          group: 'Food & Beverage',
+        ),
+        MasterNavItem(
           section: BranchManagerSection.orderIntelligence,
           label: 'Order Intelligence',
           icon: PhosphorIcons.chartBar(),
@@ -619,7 +628,7 @@ class _BranchManagerDashboardState
           icon: PhosphorIcons.users(),
           group: 'Human Resources',
         ),
-        MasterNavItem(
+        const MasterNavItem(
           section: BranchManagerSection.users,
           label: 'User Accounts',
           icon: Icons.badge_outlined,
@@ -814,6 +823,8 @@ class _BranchManagerDashboardState
         return _reports();
       case BranchManagerSection.reviews:
         return const MobileManagerReviewsScreen();
+      case BranchManagerSection.dataHealth:
+        return const BranchHealthView();
       case BranchManagerSection.orderIntelligence:
         return const KitchenOrderIntelligencePanel();
       case BranchManagerSection.waiterSales:
@@ -832,7 +843,7 @@ class _BranchManagerDashboardState
           fields: const ['document_type', 'file_name', 'created_at', 'status'],
           actionsBuilder: (row) => [
             _miniButton('View', () => _showRow(row)),
-            _miniButton('Download', () => _snack('Download queued')),
+            _miniButton('Download', () => _snack('Document download coming soon')),
           ],
         );
       case BranchManagerSection.kitchenStock:
@@ -1311,7 +1322,7 @@ class _BranchManagerDashboardState
           ],
           onChanged: (value) {
             if (value == null) return;
-            _period = value;
+            setState(() => _period = value);
             _load();
           },
         ),
@@ -1417,7 +1428,7 @@ class _BranchManagerDashboardState
           ],
           onChanged: (value) {
             if (value == null) return;
-            _staffPerformancePeriod = value;
+            setState(() => _staffPerformancePeriod = value);
             _load();
           },
         ),
@@ -2160,6 +2171,7 @@ class _BranchManagerDashboardState
                 prefixIcon: Icon(Icons.search, size: 18),
                 hintText: 'Search',
               ),
+              onChanged: (v) { _search = v; if (v.isEmpty) _load(); },
               onSubmitted: (value) {
                 _search = value;
                 _load();
@@ -2566,6 +2578,7 @@ class _BranchManagerDashboardState
         );
         if (picked != null) {
           _date = picked;
+          if (!mounted) return;
           _load();
         }
       },
@@ -2586,6 +2599,7 @@ class _BranchManagerDashboardState
         if (picked != null) {
           _from = picked.start;
           _to = picked.end;
+          if (!mounted) return;
           _load();
         }
       },
@@ -2826,77 +2840,81 @@ class _BranchManagerDashboardState
     }
 
     if (!mounted) return;
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: 460,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final field in fields) ...[
-                    if (field.endsWith('_id'))
-                      _searchableSelectField(
-                        label: readableRecordLabel(field),
-                        value: idValues[field] ?? '',
-                        options: idOptions[field] ?? const [],
-                        onChanged: (value) =>
-                            setDialogState(() => idValues[field] = value),
-                      )
-                    else
-                      TextField(
-                        controller: controllers[field],
-                        keyboardType: _numericField(field)
-                            ? const TextInputType.numberWithOptions(
-                                decimal: true)
-                            : TextInputType.text,
-                        decoration: InputDecoration(
-                            labelText: readableRecordLabel(field)),
-                      ),
-                    const SizedBox(height: 10),
+    Map<String, dynamic>? result;
+    try {
+      result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: Text(title),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final field in fields) ...[
+                      if (field.endsWith('_id'))
+                        _searchableSelectField(
+                          label: readableRecordLabel(field),
+                          value: idValues[field] ?? '',
+                          options: idOptions[field] ?? const [],
+                          onChanged: (value) =>
+                              setDialogState(() => idValues[field] = value),
+                        )
+                      else
+                        TextField(
+                          controller: controllers[field],
+                          keyboardType: _numericField(field)
+                              ? const TextInputType.numberWithOptions(
+                                  decimal: true)
+                              : TextInputType.text,
+                          decoration: InputDecoration(
+                              labelText: readableRecordLabel(field)),
+                        ),
+                      const SizedBox(height: 10),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final data = <String, dynamic>{};
-                for (final field in fields) {
-                  if (field.endsWith('_id')) {
-                    if (idValues[field]!.isNotEmpty) {
-                      data[field] = idValues[field];
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final data = <String, dynamic>{};
+                  for (final field in fields) {
+                    if (field.endsWith('_id')) {
+                      if (idValues[field]!.isNotEmpty) {
+                        data[field] = idValues[field];
+                      }
+                    } else {
+                      final value = controllers[field]?.text.trim() ?? '';
+                      if (value.isEmpty) continue;
+                      data[field] = _numericField(field)
+                          ? (num.tryParse(value) ?? value)
+                          : value;
                     }
-                  } else {
-                    final value = controllers[field]?.text.trim() ?? '';
-                    if (value.isEmpty) continue;
-                    data[field] = _numericField(field)
-                        ? (num.tryParse(value) ?? value)
-                        : value;
                   }
-                }
-                Navigator.pop(ctx, data);
-              },
-              child: const Text('Save'),
-            ),
-          ],
+                  Navigator.pop(ctx, data);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-    for (final controller in controllers.values) {
-      controller.dispose();
+      );
+    } finally {
+      for (final controller in controllers.values) {
+        controller.dispose();
+      }
     }
     if (result == null) return;
     await _run(() async {
-      await onSubmit(result);
+      await onSubmit(result!);
       await _load();
     }, success: '$title saved');
   }
@@ -2971,6 +2989,7 @@ class _BranchManagerDashboardState
       });
     }
 
+    if (!mounted) return;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -3102,6 +3121,7 @@ class _BranchManagerDashboardState
       c.dispose();
     }
     if (result == null) return;
+    if (!mounted) return;
 
     await _run(() async {
       final created = await _repo.createStaff(result);
@@ -3117,6 +3137,7 @@ class _BranchManagerDashboardState
     final staffOptions = staff == null
         ? await _loadIdOptions('staff_profile_id')
         : <_SelectOption>[];
+    if (!mounted) return;
     String staffProfileId = staff == null ? '' : _id(staff);
     String selectedRole = staff == null
         ? 'employee'
@@ -3252,6 +3273,7 @@ class _BranchManagerDashboardState
     );
     controller.dispose();
     if (password == null || password.isEmpty) return;
+    if (!mounted) return;
     await _run(() async {
       await _repo.updateUser(id, {'password': password});
     }, success: 'Password reset');
@@ -3553,7 +3575,7 @@ class _BranchManagerDashboardState
             await _repo.putMap('/maintenance/tasks/$id', data: data);
             break;
           default:
-            break;
+            throw UnimplementedError('Edit not supported for this section');
         }
       },
     );
@@ -3583,7 +3605,7 @@ class _BranchManagerDashboardState
           await _repo.delete('/maintenance/tasks/$id');
           break;
         default:
-          break;
+          throw UnimplementedError('Delete not supported for this section');
       }
       await _load();
     }, success: 'Record deleted');
@@ -3634,6 +3656,10 @@ class _BranchManagerDashboardState
   }
 
   Future<void> _bookingAction(String id, String action) async {
+    if (action == 'cancel') {
+      final confirmed = await _confirm('Cancel this booking?');
+      if (!confirmed) return;
+    }
     await _run(() async {
       if (action == 'checkin') await _repo.checkIn(id);
       if (action == 'checkout') await _repo.checkOut(id);
@@ -3743,6 +3769,7 @@ class _BranchManagerDashboardState
   }
 
   Future<void> _run(Future<void> Function() action, {String? success}) async {
+    if (!mounted) return;
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -3775,7 +3802,7 @@ class _BranchManagerDashboardState
   }
 
   void _openDetail(BranchManagerSection section, String id) {
-    if (id.isEmpty) return _showRow({});
+    if (id.isEmpty) { _snack('No record ID available'); return; }
     setState(() {
       _section = section;
       _recordId = id;
@@ -4715,6 +4742,8 @@ String _label(BranchManagerSection section) {
       return 'Kitchen Wastage';
     case BranchManagerSection.exchangeHistory:
       return 'Item Exchanges';
+    case BranchManagerSection.dataHealth:
+      return 'Data Health';
   }
 }
 

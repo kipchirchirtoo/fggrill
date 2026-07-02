@@ -1014,7 +1014,12 @@ class _ReportTemplateDialogState extends State<_ReportTemplateDialog> {
         ),
       ],
       onSave: () {
-        if (_name.text.trim().isEmpty) return;
+        if (_name.text.trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Template name is required.')),
+          );
+          return;
+        }
         Navigator.of(context).pop({
           'name': _name.text.trim(),
           'type': _type,

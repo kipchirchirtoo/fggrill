@@ -41,8 +41,10 @@ class _MenuPricingSectionState extends ConsumerState<MenuPricingSection> {
   // key -> pending edit (cost, selling). selling null = inherit base.
   final Map<String, ({double cost, double? selling})> _pending = {};
 
-  BranchPricingArgs get _args =>
-      (branchId: _branchId!, type: _type == 'all' ? null : _type);
+  BranchPricingArgs? get _args {
+    if (_branchId == null) return null;
+    return (branchId: _branchId!, type: _type == 'all' ? null : _type);
+  }
 
   void _onRowChanged(String key, double cost, double? selling) {
     _pending[key] = (cost: cost, selling: selling);
@@ -64,8 +66,8 @@ class _MenuPricingSectionState extends ConsumerState<MenuPricingSection> {
       }).toList();
       final saved = await ref.read(menuPricingRepositoryProvider).saveBulk(_branchId!, items);
       if (!mounted) return;
-      _pending.clear();
-      ref.invalidate(branchPricingProvider(_args));
+      setState(() => _pending.clear());
+      ref.invalidate(branchPricingProvider(_args!));
       AppNotifier.showSnackBar(
         context,
         SnackBar(content: Text('Saved $saved item price${saved == 1 ? '' : 's'}')),
@@ -87,7 +89,7 @@ class _MenuPricingSectionState extends ConsumerState<MenuPricingSection> {
       await ref.read(menuPricingRepositoryProvider).resetItem(_branchId!, item.itemType, item.itemId);
       if (!mounted) return;
       _pending.remove(item.key);
-      ref.invalidate(branchPricingProvider(_args));
+      ref.invalidate(branchPricingProvider(_args!));
       AppNotifier.showSnackBar(
         context,
         const SnackBar(content: Text('Reverted to base price')),
@@ -208,12 +210,15 @@ class _MenuPricingSectionState extends ConsumerState<MenuPricingSection> {
   }
 
   Widget _pricingList() {
-    final async = ref.watch(branchPricingProvider(_args));
+    // _pricingList is only called from build when _branchId != null,
+    // so _args is guaranteed non-null here.
+    final args = _args!;
+    final async = ref.watch(branchPricingProvider(args));
     return async.when(
       loading: () => const LoadingSkeleton(),
       error: (e, _) => ErrorState(
         message: apiErrorMessage(e, fallback: 'Could not load pricing'),
-        onRetry: () => ref.invalidate(branchPricingProvider(_args)),
+        onRetry: () => ref.invalidate(branchPricingProvider(args)),
       ),
       data: (result) {
         var items = result.items;

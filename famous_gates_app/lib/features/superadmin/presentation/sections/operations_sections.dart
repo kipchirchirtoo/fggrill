@@ -99,12 +99,20 @@ class _DepartmentsSectionState extends ConsumerState<DepartmentsSection> {
       final svc = ref.read(systemServiceProvider);
       final res = await svc.getDepartments();
       final raw = res['data'];
-      setState(() {
-        _departments = (raw is List ? raw : [])
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-      });
-    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _departments = (raw is List ? raw : [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load departments: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -114,10 +122,10 @@ class _DepartmentsSectionState extends ConsumerState<DepartmentsSection> {
     _editing = dept;
     _nameController.text = dept?['name'] ?? '';
     _descController.text = dept?['description'] ?? '';
-    showDialog(context: context, builder: (_) => _DeptDialog(this));
+    showDialog(context: context, builder: (ctx) => _DeptDialog(this, ctx));
   }
 
-  Future<void> _save() async {
+  Future<void> _save(BuildContext dialogContext) async {
     if (_nameController.text.trim().isEmpty) return;
     setState(() => _submitting = true);
     try {
@@ -135,7 +143,7 @@ class _DepartmentsSectionState extends ConsumerState<DepartmentsSection> {
       } else {
         await svc.createDepartment(payload);
       }
-      if (mounted) Navigator.pop(context);
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
       _load();
     } catch (e) {
       if (mounted) {
@@ -150,15 +158,15 @@ class _DepartmentsSectionState extends ConsumerState<DepartmentsSection> {
   Future<void> _delete(Map<String, dynamic> dept) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Delete Department'),
         content: Text('Delete "${dept['name']}"?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
@@ -170,7 +178,13 @@ class _DepartmentsSectionState extends ConsumerState<DepartmentsSection> {
       await ref.read(systemServiceProvider).deleteDepartment(
           deptId is int ? deptId : int.tryParse(deptId.toString()) ?? 0);
       _load();
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete department: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -288,7 +302,10 @@ class _DepartmentsSectionState extends ConsumerState<DepartmentsSection> {
 
 class _DeptDialog extends StatelessWidget {
   final _DepartmentsSectionState state;
-  const _DeptDialog(this.state);
+  // dialogContext is passed by the showDialog builder but the build(context)
+  // parameter is the same dialog context and is used directly below.
+  // ignore: avoid_unused_constructor_parameters
+  const _DeptDialog(this.state, BuildContext dialogContext);
 
   @override
   Widget build(BuildContext context) {
@@ -320,7 +337,7 @@ class _DeptDialog extends StatelessWidget {
             onPressed: state._submitting ? null : () => Navigator.pop(context),
             child: const Text('Cancel')),
         ElevatedButton(
-          onPressed: state._submitting ? null : state._save,
+          onPressed: state._submitting ? null : () => state._save(context),
           style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.kPrimary,
               foregroundColor: Colors.white),
@@ -389,12 +406,20 @@ class _RatePlansSectionState extends ConsumerState<RatePlansSection> {
       final svc = ref.read(roomServiceProvider);
       final res = await svc.getRatePlans();
       final raw = res['data'];
-      setState(() {
-        _plans = (raw is List ? raw : [])
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-      });
-    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _plans = (raw is List ? raw : [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load rate plans: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -411,10 +436,10 @@ class _RatePlansSectionState extends ConsumerState<RatePlansSection> {
     _rateType = (plan?['rateType'] ?? 'standard').toString();
     _isPercentage = plan?['isPercentage'] == true;
     _refundable = plan?['refundable'] != false;
-    showDialog(context: context, builder: (_) => _RatePlanDialog(this));
+    showDialog(context: context, builder: (ctx) => _RatePlanDialog(this, ctx));
   }
 
-  Future<void> _save() async {
+  Future<void> _save(BuildContext dialogContext) async {
     if (_nameCtrl.text.trim().isEmpty) return;
     setState(() => _submitting = true);
     try {
@@ -436,7 +461,7 @@ class _RatePlansSectionState extends ConsumerState<RatePlansSection> {
       } else {
         await svc.createRatePlan(payload);
       }
-      if (mounted) Navigator.pop(context);
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
       _load();
     } catch (e) {
       if (mounted) {
@@ -493,17 +518,17 @@ class _RatePlansSectionState extends ConsumerState<RatePlansSection> {
                         onDelete: () async {
                           final confirm = await showDialog<bool>(
                             context: context,
-                            builder: (_) => AlertDialog(
+                            builder: (ctx) => AlertDialog(
                               title: const Text('Delete Rate Plan'),
                               content: Text('Delete "${_plans[i]['name']}"?'),
                               actions: [
                                 TextButton(
                                     onPressed: () =>
-                                        Navigator.pop(context, false),
+                                        Navigator.pop(ctx, false),
                                     child: const Text('Cancel')),
                                 TextButton(
                                     onPressed: () =>
-                                        Navigator.pop(context, true),
+                                        Navigator.pop(ctx, true),
                                     child: const Text('Delete',
                                         style: TextStyle(color: Colors.red))),
                               ],
@@ -680,7 +705,11 @@ class _InfoRow extends StatelessWidget {
 
 class _RatePlanDialog extends StatefulWidget {
   final _RatePlansSectionState state;
-  const _RatePlanDialog(this.state);
+  // dialogContext is passed by the showDialog builder but the build(context)
+  // parameter of _RatePlanDialogState is the same dialog context and is used
+  // directly inside the widget tree below.
+  // ignore: avoid_unused_constructor_parameters
+  const _RatePlanDialog(this.state, BuildContext dialogContext);
 
   @override
   State<_RatePlanDialog> createState() => _RatePlanDialogState();
@@ -808,7 +837,7 @@ class _RatePlanDialogState extends State<_RatePlanDialog> {
                 onPressed: s._submitting ? null : () => Navigator.pop(context),
                 child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: s._submitting ? null : s._save,
+              onPressed: s._submitting ? null : () => s._save(context),
               style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.kPrimary,
                   foregroundColor: Colors.white),
@@ -855,12 +884,20 @@ class _CheckInSectionState extends ConsumerState<CheckInSection> {
       final res = await svc.getBookings(
           checkInFrom: today, checkInTo: today, status: 'confirmed');
       final raw = res['data'];
-      setState(() {
-        _arrivals = (raw is List ? raw : [])
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-      });
-    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _arrivals = (raw is List ? raw : [])
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load arrivals: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1277,7 +1314,8 @@ class ChannelManagerSection extends ConsumerStatefulWidget {
 class _ChannelManagerSectionState extends ConsumerState<ChannelManagerSection> {
   List<Map<String, dynamic>> _channels = [];
   bool _isLoading = true;
-  final bool _syncingAll = false;
+  // ignore: prefer_final_fields — intentionally mutable for future sync implementation
+  bool _syncingAll = false;
   final Set<String> _syncingChannel = {};
 
   final _channelLogos = const {
@@ -1327,7 +1365,11 @@ class _ChannelManagerSectionState extends ConsumerState<ChannelManagerSection> {
                     tooltip: 'Refresh'),
                 const SizedBox(width: 4),
                 ElevatedButton.icon(
-                  onPressed: _syncingAll ? null : () {},
+                  onPressed: _syncingAll
+                      ? null
+                      : () => ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Coming soon')),
+                          ),
                   icon: Icon(PhosphorIcons.arrowsClockwise(), size: 16),
                   label: const Text('Sync All'),
                   style: ElevatedButton.styleFrom(
@@ -1483,7 +1525,11 @@ class _ChannelCard extends StatelessWidget {
               Row(children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: isSyncing ? null : () {},
+                    onPressed: isSyncing
+                        ? null
+                        : () => ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Coming soon')),
+                            ),
                     icon: Icon(PhosphorIcons.arrowsClockwise(), size: 14),
                     label: const Text('Push Availability'),
                     style: OutlinedButton.styleFrom(
@@ -1495,7 +1541,11 @@ class _ChannelCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: isSyncing ? null : () {},
+                    onPressed: isSyncing
+                        ? null
+                        : () => ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Coming soon')),
+                            ),
                     icon: Icon(PhosphorIcons.downloadSimple(), size: 14),
                     label: const Text('Pull Bookings'),
                     style: OutlinedButton.styleFrom(

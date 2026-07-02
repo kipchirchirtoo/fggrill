@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_provider.dart';
+import '../../../core/utils/api_error_message.dart';
 import '../../auth/data/auth_repository.dart';
 
 final branchStorekeeperRepositoryProvider =
@@ -748,13 +749,17 @@ class BranchStorekeeperRepository {
 
   Future<void> createStockRequest(Map<String, dynamic> data) async {
     final branchId = await _branchId;
-    await _dio.post('/store/stock-requests',
-        data: {
-          ...data,
-          if (branchId.isNotEmpty)
-            'requesting_branch_id': int.tryParse(branchId),
-        },
-        options: await _authOptions);
+    try {
+      await _dio.post('/store/stock-requests',
+          data: {
+            ...data,
+            if (branchId.isNotEmpty)
+              'requesting_branch_id': int.tryParse(branchId),
+          },
+          options: await _authOptions);
+    } on DioException catch (e) {
+      throw apiErrorMessage(e, fallback: 'Stock request failed');
+    }
   }
 
   Future<List<Map<String, dynamic>>> kitchenRequisitions({
@@ -1137,6 +1142,39 @@ class BranchStorekeeperRepository {
     return _unwrapMap(response.data);
   }
 
+  /// The finalized "previous closed commercial day" Daily Controls snapshot
+  /// (daily_control_snapshots) — frozen when the next cashier shift opened.
+  /// Null if this branch has no closed commercial day yet. See GET
+  /// /kitchen/daily-control/snapshot.
+  Future<Map<String, dynamic>?> getDailyControlSnapshot() async {
+    final response = await _dio.get(
+      '/kitchen/daily-control/snapshot',
+      queryParameters: await _branchQuery({}),
+      options: await _authOptions,
+    );
+    final data = response.data is Map ? response.data['data'] : null;
+    return data is Map ? Map<String, dynamic>.from(data) : null;
+  }
+
+  /// The physical stock ledger (Opening/Added/Totals/Closing/Rejects/Qty
+  /// Sold/System Sold/Shorts) — one row per branch stock item being
+  /// physically tracked in a kitchen shift, matching the storekeeper's own
+  /// paper ledger. See GET /kitchen/daily-control/stock-ledger.
+  Future<List<Map<String, dynamic>>> getStockLedger({
+    required String date,
+    String? shift,
+  }) async {
+    final response = await _dio.get(
+      '/kitchen/daily-control/stock-ledger',
+      queryParameters: await _branchQuery({
+        'date': date,
+        if (shift != null) 'shift': shift,
+      }),
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
   Future<List<Map<String, dynamic>>> getRecipes() async {
     final response = await _dio.get(
       '/kitchen/recipes',
@@ -1268,7 +1306,8 @@ class BranchStorekeeperRepository {
         'spoilage_threshold_percent': spoilageThresholdPercent,
         'cost_per_output': costPerOutput,
         'requires_yield_confirmation': requiresYieldConfirmation,
-        if (poolItemId != null && poolItemId.isNotEmpty) 'pool_item_id': poolItemId,
+        if (poolItemId != null && poolItemId.isNotEmpty)
+          'pool_item_id': poolItemId,
         if (poolFraction != null) 'pool_fraction': poolFraction,
         if (outputs.isNotEmpty) 'outputs': outputs,
       },
@@ -1312,7 +1351,8 @@ class BranchStorekeeperRepository {
         'spoilage_threshold_percent': spoilageThresholdPercent,
         'cost_per_output': costPerOutput,
         'requires_yield_confirmation': requiresYieldConfirmation,
-        if (poolItemId != null && poolItemId.isNotEmpty) 'pool_item_id': poolItemId,
+        if (poolItemId != null && poolItemId.isNotEmpty)
+          'pool_item_id': poolItemId,
         if (poolFraction != null) 'pool_fraction': poolFraction,
       },
       options: await _authOptions,
@@ -1323,6 +1363,144 @@ class BranchStorekeeperRepository {
   Future<void> deactivateProductionRecipe(String id) async {
     await _dio.delete(
       '/kitchen/shifts/recipes/$id',
+      options: await _authOptions,
+    );
+  }
+
+  // ── FOOD CONTROL TYPE CONFIG (Phase 1) ─────────────────────
+  Future<String> getStockItemFoodControlType(String itemSku) async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/food-control/type',
+      queryParameters: {'branch_id': branchId, 'item_sku': itemSku},
+      options: await _authOptions,
+    );
+    final data = _unwrapMap(response.data);
+    return '${data['food_control_type'] ?? 'UNREGISTERED'}';
+  }
+
+  Future<List<Map<String, dynamic>>> getUnregisteredFoodControlItems() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/food-control/unregistered',
+      queryParameters: {'branch_id': branchId},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getDirectItems() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/food-control/direct-items',
+      queryParameters: {'branch_id': branchId},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createDirectItem({
+    required String stockItemSku,
+    String? stockItemName,
+    required String posOutletItemId,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/kitchen/shifts/food-control/direct-items',
+      data: {
+        'branch_id': branchId,
+        'stock_item_sku': stockItemSku,
+        if (stockItemName != null) 'stock_item_name': stockItemName,
+        'pos_outlet_item_id': posOutletItemId,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<void> deactivateDirectItem(String id) async {
+    await _dio.delete(
+      '/kitchen/shifts/food-control/direct-items/$id',
+      options: await _authOptions,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getExemptItems() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/food-control/exempt-items',
+      queryParameters: {'branch_id': branchId},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createExemptItem({
+    required String posOutletItemId,
+    String? reason,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/kitchen/shifts/food-control/exempt-items',
+      data: {
+        'branch_id': branchId,
+        'pos_outlet_item_id': posOutletItemId,
+        if (reason != null) 'reason': reason,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<void> deleteExemptItem(String id) async {
+    await _dio.delete(
+      '/kitchen/shifts/food-control/exempt-items/$id',
+      options: await _authOptions,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPoolLinks() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/food-control/pool-links',
+      queryParameters: {'branch_id': branchId},
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  /// Either [poolItemId] (an existing pos_outlet_items row) or
+  /// [poolItemSku] (a raw branch_stock SKU from the central store — the
+  /// backend resolves or auto-creates its pos_outlet_items proxy) must be
+  /// given.
+  Future<Map<String, dynamic>> setPoolLink({
+    required String posOutletItemId,
+    String? poolItemId,
+    String? poolItemSku,
+    String? poolItemName,
+    String? poolItemUnit,
+    required double poolFraction,
+  }) async {
+    final branchId = await _branchId;
+    final response = await _dio.post(
+      '/kitchen/shifts/food-control/pool-links',
+      data: {
+        'pos_outlet_item_id': posOutletItemId,
+        if (poolItemId != null) 'pool_item_id': poolItemId,
+        if (poolItemSku != null) 'pool_item_sku': poolItemSku,
+        if (poolItemName != null) 'pool_item_name': poolItemName,
+        if (poolItemUnit != null) 'pool_item_unit': poolItemUnit,
+        if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId),
+        'pool_fraction': poolFraction,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<void> clearPoolLink(String posOutletItemId) async {
+    await _dio.delete(
+      '/kitchen/shifts/food-control/pool-links/$posOutletItemId',
       options: await _authOptions,
     );
   }
@@ -1417,7 +1595,8 @@ class BranchStorekeeperRepository {
     return _unwrapMap(response.data);
   }
 
-  Future<Map<String, dynamic>> getKitchenShiftPosConsumption(String shiftId) async {
+  Future<Map<String, dynamic>> getKitchenShiftPosConsumption(
+      String shiftId) async {
     final response = await _dio.get(
       '/kitchen/shifts/$shiftId/pos-consumption',
       options: await _authOptions,
@@ -1425,11 +1604,16 @@ class BranchStorekeeperRepository {
     return _unwrapMap(response.data);
   }
 
+  /// openingItems is ignored by the backend for Shift B once Shift A has
+  /// been handed over — its opening stock is seeded directly from Shift A's
+  /// confirmed closing counts (see getShiftHandover/SHIFT_A_NOT_HANDED_OVER).
   Future<Map<String, dynamic>> openKitchenShift({
     required String shiftType,
     required String shiftDate,
-    required List<Map<String, dynamic>> openingItems,
+    List<Map<String, dynamic>> openingItems = const [],
     List<String> assignedChefIds = const [],
+    String? subShiftType,
+    String department = 'KITCHEN',
   }) async {
     final branchId = await _branchId;
     final response = await _dio.post(
@@ -1440,10 +1624,26 @@ class BranchStorekeeperRepository {
         'shift_date': shiftDate,
         'opening_items': openingItems,
         'assigned_chef_ids': assignedChefIds,
+        if (subShiftType != null) 'sub_shift_type': subShiftType,
+        'department': department,
       },
       options: await _authOptions,
     );
     return _unwrapMap(response.data);
+  }
+
+  /// The branch's currently open commercial day (cashier shift), or null if
+  /// none is open — used to gate opening a kitchen Shift A/B before the user
+  /// tries and hits the backend's NO_ACTIVE_CASHIER_SHIFT error.
+  Future<Map<String, dynamic>?> getActiveCashierShift() async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/active-cashier-shift',
+      queryParameters: {'branch_id': branchId},
+      options: await _authOptions,
+    );
+    final data = response.data is Map ? response.data['data'] : null;
+    return data is Map ? Map<String, dynamic>.from(data) : null;
   }
 
   Future<Map<String, dynamic>> addShiftStock(
@@ -1453,6 +1653,28 @@ class BranchStorekeeperRepository {
     final response = await _dio.post(
       '/kitchen/shifts/$shiftId/stock',
       data: {'items': items},
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  /// Full type-tagged, staff-tagged, timestamped issuance ledger for a shift
+  /// — every mid-session "+ Add Issuance" appears here, distinct from the
+  /// running-total number on the shift item row.
+  Future<List<Map<String, dynamic>>> getShiftAdditions(String shiftId) async {
+    final response = await _dio.get(
+      '/kitchen/shifts/$shiftId/additions',
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  /// Production logged so far this shift, grouped by recipe, plus any Type A
+  /// (recipe BOM) issuances that still have no production output logged —
+  /// the same list the backend uses to block closeKitchenShift.
+  Future<Map<String, dynamic>> getProductionSummary(String shiftId) async {
+    final response = await _dio.get(
+      '/kitchen/shifts/$shiftId/production-summary',
       options: await _authOptions,
     );
     return _unwrapMap(response.data);
@@ -1490,26 +1712,49 @@ class BranchStorekeeperRepository {
   }) async {
     final response = await _dio.post(
       '/kitchen/shifts/$shiftId/spoilage',
-      data: {'items': items, if (notes != null && notes.isNotEmpty) 'notes': notes},
+      data: {
+        'items': items,
+        if (notes != null && notes.isNotEmpty) 'notes': notes
+      },
       options: await _authOptions,
     );
     return _unwrapMap(response.data);
   }
 
+  /// outgoingWitnessIds/incomingWitnessIds are required by the backend for
+  /// Shift A/B kitchen shifts — the digital kitchen ledger handover (Phase
+  /// 4) that Shift B's opening is later seeded from.
   Future<Map<String, dynamic>> closeKitchenShift(
     String shiftId,
     List<Map<String, dynamic>> physicalCounts, {
     String? closingNotes,
+    List<String> outgoingWitnessIds = const [],
+    List<String> incomingWitnessIds = const [],
   }) async {
     final response = await _dio.post(
       '/kitchen/shifts/$shiftId/close',
       data: {
         'physical_counts': physicalCounts,
         if (closingNotes != null) 'closing_notes': closingNotes,
+        if (outgoingWitnessIds.isNotEmpty)
+          'outgoing_witness_ids': outgoingWitnessIds,
+        if (incomingWitnessIds.isNotEmpty)
+          'incoming_witness_ids': incomingWitnessIds,
       },
       options: await _authOptions,
     );
     return _unwrapMap(response.data);
+  }
+
+  /// The digital kitchen ledger for a shift — found whether the shift was
+  /// the outgoing (closing) or incoming (seeded) side of the handover.
+  Future<Map<String, dynamic>?> getShiftHandover(String shiftId) async {
+    final response = await _dio.get(
+      '/kitchen/shifts/$shiftId/handover',
+      options: await _authOptions,
+    );
+    final data = response.data is Map ? response.data['data'] : null;
+    return data is Map ? Map<String, dynamic>.from(data) : null;
   }
 
   Future<Map<String, dynamic>> submitShiftForApproval(String shiftId) async {
@@ -1602,57 +1847,6 @@ class BranchStorekeeperRepository {
       options: await _authOptions,
     );
     return _unwrapList(response.data);
-  }
-
-  // ---------------------------------------------------------------------
-  // Pastry production (Branch Storekeeper).
-  // ---------------------------------------------------------------------
-
-  Future<List<Map<String, dynamic>>> pastryProduction({String? date}) async {
-    final response = await _dio.get(
-      '/storekeeping/pastry-production',
-      queryParameters:
-          await _branchQuery({if (date != null) 'date': date}),
-      options: await _authOptions,
-    );
-    return _unwrapList(response.data);
-  }
-
-  /// itemId is the inventory_items UUID (String); branchId/quantityProduced
-  /// are numeric.
-  Future<Map<String, dynamic>> recordPastryProduction({
-    required String itemId,
-    required num quantityProduced,
-  }) async {
-    final branchId = await _branchId;
-    final response = await _dio.post(
-      '/storekeeping/pastry-production',
-      data: {
-        if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId),
-        'item_id': itemId,
-        'quantity_produced': quantityProduced,
-      },
-      options: await _authOptions,
-    );
-    return _unwrapMap(response.data);
-  }
-
-  /// shiftId must be a real, open kitchen_shifts.id — the batch is issued
-  /// into that shift's stock ledger.
-  Future<Map<String, dynamic>> issuePastryToKitchen(
-    String id, {
-    required String shiftId,
-    num? issuedQuantity,
-  }) async {
-    final response = await _dio.put(
-      '/storekeeping/pastry-production/$id/issue',
-      data: {
-        'shift_id': shiftId,
-        if (issuedQuantity != null) 'issued_quantity': issuedQuantity,
-      },
-      options: await _authOptions,
-    );
-    return _unwrapMap(response.data);
   }
 
   // ---------------------------------------------------------------------
@@ -1901,7 +2095,8 @@ class BranchStorekeeperRepository {
         if (barLocation != null) 'bar_location': barLocation,
         if (shift != null) 'shift': shift,
         if (spoilageDate != null) 'spoilage_date': spoilageDate,
-        if (responsibleStaffId != null) 'responsible_staff_id': responsibleStaffId,
+        if (responsibleStaffId != null)
+          'responsible_staff_id': responsibleStaffId,
         'charge_to_staff': chargeToStaff,
       },
       options: await _authOptions,

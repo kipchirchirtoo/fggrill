@@ -81,6 +81,8 @@ enum AdminSection {
   requisitions,
   packing,
   dispatchNotes,
+  directIssue,
+  pendingBackorders,
   purchaseOrders,
   goodsReceiptGRN,
   centralStockTakes,

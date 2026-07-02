@@ -12,6 +12,13 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/ge
 import { supabase } from '../config/database';
 import db from '../db';
 import { logger } from '../utils/logger';
+import {
+  FOOD_CONTROL_SYSTEM_MODEL,
+  runFleetStructuralChecks,
+  runStructuralChecks,
+  buildFallbackDiagnosis,
+} from '../services/branch-health.service';
+import { getLinaDailyFoodControl as runLinaDailyFoodControl } from '../services/lina-daily-food-control.service';
 
 // ── AI Clients ────────────────────────────────────────────────────────────────
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
@@ -186,10 +193,10 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
   ] = await Promise.allSettled([
     supabase.from('branches').select('id,name,code,status,is_main_branch,manager_id').order('name'),
     supabase.from('users').select('id,role,branch_id,first_name,last_name,created_at,force_logout_at').limit(500),
-    // cashier_shifts: cash_variance is the actual discrepancy column (not discrepancy_amount)
-    supabase.from('cashier_shifts').select('id,branch_id,status,total_sales,cash_variance,opened_at,closed_at').gte('opened_at', since24h).limit(200),
-    supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,status,opened_at').gte('opened_at', since7d).limit(500),
-    supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,opened_at').gte('opened_at', sincePrev7d).lt('opened_at', since7d).limit(500),
+    // cashier_shifts: discrepancy_amount is the actual discrepancy column
+    supabase.from('cashier_shifts').select('id,branch_id,status,total_sales,discrepancy_amount,opened_at,closed_at').gte('opened_at', since24h).limit(200),
+    supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status,opened_at').gte('opened_at', since7d).limit(500),
+    supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,opened_at').gte('opened_at', sincePrev7d).lt('opened_at', since7d).limit(500),
     // audit_exceptions: no branch_id column — linked via audit_session_id
     supabase.from('audit_exceptions').select('id,exception_type,severity,description,amount,status,detected_at').gte('detected_at', since7d).order('detected_at', { ascending: false }).limit(100),
     supabase.from('audit_trail').select('id,user_id,action,entity_type,old_values,new_values,performed_at').gte('performed_at', since24h).order('performed_at', { ascending: false }).limit(150),
@@ -262,9 +269,9 @@ async function gatherSystemContext(): Promise<Record<string, any>> {
     ? Math.round(((revenue7d - revenuePrev7d) / revenuePrev7d) * 1000) / 10
     : (revenue7d > 0 ? 100 : 0);
   const openShifts = shifts24h.filter((s: any) => s.status === 'OPEN' || s.status === 'open').length;
-  // cash_variance is the actual column (cash_counted - expected); non-zero = discrepancy
-  const cashDiscrepancies = shifts7d.filter((s: any) => Math.abs(s.cash_variance || 0) > 0);
-  const totalDiscrepancyAmount = shifts7d.reduce((s: number, sh: any) => s + Math.abs(sh.cash_variance || 0), 0);
+  // discrepancy_amount (expected vs actual cash); non-zero = discrepancy
+  const cashDiscrepancies = shifts7d.filter((s: any) => Math.abs(s.discrepancy_amount || 0) > 0);
+  const totalDiscrepancyAmount = shifts7d.reduce((s: number, sh: any) => s + Math.abs(sh.discrepancy_amount || 0), 0);
 
   // Revenue by branch (7d) — id-keyed + name-keyed
   const revByBranch: Record<string, number> = {};
@@ -786,6 +793,20 @@ const LINA_READABLE_TABLES = new Set([
   'lina_daily_financial_snapshots',
   'lina_variance_findings',
   'lina_agent_findings',
+  // Food-control system tables
+  'recipes',
+  'recipe_items',
+  'bar_drinks',
+  'bar_stock',
+  'bar_stock_ledger',
+  'bar_stocktake_records',
+  'kitchen_stocktake_shifts',
+  'kitchen_stocktake_items',
+  'pos_outlets',
+  'pos_outlet_items',
+  'restaurant_menu_items',
+  'pos_shift_orders',
+  'branch_health_checks',
 ]);
 
 const LINA_BRANCH_SCOPED_TABLES = new Set([
@@ -823,6 +844,18 @@ const LINA_BRANCH_SCOPED_TABLES = new Set([
   'lina_daily_financial_snapshots',
   'lina_variance_findings',
   'lina_agent_findings',
+  // Food-control tables carrying a branch_id column
+  'recipes',
+  'bar_drinks',
+  'bar_stock',
+  'bar_stock_ledger',
+  'bar_stocktake_records',
+  'kitchen_stocktake_shifts',
+  'pos_outlets',
+  'pos_outlet_items',
+  'restaurant_menu_items',
+  'pos_shift_orders',
+  'branch_health_checks',
 ]);
 
 const LINA_GLOBAL_READ_ROLES = new Set([
@@ -859,6 +892,7 @@ type LinaBusinessDomain =
   | 'audit'
   | 'security'
   | 'suppliers'
+  | 'food_control'
   | 'general';
 
 type LinaAgentKey =
@@ -906,9 +940,9 @@ const LINA_AGENT_PROFILES: Record<LinaAgentKey, { label: string; owns: LinaBusin
   },
   inventory: {
     label: 'Inventory Control Agent',
-    owns: ['inventory'],
+    owns: ['inventory', 'food_control'],
     primary_provider: 'openai',
-    purpose: 'Stock balances, movements, reservations, GRNs, issues, stock takes, wastage, and reorder risk.',
+    purpose: 'Stock balances, movements, reservations, GRNs, issues, stock takes, wastage, reorder risk, and three-tier food-control health (bar, kitchen, store).',
   },
   procurement: {
     label: 'Procurement Agent',
@@ -1004,6 +1038,7 @@ function classifyBusinessDomains(input: string): LinaBusinessDomain[] {
   add('staff', /\b(staff|employee|hr|attendance|leave|payroll|performance|overtime)\b/);
   add('audit', /\b(audit|exception|anomaly|discrepancy|compliance|risk|fraud|variance)\b/);
   add('security', /\b(security|login|auth|session|impersonation|suspicious|ip|2fa|permission|role)\b/);
+  add('food_control', /\b(food control|food cost|cost of food|recipe|ingredient|stock ?take|par level|bar stock|bar drink|drinks?\b|pos link|outlet item|menu cost|cost price|data health|health check|health score|unlinked|stock deduction|portion|chapati|kitchen cost|expected (usage|cost)|dispatch(ed)? (not|never) received)\b/);
 
   return domains.length ? domains : ['general'];
 }
@@ -1014,6 +1049,7 @@ function selectLinaAgents(domains: LinaBusinessDomain[], intent: LinaIntent, mes
 
   if (domains.includes('finance') || domains.includes('suppliers')) selected.add('finance');
   if (domains.includes('inventory')) selected.add('inventory');
+  if (domains.includes('food_control')) { selected.add('inventory'); selected.add('audit'); }
   if (domains.includes('procurement') || domains.includes('suppliers')) selected.add('procurement');
   if (domains.includes('audit') || domains.includes('security') || /\b(risk|variance|fraud|exception|discrepanc)/.test(normalized)) selected.add('audit');
   if (domains.includes('staff')) selected.add('hr');
@@ -1262,6 +1298,48 @@ function compactReadForPrompt(read: LinaReadResult): Record<string, any> {
   };
 }
 
+/**
+ * Deterministic food-control health evidence (three-tier system). Global-read
+ * roles see the whole fleet; branch-scoped actors see only their branch.
+ * Pure SQL findings + severity-formula scores — no external AI call, so this
+ * is safe to attach to every food-control chat turn.
+ */
+async function gatherFoodControlHealth(req: Request): Promise<Record<string, any> | null> {
+  try {
+    if (hasGlobalLinaRead(req)) {
+      const fleet = await runFleetStructuralChecks();
+      return {
+        scope: 'fleet',
+        system_model: FOOD_CONTROL_SYSTEM_MODEL,
+        branches: fleet.branches,
+        generated_at: fleet.generated_at,
+      };
+    }
+    const branchId = Number(linaBranchId(req));
+    if (!Number.isInteger(branchId) || branchId <= 0) return null;
+    const { findings, context } = await runStructuralChecks(branchId);
+    const diagnosis = buildFallbackDiagnosis(findings, context);
+    return {
+      scope: 'branch',
+      system_model: FOOD_CONTROL_SYSTEM_MODEL,
+      branch: {
+        ...context,
+        health_score: diagnosis.health_score,
+        issues: diagnosis.issues,
+        findings,
+      },
+      generated_at: new Date().toISOString(),
+    };
+  } catch (err: any) {
+    logger.warn('Lina food-control health evidence unavailable', { error: err.message });
+    return {
+      scope: 'unavailable',
+      error: err.message,
+      system_model: FOOD_CONTROL_SYSTEM_MODEL,
+    };
+  }
+}
+
 async function gatherBusinessEvidence(req: Request, message: string, ctx: Record<string, any>): Promise<Record<string, any>> {
   const domains = classifyBusinessDomains(message);
   const tablePlans: Array<{ table: string; options: LinaTableReadOptions; domains: LinaBusinessDomain[] }> = [
@@ -1279,8 +1357,8 @@ async function gatherBusinessEvidence(req: Request, message: string, ctx: Record
     { table: 'store_supplier_payments', domains: ['procurement', 'suppliers', 'finance'], options: { select: 'id,payment_number,supplier_id,invoice_id,po_id,status,amount,payment_method,paid_at,created_at', limit: 80, orderBy: { column: 'created_at' } } },
     { table: 'branch_payments', domains: ['finance', 'suppliers'], options: { select: 'id,branch_id,payment_number,category,payment_method,payee_name,amount,status,po_id,grn_id,invoice_id,created_at,updated_at', limit: 80, orderBy: { column: 'created_at' } } },
 
-    // cashier_shifts: cash_variance is the actual discrepancy column
-    { table: 'cashier_shifts', domains: ['finance', 'pos'], options: { select: 'id,branch_id,status,total_sales,cash_variance,opened_at,closed_at', limit: 80, orderBy: { column: 'opened_at' } } },
+    // cashier_shifts: discrepancy_amount is the actual discrepancy column
+    { table: 'cashier_shifts', domains: ['finance', 'pos'], options: { select: 'id,branch_id,status,total_sales,discrepancy_amount,opened_at,closed_at', limit: 80, orderBy: { column: 'opened_at' } } },
     // pos_transactions: total_amount is the correct column (no amount/total/source)
     { table: 'pos_transactions', domains: ['finance', 'pos'], options: { select: 'id,branch_id,total_amount,payment_method,transaction_type,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
     // restaurant_orders: no branch_id column
@@ -1310,6 +1388,15 @@ async function gatherBusinessEvidence(req: Request, message: string, ctx: Record
     // impersonation_sessions: may not exist — linaReadTable handles gracefully
     { table: 'impersonation_sessions', domains: ['security', 'audit'], options: { select: 'id,superadmin_id,impersonated_user_id,started_at,ended_at', limit: 40, orderBy: { column: 'started_at' } } },
 
+    // Food-control system (column names verified against live schema)
+    { table: 'recipes', domains: ['food_control'], options: { select: 'id,branch_id,name,menu_item_name,output_quantity,output_unit,portions_per_recipe,selling_price,is_active', limit: 60 } },
+    { table: 'recipe_items', domains: ['food_control'], options: { select: 'id,recipe_id,item_sku,item_name,quantity_required,unit,waste_factor,inventory_item_id', limit: 80 } },
+    { table: 'bar_drinks', domains: ['food_control'], options: { select: 'id,branch_id,name,category,cost_price,selling_price,inventory_item_id,is_active', limit: 80 } },
+    { table: 'bar_stock', domains: ['food_control'], options: { select: 'id,branch_id,item_name,current_stock,par_level,unit,low_stock,last_updated', limit: 80, orderBy: { column: 'last_updated' } } },
+    { table: 'bar_stocktake_records', domains: ['food_control', 'audit'], options: { select: 'id,branch_id,stocktake_date,item_id,system_quantity,physical_quantity,variance,status,reason_for_variance,recorded_at', limit: 60, orderBy: { column: 'recorded_at' } } },
+    { table: 'kitchen_stocktake_shifts', domains: ['food_control'], options: { select: 'id,branch_id,stocktake_date,shift,status,submitted_at,reviewed_at', limit: 40, orderBy: { column: 'stocktake_date' } } },
+    { table: 'branch_health_checks', domains: ['food_control', 'audit'], options: { select: 'id,branch_id,health_score,is_ai_interpreted,checked_at', limit: 20, orderBy: { column: 'checked_at' } } },
+
     { table: 'lina_memories', domains: ['general', 'finance', 'inventory', 'procurement', 'suppliers', 'pos', 'rooms', 'staff', 'audit', 'security'], options: { select: 'id,branch_id,memory_type,subject_type,subject_id,title,summary,severity,confidence,status,last_seen_at,source_module', limit: 80, orderBy: { column: 'last_seen_at' } } },
     { table: 'lina_daily_financial_snapshots', domains: ['general', 'finance', 'suppliers'], options: { select: 'id,branch_id,snapshot_date,revenue_total,expense_total,cash_total,card_total,mpesa_total,supplier_liability,payroll_cost,inventory_value,generated_at', limit: 40, orderBy: { column: 'snapshot_date' } } },
     { table: 'lina_variance_findings', domains: ['general', 'finance', 'inventory', 'audit', 'staff', 'suppliers'], options: { select: 'id,branch_id,finding_date,variance_type,expected_amount,actual_amount,variance_amount,likely_cause,confidence,severity,status,created_at', limit: 80, orderBy: { column: 'created_at' } } },
@@ -1330,7 +1417,10 @@ async function gatherBusinessEvidence(req: Request, message: string, ctx: Record
   const intent = classifyLinaIntent(message);
   const agents = selectLinaAgents(domains, intent, message);
   const metrics = deriveBusinessMetrics(ctx, reads);
-  const evidence = {
+  const foodControlHealth = domains.includes('food_control')
+    ? await gatherFoodControlHealth(req)
+    : null;
+  const evidence: Record<string, any> = {
     query: message,
     domains,
     intent,
@@ -1344,6 +1434,7 @@ async function gatherBusinessEvidence(req: Request, message: string, ctx: Record
     reads: reads.map(compactReadForPrompt),
     generated_at: new Date().toISOString(),
   };
+  if (foodControlHealth) evidence.food_control_health = foodControlHealth;
 
   await writeLinaAgentLog(req, {
     action: 'business_evidence_read',
@@ -1392,6 +1483,32 @@ function localBusinessGuruAnswer(_message: string, ctx: Record<string, any>, evi
     if (Array.isArray(inv.low_stock_examples) && inv.low_stock_examples.length) {
       sections.push(`- Examples needing reorder: ${inv.low_stock_examples.map((i: any) => `${i.item || i.sku} (${i.quantity}/${i.reorder_level})`).join(', ')}.`);
     }
+  }
+
+  const fch = evidence.food_control_health;
+  if (domains.includes('food_control') && fch && fch.scope !== 'unavailable') {
+    sections.push('');
+    sections.push(`### Food Control Health (deterministic checks)`);
+    if (fch.scope === 'fleet' && Array.isArray(fch.branches)) {
+      for (const b of fch.branches) {
+        const counts = b.issue_counts || {};
+        const flags = [
+          counts.critical ? `${counts.critical} critical` : '',
+          counts.high ? `${counts.high} high` : '',
+          counts.medium ? `${counts.medium} medium` : '',
+          counts.low ? `${counts.low} low` : '',
+        ].filter(Boolean).join(', ') || 'no issues';
+        const top = (b.top_issues || [])[0];
+        sections.push(`- **${b.branch_name}** — score **${b.health_score}/100** (${flags})${top ? `; top issue: ${top}` : ''}.`);
+      }
+    } else if (fch.scope === 'branch' && fch.branch) {
+      const b = fch.branch;
+      sections.push(`- **${b.branch_name}** — score **${b.health_score}/100**.`);
+      for (const issue of (b.issues || []).slice(0, 6)) {
+        sections.push(`- [${String(issue.severity).toUpperCase()}] ${issue.title} — ${issue.suggested_action}`);
+      }
+    }
+    sections.push(`- Model: bar sales deduct via pos_outlet_items → bar_drinks → bar_stock_ledger; kitchen consumption = stocktake opening + added − closing; store trail = DISPATCH_OUT/DISPATCH_RECEIVE matched by reference_id. Sales live ONLY in pos_shift_orders (restaurant_orders is a dead table).`);
   }
 
   if (domains.includes('procurement') || domains.includes('suppliers')) {
@@ -1578,16 +1695,26 @@ async function writeLinaAgentLog(req: Request | null, payload: {
   output?: Record<string, any>;
   status?: string;
 }): Promise<void> {
-  const user = req ? linaUser(req) : { id: null, role: null };
+  const user = req ? linaUser(req) : { id: null, role: null, branch_id: null };
+  // Mapped onto the ACTUAL lina_agent_logs columns (id, branch_id, session_id,
+  // message_role, content, tool_name, tool_input, tool_result, tokens_used,
+  // model, created_at) — the previous shape (action/input/output/status
+  // columns) never existed, so every log write silently failed.
+  const branchIdRaw = (user as any).branch_id;
+  const branchId = Number(branchIdRaw);
   await supabase.from('lina_agent_logs').insert({
-    actor_id: user.id,
-    actor_role: user.role,
-    action: payload.action,
-    tool_name: payload.tool_name || null,
-    risk_classification: payload.risk_classification || null,
-    input: payload.input || {},
-    output: payload.output || {},
-    status: payload.status || 'recorded',
+    branch_id: Number.isInteger(branchId) && branchId > 0 ? branchId : null,
+    message_role: 'tool',
+    content: JSON.stringify({
+      action: payload.action,
+      actor_id: user.id,
+      actor_role: user.role,
+      risk_classification: payload.risk_classification || null,
+      status: payload.status || 'recorded',
+    }),
+    tool_name: payload.tool_name || payload.action,
+    tool_input: payload.input || {},
+    tool_result: payload.output || {},
   }).then(({ error }) => {
     if (error) logger.warn('Lina agent log write failed', { error: error.message });
   });
@@ -2384,7 +2511,7 @@ export const getFinancialIntelligence = async (req: Request, res: Response): Pro
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     const [shifts30dRes, expensesRes, creditRes, pettyCashRes] = await Promise.allSettled([
-      supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,status,opened_at,closed_at').gte('opened_at', since30d).limit(1000),
+      supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status,opened_at,closed_at').gte('opened_at', since30d).limit(1000),
       supabase.from('accounting_ap_bills').select('id,amount,status,due_date,created_at').gte('created_at', since30d).limit(200),
       supabase.from('audit_exceptions').select('id,exception_type,severity,amount,detected_at').eq('exception_type', 'credit_bill').gte('detected_at', since30d).limit(100),
       supabase.from('store_purchase_orders').select('id,branch_id,total_amount,status,created_at').gte('created_at', since30d).limit(200),
@@ -2637,6 +2764,7 @@ export const getLinaTools = async (req: Request, res: Response): Promise<void> =
         { name: 'business.evidence_reader', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/chat', purpose: 'Automatically gathers role-scoped ERP evidence before Lina answers business questions.' },
         { name: 'db.read_table', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-table', tables: Array.from(LINA_READABLE_TABLES).sort() },
         { name: 'db.run_readonly_sql', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-only-sql', restricted_to: Array.from(LINA_GLOBAL_READ_ROLES).sort() },
+        { name: 'food_control.health_check', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/food-control-health', purpose: 'Deterministic three-tier food-control health: POS→stock links, bar drink/recipe/inventory linkage, stocktake linkage, par levels, dispatch reconciliation, and menu cost coverage — fleet-wide for leadership, own branch otherwise.' },
         { name: 'model.router', action_class: 'READ_ONLY', endpoint: 'GET /api/lina/model-router' },
         { name: 'client.puter_quick_assist', action_class: 'CLIENT_SIDE_ONLY', endpoint: 'frontend Puter.js helper', purpose: 'Autocomplete, draft descriptions, form copy, and text cleanup only. No ERP decisions or database reads.' },
         { name: 'remediation.create_proposal', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/remediate' },
@@ -2654,6 +2782,141 @@ export const getLinaTools = async (req: Request, res: Response): Promise<void> =
       },
     },
   });
+};
+
+/**
+ * Lina tool: deterministic food-control health check.
+ * Body: { branch_id?: number } — omitted = fleet view for global-read roles,
+ * own branch for branch-scoped roles. Never calls an external AI.
+ */
+export const foodControlHealthTool = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const global = hasGlobalLinaRead(req);
+    const actorBranch = Number(linaBranchId(req));
+    const requestedRaw = req.body?.branch_id;
+    const requestedBranchId = requestedRaw != null && `${requestedRaw}`.trim() !== ''
+      ? Number(requestedRaw)
+      : null;
+
+    const branchPayload = async (branchId: number): Promise<Record<string, any>> => {
+      const { findings, context } = await runStructuralChecks(branchId);
+      const diagnosis = buildFallbackDiagnosis(findings, context);
+      return {
+        scope: 'branch',
+        system_model: FOOD_CONTROL_SYSTEM_MODEL,
+        branch: {
+          ...context,
+          health_score: diagnosis.health_score,
+          issues: diagnosis.issues,
+          findings,
+        },
+        generated_at: new Date().toISOString(),
+      };
+    };
+
+    let data: Record<string, any>;
+    if (requestedBranchId != null) {
+      if (!Number.isInteger(requestedBranchId) || requestedBranchId <= 0) {
+        res.status(400).json({ success: false, message: 'branch_id must be a positive integer' });
+        return;
+      }
+      if (!global && requestedBranchId !== actorBranch) {
+        res.status(403).json({ success: false, message: 'You can only check your own branch' });
+        return;
+      }
+      data = await branchPayload(requestedBranchId);
+    } else if (global) {
+      const fleet = await runFleetStructuralChecks();
+      data = {
+        scope: 'fleet',
+        system_model: FOOD_CONTROL_SYSTEM_MODEL,
+        branches: fleet.branches,
+        generated_at: fleet.generated_at,
+      };
+    } else if (Number.isInteger(actorBranch) && actorBranch > 0) {
+      data = await branchPayload(actorBranch);
+    } else {
+      res.status(400).json({ success: false, message: 'branch_id is required for this role' });
+      return;
+    }
+
+    await writeLinaAgentLog(req, {
+      action: 'tool_food_control_health',
+      tool_name: 'food_control.health_check',
+      risk_classification: 'READ_ONLY',
+      input: { branch_id: requestedBranchId },
+      output: { scope: data.scope },
+      status: 'succeeded',
+    });
+    res.json({ success: true, data });
+  } catch (err: any) {
+    if (err?.name === 'BranchNotFoundError') {
+      res.status(404).json({ success: false, message: err.message });
+      return;
+    }
+    logger.error('Lina food-control health tool failed', err);
+    res.status(500).json({ success: false, message: 'Food-control health check failed' });
+  }
+};
+
+/**
+ * Lina Daily Food Control briefing — the AI layer over the same payload the
+ * storekeeper Daily Controls page uses. Query: branch_id (optional for
+ * branch-scoped roles), date (YYYY-MM-DD, defaults to today Nairobi),
+ * shift (A|B, optional), force_refresh=true to bypass the 5-min cache.
+ */
+export const getDailyFoodControlBriefing = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const global = hasGlobalLinaRead(req);
+    const actorBranch = Number(linaBranchId(req));
+    const requestedRaw = `${req.query.branch_id ?? ''}`.trim();
+    let branchId: number;
+    if (requestedRaw) {
+      branchId = Number(requestedRaw);
+      if (!Number.isInteger(branchId) || branchId <= 0) {
+        res.status(400).json({ success: false, message: 'branch_id must be a positive integer' });
+        return;
+      }
+      if (!global && branchId !== actorBranch) {
+        res.status(403).json({ success: false, message: 'You can only view your own branch' });
+        return;
+      }
+    } else if (Number.isInteger(actorBranch) && actorBranch > 0) {
+      branchId = actorBranch;
+    } else {
+      res.status(400).json({ success: false, message: 'branch_id is required for this role' });
+      return;
+    }
+
+    // Default to "today" in Africa/Nairobi (UTC+3) — the business day, not UTC.
+    const nairobiToday = new Date(Date.now() + 3 * 3_600_000).toISOString().split('T')[0];
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(`${req.query.date}`)
+      ? `${req.query.date}`
+      : nairobiToday;
+    const shiftRaw = `${req.query.shift ?? ''}`.toUpperCase();
+    const shift = shiftRaw === 'A' || shiftRaw === 'B' ? shiftRaw : null;
+    const forceRefresh = req.query.force_refresh === 'true';
+
+    const result = await runLinaDailyFoodControl(branchId, date, shift, forceRefresh);
+
+    await writeLinaAgentLog(req, {
+      action: 'daily_food_control_briefing',
+      tool_name: 'food_control.daily_briefing',
+      risk_classification: 'READ_ONLY',
+      input: { branch_id: branchId, date, shift, force_refresh: forceRefresh },
+      output: { is_ai_interpreted: result.is_ai_interpreted, concerns: result.briefing.top_concerns.length },
+      status: 'succeeded',
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    if (err?.name === 'BranchNotFoundError') {
+      res.status(404).json({ success: false, message: err.message });
+      return;
+    }
+    logger.error('Lina daily food-control briefing failed', err);
+    res.status(500).json({ success: false, message: 'Daily food-control briefing failed. Please try again.' });
+  }
 };
 
 export const readLinaTableTool = async (req: Request, res: Response): Promise<void> => {
@@ -3136,7 +3399,7 @@ export const getBranchBenchmark = async (req: Request, res: Response): Promise<v
     const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const [branchesRes, shiftsRes, roomsRes, exceptionsRes] = await Promise.allSettled([
       supabase.from('branches').select('id,name,code,status').order('name'),
-      supabase.from('cashier_shifts').select('branch_id,total_sales,cash_variance,status').gte('opened_at', since7d).limit(2000),
+      supabase.from('cashier_shifts').select('branch_id,total_sales,discrepancy_amount,status').gte('opened_at', since7d).limit(2000),
       supabase.from('rooms').select('branch_id,status').limit(5000),
       // audit_exceptions has no branch_id — skip it in benchmark, use exception count only
       supabase.from('audit_exceptions').select('exception_type,severity,amount').gte('detected_at', since7d).limit(1000),
@@ -3151,16 +3414,16 @@ export const getBranchBenchmark = async (req: Request, res: Response): Promise<v
     branches.forEach((b: any) => {
       byBranch[String(b.id)] = {
         branch_id: b.id, name: b.name || b.code || `Branch ${b.id}`, status: b.status,
-        revenue_7d: 0, shifts: 0, cash_variance: 0, discrepancy_shifts: 0,
+        revenue_7d: 0, shifts: 0, discrepancy_amount: 0, discrepancy_shifts: 0,
         rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0,
       };
     });
     const ensure = (id: any) => {
       const k = String(id);
-      if (!byBranch[k]) byBranch[k] = { branch_id: id, name: `Branch ${id}`, status: 'unknown', revenue_7d: 0, shifts: 0, cash_variance: 0, discrepancy_shifts: 0, rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0 };
+      if (!byBranch[k]) byBranch[k] = { branch_id: id, name: `Branch ${id}`, status: 'unknown', revenue_7d: 0, shifts: 0, discrepancy_amount: 0, discrepancy_shifts: 0, rooms_total: 0, rooms_occupied: 0, voids: 0, critical: 0 };
       return byBranch[k];
     };
-    shifts.forEach((s: any) => { if (s.branch_id == null) return; const b = ensure(s.branch_id); b.revenue_7d += Number(s.total_sales) || 0; b.shifts += 1; const d = Math.abs(Number(s.cash_variance) || 0); if (d > 0) { b.cash_variance += d; b.discrepancy_shifts += 1; } });
+    shifts.forEach((s: any) => { if (s.branch_id == null) return; const b = ensure(s.branch_id); b.revenue_7d += Number(s.total_sales) || 0; b.shifts += 1; const d = Math.abs(Number(s.discrepancy_amount) || 0); if (d > 0) { b.discrepancy_amount += d; b.discrepancy_shifts += 1; } });
     rooms.forEach((r: any) => { if (r.branch_id == null) return; const b = ensure(r.branch_id); b.rooms_total += 1; if ((r.status || '').toLowerCase() === 'occupied') b.rooms_occupied += 1; });
     // audit_exceptions has no branch_id — aggregate totals only
     const totalVoids = exceptions.filter((e: any) => e.exception_type === 'void_bill').length;

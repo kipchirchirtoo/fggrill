@@ -1,5 +1,6 @@
 import 'bom_control_item.dart';
 import 'kitchen_vs_sales_item.dart';
+import 'stock_ledger_item.dart';
 import 'stock_vs_sales_summary.dart';
 
 /// Layer 4 — the unified daily summary dashboard.
@@ -74,11 +75,25 @@ class DailyControlState {
     required this.stockVsSales,
     required this.summary,
     required this.hasKitchenSession,
+    this.totalIssuedQty = 0,
+    this.stockLedger = const [],
+    this.stockLedgerLoading = false,
+    this.snapshot,
+    this.snapshotLoading = false,
   });
 
   final bool isLoading;
   final String? errorMessage;
   final String date;
+
+  /// The previous CLOSED commercial day's frozen Daily Controls payload
+  /// (daily_control_snapshots, via GET /kitchen/daily-control/snapshot) —
+  /// null until loaded, or if this branch has no closed commercial day yet.
+  /// Everything else on this page (bomControl, kitchenVsSales, etc. below)
+  /// is always a live/provisional recomputation for whatever date/shift is
+  /// selected — the two must never be merged into one view.
+  final Map<String, dynamic>? snapshot;
+  final bool snapshotLoading;
 
   /// Active shift filter: 'A', 'B', or null (full day).
   final String? shift;
@@ -88,11 +103,25 @@ class DailyControlState {
   /// from stock_history fallback and the UI should show a warning.
   final bool hasKitchenSession;
 
+  /// Sum of all real, confirmed ingredient usage found across every actual-
+  /// usage source (kitchen_shift_items.sold_quantity, kitchen_session_issues,
+  /// kitchen_usage_records). Can be 0 even when [hasKitchenSession] is true —
+  /// that means a kitchen shift was opened but no production yield has been
+  /// confirmed yet, so every "Actual" figure below is genuinely unrecorded,
+  /// not a confirmed zero.
+  final num totalIssuedQty;
+
   final List<BomControlItem> bomControl;
   final List<NoRecipeItem> noRecipeItems;
   final List<KitchenVsSalesItem> kitchenVsSales;
   final StockVsSalesSummary stockVsSales;
   final DailyControlSummary summary;
+
+  /// The physical stock ledger (paper-ledger-shaped) view — independent of
+  /// bomControl above, which is the recipe-theoretical check. Loaded
+  /// separately since it's sourced from kitchen_shift_items, not POS sales.
+  final List<StockLedgerItem> stockLedger;
+  final bool stockLedgerLoading;
 
   bool get hasAnyData =>
       bomControl.isNotEmpty || kitchenVsSales.isNotEmpty || summary.totalFoodQtySold > 0;
@@ -102,11 +131,14 @@ class DailyControlState {
         date: date,
         shift: null,
         hasKitchenSession: false,
+        totalIssuedQty: 0,
         bomControl: const [],
         noRecipeItems: const [],
         kitchenVsSales: const [],
         stockVsSales: StockVsSalesSummary.empty(),
         summary: DailyControlSummary.empty(),
+        stockLedger: const [],
+        stockLedgerLoading: false,
       );
 
   DailyControlState copyWith({
@@ -116,11 +148,16 @@ class DailyControlState {
     String? date,
     Object? shift = _unset,
     bool? hasKitchenSession,
+    num? totalIssuedQty,
     List<BomControlItem>? bomControl,
     List<NoRecipeItem>? noRecipeItems,
     List<KitchenVsSalesItem>? kitchenVsSales,
     StockVsSalesSummary? stockVsSales,
     DailyControlSummary? summary,
+    List<StockLedgerItem>? stockLedger,
+    bool? stockLedgerLoading,
+    Object? snapshot = _unset,
+    bool? snapshotLoading,
   }) {
     return DailyControlState(
       isLoading: isLoading ?? this.isLoading,
@@ -128,11 +165,18 @@ class DailyControlState {
       date: date ?? this.date,
       shift: identical(shift, _unset) ? this.shift : shift as String?,
       hasKitchenSession: hasKitchenSession ?? this.hasKitchenSession,
+      totalIssuedQty: totalIssuedQty ?? this.totalIssuedQty,
       bomControl: bomControl ?? this.bomControl,
       noRecipeItems: noRecipeItems ?? this.noRecipeItems,
       kitchenVsSales: kitchenVsSales ?? this.kitchenVsSales,
       stockVsSales: stockVsSales ?? this.stockVsSales,
       summary: summary ?? this.summary,
+      stockLedger: stockLedger ?? this.stockLedger,
+      stockLedgerLoading: stockLedgerLoading ?? this.stockLedgerLoading,
+      snapshot: identical(snapshot, _unset)
+          ? this.snapshot
+          : snapshot as Map<String, dynamic>?,
+      snapshotLoading: snapshotLoading ?? this.snapshotLoading,
     );
   }
 }

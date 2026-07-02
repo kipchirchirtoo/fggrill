@@ -25,6 +25,10 @@ Future<void> printCustomerDocument(
   num? changeGiven,
   String? duplicateLabel,
 }) async {
+  final branding = _customerDocumentBranding(
+    branchId: branchId,
+    branchName: branchName,
+  );
   final doc = await resolveDocumentCached(
     ref,
     templateKey,
@@ -42,7 +46,8 @@ Future<void> printCustomerDocument(
     final data = _templateData(
       sale: sale,
       items: items,
-      branchName: branchName,
+      branchName: branding.branchName,
+      companyName: branding.companyName,
       tillNumber: doc?.tillNumber,
       tableNumber: tableNumber,
       roomNumber: roomNumber,
@@ -65,8 +70,9 @@ Future<void> printCustomerDocument(
   await PrintService().printReceipt(
     sale,
     items,
-    branchName,
+    branding.branchName,
     receiptType: fallbackTitle,
+    companyNameOverride: branding.companyName,
     tableNumber: tableNumber,
     roomNumber: roomNumber,
     customerName: customerName,
@@ -236,6 +242,7 @@ TemplatePrintData _templateData({
   required SaleResult sale,
   required List<CartItem> items,
   required String branchName,
+  String companyName = 'FamousGate Hotels',
   String? tillNumber,
   String? tableNumber,
   String? roomNumber,
@@ -284,7 +291,7 @@ TemplatePrintData _templateData({
 
   return TemplatePrintData(
     values: {
-      'company_name': 'FamousGate Hotels',
+      'company_name': companyName,
       'branch_name': branchName,
       'company_address': 'Bomet, Kenya',
       'company_phone': '+254 706 782 828',
@@ -343,6 +350,39 @@ TemplatePrintData _templateData({
     serviceCharge: serviceCharge,
     noticeText: noticeText,
     duplicateLabel: _clean(duplicateLabel),
+  );
+}
+
+class _CustomerDocumentBranding {
+  const _CustomerDocumentBranding({
+    required this.companyName,
+    required this.branchName,
+  });
+
+  final String companyName;
+  final String branchName;
+}
+
+_CustomerDocumentBranding _customerDocumentBranding({
+  required String? branchId,
+  required String branchName,
+}) {
+  final normalizedBranchId = _clean(branchId);
+  final normalizedBranchName = branchName.trim().toLowerCase();
+  final isSotik = normalizedBranchId == '4' ||
+      normalizedBranchName == 'sotik' ||
+      normalizedBranchName.contains('sotik ');
+
+  if (isSotik) {
+    return const _CustomerDocumentBranding(
+      companyName: 'KLUB DIAMOND',
+      branchName: '',
+    );
+  }
+
+  return _CustomerDocumentBranding(
+    companyName: 'FamousGate Hotels',
+    branchName: branchName,
   );
 }
 

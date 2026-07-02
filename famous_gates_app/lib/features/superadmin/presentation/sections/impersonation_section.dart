@@ -266,89 +266,30 @@ class _ImpersonationSectionState extends ConsumerState<ImpersonationSection> {
   }
 
   void _showImpersonateDialog(Map<String, dynamic> user) {
-    final justificationCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
     final fullName =
         '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim();
     final userId = user['id']?.toString() ?? '';
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(children: [
-          Icon(PhosphorIcons.warning(), color: Colors.orange, size: 22),
-          const SizedBox(width: 8),
-          const Text('Confirm Impersonation'),
-        ]),
-        content: SizedBox(
-          width: 460,
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Text(
-                    'You are about to impersonate $fullName (${user['role'] ?? 'Unknown role'}). '
-                    'This action is fully logged and audited.',
-                    style: TextStyle(color: Colors.orange.shade800),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: justificationCtrl,
-                  minLines: 3,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: 'Justification *',
-                    hintText: 'Provide a reason for impersonation...',
-                    alignLabelWithHint: true,
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().length < 10) {
-                      return 'Justification must be at least 10 characters';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              Navigator.pop(ctx);
-              await _startImpersonation(
-                  userId, fullName, justificationCtrl.text.trim());
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade600,
-            ),
-            child: const Text('Impersonate'),
-          ),
-        ],
+      builder: (ctx) => _ImpersonateDialog(
+        user: user,
+        fullName: fullName,
+        userId: userId,
+        onConfirmed: (justification) =>
+            _startImpersonation(userId, fullName, justification),
       ),
     );
   }
 
   Future<void> _startImpersonation(
       String userId, String userName, String justification) async {
+    if (!mounted) return;
     try {
       final result = await ref
           .read(superadminGodRepositoryProvider)
           .startImpersonation(userId, justification);
+      if (!mounted) return;
       ref.read(impersonationSessionProvider.notifier).state = {
         ...result,
         'user_name': userName,
@@ -401,5 +342,105 @@ class _ImpersonationSectionState extends ConsumerState<ImpersonationSection> {
         AppNotifier.show(context, 'Failed to end session: $e', isError: true);
       }
     }
+  }
+}
+
+/// A dedicated StatefulWidget for the impersonation confirmation dialog so
+/// that [justificationCtrl] is properly disposed when the dialog is closed.
+class _ImpersonateDialog extends StatefulWidget {
+  const _ImpersonateDialog({
+    required this.user,
+    required this.fullName,
+    required this.userId,
+    required this.onConfirmed,
+  });
+
+  final Map<String, dynamic> user;
+  final String fullName;
+  final String userId;
+  final void Function(String justification) onConfirmed;
+
+  @override
+  State<_ImpersonateDialog> createState() => _ImpersonateDialogState();
+}
+
+class _ImpersonateDialogState extends State<_ImpersonateDialog> {
+  final TextEditingController _justificationCtrl = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _justificationCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(children: [
+        Icon(PhosphorIcons.warning(), color: Colors.orange, size: 22),
+        const SizedBox(width: 8),
+        const Text('Confirm Impersonation'),
+      ]),
+      content: SizedBox(
+        width: 460,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Text(
+                  'You are about to impersonate ${widget.fullName} (${widget.user['role'] ?? 'Unknown role'}). '
+                  'This action is fully logged and audited.',
+                  style: TextStyle(color: Colors.orange.shade800),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _justificationCtrl,
+                minLines: 3,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Justification *',
+                  hintText: 'Provide a reason for impersonation...',
+                  alignLabelWithHint: true,
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().length < 10) {
+                    return 'Justification must be at least 10 characters';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            final justification = _justificationCtrl.text.trim();
+            Navigator.pop(context);
+            widget.onConfirmed(justification);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange.shade600,
+          ),
+          child: const Text('Impersonate'),
+        ),
+      ],
+    );
   }
 }

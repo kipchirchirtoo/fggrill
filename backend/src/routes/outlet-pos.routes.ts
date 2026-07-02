@@ -26,6 +26,7 @@ import {
   getPendingVoidsKitchen,
   getPendingVoidsKitchenWholeBill,
   getPendingVoidsManager,
+  getPosBootstrap,
   getOutletItems,
   getOutletStaff,
   getOutlets,
@@ -109,7 +110,8 @@ const allowedRoles = new Set([
   'kyogong_spa_cashier',
   'kyogong_executive_bar_cashier',
   'kyogong_sports_bar_cashier',
-  'kyogong_reception_cashier'
+  'kyogong_reception_cashier',
+  'choma_zone_cashier'
 ]);
 
 router.use(protect);
@@ -123,6 +125,7 @@ router.use((req, res, next) => {
 
 router.get('/printer/status', getPrinterStatus);
 router.get('/captain-orders', getBarCaptainOrders);
+router.get('/bootstrap', getPosBootstrap);
 router.get('/outlets', getOutlets);
 router.post('/outlets', createOutlet);
 router.get('/staff', getOutletStaff);

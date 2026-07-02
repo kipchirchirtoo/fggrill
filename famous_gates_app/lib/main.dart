@@ -1,9 +1,13 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:updat/updat.dart';
 import 'package:updat/updat_window_manager.dart';
 import 'package:timezone/data/latest.dart' as tz; // KENYA TIME
+import 'package:window_manager/window_manager.dart';
 
 import 'core/router/app_router.dart';
 import 'core/services/desktop_update_service.dart';
@@ -13,10 +17,29 @@ import 'core/utils/working_directory_guard.dart';
 
 bool _updateNoticeShown = false;
 
-void main() {
+bool get _isDesktop =>
+    !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones(); // KENYA TIME
   ensureStableWorkingDirectory();
+
+  // Desktop: launch in full screen. Esc exits full screen (see the app-wide
+  // shortcut in FamousGatesApp below).
+  if (_isDesktop) {
+    await windowManager.ensureInitialized();
+    await windowManager.waitUntilReadyToShow(
+      const WindowOptions(
+        fullScreen: true,
+        title: 'FamousGate Hotels System',
+      ),
+      () async {
+        await windowManager.show();
+        await windowManager.focus();
+      },
+    );
+  }
   FlutterError.onError = (details) {
     final message = details.exceptionAsString();
     if (message.contains('AssetManifest.bin') &&
@@ -88,6 +111,14 @@ class FamousGatesApp extends ConsumerWidget {
                 triggerGlobalRefresh(ref),
             const SingleActivator(LogicalKeyboardKey.f5): () =>
                 triggerGlobalRefresh(ref),
+            // Esc leaves full screen. Dialogs and menus handle Esc closer to
+            // the focus first, so this only fires when nothing else consumed
+            // it — closing a dialog will not also drop out of full screen.
+            const SingleActivator(LogicalKeyboardKey.escape): () async {
+              if (_isDesktop && await windowManager.isFullScreen()) {
+                await windowManager.setFullScreen(false);
+              }
+            },
           },
           child: Focus(
             autofocus: true,

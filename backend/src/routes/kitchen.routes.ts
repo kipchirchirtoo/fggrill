@@ -89,6 +89,8 @@ import {
     analyzeShiftControls,
     billStaffForShortage,
     getDailyControlData,
+    getDailyControlSnapshot,
+    getStockLedger,
     billDailyControlVariance
 } from '../controllers/kitchen/kitchen-controls.controller';
 
@@ -238,6 +240,8 @@ router.put('/production-sessions/:id/complete', authorize(storekeepers), complet
 router.get('/shift-controls/analyze', authorize(storekeepers), analyzeShiftControls);
 router.post('/shift-controls/bill-staff', authorize(storekeepers), billStaffForShortage);
 router.get('/daily-control', authorize([...storekeepers, UserRole.BRANCH_ACCOUNTANT]), getDailyControlData);
+router.get('/daily-control/snapshot', authorize([...storekeepers, UserRole.BRANCH_ACCOUNTANT]), getDailyControlSnapshot);
+router.get('/daily-control/stock-ledger', authorize([...storekeepers, UserRole.BRANCH_ACCOUNTANT]), getStockLedger);
 router.post(
     '/daily-control/bill-staff',
     authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER]),

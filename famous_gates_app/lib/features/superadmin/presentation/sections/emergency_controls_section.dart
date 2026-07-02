@@ -597,69 +597,100 @@ class _EmergencyControlsSectionState
     required String warning,
     required VoidCallback onConfirmed,
   }) {
-    final confirmCtrl = TextEditingController();
-
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: Row(children: [
-            Icon(PhosphorIcons.warning(), color: AppColors.kError, size: 22),
-            const SizedBox(width: 8),
-            Expanded(child: Text(title)),
-          ]),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade300),
-                  ),
-                  child: Text(
-                    warning,
-                    style: TextStyle(color: Colors.red.shade800),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Type CONFIRM to proceed:',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: confirmCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'CONFIRM',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setS(() {}),
-                ),
-              ],
+      builder: (ctx) => _DoubleConfirmDialog(
+        title: title,
+        warning: warning,
+        onConfirmed: onConfirmed,
+      ),
+    );
+  }
+}
+
+/// A dedicated StatefulWidget for the double-confirmation dialog so that
+/// [confirmCtrl] is properly disposed when the dialog is closed.
+class _DoubleConfirmDialog extends StatefulWidget {
+  const _DoubleConfirmDialog({
+    required this.title,
+    required this.warning,
+    required this.onConfirmed,
+  });
+
+  final String title;
+  final String warning;
+  final VoidCallback onConfirmed;
+
+  @override
+  State<_DoubleConfirmDialog> createState() => _DoubleConfirmDialogState();
+}
+
+class _DoubleConfirmDialogState extends State<_DoubleConfirmDialog> {
+  final TextEditingController _confirmCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(children: [
+        Icon(PhosphorIcons.warning(), color: AppColors.kError, size: 22),
+        const SizedBox(width: 8),
+        Expanded(child: Text(widget.title)),
+      ]),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade300),
+              ),
+              child: Text(
+                widget.warning,
+                style: TextStyle(color: Colors.red.shade800),
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: confirmCtrl.text == 'CONFIRM'
-                  ? () {
-                      Navigator.pop(ctx);
-                      onConfirmed();
-                    }
-                  : null,
-              style:
-                  ElevatedButton.styleFrom(backgroundColor: AppColors.kError),
-              child: const Text('Execute'),
+            const SizedBox(height: 16),
+            const Text(
+              'Type CONFIRM to proceed:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _confirmCtrl,
+              decoration: const InputDecoration(
+                hintText: 'CONFIRM',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
             ),
           ],
         ),
       ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: _confirmCtrl.text == 'CONFIRM'
+              ? () {
+                  Navigator.pop(context);
+                  widget.onConfirmed();
+                }
+              : null,
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.kError),
+          child: const Text('Execute'),
+        ),
+      ],
     );
   }
 }

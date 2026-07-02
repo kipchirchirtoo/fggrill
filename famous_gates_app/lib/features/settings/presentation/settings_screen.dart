@@ -185,98 +185,16 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _showChangePassword(BuildContext context, WidgetRef ref) {
-    final currentCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Password'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: currentCtrl,
-                obscureText: true,
-                decoration:
-                    const InputDecoration(labelText: 'Current Password'),
-                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: newCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'New Password'),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Required';
-                  if (v.length < 8) return 'Minimum 8 characters';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: confirmCtrl,
-                obscureText: true,
-                decoration:
-                    const InputDecoration(labelText: 'Confirm New Password'),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Required';
-                  if (v != newCtrl.text) return 'Passwords do not match';
-                  return null;
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              Navigator.of(ctx).pop();
-              try {
-                await ref.read(dioProvider).put('/auth/updatepassword', data: {
-                  'currentPassword': currentCtrl.text,
-                  'newPassword': newCtrl.text,
-                });
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(
-                    context,
-                    const SnackBar(
-                      content: Text('Password changed successfully'),
-                      backgroundColor: AppColors.kSuccess,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  AppNotifier.showSnackBar(
-                    context,
-                    SnackBar(
-                      content: Text('Error: ${_extractError(e)}'),
-                      backgroundColor: AppColors.kError,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Update Password'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _ChangePasswordDialog(ref: ref),
     );
   }
 
   void _showChangeLockPin(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (ctx) => _ChangePinDialog(ref: ref),
+      builder: (ctx) => const _ChangePinDialog(),
     );
   }
 
@@ -894,9 +812,127 @@ class _SettingsItem extends StatelessWidget {
   }
 }
 
-class _ChangePinDialog extends StatefulWidget {
+class _ChangePasswordDialog extends StatefulWidget {
   final WidgetRef ref;
-  const _ChangePinDialog({required this.ref});
+  const _ChangePasswordDialog({required this.ref});
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _currentCtrl = TextEditingController();
+  final _newCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  bool _loading = false;
+  String? _errorMsg;
+
+  @override
+  void dispose() {
+    _currentCtrl.dispose();
+    _newCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() { _loading = true; _errorMsg = null; });
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.ref.read(dioProvider).put('/auth/updatepassword', data: {
+        'currentPassword': _currentCtrl.text,
+        'newPassword': _newCtrl.text,
+      });
+      if (mounted) Navigator.of(context).pop();
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Password changed successfully'),
+        backgroundColor: AppColors.kSuccess,
+      ));
+    } catch (e) {
+      final msg = e.toString();
+      String display = 'Failed to change password';
+      final match = RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(msg);
+      if (match != null) display = match.group(1) ?? display;
+      if (mounted) setState(() => _errorMsg = display);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change Password'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_errorMsg != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.kError.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(_errorMsg!,
+                    style: const TextStyle(color: AppColors.kError, fontSize: 13)),
+              ),
+              const SizedBox(height: 12),
+            ],
+            TextFormField(
+              controller: _currentCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Current Password'),
+              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _newCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'New Password'),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v.length < 8) return 'Minimum 8 characters';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Confirm New Password'),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v != _newCtrl.text) return 'Passwords do not match';
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _submit,
+          child: _loading
+              ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Update Password'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChangePinDialog extends StatefulWidget {
+  const _ChangePinDialog();
 
   @override
   State<_ChangePinDialog> createState() => _ChangePinDialogState();
@@ -925,33 +961,29 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
       _errorMsg = null;
     });
     try {
-      await widget.ref.read(dioProvider).put('/auth/update-pin', data: {
-        'currentPin': _currentPinCtrl.text,
-        'newPin': _newPinCtrl.text,
-      });
+      // The screen-lock PIN is a local device feature stored in secure storage
+      // (key: fg_lock_pin). It is separate from the POS till PIN (pos_pin in
+      // the database, which includes a type prefix like "C2040"). Comparing
+      // the 4-digit input against the prefixed DB value always fails, so the
+      // check runs against local storage only.
+      final stored = await _storage.read(key: 'fg_lock_pin') ?? '';
+      if (stored.isNotEmpty && stored != _currentPinCtrl.text) {
+        if (mounted) setState(() => _errorMsg = 'Current PIN is incorrect');
+        return;
+      }
       await _storage.write(key: 'fg_lock_pin', value: _newPinCtrl.text);
       if (mounted) {
         Navigator.of(context).pop();
         AppNotifier.showSnackBar(
           context,
           const SnackBar(
-            content: Text('PIN updated successfully'),
+            content: Text('Screen lock PIN updated successfully'),
             backgroundColor: AppColors.kSuccess,
           ),
         );
       }
     } catch (e) {
-      final msg = e.toString();
-      String display = 'Failed to update PIN';
-      final match = RegExp(r'"message"\s*:\s*"([^"]+)"').firstMatch(msg);
-      if (match != null) {
-        display = match.group(1) ?? display;
-      } else if (msg.contains('Current PIN is incorrect')) {
-        display = 'Current PIN is incorrect';
-      } else if (msg.contains('4 digits')) {
-        display = 'New PIN must be exactly 4 digits';
-      }
-      if (mounted) setState(() => _errorMsg = display);
+      if (mounted) setState(() => _errorMsg = 'Failed to update PIN: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -971,7 +1003,7 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.kError.withOpacity(0.1),
+                  color: AppColors.kError.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

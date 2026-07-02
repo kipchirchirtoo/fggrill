@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_notifier.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
 import '../../../../core/widgets/safe_avatar.dart';
@@ -184,7 +185,13 @@ class _StaffSectionState extends ConsumerState<StaffSection> {
             ),
             const SizedBox.shrink(),
             ElevatedButton.icon(
-              onPressed: () => showUserDialog(context, isStaffMode: true),
+              onPressed: () async {
+                await showUserDialog(context, isStaffMode: true);
+                // Provider invalidation is handled inside _UserDialog._submit();
+                // no additional work needed here, but awaiting keeps the call
+                // site honest and prevents any future handler from running
+                // before the dialog is fully dismissed.
+              },
               icon: Icon(PhosphorIcons.plus(), size: 20),
               label: const Text('Add Staff'),
             ),
@@ -270,14 +277,14 @@ class _StaffSectionState extends ConsumerState<StaffSection> {
             children: [
               IconButton(
                 icon: Icon(PhosphorIcons.pencilLine(), size: 18),
-                onPressed: () =>
+                onPressed: () async =>
                     showUserDialog(context, user: s, isStaffMode: true),
                 tooltip: 'Edit',
               ),
               IconButton(
                 icon: Icon(PhosphorIcons.prohibit(),
                     size: 18, color: AppColors.kError),
-                onPressed: () => _confirmDelete(context, s),
+                onPressed: () => _confirmDelete(s),
                 tooltip: 'Delete',
               ),
             ],
@@ -432,26 +439,51 @@ class _StaffSectionState extends ConsumerState<StaffSection> {
     );
   }
 
-  void _confirmDelete(BuildContext context, AdminUser staff) {
-    showDialog(
+  Future<void> _confirmDelete(AdminUser staff) async {
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Staff'),
         content: Text('Are you sure you want to delete "${staff.name}"?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(adminRepositoryProvider).deleteStaff(staff.id);
-              ref.invalidate(adminStaffProvider);
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child:
                 const Text('Delete', style: TextStyle(color: AppColors.kError)),
           ),
         ],
       ),
     );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      await ref.read(adminRepositoryProvider).deleteStaff(staff.id);
+      if (!mounted) return;
+      ref.invalidate(adminStaffProvider);
+      // Clear detail panel if the deleted staff was selected.
+      if (_selectedStaffId == staff.id) {
+        setState(() => _selectedStaffId = null);
+      }
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(
+          content: Text('Staff member deleted'),
+          backgroundColor: AppColors.kSuccess,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(
+          content: Text('Failed to delete staff: $e'),
+          backgroundColor: AppColors.kError,
+        ),
+      );
+    }
   }
 }

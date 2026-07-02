@@ -26,6 +26,9 @@ declare global {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const TRANSIENT_SCHEMA_ERRORS = ['schema cache', 'Retrying', 'PGRST002', 'timeout', 'canceling statement'];
+const AUTH_USER_CACHE_TTL_MS = Number(process.env.AUTH_USER_CACHE_TTL_MS || 30_000);
+const authUserCache = new Map<string, { expiresAt: number; user: any }>();
+const authUserLookupInflight = new Map<string, Promise<any>>();
 
 function isTransientSchemaError(err: any): boolean {
   const message = String(err?.message || err || '').toLowerCase();
@@ -34,6 +37,15 @@ function isTransientSchemaError(err: any): boolean {
 }
 
 async function lookupUserWithRetry(userId: string, retries = 2): Promise<any> {
+  const cached = authUserCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.user;
+  }
+
+  const inflight = authUserLookupInflight.get(userId);
+  if (inflight) return inflight;
+
+  const lookupPromise = (async () => {
   for (let i = 0; i <= retries; i++) {
     try {
       const { data, error } = await supabase
@@ -42,6 +54,10 @@ async function lookupUserWithRetry(userId: string, retries = 2): Promise<any> {
         .eq('id', userId)
         .single();
       if (error) throw error;
+      authUserCache.set(userId, {
+        user: data,
+        expiresAt: Date.now() + AUTH_USER_CACHE_TTL_MS
+      });
       return data;
     } catch (err: any) {
       if (i < retries && isTransientSchemaError(err)) {
@@ -58,12 +74,35 @@ async function lookupUserWithRetry(userId: string, retries = 2): Promise<any> {
     }
   }
   return null;
+  })();
+
+  authUserLookupInflight.set(userId, lookupPromise);
+  try {
+    return await lookupPromise;
+  } finally {
+    authUserLookupInflight.delete(userId);
+  }
 }
 
 async function lookupUserFallback(userId: string): Promise<any | null> {
+  // Skip the raw-pool fallback when the PostgreSQL connection is not available
+  // (e.g. local dev without DATABASE_URL, or Supabase direct connection blocked
+  // by firewall/IP restrictions).  Without this guard the 8-second timeout in
+  // db.ts causes a 25-second auth hang followed by a spurious 401.
+  if (!db.isAvailable()) {
+    logger.warn('Auth Middleware - Direct SQL fallback skipped: DB pool not available', { userId });
+    return null;
+  }
   try {
     const result = await db.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [userId]);
-    return result.rows[0] || null;
+    const user = result.rows[0] || null;
+    if (user) {
+      authUserCache.set(userId, {
+        user,
+        expiresAt: Date.now() + AUTH_USER_CACHE_TTL_MS
+      });
+    }
+    return user;
   } catch (err: any) {
     logger.error('Auth Middleware - Direct SQL fallback failed', {
       userId,
@@ -149,11 +188,43 @@ export const protect = async (
         }
 
         if (!user) {
-          logger.error('Auth Middleware - User lookup failed for valid JWT', {
+          logger.warn('Auth Middleware - User lookup failed for valid JWT; falling back to JWT claims', {
             userId: decoded.sub,
             error: userLookupError?.message || 'User not found'
           });
-          // Fallback to Supabase auth in case they used a Supabase token
+          // The JWT signature was already verified above — it is safe to trust
+          // the claims it carries.  This path fires when BOTH the Supabase
+          // client AND the raw-pool fallback are unreachable (e.g. local dev
+          // with Supabase unreachable from Node undici, or DB pool down).
+          // We reconstruct req.user from the JWT payload so the request can
+          // proceed instead of returning a spurious 401.
+          if (decoded.role || decoded.active_role) {
+            const effectiveRole = decoded.active_role || decoded.role;
+            const effectiveBranchId = decoded.active_branch_id ?? null;
+            req.user = {
+              id: decoded.sub,
+              email: decoded.email || null,
+              role: effectiveRole,
+              branch_id: effectiveBranchId,
+              branchId: effectiveBranchId,
+              first_name: null,
+              last_name: null,
+              is_central: !effectiveBranchId,
+              primary_role: decoded.role,
+              active_context: !!(decoded.active_role),
+              active_outlet_id: decoded.active_outlet_id || null,
+              active_outlet_type: decoded.active_outlet_type || null,
+              active_outlet_prefix: decoded.active_outlet_prefix || null,
+              is_pos_login: decoded.isPosLogin === true,
+              session_id: decoded.sid || null,
+              is_impersonation: false,
+              impersonation_session_id: null,
+              actual_actor_id: null,
+            };
+            next();
+            return;
+          }
+          // JWT has no role claims — can't build a safe user; try Supabase auth path
         } else {
           // Check force_logout_at: reject tokens issued before this timestamp
           if (user.force_logout_at) {

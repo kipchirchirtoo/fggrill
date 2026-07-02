@@ -244,6 +244,7 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       'kyogong_executive_bar_cashier',
       'kyogong_sports_bar_cashier',
       'kyogong_reception_cashier',
+      'choma_zone_cashier',
       'employee'
     ];
     if (!roles.contains(selectedRole)) selectedRole = 'employee';
@@ -282,6 +283,7 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
       'kyogong_executive_bar_cashier',
       'kyogong_sports_bar_cashier',
       'kyogong_reception_cashier',
+      'choma_zone_cashier',
       'employee',
     };
     final branchIds = branches
@@ -341,12 +343,17 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                       },
                       fieldViewBuilder:
                           (context, controller, focusNode, onFieldSubmitted) {
-                        if (selectedStaffProfile != null &&
-                            controller.text != _staffLabel(selectedStaffProfile!)) {
+                        // Bug fix: only update the controller when the field is
+                        // NOT focused, to avoid mid-typing cursor jumps.
+                        if (!focusNode.hasFocus &&
+                            selectedStaffProfile != null &&
+                            controller.text !=
+                                _staffLabel(selectedStaffProfile!)) {
                           controller.value = TextEditingValue(
                             text: _staffLabel(selectedStaffProfile!),
                             selection: TextSelection.collapsed(
-                              offset: _staffLabel(selectedStaffProfile!).length,
+                              offset:
+                                  _staffLabel(selectedStaffProfile!).length,
                             ),
                           );
                         }
@@ -648,23 +655,43 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                           backgroundColor: AppColors.kError));
                   return;
                 }
+                // Capture all controller values into locals BEFORE popping.
+                // Navigator.pop() resolves the showDialog future immediately,
+                // which causes the dispose() calls at the end of _showUserDialog
+                // to race with this async callback still running. Reading text
+                // after pop = "used after being disposed" crash.
+                final firstName = firstNameCtrl.text;
+                final lastName = lastNameCtrl.text;
+                final phone = phoneCtrl.text.trim();
+                final employeeId = employeeCtrl.text.trim();
+                final department = departmentCtrl.text.trim();
+                final pinRaw = pinCtrl.text.trim();
+                final password =
+                    user == null ? passwordCtrl.text : null;
+
+                // Unfocus first to close any open Autocomplete options overlay.
+                // If the overlay is showing when we pop the dialog, its context
+                // still holds InheritedWidget dependencies from the route that
+                // are about to be deactivated — triggering the
+                // '_dependents.isEmpty' assertion in framework.dart.
+                FocusScope.of(ctx).unfocus();
                 Navigator.pop(ctx);
                 try {
                   final svc = ref.read(userServiceProvider);
                   final payload = {
-                    'first_name': firstNameCtrl.text,
-                    'last_name': lastNameCtrl.text,
+                    'first_name': firstName,
+                    'last_name': lastName,
                     'email': email,
                     'role': selectedRole,
                     'status': selectedStatus,
                     'branch_id': selectedBranch,
-                    'phone_number': phoneCtrl.text.trim(),
-                    'employee_id': employeeCtrl.text.trim(),
-                    'department': departmentCtrl.text.trim(),
-                    'pos_pin': pinCtrl.text.trim().isEmpty
-                        ? null
-                        : pinCtrl.text.trim().toUpperCase(),
-                    if (user == null) 'password': passwordCtrl.text,
+                    'phone_number': phone,
+                    'employee_id': employeeId,
+                    'department': department,
+                    'pos_pin':
+                        pinRaw.isEmpty ? null : pinRaw.toUpperCase(),
+                    if (user == null && password != null)
+                      'password': password,
                     'staff_profile_id': selectedStaffProfileId,
                   };
                   if (user == null) {

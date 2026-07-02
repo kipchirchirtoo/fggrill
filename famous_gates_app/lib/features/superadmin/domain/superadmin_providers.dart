@@ -8,6 +8,8 @@ enum SuperAdminSection {
   // Command
   adminDashboard,
   lina,
+  linaDailyControls,
+  foodControlHealth,
   securityCenter,
   systemHealth,
   globalSearch,
@@ -86,10 +88,11 @@ final aiInsightsProvider =
 });
 
 // AI Stats Provider
+// TODO: replace with a dedicated getAIStats() call once the endpoint exists.
 final aiStatsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final service = ref.read(securityServiceProvider);
-  return service.getAnomalies(limit: 100);
+  return service.getAnomalies(limit: 10);
 });
 
 // Security Logs Provider

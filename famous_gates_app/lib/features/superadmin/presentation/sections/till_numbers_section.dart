@@ -133,9 +133,11 @@ class _BranchTillCard extends ConsumerWidget {
             label: 'Branch default till',
             value: branchDefault,
             onSave: (v) async {
+              final branchId = branch['branch_id'];
+              if (branchId == null) return;
               await ref
                   .read(templateRepositoryProvider)
-                  .updateBranchTill('${branch['branch_id']}', v);
+                  .updateBranchTill('$branchId', v);
               ref.invalidate(tillNumbersProvider);
               if (context.mounted) {
                 AppNotifier.showSnackBar(context,
@@ -230,6 +232,21 @@ class _TillFieldState extends State<_TillField> {
   bool _busy = false;
 
   @override
+  void didUpdateWidget(_TillField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync the controller when the parent rebuilds with a new value (e.g.
+    // after a successful save + provider invalidation fetches fresh data).
+    // Only update when the field is not currently focused to avoid clobbering
+    // text the user is actively editing.
+    if (oldWidget.value != widget.value &&
+        !(_ctrl.selection.isCollapsed &&
+            FocusScope.of(context).hasFocus &&
+            _ctrl.text == oldWidget.value)) {
+      _ctrl.text = widget.value;
+    }
+  }
+
+  @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
@@ -257,9 +274,22 @@ class _TillFieldState extends State<_TillField> {
           onPressed: _busy
               ? null
               : () async {
+                  final value = _ctrl.text.trim();
+                  // Validate: allow empty (clears the till) but reject
+                  // values that contain non-numeric characters when not empty.
+                  if (value.isNotEmpty &&
+                      !RegExp(r'^\d+$').hasMatch(value)) {
+                    AppNotifier.showSnackBar(
+                      context,
+                      const SnackBar(
+                          content: Text(
+                              'Till number must contain digits only (e.g. 1, 12, 001)')),
+                    );
+                    return;
+                  }
                   setState(() => _busy = true);
                   try {
-                    await widget.onSave(_ctrl.text.trim());
+                    await widget.onSave(value.isEmpty ? null : value);
                   } catch (e) {
                     if (context.mounted) {
                       AppNotifier.showSnackBar(

@@ -46,7 +46,14 @@ class SuperAdminTopBar extends ConsumerWidget {
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    final session = ref.read(impersonationSessionProvider);
+                    final sessionId = session?['session_id']?.toString();
+                    if (sessionId != null) {
+                      await ref
+                          .read(superadminGodRepositoryProvider)
+                          .endImpersonation(sessionId);
+                    }
                     ref.read(impersonationSessionProvider.notifier).state =
                         null;
                   },
@@ -191,6 +198,13 @@ class SuperAdminTopBar extends ConsumerWidget {
       onSelected: (value) {
         if (value == 'logout') {
           _handleLogout(ref);
+        } else if (value == 'profile') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile settings coming soon')),
+          );
+        } else if (value == 'settings') {
+          ref.read(superAdminSectionProvider.notifier).state =
+              SuperAdminSection.settings;
         }
       },
       child: Builder(builder: (context) {

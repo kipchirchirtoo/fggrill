@@ -258,6 +258,16 @@ initializeApp().then(({ app, httpServer }) => {
   logger.info('App initialized successfully');
   // Start server
   const PORT = process.env.PORT || 5000;
+  httpServer.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      logger.error(`Port ${PORT} is already in use. Stop the existing backend process or set a different PORT.`);
+      process.exit(1);
+    }
+
+    logger.error('HTTP server failed to start:', error);
+    process.exit(1);
+  });
+
   httpServer.listen(PORT, async () => {
     logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
     logger.info(`Health check available at http://localhost:${PORT}/health`);

@@ -171,6 +171,16 @@ class AdminSideNavGroup {
               label: 'Dispatch & Notes',
               routePath: '/central-store/dispatch'),
           AdminSideNavItem(
+              section: AdminSection.directIssue,
+              icon: PhosphorIcons.arrowUpRight(),
+              label: 'Direct Issues',
+              routePath: '/central-store/direct-issues'),
+          AdminSideNavItem(
+              section: AdminSection.pendingBackorders,
+              icon: PhosphorIcons.clockClockwise(),
+              label: 'Pending Backorders',
+              routePath: '/central-store/backorders'),
+          AdminSideNavItem(
               section: AdminSection.purchaseOrders,
               icon: PhosphorIcons.fileText(),
               label: 'Purchase Orders',
@@ -602,6 +612,14 @@ class AdminSideNavGroup {
               icon: PhosphorIcons.truck(),
               label: 'Dispatch & Notes'),
           AdminSideNavItem(
+              section: AdminSection.directIssue,
+              icon: PhosphorIcons.arrowUpRight(),
+              label: 'Direct Issues'),
+          AdminSideNavItem(
+              section: AdminSection.pendingBackorders,
+              icon: PhosphorIcons.clockClockwise(),
+              label: 'Pending Backorders'),
+          AdminSideNavItem(
               section: AdminSection.purchaseOrders,
               icon: PhosphorIcons.fileText(),
               label: 'Purchase Orders'),
@@ -665,6 +683,14 @@ class AdminSideNavGroup {
               section: AdminSection.dispatchNotes,
               icon: PhosphorIcons.truck(),
               label: 'Dispatch & Notes'),
+          AdminSideNavItem(
+              section: AdminSection.directIssue,
+              icon: PhosphorIcons.arrowUpRight(),
+              label: 'Direct Issues'),
+          AdminSideNavItem(
+              section: AdminSection.pendingBackorders,
+              icon: PhosphorIcons.clockClockwise(),
+              label: 'Pending Backorders'),
           AdminSideNavItem(
               section: AdminSection.inventory,
               icon: PhosphorIcons.package(),

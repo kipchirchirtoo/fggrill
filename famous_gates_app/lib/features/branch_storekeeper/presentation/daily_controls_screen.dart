@@ -218,6 +218,19 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
             ),
           ),
           
+          if (_salesSummary['total_food_qty_sold'] != null && !_isLoading)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.grey[100],
+              width: double.infinity,
+              child: Text(
+                'Food sold: ${_salesSummary['total_food_qty_sold']} items · '
+                'Revenue: KES ${_salesSummary['total_food_revenue']}',
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+                textAlign: TextAlign.center,
+              ),
+            ),
+
           if (!_hasKitchenShiftRecord && !_isLoading)
             Container(
               padding: const EdgeInsets.all(12),

@@ -76,7 +76,8 @@ router.get('/sales-points',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getSalesPoints
 );
@@ -94,7 +95,8 @@ router.get('/sales-points/:id',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getSalesPointDetails
 );
@@ -112,7 +114,8 @@ router.post('/shifts/open',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   openShift
 );
@@ -126,7 +129,8 @@ router.get('/shifts/current',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getCurrentShift
 );
@@ -145,7 +149,8 @@ router.get('/shifts',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getShifts
 );
@@ -170,7 +175,8 @@ router.get('/shifts/:shift_id/float',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getCurrentFloat
 );
@@ -199,7 +205,8 @@ router.get('/shifts/:shift_id/float/history',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getFloatHistory
 );
@@ -236,7 +243,8 @@ router.get('/shifts/:id',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getShiftDetails
 );
@@ -250,7 +258,8 @@ router.put('/shifts/:id/close',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   closeShift
 );
@@ -264,7 +273,8 @@ router.post('/shifts/:id/recalculate',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   recalculateShiftTotals
 );
@@ -315,7 +325,8 @@ router.post('/shifts/:shift_id/transactions',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   createTransaction
 );
@@ -334,7 +345,8 @@ router.get('/shifts/:shift_id/transactions',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getShiftTransactions
 );
@@ -353,7 +365,8 @@ router.get('/transactions/:id',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getTransactionDetails
 );
@@ -383,7 +396,8 @@ router.get('/spa-services/categories',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getSpaCategories
 );
@@ -399,7 +413,8 @@ router.get('/spa-services',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getSpaServices
 );
@@ -498,7 +513,8 @@ router.get('/dynamic-services',
     UserRole.KYOGONG_SPA_CASHIER,
     UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
     UserRole.KYOGONG_SPORTS_BAR_CASHIER,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER
   ]),
   getDynamicServices
 );

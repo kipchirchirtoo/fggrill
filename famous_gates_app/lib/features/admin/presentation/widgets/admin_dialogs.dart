@@ -320,6 +320,8 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
   late final TextEditingController _emailCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _posPinCtrl;
+  late final TextEditingController _nationalIdCtrl;
+  late final TextEditingController _departmentCtrl;
   String _selectedBranchId = '';
   String _selectedRole = '';
   bool _isActive = true;
@@ -397,6 +399,8 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
     _emailCtrl = TextEditingController(text: u?.email ?? '');
     _phoneCtrl = TextEditingController(text: u?.phone ?? '');
     _posPinCtrl = TextEditingController(text: u?.posPin ?? '');
+    _nationalIdCtrl = TextEditingController(text: '');
+    _departmentCtrl = TextEditingController(text: u?.department ?? '');
     _selectedBranchId = u?.branchId ?? '';
     _selectedRole = u?.role ?? '';
     _isActive = u?.isActive ?? true;
@@ -408,6 +412,8 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _posPinCtrl.dispose();
+    _nationalIdCtrl.dispose();
+    _departmentCtrl.dispose();
     super.dispose();
   }
 
@@ -429,6 +435,10 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
           'role': _selectedRole,
           'status': _isActive ? 'active' : 'inactive',
           'pos_pin': _posPinCtrl.text.trim(),
+          if (_nationalIdCtrl.text.trim().isNotEmpty)
+            'national_id': _nationalIdCtrl.text.trim(),
+          if (_departmentCtrl.text.trim().isNotEmpty)
+            'department': _departmentCtrl.text.trim(),
         };
         if (widget.user != null) {
           await repo.updateStaff(widget.user!.id, data);
@@ -517,6 +527,33 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
                       obscureText: true)),
             ],
           ),
+          if (widget.isStaffMode) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _nationalIdCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'National ID / ID Number',
+                      hintText: 'e.g. 12345678',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _departmentCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Department',
+                      hintText: 'e.g. restaurant, kitchen',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           branchesAsync.when(
             data: (branches) => DropdownButtonFormField<String>(

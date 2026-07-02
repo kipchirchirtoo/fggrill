@@ -88,6 +88,7 @@ router.use((req: any, res, next) => {
         'kyogong_executive_bar_cashier',
         'kyogong_sports_bar_cashier',
         'kyogong_reception_cashier',
+        'choma_zone_cashier',
         // Storekeepers need read access to shifts for the opening-stock gate
         'branch_storekeeper',
         'central_storekeeper',

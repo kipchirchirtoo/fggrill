@@ -9,6 +9,8 @@ import 'widgets/superadmin_top_bar.dart';
 
 // Superadmin-specific sections
 import '../../lina/presentation/lina_screen.dart';
+import 'sections/food_control_health_section.dart';
+import 'sections/lina_daily_controls_section.dart';
 import 'sections/security_center_section.dart';
 import 'sections/system_health_section.dart';
 import 'sections/global_users_section.dart';
@@ -53,6 +55,7 @@ class SuperAdminScreen extends ConsumerWidget {
       final selected = ref.read(superAdminSectionProvider);
       if (selected != initialSection) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
           ref.read(superAdminSectionProvider.notifier).state = initialSection!;
         });
       }
@@ -94,6 +97,8 @@ class SuperAdminScreen extends ConsumerWidget {
       // Command
       SuperAdminSection.adminDashboard: const OverviewSection(),
       SuperAdminSection.lina: const LinaScreen(),
+      SuperAdminSection.linaDailyControls: const LinaDailyControlsSection(),
+      SuperAdminSection.foodControlHealth: const FoodControlHealthSection(),
       SuperAdminSection.securityCenter: const SecurityCenterSection(),
       SuperAdminSection.systemHealth: const SystemHealthSection(),
       SuperAdminSection.globalSearch: const SuperAdminSearchSection(),
@@ -151,9 +156,19 @@ class SuperAdminScreen extends ConsumerWidget {
       SuperAdminSection.announcements: const AnnouncementsSection(),
       SuperAdminSection.emergencyControls: const EmergencyControlsSection(),
       SuperAdminSection.dataOverrides: const DataOverrideSection(),
-      SuperAdminSection.godAuditLog: const DataOverrideSection(),
+      SuperAdminSection.godAuditLog: const SuperAdminAuditLogsSection(),
     };
 
+    // KeyedSubtree gives the AnimatedSwitcher a stable, section-specific key
+    // for each child.  Without it, all section widgets of the same runtimeType
+    // (e.g. LinaScreen) share the same implicit key, so when the user navigates
+    // A → B → A within the 200 ms crossfade, the fading-out instance of A and
+    // the newly-shown instance of A have the same key.  Flutter then tries to
+    // reparent the widget via its GlobalKey; the stale _Theater (Overlay) has
+    // the old OverlayEntry widgets forcibly removed but never re-rendered,
+    // causing "Duplicate GlobalKeys detected" and "_dependents.isEmpty" crashes.
+    // With ValueKey(section), AnimatedSwitcher recognises the re-entry and
+    // reverses the outgoing animation rather than adding a duplicate child.
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       layoutBuilder: (currentChild, previousChildren) => Stack(
@@ -163,23 +178,26 @@ class SuperAdminScreen extends ConsumerWidget {
           if (currentChild != null) currentChild,
         ],
       ),
-      child: widgets[section] ?? const LinaScreen(),
+      child: KeyedSubtree(
+        key: ValueKey(section),
+        child: widgets[section] ?? const LinaScreen(),
+      ),
     );
   }
 
   void _showMobileNav(BuildContext context, WidgetRef ref) {
+    if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _MobileNavSheet(ref: ref),
+      builder: (_) => const _MobileNavSheet(),
     );
   }
 }
 
 class _MobileNavSheet extends ConsumerWidget {
-  final WidgetRef ref;
-  const _MobileNavSheet({required this.ref});
+  const _MobileNavSheet();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

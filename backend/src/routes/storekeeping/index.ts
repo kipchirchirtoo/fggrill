@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect } from '../../middleware/auth';
+import { protect, authorize, UserRole } from '../../middleware/auth';
 import stockRequestsRoutes from './stock-requests.routes';
 import dispatchNotesRoutes from './dispatch-notes.routes';
 import purchaseOrdersRoutes from './purchase-orders.routes';
@@ -20,8 +20,16 @@ import {
   getCentralDashboard,
   getBranchDashboard
 } from '../../controllers/storekeeping/branch-inventory.controller';
+import {
+  createDirectIssue,
+  getDirectIssues,
+  getBackorders
+} from '../../controllers/storekeeping/direct-issue.controller';
 
 const router = express.Router();
+
+const centralRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.AUDITOR];
+const branchRoles = [UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_MANAGER, UserRole.AUDITOR, UserRole.BRANCH_ACCOUNTANT];
 
 router.use('/items', itemsRoutes);
 router.use('/stock-requests', stockRequestsRoutes);
@@ -41,5 +49,12 @@ router.get('/dashboard/central', protect, getCentralDashboard);
 router.get('/dashboard/branch', protect, getBranchDashboard);
 router.get('/branch-stock', protect, getBranchStock);
 router.get('/branch-stock/low', protect, getLowStockItems);
+
+// Direct Issues (no prior requisition) — reuses stock_requests with request_type='DIRECT_ISSUE'
+router.post('/direct-issues', protect, authorize(centralRoles), createDirectIssue);
+router.get('/direct-issues', protect, authorize(branchRoles), getDirectIssues);
+
+// Backorders — stock_request_items with issue_status='backordered'
+router.get('/backorders', protect, authorize(branchRoles), getBackorders);
 
 export default router;

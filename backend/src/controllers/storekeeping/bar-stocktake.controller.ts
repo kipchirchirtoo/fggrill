@@ -452,36 +452,70 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             .in('id', invIds);
         const invById = new Map((invRows || []).map((i: any) => [i.id, i]));
 
-        // Find the live bar_stock value for each inventory item via bar_drinks link.
-        const { data: drinkRows } = await supabase
+        // Fetch ALL active bar_drinks for this branch (mirrors the GET approach).
+        // We cannot filter by inventory_item_id IN invIds because many branches
+        // (e.g. Sotik) have drinks without inventory_item_id stamped yet — those
+        // drinks are resolved via name/SKU fallback in ensureInventoryItems during
+        // the GET, which stamps the id back, but until that stamp propagates the
+        // POST must also handle the fallback path.
+        const { data: allBranchDrinks } = await supabase
             .from('bar_drinks')
-            .select('id, inventory_item_id, name, unit')
-            .in('inventory_item_id', invIds);
-        const drinkIds = (drinkRows || []).map((d: any) => d.id);
+            .select('id, inventory_item_id, name, unit, sku, cost_price, selling_price')
+            .eq('branch_id', branchId)
+            .eq('is_active', true);
+        const branchDrinks = (allBranchDrinks || []) as Array<Record<string, any>>;
+
+        // Resolve inventory_item_id for drinks that are missing it.
+        const drinksNeedingLink = branchDrinks
+            .filter((d) => !d.inventory_item_id)
+            .map((d) => ({
+                id: String(d.id),
+                name: String(d.name),
+                sku: d.sku ? String(d.sku) : `bard-${d.id}`,
+                unit: String(d.unit || 'bottle'),
+                cost_price: num(d.cost_price),
+                selling_price: num(d.selling_price),
+            }));
+        const fallbackInvIdByDrinkId = drinksNeedingLink.length > 0
+            ? await ensureInventoryItems(drinksNeedingLink)
+            : new Map<string, string>();
+
+        // Build invId → drinkId map (covers both stamped and fallback drinks).
+        const drinkIdByInvId = new Map<string, string>();
+        for (const d of branchDrinks) {
+            const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
+            if (invId && invIds.includes(String(invId))) {
+                drinkIdByInvId.set(String(invId), String(d.id));
+            }
+        }
+        const resolvedDrinkIds = Array.from(drinkIdByInvId.values());
 
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, bar_location, stocktakeDate);
         const sumWindow = await getSinceLastApprovalWindow(branchId, bar_location, stocktakeDate);
         const [{ data: stockRows }, { data: ledgerRows }] = await Promise.all([
-            supabase.from('bar_stock').select('drink_id, current_stock').eq('branch_id', branchId).in('drink_id', drinkIds),
-            drinkIds.length > 0
+            resolvedDrinkIds.length > 0
+                ? supabase.from('bar_stock').select('drink_id, current_stock').eq('branch_id', branchId).in('drink_id', resolvedDrinkIds)
+                : Promise.resolve({ data: [] }),
+            resolvedDrinkIds.length > 0
                 ? supabase.from('bar_stock_ledger')
                     .select('drink_id, transaction_type, quantity')
                     .eq('branch_id', branchId)
-                    .in('drink_id', drinkIds)
+                    .in('drink_id', resolvedDrinkIds)
                     .gte('created_at', sumWindow.from)
                     .lt('created_at', sumWindow.to)
                 : Promise.resolve({ data: [] }),
         ]);
 
-        // Map drink_id → inventory_item_id for ledger lookups
-        const invIdByDrinkId = new Map<string, string>(
-            (drinkRows || []).filter((d: any) => d.inventory_item_id)
-                .map((d: any) => [String(d.id), String(d.inventory_item_id)])
+        // Build stockByInvId using the drinkIdByInvId reverse map.
+        const stockByDrinkId = new Map<string, number>(
+            (stockRows || []).map((r: any) => [String(r.drink_id), num(r.current_stock)])
         );
         const additionsByInvId = new Map<string, number>();
         const salesByInvId = new Map<string, number>();
         for (const row of (ledgerRows || [])) {
-            const invId = invIdByDrinkId.get(String(row.drink_id));
+            const did = String(row.drink_id);
+            // find which invId this drink maps to
+            const invId = Array.from(drinkIdByInvId.entries()).find(([, d]) => d === did)?.[0];
             if (!invId) continue;
             if (row.transaction_type === 'restock') {
                 additionsByInvId.set(invId, (additionsByInvId.get(invId) ?? 0) + num(row.quantity));
@@ -490,14 +524,10 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             }
         }
 
-        const stockByInvId = new Map<string, number>(
-            (stockRows || [])
-                .map((r: any) => {
-                    const drink = (drinkRows || []).find((d: any) => d.id === r.drink_id);
-                    return [drink?.inventory_item_id, num(r.current_stock)] as [string, number];
-                })
-                .filter(([k]) => Boolean(k))
-        );
+        const stockByInvId = new Map<string, number>();
+        for (const [invId, drinkId] of drinkIdByInvId.entries()) {
+            stockByInvId.set(invId, stockByDrinkId.get(drinkId) ?? 0);
+        }
 
         const now = new Date().toISOString();
         const missingReasons: string[] = [];

@@ -54,6 +54,8 @@ String getRoleRoute(String role) {
       return '/pos/kyogong-executive-bar';
     case 'kyogong_sports_bar_cashier':
       return '/pos/kyogong-sports-bar';
+    case 'choma_zone_cashier':
+      return '/pos/choma-zone';
     case 'waiter':
     case 'waitress':
     case 'head_waiter':

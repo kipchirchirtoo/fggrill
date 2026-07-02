@@ -214,10 +214,89 @@ async function syncKitchenShiftToStockCounts(shiftId: string): Promise<void> {
 }
 
 // ── OPEN SHIFT ──────────────────────────────────────────────
+// sub_shift_type ('A'/'B') + department ('KITCHEN'/'PASTRY') are the new
+// storekeeper-facing slot the shift opens into. cashier_shift_id is always
+// resolved server-side from the branch's currently open commercial day —
+// never trusted from the client — so the one-A-one-B-per-day DB constraint
+// (uq_one_subshift_per_cashier_shift) actually means what it says.
 export const openKitchenShift = asyncWrap(async (req: Request, res: Response) => {
-    const { branch_id, shift_type, shift_date, opening_items, assigned_chef_ids } = req.body;
+    const { branch_id, shift_type, shift_date, opening_items, assigned_chef_ids, sub_shift_type, department } = req.body;
     const userId = (req as any).user?.id;
-    if (!branch_id || !shift_type || !opening_items) throw new AppError('branch_id, shift_type, opening_items required', 400);
+    if (!branch_id || !shift_type) throw new AppError('branch_id, shift_type required', 400);
+
+    let cashierShiftId: string | null = null;
+    // Set only for Shift B once Shift A's handover ledger is found — its
+    // closing_counts become Shift B's opening_stock, replacing whatever the
+    // client sent in opening_items (see "seeded directly from Shift A's
+    // confirmed closing count" in the Phase 4 spec).
+    let seededOpeningItems: any[] | null = null;
+    let handoverRecord: any = null;
+    if (sub_shift_type) {
+        if (!['A', 'B'].includes(sub_shift_type)) {
+            throw new AppError('INVALID_SUB_SHIFT_TYPE: sub_shift_type must be A or B', 400);
+        }
+        const { data: cashierShift } = await supabase
+            .from('cashier_shift_logs')
+            .select('id')
+            .eq('branch_id', branch_id)
+            .eq('status', 'open')
+            .order('shift_start', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (!cashierShift) {
+            throw new AppError('NO_ACTIVE_CASHIER_SHIFT: no open cashier shift for this branch — open the cashier/POS shift before opening a kitchen shift', 400);
+        }
+        cashierShiftId = cashierShift.id;
+
+        const dept = department || 'KITCHEN';
+        const { data: existingSameType } = await supabase
+            .from('kitchen_shifts')
+            .select('id, status')
+            .eq('branch_id', branch_id)
+            .eq('cashier_shift_id', cashierShiftId)
+            .eq('sub_shift_type', sub_shift_type)
+            .eq('department', dept)
+            .maybeSingle();
+        if (existingSameType) {
+            throw new AppError(`KITCHEN_SHIFT_ALREADY_OPEN: Shift ${sub_shift_type} (${dept}) has already been opened for this commercial day`, 409);
+        }
+
+        if (sub_shift_type === 'B') {
+            const { data: shiftA } = await supabase
+                .from('kitchen_shifts')
+                .select('id, status')
+                .eq('branch_id', branch_id)
+                .eq('cashier_shift_id', cashierShiftId)
+                .eq('sub_shift_type', 'A')
+                .eq('department', dept)
+                .maybeSingle();
+            if (!shiftA) {
+                throw new AppError('SHIFT_A_NOT_OPENED: Shift A must be opened (and closed) before Shift B can start', 400);
+            }
+            if (shiftA.status === 'open') {
+                throw new AppError('SHIFT_A_NOT_CLOSED: Shift A is still open — close it before opening Shift B', 400);
+            }
+
+            const { data: handover } = await supabase
+                .from('kitchen_shift_handovers')
+                .select('*')
+                .eq('outgoing_shift_id', shiftA.id)
+                .maybeSingle();
+            if (!handover) {
+                throw new AppError('SHIFT_A_NOT_HANDED_OVER: Shift A has not been handed over yet — the handover ledger (witnessed closing counts) must be confirmed before Shift B can open', 400);
+            }
+            handoverRecord = handover;
+            seededOpeningItems = (handover.closing_counts || []).map((c: any) => ({
+                sku: c.item_sku, name: c.item_name, unit: c.unit_of_measure,
+                cost_price: c.cost_price, quantity: c.physical_count
+            }));
+        }
+    }
+
+    const effectiveOpeningItems = seededOpeningItems || opening_items;
+    if (!effectiveOpeningItems || !Array.isArray(effectiveOpeningItems) || effectiveOpeningItems.length === 0) {
+        throw new AppError('opening_items required', 400);
+    }
 
     const { data: sn } = await supabase.rpc('generate_kitchen_shift_number', {
         p_branch_id: branch_id, p_date: shift_date || new Date().toISOString().split('T')[0]
@@ -225,26 +304,42 @@ export const openKitchenShift = asyncWrap(async (req: Request, res: Response) =>
     const { data: shift, error: e1 } = await supabase.from('kitchen_shifts').insert({
         shift_number: sn || `KS-${Date.now()}`, branch_id, shift_type: shift_type.toLowerCase(),
         shift_date: shift_date || new Date().toISOString().split('T')[0],
-        opened_by: userId, store_keeper_id: userId, assigned_chef_ids: assigned_chef_ids || [], status: 'open'
+        opened_by: userId, store_keeper_id: userId, assigned_chef_ids: assigned_chef_ids || [], status: 'open',
+        sub_shift_type: sub_shift_type || null, cashier_shift_id: cashierShiftId, department: department || 'KITCHEN'
     }).select().single();
-    if (e1) throw new AppError(e1.message, 500);
+    if (e1) {
+        if (e1.code === '23505') {
+            throw new AppError(`KITCHEN_SHIFT_ALREADY_OPEN: Shift ${sub_shift_type} has already been opened for this commercial day`, 409);
+        }
+        throw new AppError(e1.message, 500);
+    }
+
+    if (handoverRecord) {
+        await supabase.from('kitchen_shift_handovers').update({
+            incoming_shift_id: shift.id, seeded_at: new Date().toISOString()
+        }).eq('id', handoverRecord.id);
+    }
 
     // Opening a shift with stock is a real issue from branch store to the
     // kitchen line — debit branch-wide stock the same way Outlet Production
     // already does for raw consumption, so the two systems stay consistent
     // instead of the shift's opening_stock being an arbitrary self-reported
-    // number with no link to actual branch stock.
-    for (const it of opening_items) {
-        if (n(it.quantity) > 0) {
-            await updateBranchStock(
-                Number(branch_id), it.sku, -n(it.quantity), 'KITCHEN_SHIFT_OPEN', userId,
-                'kitchen_shift', shift.id, shift.shift_number,
-                `Kitchen shift ${shift.shift_number} opened with ${it.name || it.sku}`
-            );
+    // number with no link to actual branch stock. For a seeded Shift B this
+    // is a carry-forward of stock already debited when Shift A opened, not
+    // a fresh issue, so it's skipped here.
+    if (!seededOpeningItems) {
+        for (const it of effectiveOpeningItems) {
+            if (n(it.quantity) > 0) {
+                await updateBranchStock(
+                    Number(branch_id), it.sku, -n(it.quantity), 'KITCHEN_SHIFT_OPEN', userId,
+                    'kitchen_shift', shift.id, shift.shift_number,
+                    `Kitchen shift ${shift.shift_number} opened with ${it.name || it.sku}`
+                );
+            }
         }
     }
 
-    const items = opening_items.map((it: any) => ({
+    const items = effectiveOpeningItems.map((it: any) => ({
         shift_id: shift.id, branch_id, item_sku: it.sku, item_name: it.name,
         unit_of_measure: it.unit, cost_price: n(it.cost_price), opening_stock: n(it.quantity), additions: 0, sold_quantity: 0, spoilage_quantity: 0
     }));
@@ -253,7 +348,12 @@ export const openKitchenShift = asyncWrap(async (req: Request, res: Response) =>
     res.status(201).json({ success: true, data: shift });
 });
 
-// ── ADD STOCK ───────────────────────────────────────────────
+// ── ADD STOCK (mid-session issuance) ─────────────────────────
+// Each addition is now type-detected, BOM-linked (Type A requires a
+// recipe_id), staff-tagged and timestamped into kitchen_shift_additions —
+// the audit trail that was missing before. kitchen_shift_items.additions
+// (a running total) is still updated in the same call so existing
+// close/reconciliation/stock_counts sync logic is untouched.
 export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
     const { shift_id } = req.params;
     const { items } = req.body;
@@ -264,28 +364,166 @@ export const addShiftStock = asyncWrap(async (req: Request, res: Response) => {
 
     const results: any[] = [];
     for (const it of items || []) {
-        if (n(it.quantity) > 0) {
-            await updateBranchStock(
-                Number(shift.branch_id), it.sku, -n(it.quantity), 'KITCHEN_SHIFT_ADD_STOCK', userId,
-                'kitchen_shift', shift_id, undefined,
-                `Added to kitchen shift ${shift_id} mid-shift: ${it.name || it.sku}`
-            );
+        if (n(it.quantity) <= 0) continue;
+
+        const staffIds: string[] = Array.isArray(it.responsible_staff_ids) ? it.responsible_staff_ids : [];
+        if (staffIds.length === 0) {
+            throw new AppError(`RESPONSIBLE_STAFF_REQUIRED: select at least one responsible staff member for ${it.name || it.sku}`, 400);
         }
+
+        const { data: typeResult } = await supabase.rpc('get_stock_item_food_control_type', {
+            p_branch_id: Number(shift.branch_id), p_item_sku: it.sku
+        });
+        const foodControlType: string = typeResult || 'UNREGISTERED';
+
+        let recipeId: string | null = it.recipe_id || null;
+        if (foodControlType === 'A_RECIPE_BOM' && !recipeId) {
+            throw new AppError(`BOM_DECLARATION_REQUIRED: ${it.name || it.sku} is a recipe item — select which recipe this batch is for`, 400);
+        }
+        if (foodControlType !== 'A_RECIPE_BOM') {
+            recipeId = null; // never persist a recipe_id for non-recipe types, even if the client sent one
+        }
+
+        await updateBranchStock(
+            Number(shift.branch_id), it.sku, -n(it.quantity), 'KITCHEN_SHIFT_ADD_STOCK', userId,
+            'kitchen_shift', shift_id, undefined,
+            `Added to kitchen shift ${shift_id} mid-shift: ${it.name || it.sku}`
+        );
+
+        const { error: ledgerError } = await supabase.from('kitchen_shift_additions').insert({
+            shift_id, branch_id: shift.branch_id, item_sku: it.sku, item_name: it.name || null,
+            quantity: n(it.quantity), unit: it.unit || null,
+            food_control_type: foodControlType, recipe_id: recipeId,
+            responsible_staff_ids: staffIds, notes: it.notes || null, added_by: userId
+        });
+        if (ledgerError) throw new AppError(ledgerError.message, 500);
+
         const { data: ex } = await supabase.from('kitchen_shift_items').select('*').eq('shift_id', shift_id).eq('item_sku', it.sku).maybeSingle();
         if (ex) {
             const { data: upd } = await supabase.from('kitchen_shift_items').update({
                 additions: n(ex.additions) + n(it.quantity), updated_at: new Date().toISOString()
             }).eq('id', ex.id).select().single();
-            results.push(upd);
+            results.push({ ...upd, food_control_type: foodControlType });
         } else {
             const { data: cr } = await supabase.from('kitchen_shift_items').insert({
                 shift_id, branch_id: shift.branch_id, item_sku: it.sku, item_name: it.name,
                 unit_of_measure: it.unit, cost_price: n(it.cost_price), opening_stock: 0, additions: n(it.quantity), sold_quantity: 0, spoilage_quantity: 0
             }).select().single();
-            results.push(cr);
+            results.push({ ...cr, food_control_type: foodControlType });
         }
     }
     res.json({ success: true, data: results });
+});
+
+// Issuance ledger for a shift — the storekeeper-facing "running log" view,
+// each row showing exactly what addShiftStock recorded: type, recipe (if
+// any), staff, timestamp.
+export const listShiftAdditions = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id } = req.params;
+    const { data, error } = await supabase
+        .from('kitchen_shift_additions')
+        .select('*, recipe:kitchen_production_recipes(id,recipe_name,produced_item_name)')
+        .eq('shift_id', shift_id)
+        .order('added_at', { ascending: false });
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: data || [] });
+});
+
+// ── PRODUCTION SUMMARY / PENDING LOGS (Phase 3) ──────────────
+// "Unlogged Type A issuance" = a kitchen_shift_additions row tagged
+// A_RECIPE_BOM whose recipe was never actually produced this shift (no
+// kitchen_shift_production row referencing that recipe_id) — i.e. raw
+// stock was issued against a recipe but nobody ever logged the output.
+// Shared by getProductionSummary (so the storekeeper sees it coming) and
+// closeKitchenShift (so it's actually enforced, not just advisory).
+async function getPendingProductionLogs(shiftId: string) {
+    const [{ data: additions }, { data: productions }] = await Promise.all([
+        supabase
+            .from('kitchen_shift_additions')
+            .select('*, recipe:kitchen_production_recipes(id,recipe_name,produced_item_name)')
+            .eq('shift_id', shiftId)
+            .eq('food_control_type', 'A_RECIPE_BOM'),
+        supabase.from('kitchen_shift_production').select('recipe_id').eq('shift_id', shiftId)
+    ]);
+    const loggedRecipeIds = new Set((productions || []).map((p: any) => p.recipe_id).filter(Boolean));
+    return (additions || []).filter((a: any) => !loggedRecipeIds.has(a.recipe_id));
+}
+
+export const getProductionSummary = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id } = req.params;
+    const { data: shift } = await supabase.from('kitchen_shifts').select('id').eq('id', shift_id).maybeSingle();
+    if (!shift) throw new AppError('Shift not found', 404);
+
+    const { data: productions } = await supabase
+        .from('kitchen_shift_production')
+        .select('*')
+        .eq('shift_id', shift_id)
+        .order('produced_at', { ascending: false });
+
+    const byRecipe = new Map<string, any>();
+    for (const p of productions || []) {
+        const key = p.recipe_id || `name:${p.produced_item_name}`;
+        const existing = byRecipe.get(key) || {
+            recipe_id: p.recipe_id, produced_item_name: p.produced_item_name, produced_unit: p.produced_unit,
+            raw_item_name: p.raw_item_name, raw_unit: p.raw_unit,
+            total_raw_quantity_used: 0, total_produced_quantity: 0, entries: 0, variance_flagged_count: 0
+        };
+        existing.total_raw_quantity_used += n(p.raw_quantity_used);
+        existing.total_produced_quantity += n(p.produced_quantity);
+        existing.entries += 1;
+        if (p.variance_flagged) existing.variance_flagged_count += 1;
+        byRecipe.set(key, existing);
+    }
+
+    const pendingLogs = await getPendingProductionLogs(shift_id as string);
+
+    res.json({
+        success: true,
+        data: {
+            by_recipe: Array.from(byRecipe.values()),
+            pending_logs: pendingLogs,
+            can_close: pendingLogs.length === 0
+        }
+    });
+});
+
+// The digital kitchen ledger document for a shift — found whether the shift
+// was the outgoing (Shift A, closing) or incoming (Shift B, seeded) side of
+// the handover, so either shift's detail view can display it.
+export const getKitchenShiftHandover = asyncWrap(async (req: Request, res: Response) => {
+    const { shift_id } = req.params;
+    const { data, error } = await supabase
+        .from('kitchen_shift_handovers')
+        .select('*')
+        .or(`outgoing_shift_id.eq.${shift_id},incoming_shift_id.eq.${shift_id}`)
+        .maybeSingle();
+    if (error) throw new AppError(error.message, 500);
+    if (!data) {
+        res.json({ success: true, data: null });
+        return;
+    }
+    const staff = await staffProfileSummaries([
+        ...(data.outgoing_witness_ids || []),
+        ...(data.incoming_witness_ids || [])
+    ]);
+    res.json({ success: true, data: { ...data, witness_staff: staff } });
+});
+
+// Active commercial day for a branch — used by the Kitchen Sessions screen
+// to know whether Shift A/B can be opened at all before the user tries.
+export const getActiveCashierShift = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id } = req.query;
+    if (!branch_id) throw new AppError('branch_id required', 400);
+    const { data, error } = await supabase
+        .from('cashier_shift_logs')
+        .select('id, shift_number, shift_start, status')
+        .eq('branch_id', Number(branch_id))
+        .eq('status', 'open')
+        .order('shift_start', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: data || null });
 });
 
 // ── RECORD PRODUCTION ───────────────────────────────────────
@@ -462,13 +700,40 @@ export const recordSpoilage = asyncWrap(async (req: Request, res: Response) => {
 // ── CLOSE SHIFT ───────────────────────────────────────────
 export const closeKitchenShift = asyncWrap(async (req: Request, res: Response) => {
     const { shift_id } = req.params;
-    const { physical_counts, closing_notes } = req.body;
+    const { physical_counts, closing_notes, outgoing_witness_ids, incoming_witness_ids } = req.body;
     const userId = (req as any).user?.id;
     if (!physical_counts) throw new AppError('physical_counts required', 400);
 
-    const { data: shift } = await supabase.from('kitchen_shifts').select('id,branch_id,status,shift_date,opened_at').eq('id', shift_id).single();
+    const { data: shift } = await supabase.from('kitchen_shifts').select('id,branch_id,status,shift_date,opened_at,sub_shift_type,cashier_shift_id,department').eq('id', shift_id).single();
     if (!shift) throw new AppError('Shift not found', 404);
     if (shift.status !== 'open') throw new AppError('Shift must be open', 400);
+
+    // Digital kitchen ledger (Phase 4): a Shift A/B kitchen shift cannot close
+    // until both the outgoing and incoming teams are named as witnesses to
+    // the closing physical counts. Legacy/ad-hoc shifts (no sub_shift_type)
+    // predate this requirement and are unaffected.
+    const requiresHandover = !!shift.sub_shift_type;
+    const outgoingWitnesses: string[] = Array.isArray(outgoing_witness_ids) ? outgoing_witness_ids : [];
+    const incomingWitnesses: string[] = Array.isArray(incoming_witness_ids) ? incoming_witness_ids : [];
+    if (requiresHandover && (outgoingWitnesses.length === 0 || incomingWitnesses.length === 0)) {
+        res.status(400).json({
+            success: false,
+            code: 'HANDOVER_WITNESSES_REQUIRED',
+            message: 'Both the outgoing shift team and the incoming shift team must be named as witnesses before this shift can close.'
+        });
+        return;
+    }
+
+    const pendingLogs = await getPendingProductionLogs(shift_id as string);
+    if (pendingLogs.length > 0) {
+        res.status(400).json({
+            success: false,
+            code: 'PENDING_PRODUCTION_LOGS',
+            message: `${pendingLogs.length} recipe issuance(s) have no production output logged yet. Enter output for each before closing this shift.`,
+            data: { pending_logs: pendingLogs }
+        });
+        return;
+    }
 
     const thresholds = await getWastageThresholds(shift.branch_id);
     const records: any[] = [];
@@ -523,6 +788,20 @@ export const closeKitchenShift = asyncWrap(async (req: Request, res: Response) =
         .eq('status', 'posted').neq('transaction_type', 'refund');
     revenue = (txns || []).reduce((s: number, t: any) => s + n(t.amount), 0);
 
+    // Write the handover ledger before marking the shift closed — closing is
+    // the act of confirming handover for Shift A/B shifts, so if this insert
+    // fails the shift stays open rather than closing with no witnessed record.
+    let handover: any = null;
+    if (requiresHandover) {
+        const { data: ho, error: hoError } = await supabase.from('kitchen_shift_handovers').insert({
+            outgoing_shift_id: shift_id, branch_id: shift.branch_id, cashier_shift_id: shift.cashier_shift_id,
+            department: shift.department, outgoing_witness_ids: outgoingWitnesses, incoming_witness_ids: incomingWitnesses,
+            closing_counts: records, notes: closing_notes, confirmed_by: userId
+        }).select().single();
+        if (hoError) throw new AppError(hoError.message, 500);
+        handover = ho;
+    }
+
     const { data: closed } = await supabase.from('kitchen_shifts').update({
         status: 'closed', closed_at: new Date().toISOString(), total_revenue: revenue, total_cogs: cogs,
         total_spoilage_cost: spoilageCost, total_variance_cost: varianceCost, closing_notes, updated_at: new Date().toISOString()
@@ -534,7 +813,7 @@ export const closeKitchenShift = asyncWrap(async (req: Request, res: Response) =
         logger.error(`[closeKitchenShift] syncKitchenShiftToStockCounts failed for shift ${shift_id}:`, err);
     }
 
-    res.json({ success: true, data: { shift: closed, stock_take: records, summary: { revenue, cogs, spoilage_cost: spoilageCost, variance_cost: varianceCost } } });
+    res.json({ success: true, data: { shift: closed, stock_take: records, handover, summary: { revenue, cogs, spoilage_cost: spoilageCost, variance_cost: varianceCost } } });
 });
 
 // ── SUBMIT FOR APPROVAL ─────────────────────────────────────
@@ -923,12 +1202,276 @@ export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: R
     if (!branch_id) throw new AppError('branch_id required', 400);
     const { data, error } = await supabase
         .from('pos_outlet_items')
-        .select('id, name, sku, unit, item_group')
+        .select('id, name, sku, unit, item_group, track_stock')
         .eq('branch_id', branch_id)
         .eq('is_active', true)
         .order('name', { ascending: true });
     if (error) throw new AppError(error.message, 500);
     res.json({ success: true, data: data || [] });
+});
+
+// ── FOOD CONTROL TYPE CONFIG (Phase 1) ───────────────────────
+// Type A (recipe BOM) = kitchen_production_recipes, above.
+// Type B (yield/pool split) = pos_outlet_items.stock_pool_item_id + pool_fraction,
+// already live for real POS sales (see applyPoolLink above). The endpoints
+// below just expose that same mechanism as its own config screen.
+// Type C (direct) and EXEMPT are genuinely new — registered in
+// food_control_direct_items / food_control_exempt_items
+// (migration 20260629_food_control_type_config.sql).
+
+const BAR_KEYWORDS = ['beer', 'spirit', 'wine', 'whisky', 'whiskey', 'vodka', 'gin', 'rum', 'brandy', 'liqueur', 'soda', 'alcohol', 'bar'];
+function isBarItem(item: { category?: string | null; sku?: string | null; name?: string | null }): boolean {
+    const haystack = `${item.category || ''} ${item.sku || ''} ${item.name || ''}`.toLowerCase();
+    return BAR_KEYWORDS.some((kw) => haystack.includes(kw));
+}
+
+export const getStockItemFoodControlType = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id, item_sku } = req.query;
+    if (!branch_id || !item_sku) throw new AppError('branch_id and item_sku are required', 400);
+    const { data, error } = await supabase.rpc('get_stock_item_food_control_type', {
+        p_branch_id: Number(branch_id),
+        p_item_sku: String(item_sku)
+    });
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: { item_sku, food_control_type: data } });
+});
+
+export const listDirectItems = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id } = req.query;
+    if (!branch_id) throw new AppError('branch_id required', 400);
+    const { data, error } = await supabase
+        .from('food_control_direct_items')
+        .select('*, pos_outlet_item:pos_outlet_items(id,name,sku,unit)')
+        .eq('branch_id', Number(branch_id))
+        .eq('is_active', true)
+        .order('stock_item_name');
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: data || [] });
+});
+
+export const createDirectItem = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id, stock_item_sku, stock_item_name, pos_outlet_item_id } = req.body;
+    if (!branch_id || !stock_item_sku || !pos_outlet_item_id) {
+        throw new AppError('branch_id, stock_item_sku and pos_outlet_item_id are required', 400);
+    }
+    const userId = (req as any).user?.id;
+    const { data, error } = await supabase
+        .from('food_control_direct_items')
+        .insert({
+            branch_id,
+            stock_item_sku,
+            stock_item_name: stock_item_name || null,
+            pos_outlet_item_id,
+            created_by: userId
+        })
+        .select()
+        .single();
+    if (error) throw new AppError(error.message, 500);
+    res.status(201).json({ success: true, data });
+});
+
+export const deactivateDirectItem = asyncWrap(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { data, error } = await supabase
+        .from('food_control_direct_items')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data });
+});
+
+export const listExemptItems = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id } = req.query;
+    if (!branch_id) throw new AppError('branch_id required', 400);
+    const { data, error } = await supabase
+        .from('food_control_exempt_items')
+        .select('*, pos_outlet_item:pos_outlet_items(id,name,sku,unit,category)')
+        .eq('branch_id', Number(branch_id))
+        .order('created_at', { ascending: false });
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: data || [] });
+});
+
+export const createExemptItem = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id, pos_outlet_item_id, reason } = req.body;
+    if (!branch_id || !pos_outlet_item_id) {
+        throw new AppError('branch_id and pos_outlet_item_id are required', 400);
+    }
+    const userId = (req as any).user?.id;
+    const { data, error } = await supabase
+        .from('food_control_exempt_items')
+        .insert({ branch_id, pos_outlet_item_id, reason: reason || null, exempted_by: userId })
+        .select()
+        .single();
+    if (error) throw new AppError(error.message, 500);
+    res.status(201).json({ success: true, data });
+});
+
+export const deleteExemptItem = asyncWrap(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { error } = await supabase.from('food_control_exempt_items').delete().eq('id', id);
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: { id } });
+});
+
+// Pool (Type B) links — thin config wrapper around the same applyPoolLink
+// mechanism used by recipe creation, so a pool relationship can be set up
+// independently of any recipe (e.g. a whole chicken split into POS fractions
+// with no cooking step in between).
+export const listPoolLinks = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id } = req.query;
+    if (!branch_id) throw new AppError('branch_id required', 400);
+    const { data, error } = await supabase
+        .from('pos_outlet_items')
+        .select('id, name, sku, unit, pool_fraction, stock_pool_item_id, pool_parent:pos_outlet_items!stock_pool_item_id(id,name,sku)')
+        .eq('branch_id', Number(branch_id))
+        .not('stock_pool_item_id', 'is', null)
+        .order('name');
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data: data || [] });
+});
+
+// Pool parents must physically be a pos_outlet_items row — the live POS
+// deduction code (outlet-pos.controller.ts, decrement_pos_outlet_item_stock)
+// only ever decrements pos_outlet_items.current_stock by id. But storekeepers
+// think of the pool parent as the raw branch_stock item in the central store
+// (e.g. "FULL CHICKEN"), not a POS catalog row. This resolves that
+// branch_stock SKU to its pos_outlet_items proxy, creating one if none exists
+// yet — tagged is_available: false so it never appears as a sellable item on
+// the cashier's POS screen (those list queries filter on is_available), while
+// still being a normal, active pos_outlet_items row for stock/pool purposes.
+async function resolveOrCreateStockPoolItem(
+    branchId: number,
+    sku: string,
+    name?: string | null,
+    unit?: string | null
+): Promise<string> {
+    // The pool parent must actually be a stocked branch_stock item — a pool
+    // split with nothing behind it to deduct from is meaningless. Read the
+    // real quantity from branch_stock ourselves rather than trust the
+    // client, and require it to be > 0.
+    const { data: stockRow, error: stockError } = await supabase
+        .from('branch_stock')
+        .select('quantity')
+        .eq('branch_id', branchId)
+        .eq('item_sku', sku)
+        .maybeSingle();
+    if (stockError) throw new AppError(stockError.message, 500);
+    const stockQuantity = Number(stockRow?.quantity ?? 0);
+    if (!stockRow || stockQuantity <= 0) {
+        throw new AppError(
+            `${name || sku} has no stock recorded in branch stock yet — receive it into branch stock before using it as a pool parent`,
+            400
+        );
+    }
+
+    const { data: existing, error: lookupError } = await supabase
+        .from('pos_outlet_items')
+        .select('id')
+        .eq('branch_id', branchId)
+        .eq('sku', sku)
+        .maybeSingle();
+    if (lookupError) throw new AppError(lookupError.message, 500);
+    if (existing) {
+        // Re-sync the proxy's stock to the real branch_stock balance every
+        // time the link is (re)confirmed, so it doesn't drift stale.
+        const { error: syncError } = await supabase
+            .from('pos_outlet_items')
+            .update({ current_stock: stockQuantity, updated_at: new Date().toISOString() })
+            .eq('id', existing.id);
+        if (syncError) throw new AppError(syncError.message, 500);
+        return existing.id;
+    }
+
+    const { data: created, error: createError } = await supabase
+        .from('pos_outlet_items')
+        .insert({
+            branch_id: branchId,
+            sku,
+            name: name || sku,
+            unit: unit || null,
+            track_stock: true,
+            is_active: true,
+            is_available: false,
+            current_stock: stockQuantity,
+            source_table: 'branch_stock'
+        })
+        .select('id')
+        .single();
+    if (createError) {
+        throw new AppError(`Could not register ${name || sku} as a stock pool item: ${createError.message}`, 500);
+    }
+    return created.id;
+}
+
+export const setPoolLink = asyncWrap(async (req: Request, res: Response) => {
+    const {
+        pos_outlet_item_id, pool_item_id,
+        pool_item_sku, pool_item_name, pool_item_unit,
+        branch_id, pool_fraction
+    } = req.body;
+    if (!pos_outlet_item_id || (!pool_item_id && !pool_item_sku) || n(pool_fraction) <= 0 || n(pool_fraction) > 1) {
+        throw new AppError(
+            'pos_outlet_item_id, (pool_item_id or pool_item_sku) and a pool_fraction between 0 and 1 are required',
+            400
+        );
+    }
+    let resolvedPoolItemId = pool_item_id;
+    if (!resolvedPoolItemId) {
+        if (!branch_id) throw new AppError('branch_id is required when linking by pool_item_sku', 400);
+        resolvedPoolItemId = await resolveOrCreateStockPoolItem(
+            Number(branch_id), String(pool_item_sku), pool_item_name, pool_item_unit
+        );
+    }
+    await applyPoolLink(pos_outlet_item_id, resolvedPoolItemId, pool_fraction);
+    const { data, error } = await supabase
+        .from('pos_outlet_items')
+        .select('id, name, sku, pool_fraction, stock_pool_item_id')
+        .eq('id', pos_outlet_item_id)
+        .single();
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data });
+});
+
+export const clearPoolLink = asyncWrap(async (req: Request, res: Response) => {
+    const { itemId } = req.params;
+    const { data, error } = await supabase
+        .from('pos_outlet_items')
+        .update({ stock_pool_item_id: null, pool_fraction: null, updated_at: new Date().toISOString() })
+        .eq('id', itemId)
+        .select()
+        .single();
+    if (error) throw new AppError(error.message, 500);
+    res.json({ success: true, data });
+});
+
+// Sold/issuable POS items with no food control classification at all —
+// the "gap finder" storekeepers and accountants use to close out config.
+export const listUnregisteredItems = asyncWrap(async (req: Request, res: Response) => {
+    const { branch_id } = req.query;
+    if (!branch_id) throw new AppError('branch_id required', 400);
+    const { data: items, error } = await supabase
+        .from('pos_outlet_items')
+        .select('id, name, sku, category, unit, stock_pool_item_id')
+        .eq('branch_id', Number(branch_id))
+        .eq('is_active', true);
+    if (error) throw new AppError(error.message, 500);
+
+    const candidates = (items || []).filter((item) => !isBarItem(item) && !item.stock_pool_item_id);
+    const skus = Array.from(new Set(candidates.map((item) => item.sku).filter(Boolean)));
+    const types = new Map<string, string>();
+    await Promise.all(skus.map(async (sku) => {
+        const { data } = await supabase.rpc('get_stock_item_food_control_type', {
+            p_branch_id: Number(branch_id),
+            p_item_sku: sku
+        });
+        types.set(sku as string, data || 'UNREGISTERED');
+    }));
+
+    const unregistered = candidates.filter((item) => !item.sku || types.get(item.sku) === 'UNREGISTERED');
+    res.json({ success: true, data: unregistered });
 });
 
 // ── DASHBOARD STATS ───────────────────────────────────────

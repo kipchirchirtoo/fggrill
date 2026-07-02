@@ -1493,4 +1493,39 @@ class AdminRepository {
       return [];
     }
   }
+
+  Future<void> issueStockRequestItem(
+      String requestId, String itemId, Map<String, dynamic> data) async {
+    await _dio.patch(
+        '/storekeeping/stock-requests/$requestId/items/$itemId/issue',
+        data: data);
+  }
+
+  Future<void> confirmStoreDispatch(String requestId) async {
+    await _dio.post(
+        '/storekeeping/stock-requests/$requestId/confirm-dispatch');
+  }
+
+  Future<List<Map<String, dynamic>>> getDirectIssues() async {
+    final response = await _dio.get('/storekeeping/direct-issues');
+    return _parseMapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createDirectIssue(
+      Map<String, dynamic> data) async {
+    final response =
+        await _dio.post('/storekeeping/direct-issues', data: data);
+    return _parseMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getBackorders() async {
+    final response = await _dio.get('/storekeeping/backorders');
+    return _parseMapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> searchSimpleItems(String query) async {
+    final response = await _dio.get('/storekeeping/items/search',
+        queryParameters: {'q': query, 'limit': 20});
+    return _parseMapList(response.data);
+  }
 }

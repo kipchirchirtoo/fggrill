@@ -8,6 +8,7 @@ import '../../domain/admin_providers.dart';
 import '../../data/models/branch.dart';
 import '../../data/models/menu_item.dart';
 import 'package:famous_gates_app/features/admin/data/admin_repository.dart';
+import 'package:famous_gates_app/core/services/bar_service.dart';
 
 final _barMenuFilteredProvider = FutureProvider.autoDispose
     .family<List<AdminMenuItem>, String?>((ref, category) async {
@@ -91,7 +92,12 @@ class _BarMenuSectionState extends ConsumerState<BarMenuSection> {
               childAspectRatio: 0.85,
             ),
             itemCount: items.length,
-            itemBuilder: (context, index) => _BarMenuCard(item: items[index]),
+            itemBuilder: (context, index) => _BarMenuCard(
+              item: items[index],
+              onEdit: () => _showEditItemDialog(items[index]),
+              onToggle: () => _toggleItem(items[index]),
+              onDelete: () => _deleteItem(items[index]),
+            ),
           ),
         Positioned(
           right: 24,
@@ -106,7 +112,162 @@ class _BarMenuSectionState extends ConsumerState<BarMenuSection> {
     );
   }
 
+  Future<void> _toggleItem(AdminMenuItem item) async {
+    try {
+      await ref.read(barServiceProvider).toggleDrinkAvailability(item.id);
+      if (!mounted) return;
+      ref.invalidate(_barMenuFilteredProvider(_category));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Toggle failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _deleteItem(AdminMenuItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text('Delete "${item.name}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(barServiceProvider).deleteDrink(item.id);
+      if (!mounted) return;
+      ref.invalidate(_barMenuFilteredProvider(_category));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _showEditItemDialog(AdminMenuItem item) {
+    final formKey = GlobalKey<FormState>();
+    final nameCtrl = TextEditingController(text: item.name);
+    final priceCtrl = TextEditingController(
+        text: item.price > 0 ? item.price.toStringAsFixed(0) : '');
+    final descCtrl = TextEditingController(text: item.description);
+    final stockCtrl = TextEditingController(text: '${item.stockQuantity}');
+    String category = item.category.isEmpty
+        ? 'Alcoholic'
+        : _barCategories.skip(1).firstWhere(
+            (c) => c.toLowerCase() == item.category.toLowerCase(),
+            orElse: () => 'Alcoholic');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Edit Bar Item'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Item Name *'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(category),
+                    initialValue: category,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    items: _barCategories
+                        .skip(1)
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) =>
+                        setDialogState(() => category = v ?? category),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: priceCtrl,
+                    decoration: const InputDecoration(labelText: 'Price *'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (double.tryParse(v ?? '') == null)
+                        ? 'Enter a valid price'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: stockCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Stock Quantity'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (int.tryParse(v ?? '') == null)
+                        ? 'Enter a valid number'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descCtrl,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                try {
+                  await ref.read(barServiceProvider).updateDrink(
+                    item.id,
+                    {
+                      'name': nameCtrl.text.trim(),
+                      'category': category.toLowerCase(),
+                      'price': double.parse(priceCtrl.text),
+                      'description': descCtrl.text.trim(),
+                      'stock_quantity': int.tryParse(stockCtrl.text) ?? 0,
+                    },
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) ref.invalidate(_barMenuFilteredProvider(_category));
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to update item: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showAddItemDialog() {
+    final formKey = GlobalKey<FormState>();
     final nameCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     final descCtrl = TextEditingController();
@@ -115,65 +276,94 @@ class _BarMenuSectionState extends ConsumerState<BarMenuSection> {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Bar Item'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Item Name')),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: _barCategories
-                    .skip(1)
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (v) => category = v ?? category,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Add Bar Item'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Item Name *'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(category),
+                    initialValue: category,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    items: _barCategories
+                        .skip(1)
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => category = v ?? category),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: priceCtrl,
+                    decoration: const InputDecoration(labelText: 'Price *'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (double.tryParse(v ?? '') == null)
+                        ? 'Enter a valid price'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: stockCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Stock Quantity'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (int.tryParse(v ?? '') == null)
+                        ? 'Enter a valid number'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descCtrl,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    maxLines: 3,
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: priceCtrl,
-                  decoration: const InputDecoration(labelText: 'Price'),
-                  keyboardType: TextInputType.number),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: stockCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Stock Quantity'),
-                  keyboardType: TextInputType.number),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: descCtrl,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  maxLines: 3),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                try {
+                  await ref.read(barServiceProvider).createDrink({
+                    'name': nameCtrl.text.trim(),
+                    'category': category.toLowerCase(),
+                    'price': double.parse(priceCtrl.text),
+                    'description': descCtrl.text.trim(),
+                    'stock_quantity': int.tryParse(stockCtrl.text) ?? 0,
+                    'is_available': true,
+                  });
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) ref.invalidate(_barMenuFilteredProvider(_category));
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to add item: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameCtrl.text.isEmpty) return;
-              await ref.read(adminRepositoryProvider).createMenuItem({
-                'name': nameCtrl.text,
-                'category': category.toLowerCase(),
-                'price': double.tryParse(priceCtrl.text) ?? 0,
-                'description': descCtrl.text,
-                'menu_type': 'bar',
-                'stock_quantity': int.tryParse(stockCtrl.text) ?? 0,
-                'is_available': true,
-              });
-              if (ctx.mounted) Navigator.pop(ctx);
-              ref.invalidate(_barMenuFilteredProvider(_category));
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }
@@ -279,13 +469,21 @@ class _CategoryTabBar extends StatelessWidget {
   }
 }
 
-class _BarMenuCard extends StatelessWidget {
+class _BarMenuCard extends ConsumerWidget {
   final AdminMenuItem item;
+  final VoidCallback onEdit;
+  final VoidCallback onToggle;
+  final VoidCallback onDelete;
 
-  const _BarMenuCard({required this.item});
+  const _BarMenuCard({
+    required this.item,
+    required this.onEdit,
+    required this.onToggle,
+    required this.onDelete,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isLow = item.isLowStock || item.stockQuantity <= item.reorderLevel;
     return Card(
       elevation: 0,
@@ -315,7 +513,7 @@ class _BarMenuCard extends StatelessWidget {
               if (isLow)
                 Positioned(
                   top: 8,
-                  right: 8,
+                  left: 8,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -330,6 +528,45 @@ class _BarMenuCard extends StatelessWidget {
                             fontWeight: FontWeight.bold)),
                   ),
                 ),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert,
+                      size: 18, color: AppColors.kTextSecondary),
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit();
+                    if (value == 'toggle') onToggle();
+                    if (value == 'delete') onDelete();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [
+                        Icon(PhosphorIcons.pencilSimple(), size: 16),
+                        const SizedBox(width: 8),
+                        const Text('Edit'),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'toggle',
+                      child: Row(children: [
+                        Icon(PhosphorIcons.arrowsClockwise(), size: 16),
+                        const SizedBox(width: 8),
+                        Text(item.isAvailable ? 'Mark Unavailable' : 'Mark Available'),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        Icon(PhosphorIcons.trash(), size: 16, color: AppColors.kError),
+                        const SizedBox(width: 8),
+                        const Text('Delete', style: TextStyle(color: AppColors.kError)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
           Padding(
@@ -361,24 +598,27 @@ class _BarMenuCard extends StatelessWidget {
                                 ? AppColors.kWarning
                                 : AppColors.kTextSecondary)),
                     const Spacer(),
-                    Container(
-                      width: 40,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: item.isAvailable
-                            ? AppColors.kSuccess.withValues(alpha: 0.15)
-                            : AppColors.kDivider,
-                      ),
-                      child: Center(
-                        child: Text(
-                          item.isAvailable ? 'ON' : 'OFF',
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: item.isAvailable
-                                  ? AppColors.kSuccess
-                                  : AppColors.kTextSecondary),
+                    GestureDetector(
+                      onTap: onToggle,
+                      child: Container(
+                        width: 40,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: item.isAvailable
+                              ? AppColors.kSuccess.withValues(alpha: 0.15)
+                              : AppColors.kDivider,
+                        ),
+                        child: Center(
+                          child: Text(
+                            item.isAvailable ? 'ON' : 'OFF',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: item.isAvailable
+                                    ? AppColors.kSuccess
+                                    : AppColors.kTextSecondary),
+                          ),
                         ),
                       ),
                     ),

@@ -324,20 +324,31 @@ class _SecurityPoliciesDialogState extends State<_SecurityPoliciesDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    final sessionTimeout = int.tryParse(_sessionTimeoutCtrl.text.trim());
+    final maxFailedAttempts = int.tryParse(_maxFailedAttemptsCtrl.text.trim());
+    final lockoutDuration = int.tryParse(_lockoutDurationCtrl.text.trim());
+    if (sessionTimeout == null || maxFailedAttempts == null || lockoutDuration == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All numeric fields must be valid whole numbers.'),
+          backgroundColor: Color(0xFFef4444),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await widget.onSave({
-        'session_timeout_minutes':
-            int.parse(_sessionTimeoutCtrl.text.trim()),
-        'max_failed_attempts': int.parse(_maxFailedAttemptsCtrl.text.trim()),
-        'lockout_duration_minutes':
-            int.parse(_lockoutDurationCtrl.text.trim()),
+        'session_timeout_minutes': sessionTimeout,
+        'max_failed_attempts': maxFailedAttempts,
+        'lockout_duration_minutes': lockoutDuration,
         'require_2fa_for_admin': _require2fa,
         'justification': _justificationCtrl.text.trim(),
       });
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Security policies updated successfully.'),
           backgroundColor: Color(0xFF10b981),
@@ -346,7 +357,7 @@ class _SecurityPoliciesDialogState extends State<_SecurityPoliciesDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
           backgroundColor: const Color(0xFFef4444),

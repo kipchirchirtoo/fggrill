@@ -32,3 +32,13 @@ final hkScheduleProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.read(housekeepingRepositoryProvider).getSchedule();
 });
+
+final hkStaffProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(housekeepingRepositoryProvider).getStaff();
+});
+
+final hkShiftDefinitionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(housekeepingRepositoryProvider).getShiftDefinitions();
+});

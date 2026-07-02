@@ -354,9 +354,12 @@ class ThermalPrinter:
             
             p = self.printer
             
+            company_name = str(receipt_data.get('company_name') or self.company_name).strip() or self.company_name
+            till_number = str(receipt_data.get('till_number') or '').strip()
+
             # === HEADER ===
             p.set(align='center', font='a', bold=True, double_height=True)
-            p.text(f"{self.company_name}\n")
+            p.text(f"{company_name}\n")
             
             p.set(align='center', font='a', bold=False, double_height=False)
             p.text(f"{self.company_address}\n")
@@ -491,7 +494,13 @@ class ThermalPrinter:
             p.text("CUSTOMER COPY\n")
             p.text("\n")
             p.text("THANKS FOR VISITING\n")
-            p.text(f"{self.company_name}\n")
+            p.text(f"{company_name}\n")
+            if till_number:
+                p.text("\n")
+                p.set(align='center', font='a', bold=True)
+                p.text("TILL NUMBER\n")
+                p.text(f"{till_number.upper()}\n")
+                p.set(align='center', font='a', bold=False)
             
             p.text("\n")
             p.text("-" * 32 + "\n")

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/branch_storekeeper_repository.dart';
 import '../models/bom_control_item.dart';
 import '../models/daily_control_state.dart';
 import '../models/kitchen_vs_sales_item.dart';
+import '../models/stock_ledger_item.dart';
 import '../models/stock_vs_sales_summary.dart';
 
 String _todayIso() => DateTime.now().toIso8601String().split('T').first;
@@ -12,9 +15,50 @@ String _todayIso() => DateTime.now().toIso8601String().split('T').first;
 const Object _unset = Object();
 
 class DailyControlNotifier extends StateNotifier<DailyControlState> {
-  DailyControlNotifier(this._ref) : super(DailyControlState.initial(_todayIso()));
+  DailyControlNotifier(this._ref) : super(DailyControlState.initial(_todayIso())) {
+    loadSnapshot();
+  }
 
   final Ref _ref;
+
+  /// The finalized previous-closed-day view — loaded once on init and on
+  /// refresh(), independent of the live date/shift filter below.
+  Future<void> loadSnapshot() async {
+    if (!mounted) return;
+    state = state.copyWith(snapshotLoading: true);
+    try {
+      final repo = _ref.read(branchStorekeeperRepositoryProvider);
+      final snapshot = await repo.getDailyControlSnapshot();
+      if (!mounted) return;
+      state = state.copyWith(snapshot: snapshot, snapshotLoading: false);
+    } catch (_) {
+      // Non-fatal — the live view below still works without it.
+      if (!mounted) return;
+      state = state.copyWith(snapshotLoading: false);
+    }
+  }
+
+  /// The physical stock ledger — independent data source from loadAll below
+  /// (kitchen_shift_items, not POS sales), so it's fetched in parallel
+  /// rather than folded into the same payload.
+  Future<void> loadStockLedger({String? date, Object? shift = _unset}) async {
+    final targetDate = date ?? state.date;
+    final targetShift = identical(shift, _unset) ? state.shift : shift as String?;
+    if (!mounted) return;
+    state = state.copyWith(stockLedgerLoading: true);
+    try {
+      final repo = _ref.read(branchStorekeeperRepositoryProvider);
+      final rows = await repo.getStockLedger(date: targetDate, shift: targetShift);
+      if (!mounted) return;
+      state = state.copyWith(
+        stockLedger: rows.map((r) => StockLedgerItem.fromJson(r)).toList(),
+        stockLedgerLoading: false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      state = state.copyWith(stockLedgerLoading: false);
+    }
+  }
 
   /// Single round trip that feeds all four control layers.
   /// [shift] is 'A', 'B', or null (full day).
@@ -28,9 +72,11 @@ class DailyControlNotifier extends StateNotifier<DailyControlState> {
       date: targetDate,
       shift: targetShift,
     );
+    unawaited(loadStockLedger(date: targetDate, shift: targetShift));
     try {
       final repo = _ref.read(branchStorekeeperRepositoryProvider);
       final json = await repo.dailyControlData(date: targetDate, shift: targetShift);
+      if (!mounted) return;
 
       final bomControlRaw = json['bom_control'];
       final bomControl = bomControlRaw is List
@@ -66,10 +112,17 @@ class DailyControlNotifier extends StateNotifier<DailyControlState> {
           : DailyControlSummary.empty();
 
       final hasKitchenSession = json['has_kitchen_session'] == true;
+      final issueSummaryRaw = json['kitchen_issue_summary'];
+      final totalIssuedQty = issueSummaryRaw is Map
+          ? (issueSummaryRaw['total_issued_qty'] is num
+              ? issueSummaryRaw['total_issued_qty'] as num
+              : num.tryParse('${issueSummaryRaw['total_issued_qty']}') ?? 0)
+          : 0;
 
       state = state.copyWith(
         isLoading: false,
         hasKitchenSession: hasKitchenSession,
+        totalIssuedQty: totalIssuedQty,
         bomControl: bomControl,
         noRecipeItems: noRecipeItems,
         kitchenVsSales: kitchenVsSales,
@@ -77,6 +130,7 @@ class DailyControlNotifier extends StateNotifier<DailyControlState> {
         summary: summary,
       );
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Failed to load daily control data: $e',
@@ -106,11 +160,32 @@ class DailyControlNotifier extends StateNotifier<DailyControlState> {
     loadAll(shift: shift);
   }
 
-  Future<void> refresh() => loadAll(date: state.date, shift: state.shift);
+  Future<void> refresh() {
+    loadSnapshot();
+    loadStockLedger(date: state.date, shift: state.shift);
+    return loadAll(date: state.date, shift: state.shift);
+  }
 
   List<Map<String, dynamic>> rowsForExport(int tabIndex) {
     switch (tabIndex) {
       case 0:
+        return state.stockLedger
+            .map((i) => {
+                  'item_sku': i.itemSku,
+                  'item_name': i.itemName,
+                  'unit': i.unit,
+                  'opening_stock': i.openingStock,
+                  'added_stock': i.addedStock,
+                  'totals': i.totals,
+                  'closing_stock': i.closingStock ?? '',
+                  'rejects': i.rejects,
+                  'quantity_sold': i.quantitySold ?? '',
+                  'system_sold': i.systemSold,
+                  'shorts': i.shorts ?? '',
+                  'data_quality': i.dataQuality,
+                })
+            .toList();
+      case 1:
         return state.bomControl
             .map((i) => {
                   'item_sku': i.itemSku,
@@ -127,7 +202,7 @@ class DailyControlNotifier extends StateNotifier<DailyControlState> {
                   'flag': i.flag,
                 })
             .toList();
-      case 1:
+      case 2:
         return state.kitchenVsSales
             .map((i) => {
                   'item_name': i.itemName,
@@ -137,7 +212,7 @@ class DailyControlNotifier extends StateNotifier<DailyControlState> {
                   'status': i.status,
                 })
             .toList();
-      case 2:
+      case 3:
         return [
           {
             'stock_issued_cost': state.stockVsSales.stockIssuedCost,

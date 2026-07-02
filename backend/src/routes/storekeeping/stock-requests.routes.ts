@@ -9,7 +9,9 @@ import {
     approveStockRequest,
     bulkApproveStockRequests,
     rejectStockRequest,
-    cancelStockRequest
+    cancelStockRequest,
+    setItemIssueQty,
+    confirmDispatch
 } from '../../controllers/storekeeping/stock-requests.controller';
 
 const router = express.Router();
@@ -37,5 +39,11 @@ router.put('/:id/approve', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER
 router.put('/:id/reject', authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), rejectStockRequest);
 
 router.put('/:id/cancel', cancelStockRequest);
+
+// Central storekeeper: set per-item issue qty/status
+router.patch('/:id/items/:itemId/issue', authorize([UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), setItemIssueQty);
+
+// Central storekeeper: confirm dispatch (locks items, deducts stock, creates dispatch record)
+router.post('/:id/confirm-dispatch', authorize([UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER]), confirmDispatch);
 
 export default router;

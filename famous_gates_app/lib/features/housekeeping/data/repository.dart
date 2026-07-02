@@ -33,7 +33,7 @@ class HousekeepingRepository {
   Future<List<HkRoom>> getRooms() async {
     final branchId = await _branchId;
     final response = await _dio.get('/housekeeping/rooms', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (branchId.isNotEmpty) 'branchId': branchId,
     });
     return _parseList(response.data, HkRoom.fromJson);
   }
@@ -46,7 +46,7 @@ class HousekeepingRepository {
   Future<List<HkTask>> getTasks({String? status}) async {
     final branchId = await _branchId;
     final response = await _dio.get('/housekeeping/tasks', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (branchId.isNotEmpty) 'branchId': branchId,
       if (status != null) 'status': status,
     });
     return _parseList(response.data, HkTask.fromJson);
@@ -70,7 +70,7 @@ class HousekeepingRepository {
     final branchId = await _branchId;
     final response =
         await _dio.get('/housekeeping/inspections', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (branchId.isNotEmpty) 'branchId': branchId,
       if (status != null) 'status': status,
     });
     return _parseList(response.data, (j) => j);
@@ -88,7 +88,7 @@ class HousekeepingRepository {
     final branchId = await _branchId;
     final response =
         await _dio.get('/housekeeping/lost-found', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (branchId.isNotEmpty) 'branchId': branchId,
       if (status != null) 'status': status,
     });
     return _parseList(response.data, (j) => j);
@@ -106,7 +106,7 @@ class HousekeepingRepository {
   Future<List<Map<String, dynamic>>> getSuppliesInventory() async {
     final branchId = await _branchId;
     final response = await _dio.get('/housekeeping/supplies', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (branchId.isNotEmpty) 'branchId': branchId,
     });
     return _parseList(response.data, (j) => j);
   }
@@ -116,16 +116,30 @@ class HousekeepingRepository {
   }
 
   Future<List<Map<String, dynamic>>> getSchedule({String? date}) async {
-    final branchId = await _branchId;
+    final targetDate = date ?? DateTime.now().toIso8601String().split('T').first;
     final response =
         await _dio.get('/housekeeping/scheduling/schedules', queryParameters: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-      if (date != null) 'date': date,
+      'startDate': targetDate,
+      'endDate': targetDate,
     });
     return _parseList(response.data, (j) => j);
   }
 
   Future<void> createScheduleEntry(Map<String, dynamic> data) async {
     await _dio.post('/housekeeping/scheduling/schedules', data: data);
+  }
+
+  Future<List<Map<String, dynamic>>> getStaff() async {
+    final response = await _dio.get('/housekeeping/staff');
+    return _parseList(response.data, (j) => j);
+  }
+
+  Future<List<Map<String, dynamic>>> getShiftDefinitions() async {
+    final branchId = await _branchId;
+    final response =
+        await _dio.get('/housekeeping/scheduling/shifts', queryParameters: {
+      if (branchId.isNotEmpty) 'branchId': branchId,
+    });
+    return _parseList(response.data, (j) => j);
   }
 }

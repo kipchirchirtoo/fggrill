@@ -76,6 +76,7 @@ export enum UserRole {
   KYOGONG_EXECUTIVE_BAR_CASHIER = 'kyogong_executive_bar_cashier',
   KYOGONG_SPORTS_BAR_CASHIER = 'kyogong_sports_bar_cashier',
   KYOGONG_RECEPTION_CASHIER = 'kyogong_reception_cashier',
+  CHOMA_ZONE_CASHIER = 'choma_zone_cashier',
 
   // Store & Inventory
   CENTRAL_STOREKEEPER = 'central_storekeeper',

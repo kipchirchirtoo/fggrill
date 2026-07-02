@@ -12,6 +12,7 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/presentation/terminal_screen.dart';
 import '../../features/bar/presentation/bar_screen.dart';
+import '../../features/branch_health/presentation/branch_health_screen.dart';
 import '../../features/branch_manager/presentation/branch_manager_dashboard.dart';
 import '../../features/cashier/presentation/cashier_dashboard.dart';
 import '../../features/hr/presentation/hr_dashboard.dart';
@@ -171,6 +172,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/pos/choma-zone',
+        builder: (context, state) => const OutletPOSScreen(
+          outletType: 'choma_zone',
+          title: 'Unified POS',
+          initials: 'UP',
+          unifiedStations: true,
+        ),
+      ),
+      GoRoute(
         path: '/pos/kyogong-reception',
         builder: (context, state) => const OutletPOSScreen(
           outletType: 'kyogong_reception',
@@ -205,19 +215,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/pos/outlet-stock',
         builder: (context, state) => const BranchStorekeeperDashboard(
-          initialSection: BranchStorekeeperSection.posOutletAssembly,
+          initialSection: BranchStorekeeperSection.inventoryControl,
         ),
       ),
       GoRoute(
         path: '/pos/production-assembly',
         builder: (context, state) => const BranchStorekeeperDashboard(
-          initialSection: BranchStorekeeperSection.posOutletAssembly,
+          initialSection: BranchStorekeeperSection.inventoryControl,
         ),
       ),
       GoRoute(
         path: '/pos/shift-opening-closing',
         builder: (context, state) => const BranchStorekeeperDashboard(
-          initialSection: BranchStorekeeperSection.posOutletAssembly,
+          initialSection: BranchStorekeeperSection.inventoryControl,
         ),
       ),
       GoRoute(
@@ -333,6 +343,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/diagnostics',
           builder: (context, state) => const DiagnosticsScreen()),
+      GoRoute(
+          path: '/branch-health',
+          builder: (context, state) => const BranchHealthScreen()),
       GoRoute(path: '/lock', builder: (context, state) => const LockScreen()),
       GoRoute(
           path: '/procurement',
@@ -936,6 +949,8 @@ String _defaultRouteForUser(User user) {
       return '/pos/executive-bar';
     case 'non_consumables':
       return '/pos/non-consumables';
+    case 'choma_zone':
+      return '/pos/choma-zone';
     case 'kyogong_reception':
       return '/pos/kyogong-reception';
     case 'kyogong_spa':
@@ -965,6 +980,7 @@ const _cashierRoles = {
   'executive_bar_cashier',
   'non_consumables_cashier',
   'kyogong_reception_cashier',
+  'choma_zone_cashier',
 };
 const _barRoles = {
   'bartender',
@@ -1287,6 +1303,7 @@ const _branchManagerSectionRouteSpecs =
       BranchManagerSection.orderIntelligence),
   MapEntry('/branch-manager/menu', BranchManagerSection.menu),
   MapEntry('/branch-manager/bar-menu', BranchManagerSection.barMenu),
+  MapEntry('/branch-manager/data-health', BranchManagerSection.dataHealth),
   MapEntry('/branch-manager/housekeeping', BranchManagerSection.housekeeping),
   MapEntry('/branch-manager/maintenance', BranchManagerSection.maintenance),
   MapEntry('/branch-manager/wastage', BranchManagerSection.wastage),
@@ -1304,6 +1321,10 @@ const _branchManagerSectionRouteSpecs =
 const _branchAccountantSectionRouteSpecs =
     <MapEntry<String, BranchAccountantSection>>[
   MapEntry('/branch-accountant/analytics', BranchAccountantSection.analytics),
+  MapEntry(
+      '/branch-accountant/data-health', BranchAccountantSection.dataHealth),
+  MapEntry('/branch-accountant/daily-controls-lina',
+      BranchAccountantSection.linaDailyControls),
   MapEntry('/branch-accountant/financial-close',
       BranchAccountantSection.financialClose),
   MapEntry('/branch-accountant/supplier-finance',
@@ -1318,6 +1339,8 @@ const _branchAccountantSectionRouteSpecs =
   MapEntry(
       '/branch-accountant/staff/audit', BranchAccountantSection.staffAudit),
   MapEntry('/branch-accountant/budgets', BranchAccountantSection.budgets),
+  MapEntry('/branch-accountant/food-control',
+      BranchAccountantSection.foodControl),
 ];
 
 const _branchStorekeeperSectionRouteSpecs =
@@ -1423,6 +1446,10 @@ const _centralStoreSectionRouteSpecs = <MapEntry<String, AdminSection>>[
 
 const _superAdminSectionRouteSpecs = <MapEntry<String, SuperAdminSection>>[
   MapEntry('/superadmin/lina', SuperAdminSection.lina),
+  MapEntry(
+      '/superadmin/food-control-health', SuperAdminSection.foodControlHealth),
+  MapEntry('/superadmin/daily-controls-lina',
+      SuperAdminSection.linaDailyControls),
   MapEntry('/superadmin/admin-dashboard', SuperAdminSection.adminDashboard),
   MapEntry('/superadmin/audit-logs', SuperAdminSection.securityCenter),
   MapEntry('/super/admin/security', SuperAdminSection.securityCenter),

@@ -20,7 +20,22 @@ import {
     listRecipeLinkableMenuItems,
     getKitchenShiftStats,
     getProductionSessionView,
-    getKitchenShiftPosConsumption
+    getKitchenShiftPosConsumption,
+    getStockItemFoodControlType,
+    listUnregisteredItems,
+    listDirectItems,
+    createDirectItem,
+    deactivateDirectItem,
+    listExemptItems,
+    createExemptItem,
+    deleteExemptItem,
+    listPoolLinks,
+    setPoolLink,
+    clearPoolLink,
+    listShiftAdditions,
+    getActiveCashierShift,
+    getProductionSummary,
+    getKitchenShiftHandover
 } from '../controllers/kitchen-shift.controller';
 
 const router = express.Router();
@@ -49,10 +64,30 @@ router.get('/stats', authorize(KITCHEN_ROLES), getKitchenShiftStats);
 router.get('/production-sessions-view', authorize(KITCHEN_ROLES), getProductionSessionView);
 router.post('/recipes', authorize(KITCHEN_ROLES), createProductionRecipe);
 router.get('/recipes/list', authorize(KITCHEN_ROLES), listProductionRecipes);
+router.get('/recipes/menu-items', authorize(KITCHEN_ROLES), listRecipeLinkableMenuItems);
 router.put('/recipes/:recipe_id', authorize(KITCHEN_ROLES), updateProductionRecipe);
 router.delete('/recipes/:recipe_id', authorize(KITCHEN_ROLES), deactivateProductionRecipe);
+
+// Food Control type config (Phase 1)
+router.get('/food-control/type', authorize(KITCHEN_ROLES), getStockItemFoodControlType);
+router.get('/food-control/unregistered', authorize(KITCHEN_ROLES), listUnregisteredItems);
+router.get('/food-control/direct-items', authorize(KITCHEN_ROLES), listDirectItems);
+router.post('/food-control/direct-items', authorize(KITCHEN_ROLES), createDirectItem);
+router.delete('/food-control/direct-items/:id', authorize(KITCHEN_ROLES), deactivateDirectItem);
+router.get('/food-control/exempt-items', authorize(KITCHEN_ROLES), listExemptItems);
+router.post('/food-control/exempt-items', authorize(KITCHEN_ROLES), createExemptItem);
+router.delete('/food-control/exempt-items/:id', authorize(KITCHEN_ROLES), deleteExemptItem);
+router.get('/food-control/pool-links', authorize(KITCHEN_ROLES), listPoolLinks);
+router.post('/food-control/pool-links', authorize(KITCHEN_ROLES), setPoolLink);
+router.delete('/food-control/pool-links/:itemId', authorize(KITCHEN_ROLES), clearPoolLink);
+
+router.get('/active-cashier-shift', authorize(KITCHEN_ROLES), getActiveCashierShift);
+
 router.get('/:shift_id', authorize(KITCHEN_ROLES), getKitchenShift);
 router.get('/:shift_id/pos-consumption', authorize(KITCHEN_ROLES), getKitchenShiftPosConsumption);
+router.get('/:shift_id/additions', authorize(KITCHEN_ROLES), listShiftAdditions);
+router.get('/:shift_id/production-summary', authorize(KITCHEN_ROLES), getProductionSummary);
+router.get('/:shift_id/handover', authorize(KITCHEN_ROLES), getKitchenShiftHandover);
 
 // Stock operations
 router.post('/:shift_id/stock', authorize(KITCHEN_ROLES), addShiftStock);

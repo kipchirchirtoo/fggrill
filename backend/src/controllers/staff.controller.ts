@@ -188,6 +188,7 @@ export const getRoles = async (
       { value: 'kyogong_executive_bar_cashier',  label: 'Kyogong Executive Bar Cashier',  description: 'Kyogong executive bar POS' },
       { value: 'kyogong_sports_bar_cashier',     label: 'Kyogong Sports Bar Cashier',     description: 'Kyogong sports bar POS' },
       { value: 'kyogong_reception_cashier',      label: 'Kyogong Reception Cashier',      description: 'Kyogong reception POS' },
+      { value: 'choma_zone_cashier',              label: 'Choma Zone Cashier',             description: 'Kyogong choma zone (grill/BBQ) POS' },
     ];
 
     res.status(200).json({
@@ -533,19 +534,54 @@ export const createStaffMember = async (
       staffBranchId = callerBranchId;
     }
 
-    // Validate required fields
-    if (!staffFirstName || !staffLastName || !staffNationalId || !department) {
+    // Validate required fields (national_id and department are optional — will be auto-generated/derived)
+    if (!staffFirstName || !staffLastName) {
       res.status(400).json({
         success: false,
-        message: 'Please provide all required fields: first_name, last_name, national_id, department'
+        message: 'Please provide all required fields: first_name, last_name'
       });
       return;
     }
+    // Auto-derive department from role if not provided
+    const roleToDepartment: Record<string, string> = {
+      waiter: 'restaurant', waitress: 'restaurant', head_waiter: 'restaurant',
+      restaurant_manager: 'restaurant', restaurant_cashier: 'restaurant',
+      host: 'restaurant',
+      bartender: 'bar_lounge', barman: 'bar_lounge', barmaid: 'bar_lounge',
+      bar_manager: 'bar_lounge', bar_staff: 'bar_lounge',
+      main_bar_cashier: 'bar_lounge', executive_bar_cashier: 'bar_lounge',
+      chef: 'kitchen', head_chef: 'kitchen', sous_chef: 'kitchen',
+      line_cook: 'kitchen', kitchen_staff: 'kitchen', kitchen_manager: 'kitchen',
+      kitchen_operations: 'kitchen', pastry_chef: 'kitchen', pos_kitchen: 'kitchen',
+      receptionist: 'front_office', concierge: 'front_office', bellboy: 'front_office',
+      front_desk_supervisor: 'front_office',
+      cashier: 'finance', accountant: 'finance', finance_manager: 'finance',
+      branch_accountant: 'accounts', auditor: 'finance',
+      non_consumables_cashier: 'finance',
+      housekeeper: 'housekeeping', housekeeping_manager: 'housekeeping',
+      laundry_attendant: 'housekeeping', public_area_cleaner: 'housekeeping',
+      housekeeping_supervisor: 'housekeeping',
+      maintenance: 'maintenance', maintenance_manager: 'maintenance',
+      technician: 'maintenance', electrician: 'maintenance', plumber: 'maintenance',
+      security_guard: 'security', security_manager: 'security',
+      central_storekeeper: 'store', storekeeper: 'store', store_assistant: 'store',
+      branch_storekeeper: 'store',
+      branch_manager: 'management', general_manager: 'management',
+      director: 'management', assistant_manager: 'management',
+      duty_manager: 'management', hr_manager: 'hr',
+      it_manager: 'it', system_admin: 'it', support_technician: 'it',
+      procurement: 'procurement', purchasing_manager: 'procurement',
+    };
+    const effectiveDepartment = department ||
+      roleToDepartment[String(position || login_role || user_role || (req.body?.role as string) || '').toLowerCase()] ||
+      'general';
+    // Auto-generate a placeholder national ID if not provided
+    const effectiveNationalId = staffNationalId ||
+      `STAFF-${Date.now().toString(36).toUpperCase()}`;
 
     // Normalize department to lowercase to accept both "Housekeeping" and "housekeeping"
-    const normalizedDepartment = (department || '').toLowerCase().replace(/[\s\-]/g, '_');
+    const normalizedDepartment = effectiveDepartment.toLowerCase().replace(/[\s\-]/g, '_');
 
-    // Validate department against allowed values
     const validDepartments = [
       'housekeeping', 'restaurant', 'reception', 'maintenance',
       'finance', 'management', 'security', 'bar_lounge', 'administration', 'general',
@@ -553,19 +589,10 @@ export const createStaffMember = async (
       'food_&_beverage', 'laundry', 'procurement', 'operations', 'hr', 'accounts',
       'service/f&b', 'service_f&b'
     ];
-    // Accept any department value — the departments table is the source of truth.
-    // Only reject if the department is completely empty.
-    if (!normalizedDepartment) {
-      res.status(400).json({
-        success: false,
-        message: `Invalid department. Must be one of: ${validDepartments.join(', ')}`
-      });
-      return;
-    }
     // Use the lowercase normalized value going forward
     const finalDepartment = validDepartments.includes(normalizedDepartment)
       ? normalizedDepartment
-      : department; // Keep original if it's a custom value from the DB
+      : effectiveDepartment;
     const requestedLoginRole = String(user_role || login_role || position || finalDepartment || 'employee').toLowerCase();
 
     if (callerRole === 'branch_manager' && shouldCreateUserAccount && !canBranchManagerCreateRole(requestedLoginRole)) {
@@ -593,7 +620,7 @@ export const createStaffMember = async (
       last_name: staffLastName,
       email: email || null,
       phone: phone || null,
-      national_id: staffNationalId,
+      national_id: effectiveNationalId,
       department: finalDepartment,
       position: position || finalDepartment,
       role: position || finalDepartment, // legacy 'role' column stores position

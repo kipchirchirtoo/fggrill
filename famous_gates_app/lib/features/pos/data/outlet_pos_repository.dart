@@ -15,6 +15,57 @@ class OutletPosRepository {
 
   PowerSyncService get _powerSync => _ref.read(powerSyncServiceProvider);
 
+  Future<PosBootstrapSnapshot> getBootstrap({
+    String? outletType,
+    String? outletId,
+    bool allOutlets = false,
+  }) async {
+    final response = await _dio.get('/pos/bootstrap', queryParameters: {
+      if (outletId != null && outletId.trim().isNotEmpty)
+        'outlet_id': outletId.trim(),
+      if (outletType != null && outletType.trim().isNotEmpty)
+        'selected_outlet_type': outletType.trim(),
+      if (!allOutlets && outletType != null && outletType.trim().isNotEmpty)
+        'outlet_type': outletType.trim(),
+      if (allOutlets) 'all_outlets': 'true',
+    });
+    final data = _data(response.data);
+    final map = data is Map ? Map<String, dynamic>.from(data) : const {};
+    final outlets = (map['outlets'] is List ? map['outlets'] as List : const [])
+        .whereType<Map>()
+        .map((item) => PosOutlet.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+    final outletMap = map['outlet'];
+    final outlet = outletMap is Map
+        ? PosOutlet.fromJson(Map<String, dynamic>.from(outletMap))
+        : null;
+    final shiftMap = map['shift'];
+    final shift = shiftMap is Map
+        ? OutletShift.fromJson(Map<String, dynamic>.from(shiftMap))
+        : null;
+    final fallbackOutlet = outlet;
+    final items = (map['items'] is List ? map['items'] as List : const [])
+        .whereType<Map>()
+        .map((item) => OutletPosItem.fromJson(
+              Map<String, dynamic>.from(item),
+              fallbackOutlet: fallbackOutlet,
+            ))
+        .toList();
+    final orders = (map['orders'] is List ? map['orders'] as List : const [])
+        .whereType<Map>()
+        .map((item) => OutletShiftOrder.fromJson(
+              Map<String, dynamic>.from(item),
+            ))
+        .toList();
+    return PosBootstrapSnapshot(
+      outlets: outlets,
+      outlet: outlet,
+      shift: shift,
+      items: items,
+      orders: orders,
+    );
+  }
+
   Future<List<PosOutlet>> getOutlets(
       {String? outletType, int? branchId}) async {
     if (_powerSync.hotReadsEnabled) {
@@ -752,6 +803,22 @@ class OutletPosRepository {
     final data = _data(responseData);
     return data is List ? data : const [];
   }
+}
+
+class PosBootstrapSnapshot {
+  const PosBootstrapSnapshot({
+    required this.outlets,
+    required this.outlet,
+    required this.shift,
+    required this.items,
+    required this.orders,
+  });
+
+  final List<PosOutlet> outlets;
+  final PosOutlet? outlet;
+  final OutletShift? shift;
+  final List<OutletPosItem> items;
+  final List<OutletShiftOrder> orders;
 }
 
 class OutletStaffMember {

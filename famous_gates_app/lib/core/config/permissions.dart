@@ -371,6 +371,7 @@ class RolePermissions {
       case UserRole.kyogongExecutiveBarCashier:
       case UserRole.kyogongSportsBarCashier:
       case UserRole.kyogongReceptionCashier:
+      case UserRole.chomaZoneCashier:
         return {
           Permission.canViewRestaurant,
           Permission.canManageOrders,

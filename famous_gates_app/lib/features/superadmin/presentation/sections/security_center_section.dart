@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
@@ -204,7 +204,13 @@ class _SecurityCenterSectionState extends ConsumerState<SecurityCenterSection> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      '${(int.parse(card['value'] as String) / (int.parse(stats['loginsToday']?.toString() ?? '1') + int.parse(card['value'] as String)) * 100).toStringAsFixed(1)}% failure rate',
+                      () {
+                        final failed = int.tryParse('${card["value"] ?? "0"}') ?? 0;
+                        final logins = int.tryParse('${stats["loginsToday"] ?? "0"}') ?? 0;
+                        final total = logins + failed;
+                        final rate = total == 0 ? 0.0 : failed / total * 100;
+                        return '${rate.toStringAsFixed(1)}% failure rate';
+                      }(),
                       style: const TextStyle(
                         fontSize: 11,
                         color: Color(0xFFd97706),
@@ -1204,8 +1210,7 @@ class _SecurityCenterSectionState extends ConsumerState<SecurityCenterSection> {
         AppNotifier.showSnackBar(
           context,
           SnackBar(
-              content: Text(
-                  'Security $format export prepared from current records')),
+              content: Text('Export coming soon ($format)')),
         );
       },
     );

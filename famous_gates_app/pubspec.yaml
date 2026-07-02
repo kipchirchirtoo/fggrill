@@ -2,7 +2,7 @@ name: famous_gates_app
 description: "Famous Gates Hotels Management System"
 publish_to: 'none'
 
-version: 3.9.9+20
+version: 3.9.9+24
 
 environment:
   sdk: '>=3.1.0 <4.0.0'
@@ -57,6 +57,7 @@ dependencies:
   json_annotation: ^4.9.0
   drift_flutter: ^0.2.7
   updat: ^1.4.0
+  window_manager: ^0.5.1
   http: ^1.6.0
   package_info_plus: ^9.0.1
   flutter_markdown: ^0.7.7+1

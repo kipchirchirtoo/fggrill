@@ -22,7 +22,10 @@ class SuperAdminAuditLogsSection extends ConsumerWidget {
           logsAsync.when(
             data: (data) => _buildLogsTable(data),
             loading: () => const LoadingSkeleton(height: 400),
-            error: (e, _) => ErrorState(message: e.toString()),
+            error: (e, _) => ErrorState(
+              message: e.toString(),
+              onRetry: () => ref.invalidate(systemLogsProvider),
+            ),
           ),
         ],
       ),
@@ -55,6 +58,10 @@ class SuperAdminAuditLogsSection extends ConsumerWidget {
 
   Widget _buildLogsTable(Map<String, dynamic> data) {
     final logs = data['data'] as List<dynamic>? ?? [];
+
+    if (logs.isEmpty) {
+      return const Center(child: Text('No audit logs found'));
+    }
 
     return Container(
       decoration: BoxDecoration(

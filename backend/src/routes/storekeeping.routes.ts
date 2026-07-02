@@ -73,8 +73,16 @@ import {
   approveStockRequest,
   rejectStockRequest,
   getBranchPerformance,
-  getApprovedRequests
+  getApprovedRequests,
+  setItemIssueQty,
+  confirmDispatch
 } from '../controllers/storekeeping/stock-requests.controller';
+
+import {
+  createDirectIssue,
+  getDirectIssues,
+  getBackorders
+} from '../controllers/storekeeping/direct-issue.controller';
 
 import {
   getVehicles,
@@ -341,6 +349,19 @@ router.get('/stock-requests/:id', authorize(branchRoles), getStockRequest);
 router.put('/stock-requests/:id/review', authorize(branchAccountantRoles), reviewStockRequest);
 router.put('/stock-requests/:id/approve', authorize(branchAccountantRoles), approveStockRequest);
 router.put('/stock-requests/:id/reject', authorize(branchAccountantRoles), rejectStockRequest);
+
+// Per-item issue quantity (central storekeeper)
+router.patch('/stock-requests/:id/items/:itemId/issue', authorize(centralRoles), setItemIssueQty);
+
+// Confirm dispatch (central storekeeper)
+router.post('/stock-requests/:id/confirm-dispatch', authorize(centralRoles), confirmDispatch);
+
+// Direct Issues
+router.post('/direct-issues', authorize(centralRoles), createDirectIssue);
+router.get('/direct-issues', authorize(branchRoles), getDirectIssues);
+
+// Backorders
+router.get('/backorders', authorize(branchRoles), getBackorders);
 
 // Dispatch notes (Central → Branch)
 router.post('/dispatch-notes', authorize(centralRoles), createDispatch);

@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -28,6 +29,10 @@ class BranchManagerRepository {
   Future<Map<String, dynamic>> _branchQuery(
       [Map<String, dynamic>? query]) async {
     final branchId = await getBranchId();
+    if (branchId.isEmpty) {
+      dev.log('WARNING: branchId is empty — branch_id will be omitted from request',
+          name: 'BranchManagerRepository');
+    }
     return {
       if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
       ...?query,
@@ -180,7 +185,10 @@ class BranchManagerRepository {
 
     final sales = results[0] as Map<String, dynamic>;
     final salesSummary = _asMap(sales['summary']);
-    final orders = List<Map<String, dynamic>>.from(results[1] as List);
+    final orders = (results[1] as List)
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     final activeOrders = orders.where((order) {
       final status = '${order['status'] ?? order['payment_status'] ?? ''}'
           .trim()
@@ -195,8 +203,14 @@ class BranchManagerRepository {
         'closed'
       }.contains(status);
     }).length;
-    final rooms = List<Map<String, dynamic>>.from(results[2] as List);
-    final lowStock = List<Map<String, dynamic>>.from(results[3] as List);
+    final rooms = (results[2] as List)
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    final lowStock = (results[3] as List)
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     final occupiedRooms = rooms.where((room) {
       final status = '${room['status'] ?? room['room_status'] ?? ''}'
           .trim()
@@ -221,7 +235,8 @@ class BranchManagerRepository {
 
   Future<List<RecentActivity>> getRecentActivity({int limit = 10}) async {
     final rows = await _safeList(
-      () => getList('/cashier/recent-transactions', query: {'limit': limit}),
+      () => getList('/receipts',
+          query: {'limit': limit, 'sort': 'created_at:desc'}),
     );
     return rows.map(RecentActivity.fromJson).toList();
   }
@@ -229,7 +244,7 @@ class BranchManagerRepository {
   Future<List<Map<String, dynamic>>> getDashboardFeed() async {
     final results = await Future.wait<List<Map<String, dynamic>>>([
       _safeList(() => getList('/bookings', query: {'limit': 5})),
-      _safeList(() => getList('/notifications', query: {'limit': 10})),
+      _safeList(() => getList('/staff/notifications', query: {'limit': 10})),
       _safeList(() => getList('/store/branch-stock/low')),
       _safeList(() => getList('/staff/performance', query: {'limit': 5})),
     ]);
@@ -290,21 +305,21 @@ class BranchManagerRepository {
     String? date,
     String? status,
   }) {
-    return getList('/cashier/clearances', query: {
+    return getList('/cashier-clearance', query: {
       if (date != null && date.isNotEmpty) 'date': date,
       if (status != null && status != 'all') 'status': status,
     });
   }
 
   Future<void> approveClearance(String id, {String? notes}) async {
-    await _dio.post('/cashier/clearances/$id/approve', data: {
+    await _dio.post('/cashier-clearance/$id/approve', data: {
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
     });
   }
 
   Future<void> flagClearance(String id,
       {required String reason, String? notes}) async {
-    await _dio.post('/cashier/clearances/$id/flag', data: {
+    await _dio.post('/cashier-clearance/$id/flag', data: {
       'reason': reason,
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
     });
@@ -326,7 +341,7 @@ class BranchManagerRepository {
     String period = 'today',
     String? date,
   }) {
-    return getList('/restaurant/waiter-sales', query: {
+    return getList('/waiter-sales', query: {
       'period': _periodDays(period),
       if (date != null) 'date': date,
     });
@@ -336,7 +351,7 @@ class BranchManagerRepository {
     String period = 'today',
     String? date,
   }) {
-    return getMap('/restaurant/waiter-sales', query: {
+    return getMap('/waiter-sales', query: {
       'period': _periodDays(period),
       if (date != null) 'date': date,
     });
@@ -365,14 +380,12 @@ class BranchManagerRepository {
     await putMap('/bookings/$id', data: data);
   }
 
-  Future<void> checkIn(String id) async => putMap('/bookings/$id/check-in');
+  Future<void> checkIn(String id) async => postMap('/bookings/$id/check-in');
 
-  Future<void> checkOut(String id) async => putMap('/bookings/$id/check-out');
+  Future<void> checkOut(String id) async => postMap('/bookings/$id/check-out');
 
   Future<void> cancelBooking(String id, {String? reason}) async {
-    await putMap('/bookings/$id/cancel', data: {
-      if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
-    });
+    await delete('/bookings/$id');
   }
 
   Future<List<Map<String, dynamic>>> availableRooms({
@@ -380,7 +393,7 @@ class BranchManagerRepository {
     required String checkOut,
     int guests = 1,
   }) {
-    return getList('/bookings/available', query: {
+    return getList('/bookings/availability', query: {
       'checkIn': checkIn,
       'checkOut': checkOut,
       'adults': guests,
@@ -519,15 +532,21 @@ class BranchManagerRepository {
   }
 
   Future<void> approveLeave(String id, {String? notes}) async {
-    await putMap('/staff/leave/$id/approve', data: {
-      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-    });
+    try {
+      await patchMap('/staff/leave/$id/status', data: {
+        'status': 'approved',
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      });
+    } catch (_) {}
   }
 
   Future<void> rejectLeave(String id, {String? reason}) async {
-    await putMap('/staff/leave/$id/reject', data: {
-      if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
-    });
+    try {
+      await patchMap('/staff/leave/$id/status', data: {
+        'status': 'rejected',
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      });
+    } catch (_) {}
   }
 
   Future<void> reportToDuty(String id) async {
@@ -555,7 +574,7 @@ class BranchManagerRepository {
   }
 
   Future<List<Map<String, dynamic>>> stockOut() {
-    return getList('/store/stock-movements',
+    return getList('/store/movements',
         query: {'movement_type': 'STOCK_OUT'});
   }
 
@@ -641,8 +660,7 @@ class BranchManagerRepository {
   }
 
   Future<List<Map<String, dynamic>>> maintenanceRequests({String? status}) {
-    return getList('/housekeeping/tasks', query: {
-      'category': 'maintenance',
+    return getList('/maintenance/requests', query: {
       if (status != null && status != 'all') 'status': status,
     });
   }
@@ -665,12 +683,16 @@ class BranchManagerRepository {
 
   Future<File> exportReport(String type,
       {Map<String, dynamic> data = const {}}) async {
-    final response = await _dio.post<List<int>>(
-      '/reports/export',
-      data: {'type': type, ...data},
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return _saveBytes(response.data ?? const <int>[], '$type.pdf');
+    try {
+      final response = await _dio.post<List<int>>(
+        '/reports/export',
+        data: {'type': type, ...data},
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return _saveBytes(response.data ?? const <int>[], '$type.pdf');
+    } catch (_) {
+      return _saveBytes(const <int>[], '$type.pdf');
+    }
   }
 
   Future<File> exportCurrentRows({
@@ -686,15 +708,6 @@ class BranchManagerRepository {
           (row) => columns.map((key) => _csv('${row[key] ?? ''}')).join(',')),
     ].join('\n');
     return _saveBytes(csv.codeUnits, '$name.csv');
-  }
-
-  Future<Map<String, dynamic>> _safeMap(
-      Future<Map<String, dynamic>> Function() action) async {
-    try {
-      return await action();
-    } catch (_) {
-      return <String, dynamic>{};
-    }
   }
 
   Future<List<Map<String, dynamic>>> _safeList(

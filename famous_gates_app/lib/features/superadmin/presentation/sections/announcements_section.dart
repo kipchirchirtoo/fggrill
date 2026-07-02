@@ -398,6 +398,14 @@ class _AnnouncementsSectionState extends ConsumerState<AnnouncementsSection> {
           isError: true);
       return;
     }
+    if (_targetType != 'all' && _targetValueCtrl.text.trim().isEmpty) {
+      AppNotifier.show(
+        context,
+        'Please specify a target value for the selected target type.',
+        isError: true,
+      );
+      return;
+    }
     setState(() => _submitting = true);
     try {
       await ref.read(superadminGodRepositoryProvider).createAnnouncement({

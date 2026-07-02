@@ -15,12 +15,16 @@ import 'package:famous_gates_app/core/widgets/branch_sales_payments_view.dart';
 import 'package:famous_gates_app/core/widgets/payment_method_breakdown_widget.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../../core/network/dio_client.dart';
 import '../../../core/state/app_refresh.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
 import '../../../core/utils/screen_size.dart';
 import '../../../core/widgets/record_detail_screen.dart';
 import '../../auth/domain/auth_notifier.dart';
+import '../../branch_health/presentation/branch_health_screen.dart';
+import '../../lina_daily_controls/presentation/daily_controls_lina_page.dart';
+import '../../branch_storekeeper/presentation/widgets/food_control_section.dart';
 import '../../branch_search/presentation/branch_search_screen.dart';
 import '../data/repository.dart';
 import '../domain/providers.dart';
@@ -37,6 +41,7 @@ import 'staff_pos_accounting_screen.dart';
 import 'waiter_audit_screen.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../shift_reconciliation/screens/shift_reconciliation_screen.dart';
+import '../../../core/services/user_service.dart';
 
 enum BranchAccountantSection {
   overview,
@@ -80,6 +85,14 @@ enum BranchAccountantSection {
   kitchenStocktakeReview,
   spoilageReview,
   branchStockRequestReview,
+  staffManagement,
+  branchBarMenu,
+  branchRestaurantMenu,
+  posStockLink,
+  restaurantStockLink,
+  dataHealth,
+  linaDailyControls,
+  foodControl,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -242,6 +255,22 @@ class _BranchAccountantDashboardState
         return const SpoilageReviewScreen();
       case BranchAccountantSection.branchStockRequestReview:
         return const BranchStockRequestReviewScreen();
+      case BranchAccountantSection.staffManagement:
+        return const _BranchStaffManagementSection();
+      case BranchAccountantSection.branchBarMenu:
+        return const _BranchBarMenuSection();
+      case BranchAccountantSection.branchRestaurantMenu:
+        return const _BranchRestaurantMenuSection();
+      case BranchAccountantSection.posStockLink:
+        return const _PosStockLinkSection();
+      case BranchAccountantSection.restaurantStockLink:
+        return const _RestaurantStockLinkSection();
+      case BranchAccountantSection.dataHealth:
+        return const BranchHealthView();
+      case BranchAccountantSection.linaDailyControls:
+        return const DailyControlsLinaPage();
+      case BranchAccountantSection.foodControl:
+        return const FoodControlSection();
     }
   }
 
@@ -334,6 +363,21 @@ const _navItems = [
       Icons.report_problem_outlined),
   _NavItem(BranchAccountantSection.branchStockRequestReview,
       'Branch Stock Requests', Icons.inventory_2),
+  // ── Staff & Menu management ──
+  _NavItem(BranchAccountantSection.staffManagement, 'Staff Management',
+      Icons.people),
+  _NavItem(BranchAccountantSection.branchBarMenu, 'Bar Menu', Icons.local_bar),
+  _NavItem(BranchAccountantSection.branchRestaurantMenu, 'Restaurant Menu',
+      Icons.restaurant_menu),
+  _NavItem(BranchAccountantSection.posStockLink, 'POS Stock Link', Icons.link),
+  _NavItem(BranchAccountantSection.dataHealth, 'Data Health',
+      Icons.monitor_heart_outlined),
+  _NavItem(BranchAccountantSection.linaDailyControls, 'Daily Controls (Lina)',
+      Icons.auto_awesome),
+  _NavItem(BranchAccountantSection.foodControl, 'Food Control',
+      Icons.restaurant_outlined),
+  _NavItem(BranchAccountantSection.restaurantStockLink, 'Restaurant Stock Link',
+      Icons.restaurant_outlined),
 ];
 
 class _BranchAccountantSideNav extends ConsumerWidget {
@@ -22671,6 +22715,2722 @@ class _CashFlowCategoryBadge extends StatelessWidget {
           (_cashFlowCategoryLabels[category] ?? category).toUpperCase(),
           style:
               TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Staff Management Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BranchStaffManagementSection extends ConsumerStatefulWidget {
+  const _BranchStaffManagementSection();
+
+  @override
+  ConsumerState<_BranchStaffManagementSection> createState() =>
+      _BranchStaffManagementSectionState();
+}
+
+class _BranchStaffManagementSectionState
+    extends ConsumerState<_BranchStaffManagementSection> {
+  List<Map<String, dynamic>> _staff = [];
+  List<Map<String, dynamic>> _filtered = [];
+  bool _loading = false;
+  String? _error;
+  final _searchCtrl = TextEditingController();
+
+  // Role list for login account creation
+  static const _roles = [
+    'branch_manager', 'branch_accountant', 'branch_storekeeper',
+    'receptionist', 'cashier', 'restaurant_cashier', 'main_bar_cashier',
+    'executive_bar_cashier', 'non_consumables_cashier', 'restaurant',
+    'waiter', 'waitress', 'head_waiter', 'bartender', 'barman', 'barmaid',
+    'bar_manager', 'kitchen', 'kitchen_operations', 'chef', 'head_chef',
+    'housekeeping', 'housekeeping_supervisor', 'maintenance', 'procurement',
+    'purchasing_manager', 'employee',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      final staff = await repo.getBranchStaff();
+      if (!mounted) return;
+      setState(() {
+        _staff = staff;
+        _filtered = staff;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = '$e'; _loading = false; });
+    }
+  }
+
+  void _onSearch(String query) {
+    final q = query.trim().toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty ? _staff : _staff.where((s) {
+        final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''} ${s['name'] ?? ''}'.toLowerCase();
+        final role = '${s['role'] ?? s['position'] ?? ''}'.toLowerCase();
+        final dept = '${s['department'] ?? ''}'.toLowerCase();
+        final phone = '${s['phone'] ?? ''}'.toLowerCase();
+        final email = '${s['email'] ?? ''}'.toLowerCase();
+        return name.contains(q) || role.contains(q) || dept.contains(q) ||
+            phone.contains(q) || email.contains(q);
+      }).toList();
+    });
+  }
+
+  String _staffName(Map<String, dynamic> s) {
+    final full = '${s['full_name'] ?? s['name'] ?? ''}'.trim();
+    if (full.isNotEmpty) return full;
+    return '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
+  }
+
+  // ── ADD STAFF PROFILE DIALOG ───────────────────────────────────────────────
+  Future<void> _showAddStaffDialog() async {
+    final firstCtrl = TextEditingController();
+    final lastCtrl = TextEditingController();
+    final natIdCtrl = TextEditingController();
+    final deptCtrl = TextEditingController();
+    final posCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    bool saving = false;
+
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final branchId = await repo.getBranchId();
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        return AlertDialog(
+          title: Row(children: [
+            Icon(Icons.person_add, color: AppColors.kPrimary, size: 22),
+            const SizedBox(width: 10),
+            const Text('Add Staff Member'),
+          ]),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text('This creates a staff profile. You can create a login account separately after adding the staff member.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(child: TextField(controller: firstCtrl,
+                    decoration: const InputDecoration(labelText: 'First Name *', border: OutlineInputBorder()))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: lastCtrl,
+                    decoration: const InputDecoration(labelText: 'Last Name *', border: OutlineInputBorder()))),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: TextField(controller: natIdCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'National ID', border: OutlineInputBorder()))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()))),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: TextField(controller: posCtrl,
+                    decoration: const InputDecoration(labelText: 'Role / Position', hintText: 'e.g. waiter', border: OutlineInputBorder()))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: deptCtrl,
+                    decoration: const InputDecoration(labelText: 'Department', hintText: 'e.g. restaurant', border: OutlineInputBorder()))),
+                ]),
+                const SizedBox(height: 12),
+                TextField(controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder())),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton.icon(
+              onPressed: saving ? null : () async {
+                if (firstCtrl.text.trim().isEmpty || lastCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('First and last name are required')));
+                  return;
+                }
+                setDlgState(() => saving = true);
+                try {
+                  final dio = ref.read(dioProvider);
+                  await dio.post('/staff', data: {
+                    'first_name': firstCtrl.text.trim(),
+                    'last_name': lastCtrl.text.trim(),
+                    if (natIdCtrl.text.trim().isNotEmpty) 'national_id': natIdCtrl.text.trim(),
+                    if (deptCtrl.text.trim().isNotEmpty) 'department': deptCtrl.text.trim(),
+                    if (posCtrl.text.trim().isNotEmpty) 'position': posCtrl.text.trim(),
+                    if (phoneCtrl.text.trim().isNotEmpty) 'phone': phoneCtrl.text.trim(),
+                    if (emailCtrl.text.trim().isNotEmpty) 'email': emailCtrl.text.trim(),
+                    if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+                  });
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                    content: Text('Staff member added successfully'),
+                    backgroundColor: Colors.green));
+                  await _load();
+                } catch (e) {
+                  if (!ctx.mounted) return;
+                  final msg = e is DioException
+                      ? (e.response?.data?['message'] ?? '$e') : '$e';
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red));
+                  setDlgState(() => saving = false);
+                }
+              },
+              icon: saving ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.person_add, size: 18),
+              label: Text(saving ? 'Adding…' : 'Add Staff'),
+            ),
+          ],
+        );
+      }),
+    );
+    firstCtrl.dispose(); lastCtrl.dispose(); natIdCtrl.dispose();
+    deptCtrl.dispose(); posCtrl.dispose(); phoneCtrl.dispose(); emailCtrl.dispose();
+  }
+
+  // ── CREATE LOGIN ACCOUNT DIALOG (from staff profile) ──────────────────────
+  Future<void> _showCreateLoginDialog(Map<String, dynamic> staff) async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final branchId = await repo.getBranchId();
+    if (!mounted) return;
+
+    final emailCtrl = TextEditingController(text: '${staff['email'] ?? ''}');
+    final passwordCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
+    bool obscurePass = true;
+    String selectedRole = _roles.firstWhere(
+      (r) => r == (staff['position'] ?? staff['role'] ?? '').toString().toLowerCase(),
+      orElse: () => 'employee',
+    );
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        final staffName = _staffName(staff);
+        return AlertDialog(
+          title: Row(children: [
+            Icon(Icons.account_circle, color: AppColors.kPrimary, size: 22),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Create Login for $staffName',
+                overflow: TextOverflow.ellipsis)),
+          ]),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.kPrimary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.badge_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      '${staff['first_name'] ?? ''} ${staff['last_name'] ?? ''}  •  ${staff['department'] ?? staff['position'] ?? '—'}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    )),
+                  ]),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email (login username) *',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordCtrl,
+                  obscureText: obscurePass,
+                  decoration: InputDecoration(
+                    labelText: 'Password *',
+                    helperText: 'Minimum 6 characters',
+                    prefixIcon: const Icon(Icons.lock_outlined),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscurePass ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setDlgState(() => obscurePass = !obscurePass),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedRole,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Role / Access Level *',
+                    prefixIcon: Icon(Icons.manage_accounts_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _roles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  onChanged: (v) => setDlgState(() => selectedRole = v ?? selectedRole),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pinCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'POS PIN (optional)',
+                    helperText: 'Format: R1234, M1234, E1234, N1234 or C1234',
+                    prefixIcon: Icon(Icons.pin_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton.icon(
+              onPressed: saving ? null : () async {
+                final email = emailCtrl.text.trim();
+                final password = passwordCtrl.text;
+                if (!email.contains('@')) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Enter a valid email address')));
+                  return;
+                }
+                if (password.length < 6) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Password must be at least 6 characters')));
+                  return;
+                }
+                final pinRaw = pinCtrl.text.trim().toUpperCase();
+                if (pinRaw.isNotEmpty && !RegExp(r'^[RMENC]\d{4}$').hasMatch(pinRaw)) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('POS PIN must start with R, M, E, N or C followed by 4 digits')));
+                  return;
+                }
+                // Capture values before pop
+                final firstName = '${staff['first_name'] ?? ''}';
+                final lastName = '${staff['last_name'] ?? ''}';
+                final staffProfileId = '${staff['id'] ?? ''}';
+                final department = '${staff['department'] ?? ''}';
+                final branchIdInt = int.tryParse(branchId);
+
+                FocusScope.of(ctx).unfocus();
+                setDlgState(() => saving = true);
+                try {
+                  final svc = ref.read(userServiceProvider);
+                  await svc.createUser({
+                    'first_name': firstName,
+                    'last_name': lastName,
+                    'email': email,
+                    'password': password,
+                    'role': selectedRole,
+                    'status': 'active',
+                    'branch_id': branchIdInt,
+                    'department': department,
+                    if (pinRaw.isNotEmpty) 'pos_pin': pinRaw,
+                    if (staffProfileId.isNotEmpty) 'staff_profile_id': staffProfileId,
+                  });
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  if (mounted) {
+                    AppNotifier.showSnackBar(context, SnackBar(
+                      content: Text('Login account created for $firstName $lastName'),
+                      backgroundColor: Colors.green,
+                    ));
+                  }
+                  await _load();
+                } catch (e) {
+                  if (!ctx.mounted) return;
+                  setDlgState(() => saving = false);
+                  final msg = e is DioException
+                      ? (e.response?.data?['message'] ?? '$e') : '$e';
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red));
+                }
+              },
+              icon: saving
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.person_add_alt_1, size: 18),
+              label: Text(saving ? 'Creating…' : 'Create Login'),
+            ),
+          ],
+        );
+      }),
+    );
+    emailCtrl.dispose(); passwordCtrl.dispose(); pinCtrl.dispose();
+  }
+
+  // ── EDIT STAFF DIALOG ─────────────────────────────────────────────────────
+  Future<void> _showEditDialog(Map<String, dynamic> staff) async {
+    final firstCtrl = TextEditingController(text: '${staff['first_name'] ?? ''}');
+    final lastCtrl = TextEditingController(text: '${staff['last_name'] ?? ''}');
+    final phoneCtrl = TextEditingController(text: '${staff['phone'] ?? ''}');
+    final emailCtrl = TextEditingController(text: '${staff['email'] ?? ''}');
+    final deptCtrl = TextEditingController(text: '${staff['department'] ?? ''}');
+    final posCtrl = TextEditingController(text: '${staff['position'] ?? staff['role'] ?? ''}');
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        return AlertDialog(
+          title: Row(children: [
+            Icon(Icons.edit_outlined, color: AppColors.kPrimary, size: 20),
+            const SizedBox(width: 8),
+            const Text('Edit Staff'),
+          ]),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(children: [
+                  Expanded(child: TextField(controller: firstCtrl,
+                    decoration: const InputDecoration(labelText: 'First Name', border: OutlineInputBorder()))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: lastCtrl,
+                    decoration: const InputDecoration(labelText: 'Last Name', border: OutlineInputBorder()))),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: TextField(controller: deptCtrl,
+                    decoration: const InputDecoration(labelText: 'Department', border: OutlineInputBorder()))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: posCtrl,
+                    decoration: const InputDecoration(labelText: 'Position / Role', border: OutlineInputBorder()))),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(child: TextField(controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()))),
+                ]),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton.icon(
+              onPressed: saving ? null : () async {
+                setDlgState(() => saving = true);
+                try {
+                  final id = '${staff['id'] ?? staff['staff_id'] ?? ''}';
+                  if (id.isEmpty) throw Exception('No staff ID');
+                  final dio = ref.read(dioProvider);
+                  await dio.put('/staff/$id', data: {
+                    'first_name': firstCtrl.text.trim(),
+                    'last_name': lastCtrl.text.trim(),
+                    'department': deptCtrl.text.trim(),
+                    'position': posCtrl.text.trim(),
+                    'phone': phoneCtrl.text.trim(),
+                    'email': emailCtrl.text.trim(),
+                  });
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                    content: Text('Staff updated'), backgroundColor: Colors.green));
+                  await _load();
+                } catch (e) {
+                  if (!ctx.mounted) return;
+                  final msg = e is DioException
+                      ? (e.response?.data?['message'] ?? '$e') : '$e';
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red));
+                  setDlgState(() => saving = false);
+                }
+              },
+              icon: saving
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text(saving ? 'Saving…' : 'Save'),
+            ),
+          ],
+        );
+      }),
+    );
+    firstCtrl.dispose(); lastCtrl.dispose(); phoneCtrl.dispose();
+    emailCtrl.dispose(); deptCtrl.dispose(); posCtrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Staff Management', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                Text('Add staff profiles and create login accounts', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ])),
+              IconButton(icon: const Icon(Icons.refresh), tooltip: 'Refresh', onPressed: _loading ? null : _load),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _showAddStaffDialog,
+                icon: const Icon(Icons.person_add, size: 18),
+                label: const Text('Add Staff'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Search
+          TextField(
+            controller: _searchCtrl,
+            decoration: InputDecoration(
+              hintText: 'Search by name, role, department, phone or email…',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchCtrl.text.isNotEmpty
+                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); _onSearch(''); })
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            onChanged: _onSearch,
+          ),
+          const SizedBox(height: 4),
+          if (!_loading && _staff.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Text('${_filtered.length} of ${_staff.length} staff members',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ),
+          const SizedBox(height: 8),
+          // List
+          if (_loading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 12),
+              Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+              const SizedBox(height: 16),
+              FilledButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+            ])))
+          else if (_filtered.isEmpty)
+            const Expanded(child: Center(child: Text('No staff found.', style: TextStyle(color: Colors.grey))))
+          else
+            Expanded(
+              child: ListView.separated(
+                itemCount: _filtered.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final s = _filtered[i];
+                  final name = _staffName(s);
+                  final role = '${s['position'] ?? s['role'] ?? '—'}';
+                  final dept = '${s['department'] ?? '—'}';
+                  final phone = '${s['phone'] ?? '—'}';
+                  final status = '${s['employment_status'] ?? s['status'] ?? 'active'}';
+                  final hasUser = s['user_id'] != null && '${s['user_id']}'.isNotEmpty;
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.kPrimary.withValues(alpha: 0.15),
+                      child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: TextStyle(color: AppColors.kPrimary, fontWeight: FontWeight.w700)),
+                    ),
+                    title: Row(children: [
+                      Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                      if (hasUser)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            border: Border.all(color: Colors.green.shade300),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text('Has Login', style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+                        ),
+                    ]),
+                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('$role  •  $dept'),
+                      Text(phone, style: const TextStyle(fontSize: 12)),
+                      Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: status.toLowerCase() == 'active'
+                              ? Colors.green.shade50 : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(status.toUpperCase(),
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                                color: status.toLowerCase() == 'active'
+                                    ? Colors.green.shade700 : Colors.orange.shade700)),
+                      ),
+                    ]),
+                    isThreeLine: true,
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (!hasUser)
+                        Tooltip(
+                          message: 'Create login account',
+                          child: IconButton(
+                            icon: const Icon(Icons.account_circle_outlined, color: Colors.blue),
+                            onPressed: () => _showCreateLoginDialog(s),
+                          ),
+                        ),
+                      Tooltip(
+                        message: 'Edit staff',
+                        child: IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => _showEditDialog(s),
+                        ),
+                      ),
+                    ]),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bar Menu Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BranchBarMenuSection extends ConsumerStatefulWidget {
+  const _BranchBarMenuSection();
+
+  @override
+  ConsumerState<_BranchBarMenuSection> createState() =>
+      _BranchBarMenuSectionState();
+}
+
+class _BranchBarMenuSectionState
+    extends ConsumerState<_BranchBarMenuSection> {
+  List<Map<String, dynamic>> _all = [];
+  List<Map<String, dynamic>> _filtered = [];
+  bool _loading = false;
+  String? _error;
+  String _categoryFilter = 'All';
+  List<String> _categories = ['All'];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      final branchId = await repo.getBranchId();
+      final dio = ref.read(dioProvider);
+      final res = await dio.get('/bar/drinks',
+          queryParameters: {
+            if (branchId.isNotEmpty) 'branch_id': branchId,
+          });
+      final data = res.data;
+      List<dynamic> list;
+      if (data is List) {
+        list = data;
+      } else if (data is Map) {
+        list = (data['data'] ?? data['items'] ?? data['drinks'] ?? []) as List;
+      } else {
+        list = [];
+      }
+      final items = list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      final cats = <String>{'All'};
+      for (final item in items) {
+        final c = '${item['category'] ?? ''}';
+        if (c.isNotEmpty) cats.add(c);
+      }
+      if (!mounted) return;
+      setState(() {
+        _all = items;
+        _categories = cats.toList();
+        _filtered = items;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  void _applyFilter(String cat) {
+    setState(() {
+      _categoryFilter = cat;
+      _filtered = cat == 'All'
+          ? _all
+          : _all
+              .where((i) =>
+                  '${i['category'] ?? ''}' == cat)
+              .toList();
+    });
+  }
+
+  Future<void> _toggleAvailability(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    if (id.isEmpty) return;
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.put('/bar/drinks/$id/toggle');
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  Future<void> _showEditDialog(Map<String, dynamic> item) async {
+    final nameCtrl =
+        TextEditingController(text: '${item['name'] ?? ''}');
+    final catCtrl =
+        TextEditingController(text: '${item['category'] ?? ''}');
+    final priceCtrl =
+        TextEditingController(text: '${item['price'] ?? ''}');
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        return AlertDialog(
+          title: const Text('Edit Drink'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: catCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Category')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: priceCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Price')),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final id = '${item['id'] ?? ''}';
+                      if (id.isEmpty) return;
+                      setDlgState(() => saving = true);
+                      try {
+                        final dio = ref.read(dioProvider);
+                        await dio.put('/bar/drinks/$id', data: {
+                          'name': nameCtrl.text.trim(),
+                          'category': catCtrl.text.trim(),
+                          'price': double.tryParse(priceCtrl.text) ??
+                              item['price'],
+                        });
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        await _load();
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                        setDlgState(() => saving = false);
+                      }
+                    },
+              child: Text(saving ? 'Saving…' : 'Save'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    nameCtrl.dispose();
+    catCtrl.dispose();
+    priceCtrl.dispose();
+  }
+
+  Future<void> _showAddDialog() async {
+    final nameCtrl = TextEditingController();
+    final catCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    bool saving = false;
+
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final branchId = await repo.getBranchId();
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        return AlertDialog(
+          title: const Text('Add Drink'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: nameCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Name *')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: catCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Category')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: priceCtrl,
+                keyboardType: TextInputType.number,
+                decoration:
+                    const InputDecoration(labelText: 'Price *')),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (nameCtrl.text.trim().isEmpty ||
+                          priceCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Name and price are required')),
+                        );
+                        return;
+                      }
+                      setDlgState(() => saving = true);
+                      try {
+                        final dio = ref.read(dioProvider);
+                        await dio.post('/bar/drinks', data: {
+                          'name': nameCtrl.text.trim(),
+                          'category': catCtrl.text.trim(),
+                          'price': double.tryParse(priceCtrl.text) ?? 0,
+                          if (branchId.isNotEmpty)
+                            'branch_id':
+                                int.tryParse(branchId) ?? branchId,
+                        });
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        await _load();
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                        setDlgState(() => saving = false);
+                      }
+                    },
+              child: Text(saving ? 'Adding…' : 'Add Drink'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    nameCtrl.dispose();
+    catCtrl.dispose();
+    priceCtrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Bar Menu',
+                    style: TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w700)),
+              ),
+              IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                  onPressed: _loading ? null : _load),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _showAddDialog,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Item'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Category filter chips
+          if (_categories.length > 1)
+            SizedBox(
+              height: 38,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (ctx, i) {
+                  final cat = _categories[i];
+                  final selected = cat == _categoryFilter;
+                  return FilterChip(
+                    label: Text(cat),
+                    selected: selected,
+                    onSelected: (_) => _applyFilter(cat),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (_loading)
+            const Expanded(
+                child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text(_error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_filtered.isEmpty)
+            const Expanded(
+              child: Center(
+                child: Text('No bar items found.',
+                    style: TextStyle(color: Colors.grey)),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.separated(
+                itemCount: _filtered.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final item = _filtered[i];
+                  final name = '${item['name'] ?? '—'}';
+                  final category =
+                      '${item['category'] ?? '—'}';
+                  final price = item['price'];
+                  final available =
+                      item['available'] != false &&
+                          item['is_available'] != false;
+                  return ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.local_bar, size: 20),
+                    ),
+                    title: Text(name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600)),
+                    subtitle: Text('$category  •  KES ${price ?? '—'}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Switch(
+                          value: available,
+                          onChanged: (_) =>
+                              _toggleAvailability(item),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          tooltip: 'Edit',
+                          onPressed: () => _showEditDialog(item),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Restaurant Menu Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BranchRestaurantMenuSection extends ConsumerStatefulWidget {
+  const _BranchRestaurantMenuSection();
+
+  @override
+  ConsumerState<_BranchRestaurantMenuSection> createState() =>
+      _BranchRestaurantMenuSectionState();
+}
+
+class _BranchRestaurantMenuSectionState
+    extends ConsumerState<_BranchRestaurantMenuSection> {
+  List<Map<String, dynamic>> _all = [];
+  List<Map<String, dynamic>> _filtered = [];
+  bool _loading = false;
+  String? _error;
+  String _categoryFilter = 'All';
+  List<String> _categories = ['All'];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      final branchId = await repo.getBranchId();
+      final dio = ref.read(dioProvider);
+      final res = await dio.get('/restaurant/menu/items',
+          queryParameters: {
+            if (branchId.isNotEmpty) 'branch_id': branchId,
+          });
+      final data = res.data;
+      List<dynamic> list;
+      if (data is List) {
+        list = data;
+      } else if (data is Map) {
+        list = (data['data'] ?? data['items'] ?? data['menu_items'] ?? [])
+            as List;
+      } else {
+        list = [];
+      }
+      final items = list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      final cats = <String>{'All'};
+      for (final item in items) {
+        final c = '${item['category'] ?? ''}';
+        if (c.isNotEmpty) cats.add(c);
+      }
+      if (!mounted) return;
+      setState(() {
+        _all = items;
+        _categories = cats.toList();
+        _filtered = items;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  void _applyFilter(String cat) {
+    setState(() {
+      _categoryFilter = cat;
+      _filtered = cat == 'All'
+          ? _all
+          : _all
+              .where((i) =>
+                  '${i['category'] ?? ''}' == cat)
+              .toList();
+    });
+  }
+
+  Future<void> _toggleAvailability(Map<String, dynamic> item) async {
+    final id = '${item['id'] ?? ''}';
+    if (id.isEmpty) return;
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.put('/restaurant/menu/items/$id/toggle');
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  Future<void> _showEditDialog(Map<String, dynamic> item) async {
+    final nameCtrl =
+        TextEditingController(text: '${item['name'] ?? ''}');
+    final catCtrl =
+        TextEditingController(text: '${item['category'] ?? ''}');
+    final priceCtrl =
+        TextEditingController(text: '${item['price'] ?? ''}');
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        return AlertDialog(
+          title: const Text('Edit Menu Item'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: catCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Category')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: priceCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Price')),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final id = '${item['id'] ?? ''}';
+                      if (id.isEmpty) return;
+                      setDlgState(() => saving = true);
+                      try {
+                        final dio = ref.read(dioProvider);
+                        await dio.put(
+                            '/restaurant/menu/items/$id',
+                            data: {
+                              'name': nameCtrl.text.trim(),
+                              'category': catCtrl.text.trim(),
+                              'price':
+                                  double.tryParse(priceCtrl.text) ??
+                                      item['price'],
+                            });
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        await _load();
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                        setDlgState(() => saving = false);
+                      }
+                    },
+              child: Text(saving ? 'Saving…' : 'Save'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    nameCtrl.dispose();
+    catCtrl.dispose();
+    priceCtrl.dispose();
+  }
+
+  Future<void> _showAddDialog() async {
+    final nameCtrl = TextEditingController();
+    final catCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    bool saving = false;
+
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final branchId = await repo.getBranchId();
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
+        return AlertDialog(
+          title: const Text('Add Menu Item'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: nameCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Name *')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: catCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Category')),
+            const SizedBox(height: 8),
+            TextField(
+                controller: priceCtrl,
+                keyboardType: TextInputType.number,
+                decoration:
+                    const InputDecoration(labelText: 'Price *')),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (nameCtrl.text.trim().isEmpty ||
+                          priceCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Name and price are required')),
+                        );
+                        return;
+                      }
+                      setDlgState(() => saving = true);
+                      try {
+                        final dio = ref.read(dioProvider);
+                        await dio.post('/restaurant/menu/items',
+                            data: {
+                              'name': nameCtrl.text.trim(),
+                              'category': catCtrl.text.trim(),
+                              'price': double.tryParse(priceCtrl.text) ?? 0,
+                              if (branchId.isNotEmpty)
+                                'branch_id':
+                                    int.tryParse(branchId) ?? branchId,
+                            });
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        await _load();
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                        setDlgState(() => saving = false);
+                      }
+                    },
+              child: Text(saving ? 'Adding…' : 'Add Item'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    nameCtrl.dispose();
+    catCtrl.dispose();
+    priceCtrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Restaurant Menu',
+                    style: TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w700)),
+              ),
+              IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                  onPressed: _loading ? null : _load),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _showAddDialog,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Item'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Category filter chips
+          if (_categories.length > 1)
+            SizedBox(
+              height: 38,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (ctx, i) {
+                  final cat = _categories[i];
+                  final selected = cat == _categoryFilter;
+                  return FilterChip(
+                    label: Text(cat),
+                    selected: selected,
+                    onSelected: (_) => _applyFilter(cat),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (_loading)
+            const Expanded(
+                child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text(_error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_filtered.isEmpty)
+            const Expanded(
+              child: Center(
+                child: Text('No menu items found.',
+                    style: TextStyle(color: Colors.grey)),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.separated(
+                itemCount: _filtered.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final item = _filtered[i];
+                  final name = '${item['name'] ?? '—'}';
+                  final category =
+                      '${item['category'] ?? '—'}';
+                  final price = item['price'];
+                  final available =
+                      item['available'] != false &&
+                          item['is_available'] != false;
+                  return ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.restaurant_menu, size: 20),
+                    ),
+                    title: Text(name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600)),
+                    subtitle: Text('$category  •  KES ${price ?? '—'}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Switch(
+                          value: available,
+                          onChanged: (_) =>
+                              _toggleAvailability(item),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          tooltip: 'Edit',
+                          onPressed: () => _showEditDialog(item),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POS Stock Link Section
+// Links pos_outlet_items for main_bar / executive_bar outlets to bar_drinks
+// stock items so that POS sales automatically track bar stock consumption.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PosStockLinkSection extends ConsumerStatefulWidget {
+  const _PosStockLinkSection();
+
+  @override
+  ConsumerState<_PosStockLinkSection> createState() =>
+      _PosStockLinkSectionState();
+}
+
+class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+
+  final Map<String, List<Map<String, dynamic>>> _outletItems = {};
+  final Map<String, Map<String, dynamic>> _outlets = {};
+  List<Map<String, dynamic>> _barDrinks = [];
+  bool _loading = false;
+  String? _error;
+  String _search = '';
+
+  static const _barOutletTypes = ['main_bar', 'executive_bar'];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: _barOutletTypes.length, vsync: this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      final branchId = await repo.getBranchId();
+      final dio = ref.read(dioProvider);
+
+      final outletsRes = await dio.get('/pos/outlets',
+          queryParameters: {
+            if (branchId.isNotEmpty) 'branch_id': branchId,
+          });
+      final rawOutlets = outletsRes.data;
+      List<dynamic> outletList;
+      if (rawOutlets is List) {
+        outletList = rawOutlets;
+      } else if (rawOutlets is Map) {
+        outletList =
+            (rawOutlets['data'] ?? rawOutlets['outlets'] ?? []) as List;
+      } else {
+        outletList = [];
+      }
+      final barOutlets = outletList
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((o) => _barOutletTypes
+              .contains((o['outlet_type'] as String? ?? '').toLowerCase()))
+          .toList();
+
+      final outletItemsMap = <String, List<Map<String, dynamic>>>{};
+      final outletsById = <String, Map<String, dynamic>>{};
+      for (final outlet in barOutlets) {
+        final oid = '${outlet['id'] ?? ''}';
+        if (oid.isEmpty) continue;
+        outletsById[oid] = outlet;
+        try {
+          final itemsRes =
+              await dio.get('/pos/outlets/$oid/items');
+          final rawItems = itemsRes.data;
+          List<dynamic> itemList;
+          if (rawItems is List) {
+            itemList = rawItems;
+          } else if (rawItems is Map) {
+            itemList = (rawItems['data'] ??
+                rawItems['items'] ??
+                rawItems['outlet_items'] ??
+                []) as List;
+          } else {
+            itemList = [];
+          }
+          outletItemsMap[oid] = itemList
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        } catch (_) {
+          outletItemsMap[oid] = [];
+        }
+      }
+
+      final drinksRes = await dio.get('/bar/drinks', queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
+      final rawDrinks = drinksRes.data;
+      List<dynamic> drinkList;
+      if (rawDrinks is List) {
+        drinkList = rawDrinks;
+      } else if (rawDrinks is Map) {
+        drinkList =
+            (rawDrinks['data'] ?? rawDrinks['drinks'] ?? []) as List;
+      } else {
+        drinkList = [];
+      }
+      final drinks = drinkList
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _outlets
+          ..clear()
+          ..addAll(outletsById);
+        _outletItems
+          ..clear()
+          ..addAll(outletItemsMap);
+        _barDrinks = drinks;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  Map<String, dynamic>? _outletByType(String type) {
+    try {
+      return _outlets.values.firstWhere(
+          (o) => (o['outlet_type'] as String? ?? '').toLowerCase() == type);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<Map<String, dynamic>> _itemsForType(String type) {
+    final outlet = _outletByType(type);
+    if (outlet == null) return [];
+    final oid = '${outlet['id'] ?? ''}';
+    return _outletItems[oid] ?? [];
+  }
+
+  Future<void> _linkItem(
+      Map<String, dynamic> outlet, Map<String, dynamic> item) async {
+    final outletId = '${outlet['id'] ?? ''}';
+    final itemId = '${item['id'] ?? ''}';
+    if (outletId.isEmpty || itemId.isEmpty) return;
+
+    final selected = await _showDrinkPicker(item);
+    if (selected == null || !mounted) return;
+
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.patch(
+        '/pos/outlets/$outletId/items/$itemId',
+        data: {
+          'source_table': 'bar_drinks',
+          'source_item_id': selected['id'],
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('${item['name']} linked to ${selected['name']}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error linking: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _unlinkItem(
+      Map<String, dynamic> outlet, Map<String, dynamic> item) async {
+    final outletId = '${outlet['id'] ?? ''}';
+    final itemId = '${item['id'] ?? ''}';
+    if (outletId.isEmpty || itemId.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Stock Link'),
+        content:
+            Text('Remove the stock link for "${item['name']}"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style:
+                FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.patch(
+        '/pos/outlets/$outletId/items/$itemId',
+        data: {'source_table': 'manual', 'source_item_id': null},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Link removed')));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>?> _showDrinkPicker(
+      Map<String, dynamic> posItem) async {
+    String query = '';
+    Map<String, dynamic>? result;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+        final filtered = query.isEmpty
+            ? _barDrinks
+            : _barDrinks.where((d) {
+                final name =
+                    (d['name'] as String? ?? '').toLowerCase();
+                final cat =
+                    (d['category'] as String? ?? '').toLowerCase();
+                final q = query.toLowerCase();
+                return name.contains(q) || cat.contains(q);
+              }).toList();
+
+        return Dialog(
+          child: ConstrainedBox(
+            constraints:
+                const BoxConstraints(maxWidth: 480, maxHeight: 560),
+            child: Column(
+              children: [
+                Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Link "${posItem['name']}" to Stock Item',
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Search bar stock items…',
+                          prefixIcon:
+                              Icon(Icons.search, size: 20),
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (v) =>
+                            setDlg(() => query = v.trim()),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Text('No drinks found',
+                              style: TextStyle(
+                                  color: Colors.grey)))
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final drink = filtered[i];
+                            final dName =
+                                '${drink['name'] ?? '—'}';
+                            final dCat =
+                                '${drink['category'] ?? ''}';
+                            final dUnit =
+                                '${drink['unit'] ?? drink['serving_unit'] ?? ''}';
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(
+                                  Icons.local_bar_outlined,
+                                  size: 20),
+                              title: Text(dName,
+                                  style: const TextStyle(
+                                      fontWeight:
+                                          FontWeight.w600,
+                                      fontSize: 13)),
+                              subtitle: Text(
+                                  [dCat, dUnit]
+                                      .where((s) =>
+                                          s.isNotEmpty)
+                                      .join(' • '),
+                                  style: const TextStyle(
+                                      fontSize: 11)),
+                              onTap: () {
+                                result = drink;
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel')),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+
+    return result;
+  }
+
+  String _linkedDrinkName(Map<String, dynamic> item) {
+    final srcTable = item['source_table'] as String? ?? '';
+    final srcId = item['source_item_id'];
+    if (srcTable != 'bar_drinks' || srcId == null) return '';
+    try {
+      final drink =
+          _barDrinks.firstWhere((d) => '${d['id']}' == '$srcId');
+      return '${drink['name'] ?? srcId}';
+    } catch (_) {
+      return '$srcId';
+    }
+  }
+
+  Widget _buildOutletTab(String outletType) {
+    final outlet = _outletByType(outletType);
+    final items = _itemsForType(outletType);
+    final label =
+        outletType == 'main_bar' ? 'Main Bar' : 'Executive Bar';
+
+    if (outlet == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.storefront_outlined,
+                size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            Text('No $label outlet found for this branch.',
+                style: const TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    final q = _search.toLowerCase();
+    final filtered = q.isEmpty
+        ? items
+        : items.where((i) {
+            final n = (i['name'] as String? ?? '').toLowerCase();
+            final c =
+                (i['category'] as String? ?? '').toLowerCase();
+            return n.contains(q) || c.contains(q);
+          }).toList();
+
+    final linkedCount = items
+        .where((i) =>
+            i['source_table'] == 'bar_drinks' &&
+            i['source_item_id'] != null)
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              Chip(
+                avatar: const Icon(Icons.link, size: 14),
+                label: Text(
+                    '$linkedCount / ${items.length} linked',
+                    style: const TextStyle(fontSize: 12)),
+                backgroundColor: linkedCount == items.length
+                    ? Colors.green.shade50
+                    : Colors.orange.shade50,
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search items…',
+                    prefixIcon:
+                        Icon(Icons.search, size: 18),
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                        vertical: 8, horizontal: 10),
+                  ),
+                  onChanged: (v) =>
+                      setState(() => _search = v.trim()),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (filtered.isEmpty)
+          const Expanded(
+            child: Center(
+              child: Text('No POS items found.',
+                  style: TextStyle(color: Colors.grey)),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.separated(
+              itemCount: filtered.length,
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1),
+              itemBuilder: (ctx, i) {
+                final item = filtered[i];
+                final iName = '${item['name'] ?? '—'}';
+                final iCat = '${item['category'] ?? '—'}';
+                final iPrice =
+                    item['selling_price'] ?? item['price'];
+                final isLinked =
+                    item['source_table'] == 'bar_drinks' &&
+                        item['source_item_id'] != null;
+                final linkedName = _linkedDrinkName(item);
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: isLinked
+                        ? Colors.green.shade100
+                        : Colors.orange.shade100,
+                    child: Icon(
+                      isLinked
+                          ? Icons.link
+                          : Icons.link_off,
+                      size: 18,
+                      color: isLinked
+                          ? Colors.green.shade700
+                          : Colors.orange.shade700,
+                    ),
+                  ),
+                  title: Text(iName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
+                  subtitle: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          '$iCat  •  KES ${iPrice ?? '—'}',
+                          style: const TextStyle(
+                              fontSize: 12)),
+                      if (isLinked)
+                        Row(
+                          children: [
+                            const Icon(Icons.link,
+                                size: 12,
+                                color: Colors.green),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                linkedName,
+                                overflow:
+                                    TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors
+                                        .green.shade700,
+                                    fontWeight:
+                                        FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        const Text('Not linked to stock',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange)),
+                    ],
+                  ),
+                  isThreeLine: true,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isLinked) ...[
+                        IconButton(
+                          icon: const Icon(
+                              Icons.edit_outlined,
+                              size: 18),
+                          tooltip: 'Change Link',
+                          onPressed: () =>
+                              _linkItem(outlet, item),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                              Icons.link_off,
+                              size: 18,
+                              color: Colors.orange),
+                          tooltip: 'Remove Link',
+                          onPressed: () =>
+                              _unlinkItem(outlet, item),
+                        ),
+                      ] else
+                        FilledButton.icon(
+                          onPressed: () =>
+                              _linkItem(outlet, item),
+                          icon: const Icon(Icons.link,
+                              size: 16),
+                          label: const Text('Link',
+                              style:
+                                  TextStyle(fontSize: 12)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor:
+                                Colors.blue.shade700,
+                            padding:
+                                const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize:
+                                MaterialTapTargetSize
+                                    .shrinkWrap,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('POS Stock Link',
+                        style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700)),
+                    SizedBox(height: 2),
+                    Text(
+                      'Link bar POS menu items to bar stock items for automatic stock tracking.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+                onPressed: _loading ? null : _load,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TabBar(
+            controller: _tabs,
+            tabs: const [
+              Tab(
+                  icon: Icon(Icons.local_bar, size: 18),
+                  text: 'Main Bar'),
+              Tab(
+                  icon: Icon(Icons.wine_bar, size: 18),
+                  text: 'Executive Bar'),
+            ],
+            labelStyle: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          if (_loading)
+            const Expanded(
+                child:
+                    Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text(_error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Colors.red)),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: TabBarView(
+                controller: _tabs,
+                children: _barOutletTypes
+                    .map(_buildOutletTab)
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Restaurant Stock Link Section
+// Links pos_outlet_items for restaurant / choma_zone outlets to
+// restaurant_menu_items so that POS sales drive kitchen stock tracking.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RestaurantStockLinkSection extends ConsumerStatefulWidget {
+  const _RestaurantStockLinkSection();
+
+  @override
+  ConsumerState<_RestaurantStockLinkSection> createState() =>
+      _RestaurantStockLinkSectionState();
+}
+
+class _RestaurantStockLinkSectionState
+    extends ConsumerState<_RestaurantStockLinkSection>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+
+  final Map<String, List<Map<String, dynamic>>> _outletItems = {};
+  final Map<String, Map<String, dynamic>> _outlets = {};
+  List<Map<String, dynamic>> _menuItems = [];
+  bool _loading = false;
+  String? _error;
+  String _search = '';
+
+  static const _restaurantOutletTypes = ['restaurant', 'choma_zone'];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs =
+        TabController(length: _restaurantOutletTypes.length, vsync: this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchAccountantRepositoryProvider);
+      final branchId = await repo.getBranchId();
+      final dio = ref.read(dioProvider);
+
+      final outletsRes = await dio.get('/pos/outlets',
+          queryParameters: {
+            if (branchId.isNotEmpty) 'branch_id': branchId,
+          });
+      final rawOutlets = outletsRes.data;
+      List<dynamic> outletList;
+      if (rawOutlets is List) {
+        outletList = rawOutlets;
+      } else if (rawOutlets is Map) {
+        outletList =
+            (rawOutlets['data'] ?? rawOutlets['outlets'] ?? []) as List;
+      } else {
+        outletList = [];
+      }
+      final restOutlets = outletList
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((o) => _restaurantOutletTypes
+              .contains((o['outlet_type'] as String? ?? '').toLowerCase()))
+          .toList();
+
+      final outletItemsMap = <String, List<Map<String, dynamic>>>{};
+      final outletsById = <String, Map<String, dynamic>>{};
+      for (final outlet in restOutlets) {
+        final oid = '${outlet['id'] ?? ''}';
+        if (oid.isEmpty) continue;
+        outletsById[oid] = outlet;
+        try {
+          final itemsRes =
+              await dio.get('/pos/outlets/$oid/items');
+          final rawItems = itemsRes.data;
+          List<dynamic> itemList;
+          if (rawItems is List) {
+            itemList = rawItems;
+          } else if (rawItems is Map) {
+            itemList = (rawItems['data'] ??
+                rawItems['items'] ??
+                rawItems['outlet_items'] ??
+                []) as List;
+          } else {
+            itemList = [];
+          }
+          outletItemsMap[oid] = itemList
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        } catch (_) {
+          outletItemsMap[oid] = [];
+        }
+      }
+
+      // Fetch restaurant menu items as the linking targets
+      final menuRes = await dio.get('/restaurant/menu/items',
+          queryParameters: {
+            if (branchId.isNotEmpty) 'branch_id': branchId,
+          });
+      final rawMenu = menuRes.data;
+      List<dynamic> menuList;
+      if (rawMenu is List) {
+        menuList = rawMenu;
+      } else if (rawMenu is Map) {
+        menuList = (rawMenu['data'] ?? rawMenu['items'] ?? []) as List;
+      } else {
+        menuList = [];
+      }
+      final menus = menuList
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _outlets
+          ..clear()
+          ..addAll(outletsById);
+        _outletItems
+          ..clear()
+          ..addAll(outletItemsMap);
+        _menuItems = menus;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  Map<String, dynamic>? _outletByType(String type) {
+    try {
+      return _outlets.values.firstWhere(
+          (o) => (o['outlet_type'] as String? ?? '').toLowerCase() == type);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<Map<String, dynamic>> _itemsForType(String type) {
+    final outlet = _outletByType(type);
+    if (outlet == null) return [];
+    final oid = '${outlet['id'] ?? ''}';
+    return _outletItems[oid] ?? [];
+  }
+
+  Future<void> _linkItem(
+      Map<String, dynamic> outlet, Map<String, dynamic> item) async {
+    final outletId = '${outlet['id'] ?? ''}';
+    final itemId = '${item['id'] ?? ''}';
+    if (outletId.isEmpty || itemId.isEmpty) return;
+
+    final selected = await _showMenuItemPicker(item);
+    if (selected == null || !mounted) return;
+
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.patch(
+        '/pos/outlets/$outletId/items/$itemId',
+        data: {
+          'source_table': 'restaurant_menu_items',
+          'source_item_id': selected['id'],
+          'menu_item_id': selected['id'],
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('${item['name']} linked to ${selected['name']}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error linking: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _unlinkItem(
+      Map<String, dynamic> outlet, Map<String, dynamic> item) async {
+    final outletId = '${outlet['id'] ?? ''}';
+    final itemId = '${item['id'] ?? ''}';
+    if (outletId.isEmpty || itemId.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Stock Link'),
+        content:
+            Text('Remove the stock link for "${item['name']}"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style:
+                FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.patch(
+        '/pos/outlets/$outletId/items/$itemId',
+        data: {
+          'source_table': 'manual',
+          'source_item_id': null,
+          'menu_item_id': null,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Link removed')));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>?> _showMenuItemPicker(
+      Map<String, dynamic> posItem) async {
+    String query = '';
+    Map<String, dynamic>? result;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+        final filtered = query.isEmpty
+            ? _menuItems
+            : _menuItems.where((m) {
+                final name =
+                    (m['name'] as String? ?? '').toLowerCase();
+                final cat = ((m['category'] is Map
+                            ? m['category']['name']
+                            : m['category']) as String? ??
+                        '')
+                    .toLowerCase();
+                final q = query.toLowerCase();
+                return name.contains(q) || cat.contains(q);
+              }).toList();
+
+        return Dialog(
+          child: ConstrainedBox(
+            constraints:
+                const BoxConstraints(maxWidth: 480, maxHeight: 560),
+            child: Column(
+              children: [
+                Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Link "${posItem['name']}" to Menu Item',
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Search menu items…',
+                          prefixIcon:
+                              Icon(Icons.search, size: 20),
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (v) =>
+                            setDlg(() => query = v.trim()),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Text('No menu items found',
+                              style: TextStyle(
+                                  color: Colors.grey)))
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final menu = filtered[i];
+                            final mName =
+                                '${menu['name'] ?? '—'}';
+                            final rawCat = menu['category'];
+                            final mCat = rawCat is Map
+                                ? '${rawCat['name'] ?? ''}'
+                                : '${rawCat ?? ''}';
+                            final mPrice = menu['price'] ??
+                                menu['selling_price'];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(
+                                  Icons.restaurant_menu_outlined,
+                                  size: 20),
+                              title: Text(mName,
+                                  style: const TextStyle(
+                                      fontWeight:
+                                          FontWeight.w600,
+                                      fontSize: 13)),
+                              subtitle: Text(
+                                  [
+                                    if (mCat.isNotEmpty) mCat,
+                                    if (mPrice != null)
+                                      'KES $mPrice',
+                                  ].join(' • '),
+                                  style: const TextStyle(
+                                      fontSize: 11)),
+                              onTap: () {
+                                result = menu;
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel')),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+
+    return result;
+  }
+
+  String _linkedMenuName(Map<String, dynamic> item) {
+    final srcTable = item['source_table'] as String? ?? '';
+    final srcId = item['source_item_id'] ?? item['menu_item_id'];
+    if (srcTable != 'restaurant_menu_items' || srcId == null) return '';
+    try {
+      final menu =
+          _menuItems.firstWhere((m) => '${m['id']}' == '$srcId');
+      return '${menu['name'] ?? srcId}';
+    } catch (_) {
+      return '$srcId';
+    }
+  }
+
+  Widget _buildOutletTab(String outletType) {
+    final outlet = _outletByType(outletType);
+    final items = _itemsForType(outletType);
+    final label =
+        outletType == 'restaurant' ? 'Restaurant' : 'Choma Zone';
+
+    if (outlet == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.storefront_outlined,
+                size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            Text('No $label outlet found for this branch.',
+                style: const TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    final q = _search.toLowerCase();
+    final filtered = q.isEmpty
+        ? items
+        : items.where((i) {
+            final n = (i['name'] as String? ?? '').toLowerCase();
+            final c =
+                (i['category'] as String? ?? '').toLowerCase();
+            return n.contains(q) || c.contains(q);
+          }).toList();
+
+    final linkedCount = items
+        .where((i) =>
+            i['source_table'] == 'restaurant_menu_items' &&
+            (i['source_item_id'] ?? i['menu_item_id']) != null)
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              Chip(
+                avatar: const Icon(Icons.link, size: 14),
+                label: Text(
+                    '$linkedCount / ${items.length} linked',
+                    style: const TextStyle(fontSize: 12)),
+                backgroundColor: linkedCount == items.length
+                    ? Colors.green.shade50
+                    : Colors.orange.shade50,
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search items…',
+                    prefixIcon:
+                        Icon(Icons.search, size: 18),
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                        vertical: 8, horizontal: 10),
+                  ),
+                  onChanged: (v) =>
+                      setState(() => _search = v.trim()),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (filtered.isEmpty)
+          const Expanded(
+            child: Center(
+              child: Text('No POS items found.',
+                  style: TextStyle(color: Colors.grey)),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.separated(
+              itemCount: filtered.length,
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1),
+              itemBuilder: (ctx, i) {
+                final item = filtered[i];
+                final iName = '${item['name'] ?? '—'}';
+                final iCat = '${item['category'] ?? '—'}';
+                final iPrice =
+                    item['selling_price'] ?? item['price'];
+                final isLinked =
+                    item['source_table'] == 'restaurant_menu_items' &&
+                        (item['source_item_id'] ??
+                                item['menu_item_id']) !=
+                            null;
+                final linkedName = _linkedMenuName(item);
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: isLinked
+                        ? Colors.green.shade100
+                        : Colors.orange.shade100,
+                    child: Icon(
+                      isLinked
+                          ? Icons.link
+                          : Icons.link_off,
+                      size: 18,
+                      color: isLinked
+                          ? Colors.green.shade700
+                          : Colors.orange.shade700,
+                    ),
+                  ),
+                  title: Text(iName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
+                  subtitle: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          '$iCat  •  KES ${iPrice ?? '—'}',
+                          style: const TextStyle(
+                              fontSize: 12)),
+                      if (isLinked)
+                        Row(
+                          children: [
+                            const Icon(Icons.link,
+                                size: 12,
+                                color: Colors.green),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                linkedName,
+                                overflow:
+                                    TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors
+                                        .green.shade700,
+                                    fontWeight:
+                                        FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        const Text(
+                            'Not linked to menu item',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange)),
+                    ],
+                  ),
+                  isThreeLine: true,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isLinked) ...[
+                        IconButton(
+                          icon: const Icon(
+                              Icons.edit_outlined,
+                              size: 18),
+                          tooltip: 'Change Link',
+                          onPressed: () =>
+                              _linkItem(outlet, item),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                              Icons.link_off,
+                              size: 18,
+                              color: Colors.orange),
+                          tooltip: 'Remove Link',
+                          onPressed: () =>
+                              _unlinkItem(outlet, item),
+                        ),
+                      ] else
+                        FilledButton.icon(
+                          onPressed: () =>
+                              _linkItem(outlet, item),
+                          icon: const Icon(Icons.link,
+                              size: 16),
+                          label: const Text('Link',
+                              style:
+                                  TextStyle(fontSize: 12)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor:
+                                Colors.teal.shade700,
+                            padding:
+                                const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize:
+                                MaterialTapTargetSize
+                                    .shrinkWrap,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Restaurant Stock Link',
+                        style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700)),
+                    SizedBox(height: 2),
+                    Text(
+                      'Link restaurant POS items to menu catalog items for kitchen stock tracking.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+                onPressed: _loading ? null : _load,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TabBar(
+            controller: _tabs,
+            tabs: const [
+              Tab(
+                  icon: Icon(Icons.restaurant, size: 18),
+                  text: 'Restaurant'),
+              Tab(
+                  icon: Icon(Icons.outdoor_grill, size: 18),
+                  text: 'Choma Zone'),
+            ],
+            labelStyle: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          if (_loading)
+            const Expanded(
+                child:
+                    Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text(_error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Colors.red)),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: TabBarView(
+                controller: _tabs,
+                children: _restaurantOutletTypes
+                    .map(_buildOutletTab)
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

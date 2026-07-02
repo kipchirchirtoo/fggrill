@@ -114,6 +114,8 @@ import branchPaymentRoutes from './branch-payments.routes';
 import restaurantBillsRoutes from './restaurant-bills.routes';
 import kitchenWastageRoutes from './kitchen-wastage.routes';
 import powerSyncRoutes from './powersync.routes';
+import branchHealthRoutes from './branch-health.routes';
+import foodControlReportRoutes from './food-control-report.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
@@ -202,6 +204,9 @@ router.use('/storekeeping', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
 router.use('/cashier', cashierClearanceRoutes);
 router.use('/pos', outletPosRoutes);
+// Backward-compatible alias for older desktop builds/screens that still call
+// /api/outlet-pos/... while the canonical route is /api/pos/....
+router.use('/outlet-pos', outletPosRoutes);
 router.use('/wastage', wastageRoutes);
 router.use('/kitchen-ledger', kitchenLedgerRoutes);
 router.use('/additional-services', additionalServicesRoutes);
@@ -242,6 +247,11 @@ router.use('/menu-pricing', menuPricingRoutes);
 router.use('/branch-search', branchSearchRoutes);
 router.use('/branch-payments', branchPaymentRoutes);
 router.use('/powersync', powerSyncRoutes);
+// Report routes must mount BEFORE branchHealthRoutes: that router applies
+// protect+authorize via router.use to everything under /branches, which
+// would reject storekeeper roles before the report routes could match.
+router.use('/branches', foodControlReportRoutes);
+router.use('/branches', branchHealthRoutes);
 
 // Food Control System routes
 router.use('/buffet', buffetRoutes);

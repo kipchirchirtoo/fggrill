@@ -177,18 +177,30 @@ class _RestaurantMenuAdminSectionState
   }
 
   Future<void> _toggleRestaurant(Map<String, dynamic> item) async {
-    await ref
-        .read(restaurantServiceProvider)
-        .toggleAdminMenuItemAvailability('${item['id']}');
-    ref.invalidate(_restaurantMenuItemsProvider);
+    try {
+      await ref
+          .read(restaurantServiceProvider)
+          .toggleAdminMenuItemAvailability('${item['id']}');
+      if (!mounted) return;
+      ref.invalidate(_restaurantMenuItemsProvider);
+    } catch (e) {
+      if (!mounted) return;
+      _snack(context, apiErrorMessage(e), error: true);
+    }
   }
 
   Future<void> _deleteRestaurant(Map<String, dynamic> item) async {
     if (!await _confirm(context, 'Delete ${_text(item, 'name')}?')) return;
-    await ref
-        .read(restaurantServiceProvider)
-        .deleteAdminMenuItem('${item['id']}');
-    ref.invalidate(_restaurantMenuItemsProvider);
+    try {
+      await ref
+          .read(restaurantServiceProvider)
+          .deleteAdminMenuItem('${item['id']}');
+      if (!mounted) return;
+      ref.invalidate(_restaurantMenuItemsProvider);
+    } catch (e) {
+      if (!mounted) return;
+      _snack(context, apiErrorMessage(e), error: true);
+    }
   }
 
   Future<void> _showRestaurantDialog({Map<String, dynamic>? item}) async {
@@ -338,16 +350,28 @@ class _BarMenuAdminSectionState extends ConsumerState<BarMenuAdminSection> {
   }
 
   Future<void> _toggleDrink(Map<String, dynamic> drink) async {
-    await ref
-        .read(barServiceProvider)
-        .toggleDrinkAvailability('${drink['id']}');
-    ref.invalidate(_barDrinksProvider);
+    try {
+      await ref
+          .read(barServiceProvider)
+          .toggleDrinkAvailability('${drink['id']}');
+      if (!mounted) return;
+      ref.invalidate(_barDrinksProvider);
+    } catch (e) {
+      if (!mounted) return;
+      _snack(context, apiErrorMessage(e), error: true);
+    }
   }
 
   Future<void> _deleteDrink(Map<String, dynamic> drink) async {
     if (!await _confirm(context, 'Delete ${_text(drink, 'name')}?')) return;
-    await ref.read(barServiceProvider).deleteDrink('${drink['id']}');
-    ref.invalidate(_barDrinksProvider);
+    try {
+      await ref.read(barServiceProvider).deleteDrink('${drink['id']}');
+      if (!mounted) return;
+      ref.invalidate(_barDrinksProvider);
+    } catch (e) {
+      if (!mounted) return;
+      _snack(context, apiErrorMessage(e), error: true);
+    }
   }
 
   Future<void> _showDrinkDialog({Map<String, dynamic>? drink}) async {
@@ -469,11 +493,17 @@ class _KyogongServicesAdminSectionState
   }
 
   Future<void> _toggleService(Map<String, dynamic> service) async {
-    await ref.read(kyogongServiceProvider).updateDynamicService(
-      '${service['id']}',
-      {'is_active': service['is_active'] != true},
-    );
-    ref.invalidate(_kyogongDynamicServicesProvider);
+    try {
+      await ref.read(kyogongServiceProvider).updateDynamicService(
+        '${service['id']}',
+        {'is_active': service['is_active'] != true},
+      );
+      if (!mounted) return;
+      ref.invalidate(_kyogongDynamicServicesProvider);
+    } catch (e) {
+      if (!mounted) return;
+      _snack(context, apiErrorMessage(e), error: true);
+    }
   }
 
   Future<void> _showServiceDialog({Map<String, dynamic>? service}) async {
@@ -697,9 +727,9 @@ class _IDCardsAdminSectionState extends ConsumerState<IDCardsAdminSection> {
       if (!mounted) return;
       AppNotifier.showSnackBar(
         context,
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Batch print started. Python service currently returns one PDF per request.',
+            'Printing ID card for ${_employeeName(first)}…',
           ),
         ),
       );
@@ -945,7 +975,11 @@ class _RestaurantMenuDialogState extends ConsumerState<_RestaurantMenuDialog> {
   late final description =
       TextEditingController(text: _text(widget.item ?? {}, 'description'));
   late final price = TextEditingController(
-      text: _number(widget.item ?? {}, 'price').toString());
+      text: widget.item == null
+          ? ''
+          : _number(widget.item!, 'price') > 0
+              ? _number(widget.item!, 'price').toStringAsFixed(2)
+              : '');
   String? categoryId;
   int? branchId;
   bool saving = false;
@@ -1061,7 +1095,11 @@ class _BarDrinkDialogState extends ConsumerState<_BarDrinkDialog> {
   late final description =
       TextEditingController(text: _text(widget.drink ?? {}, 'description'));
   late final price = TextEditingController(
-      text: _number(widget.drink ?? {}, 'price').toString());
+      text: widget.drink == null
+          ? ''
+          : _number(widget.drink!, 'price') > 0
+              ? _number(widget.drink!, 'price').toStringAsFixed(2)
+              : '');
   late final unit =
       TextEditingController(text: _text(widget.drink ?? {}, 'unit', 'bottle'));
   String? categoryId;
@@ -1183,11 +1221,15 @@ class _KyogongServiceDialogState extends ConsumerState<_KyogongServiceDialog> {
   late final name =
       TextEditingController(text: _text(widget.service ?? {}, 'name'));
   late final basePrice = TextEditingController(
-      text: _number(widget.service ?? {}, 'base_price').toString());
+      text: widget.service == null
+          ? ''
+          : _number(widget.service!, 'base_price') > 0
+              ? _number(widget.service!, 'base_price').toStringAsFixed(2)
+              : '');
   late final pricePerHour = TextEditingController(
       text: _number(widget.service ?? {}, 'price_per_hour') == 0
           ? ''
-          : _number(widget.service ?? {}, 'price_per_hour').toString());
+          : _number(widget.service!, 'price_per_hour').toStringAsFixed(2));
   String serviceType = 'spa';
   String pricingModel = 'fixed';
   bool active = true;
@@ -1281,6 +1323,14 @@ class _KyogongServiceDialogState extends ConsumerState<_KyogongServiceDialog> {
                       decoration:
                           const InputDecoration(labelText: 'Price Per Hour'),
                       keyboardType: TextInputType.number,
+                      validator: (v) {
+                        if (v != null &&
+                            v.trim().isNotEmpty &&
+                            double.tryParse(v.trim()) == null) {
+                          return 'Enter a valid price';
+                        }
+                        return null;
+                      },
                     ),
                   ),
                 ],
@@ -1305,7 +1355,7 @@ class _KyogongServiceDialogState extends ConsumerState<_KyogongServiceDialog> {
             'pricing_model': pricingModel,
             'base_price': double.parse(basePrice.text),
             if (pricePerHour.text.trim().isNotEmpty)
-              'price_per_hour': double.tryParse(pricePerHour.text.trim()),
+              'price_per_hour': double.tryParse(pricePerHour.text.trim()) ?? 0.0,
             'is_active': active,
           };
           if (widget.service == null) {
@@ -1560,15 +1610,15 @@ BoxDecoration _cardDecoration() => BoxDecoration(
 Future<bool> _confirm(BuildContext context, String message) async {
   final result = await showDialog<bool>(
     context: context,
-    builder: (_) => AlertDialog(
+    builder: (ctx) => AlertDialog(
       title: const Text('Confirm Action'),
       content: Text(message),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel')),
         ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Confirm')),
       ],
     ),

@@ -46,6 +46,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     'main_bar',
     'executive_bar',
     'non_consumables',
+    'choma_zone',
   ];
 
   static const _stationLabels = {
@@ -53,6 +54,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     'main_bar': 'Main Bar',
     'executive_bar': 'Executive Bar',
     'non_consumables': 'Non-consumables',
+    'choma_zone': 'Choma Zone',
   };
 
   OutletPosSection _section = OutletPosSection.station;
@@ -101,11 +103,22 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     });
     try {
       final repo = ref.read(outletPosRepositoryProvider);
-      final outlets = widget.unifiedStations
-          ? await repo.getOutlets()
-          : await repo.getOutlets(outletType: widget.outletType);
-      final stationOutlets = _normaliseStationOutlets(outlets);
-      final outlet = _resolveInitialOutlet(stationOutlets);
+      final bootstrap = await repo.getBootstrap(
+        outletType: widget.outletType,
+        allOutlets: widget.unifiedStations,
+      );
+      final stationOutlets = _normaliseStationOutlets(bootstrap.outlets);
+      PosOutlet? bootstrappedOutlet;
+      if (bootstrap.outlet != null) {
+        for (final candidate in stationOutlets) {
+          if (candidate.id == bootstrap.outlet!.id) {
+            bootstrappedOutlet = candidate;
+            break;
+          }
+        }
+      }
+      final outlet =
+          bootstrappedOutlet ?? _resolveInitialOutlet(stationOutlets);
       if (outlet == null) {
         throw Exception(
           widget.unifiedStations
@@ -113,9 +126,16 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               : 'No ${widget.title} outlet is configured for this branch.',
         );
       }
-      final snapshot = await _fetchOutletState(repo, outlet);
+      final snapshot = bootstrap.outlet?.id == outlet.id
+          ? _OutletStationSnapshot(
+              shift: bootstrap.shift,
+              items: bootstrap.items,
+              orders: bootstrap.orders,
+            )
+          : await _fetchOutletState(repo, outlet);
       final storage = ref.read(secureStorageProvider);
-      final printImmediatelyStr = await storage.read(key: 'print_bill_immediately');
+      final printImmediatelyStr =
+          await storage.read(key: 'print_bill_immediately');
       if (!mounted) return;
       setState(() {
         if (printImmediatelyStr != null) {
@@ -210,7 +230,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     });
     try {
       final repo = ref.read(outletPosRepositoryProvider);
-      final snapshot = await _fetchOutletState(repo, outlet);
+      final bootstrap = await repo.getBootstrap(outletId: outlet.id);
+      final snapshot = bootstrap.outlet?.id == outlet.id
+          ? _OutletStationSnapshot(
+              shift: bootstrap.shift,
+              items: bootstrap.items,
+              orders: bootstrap.orders,
+            )
+          : await _fetchOutletState(repo, outlet);
       if (!mounted) return;
       setState(() {
         _outlet = outlet;
@@ -370,7 +397,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                     children: [
                       const Icon(Icons.print_outlined, size: 20),
                       const SizedBox(width: 4),
-                      const Text('Auto-print Bill', style: TextStyle(fontSize: 13)),
+                      const Text('Auto-print Bill',
+                          style: TextStyle(fontSize: 13)),
                       const SizedBox(width: 4),
                       Switch(
                         value: _printBillImmediately,
@@ -799,7 +827,10 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         (entry) => entry.item.id == item.id && entry.notes == notes);
     setState(() {
       if (index == -1) {
-        _cart = [..._cart, OutletCartItem(item: item, quantity: 1, notes: notes)];
+        _cart = [
+          ..._cart,
+          OutletCartItem(item: item, quantity: 1, notes: notes)
+        ];
       } else {
         final updated = [..._cart];
         updated[index] =
@@ -924,7 +955,6 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         publicCode: order.shortCode,
         barcodeValue: barcodeVal,
       );
-
     } catch (error) {
       if (!mounted) return;
       AppNotifier.showSnackBar(
@@ -944,21 +974,34 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     List<CartItem>? itemsOverride,
   }) async {
     final savedItems = itemsOverride ??
-        order.items.map((raw) {
-          final m = Map<String, dynamic>.from(raw as Map);
-          final qty = (m['quantity'] is num)
-              ? (m['quantity'] as num).toInt()
-              : int.tryParse('${m['quantity']}') ?? 0;
-          final unitPrice = (m['unit_price'] is num)
-              ? (m['unit_price'] as num).toDouble()
-              : double.tryParse('${m['unit_price']}') ?? 0;
-          return CartItem(
-            productId: '${m['outlet_item_id'] ?? ''}',
-            name: '${m['name'] ?? ''}',
-            unitPrice: unitPrice,
-            qty: qty,
-          );
-        }).toList();
+        order.items
+            .whereType<Map>()
+            .map((raw) {
+              final m = Map<String, dynamic>.from(raw);
+              final qty = (m['quantity'] is num)
+                  ? (m['quantity'] as num).toDouble()
+                  : double.tryParse('${m['quantity']}') ?? 0;
+              final voidedQty = (m['voided_qty'] is num)
+                  ? (m['voided_qty'] as num).toDouble()
+                  : double.tryParse('${m['voided_qty']}') ?? 0;
+              final activeQty = (m['active_qty'] is num)
+                  ? (m['active_qty'] as num).toDouble()
+                  : double.tryParse('${m['active_qty']}') ?? (qty - voidedQty);
+              final unitPrice = (m['unit_price'] is num)
+                  ? (m['unit_price'] as num).toDouble()
+                  : double.tryParse('${m['unit_price']}') ?? 0;
+              if (m['void_pending_approval'] == true || activeQty <= 0) {
+                return null;
+              }
+              return CartItem(
+                productId: '${m['outlet_item_id'] ?? ''}',
+                name: '${m['name'] ?? ''}',
+                unitPrice: unitPrice,
+                qty: activeQty.round(),
+              );
+            })
+            .whereType<CartItem>()
+            .toList();
 
     final sale = SaleResult(
       transactionId: order.id,
@@ -993,8 +1036,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         staffLabel: 'Waiter',
         publicCode: order.shortCode,
         barcodeValue: barcodeVal,
-        duplicateLabel:
-            fallbackTitle.toUpperCase().contains('REPRINT') ? 'DUPLICATE' : null,
+        duplicateLabel: fallbackTitle.toUpperCase().contains('REPRINT')
+            ? 'DUPLICATE'
+            : null,
       );
     } catch (error) {
       if (!mounted) rethrow;
@@ -1037,35 +1081,42 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   // remaining (post-void) quantity, so the printed total matches the
   // already-corrected order.totalAmount.
   List<CartItem> _activeBillItems(OutletShiftOrder order) {
-    return order.items.whereType<Map>().map((raw) {
-      final m = Map<String, dynamic>.from(raw);
-      final qty = (m['quantity'] is num)
-          ? (m['quantity'] as num).toDouble()
-          : double.tryParse('${m['quantity']}') ?? 0;
-      final voidedQty = (m['voided_qty'] is num)
-          ? (m['voided_qty'] as num).toDouble()
-          : double.tryParse('${m['voided_qty']}') ?? 0;
-      final unitPrice = (m['unit_price'] is num)
-          ? (m['unit_price'] as num).toDouble()
-          : double.tryParse('${m['unit_price']}') ?? 0;
-      final activeQty = qty - voidedQty;
-      if (activeQty <= 0) return null;
-      return CartItem(
-        productId: '${m['outlet_item_id'] ?? ''}',
-        name: '${m['name'] ?? ''}',
-        unitPrice: unitPrice,
-        qty: activeQty.round(),
-      );
-    }).whereType<CartItem>().toList();
+    return order.items
+        .whereType<Map>()
+        .map((raw) {
+          final m = Map<String, dynamic>.from(raw);
+          final qty = (m['quantity'] is num)
+              ? (m['quantity'] as num).toDouble()
+              : double.tryParse('${m['quantity']}') ?? 0;
+          final voidedQty = (m['voided_qty'] is num)
+              ? (m['voided_qty'] as num).toDouble()
+              : double.tryParse('${m['voided_qty']}') ?? 0;
+          final unitPrice = (m['unit_price'] is num)
+              ? (m['unit_price'] as num).toDouble()
+              : double.tryParse('${m['unit_price']}') ?? 0;
+          final activeQty = (m['active_qty'] is num)
+              ? (m['active_qty'] as num).toDouble()
+              : double.tryParse('${m['active_qty']}') ?? (qty - voidedQty);
+          if (activeQty <= 0) return null;
+          return CartItem(
+            productId: '${m['outlet_item_id'] ?? ''}',
+            name: '${m['name'] ?? ''}',
+            unitPrice: unitPrice,
+            qty: activeQty.round(),
+          );
+        })
+        .whereType<CartItem>()
+        .toList();
   }
 
   Future<void> _printOriginalBill(OutletShiftOrder order) async {
     OutletShiftOrder? updatedOrder;
     try {
-      updatedOrder = await ref.read(outletPosRepositoryProvider).markOriginalBillPrinted(
-            shiftId: _shift!.id,
-            orderId: order.id,
-          );
+      updatedOrder =
+          await ref.read(outletPosRepositoryProvider).markOriginalBillPrinted(
+                shiftId: _shift!.id,
+                orderId: order.id,
+              );
     } on StateError catch (error) {
       if (mounted) {
         AppNotifier.showSnackBar(
@@ -1201,6 +1252,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     if (type == 'main_bar') return Icons.local_bar;
     if (type == 'executive_bar') return Icons.wine_bar;
     if (type == 'non_consumables') return Icons.inventory_2;
+    if (type == 'choma_zone') return Icons.outdoor_grill;
     return Icons.point_of_sale;
   }
 
@@ -1646,8 +1698,7 @@ class _Surface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context);
-    final brightness =
-        _PosPalette.isDark ? Brightness.dark : Brightness.light;
+    final brightness = _PosPalette.isDark ? Brightness.dark : Brightness.light;
     final scheme = base.colorScheme.copyWith(
       brightness: brightness,
       primary: _PosPalette.accent,
@@ -2084,7 +2135,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
         }
       },
       onError: (Object err) {
-        debugPrint('❌ BillDetailSheet Realtime error: $err — falling back to polling');
+        debugPrint(
+            '❌ BillDetailSheet Realtime error: $err — falling back to polling');
         _startFallbackPolling();
       },
     );
@@ -2114,7 +2166,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
       final allRequests = results[1] as List<ItemVoidRequest>;
       setState(() {
         _order = freshOrder;
-        _voidRequests = allRequests.where((r) => r.orderId == _order.id).toList();
+        _voidRequests =
+            allRequests.where((r) => r.orderId == _order.id).toList();
       });
     } catch (_) {
       // Transient polling failures should not disrupt an open bill sheet.
@@ -2162,7 +2215,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
       _order.status != 'cancelled' &&
       _order.status != 'voided';
 
-  Future<void> _openVoidItemSheet(int index, Map<String, dynamic> item, double activeQty) async {
+  Future<void> _openVoidItemSheet(
+      int index, Map<String, dynamic> item, double activeQty) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -2200,15 +2254,20 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
   Future<void> _acknowledge(ItemVoidRequest request) async {
     setState(() => _actioning = true);
     try {
-      await ref.read(outletPosRepositoryProvider).cashierAcknowledgeVoid(request.id);
+      await ref
+          .read(outletPosRepositoryProvider)
+          .cashierAcknowledgeVoid(request.id);
       await _poll();
       if (mounted) {
-        AppNotifier.showSnackBar(context,
-            const SnackBar(content: Text('Acknowledged — sent to manager for approval')));
+        AppNotifier.showSnackBar(
+            context,
+            const SnackBar(
+                content: Text('Acknowledged — sent to manager for approval')));
       }
     } on StateError catch (error) {
       if (mounted) {
-        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text(error.message)));
       }
       await _poll();
     } finally {
@@ -2219,15 +2278,20 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
   Future<void> _decline(ItemVoidRequest request) async {
     setState(() => _actioning = true);
     try {
-      await ref.read(outletPosRepositoryProvider).cashierDeclineVoid(request.id);
+      await ref
+          .read(outletPosRepositoryProvider)
+          .cashierDeclineVoid(request.id);
       await _poll();
       if (mounted) {
         AppNotifier.showSnackBar(
-            context, const SnackBar(content: Text('Void request declined — item stays on bill')));
+            context,
+            const SnackBar(
+                content: Text('Void request declined — item stays on bill')));
       }
     } on StateError catch (error) {
       if (mounted) {
-        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text(error.message)));
       }
       await _poll();
     } finally {
@@ -2246,7 +2310,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
       }
     } on StateError catch (error) {
       if (mounted) {
-        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text(error.message)));
       }
       await _poll();
     } finally {
@@ -2296,7 +2361,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
       }
     } on StateError catch (error) {
       if (mounted) {
-        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text(error.message)));
       }
       await _poll();
     } finally {
@@ -2309,10 +2375,11 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
     final order = _order;
     final isOriginalUnprinted = order.originalBillPrintedAt == null;
     final canPrintOriginal = order.paymentStatus == 'unpaid';
-    final canPrintDuplicate = order.paymentStatus == 'unpaid' && order.canReprintBill;
+    final canPrintDuplicate =
+        order.paymentStatus == 'unpaid' && order.canReprintBill;
     final pendingTotal = _voidRequests
-        .where((r) =>
-            r.isPending || r.isKitchenAcknowledged || r.isAcknowledged)
+        .where(
+            (r) => r.isPending || r.isKitchenAcknowledged || r.isAcknowledged)
         .fold<double>(0, (sum, r) => sum + r.amount);
 
     return SafeArea(
@@ -2360,17 +2427,20 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
             if (pendingTotal > 0) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   () {
-                    final hasKitchenPending = _voidRequests.any((r) => r.isPending);
+                    final hasKitchenPending =
+                        _voidRequests.any((r) => r.isPending);
                     final hasCashierPending =
                         _voidRequests.any((r) => r.isKitchenAcknowledged);
-                    final hasManagerPending = _voidRequests.any((r) => r.isAcknowledged);
+                    final hasManagerPending =
+                        _voidRequests.any((r) => r.isAcknowledged);
                     if (hasKitchenPending) {
                       return '⏳ Item void awaiting kitchen acknowledgment. May reduce total by ${formatKes(pendingTotal)}.';
                     }
@@ -2410,7 +2480,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                   final name = '${raw['name'] ?? ''}';
                   final activeVoid = _activeVoidFor(index);
                   final isFullyVoided = activeQty <= 0;
-                  final isHiddenFromCustomer = raw['void_pending_approval'] == true;
+                  final isHiddenFromCustomer =
+                      raw['void_pending_approval'] == true;
 
                   return ListTile(
                     dense: true,
@@ -2426,9 +2497,11 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                             activeQty > 0 &&
                             !_actioning)
                         ? IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, size: 20),
+                            icon: const Icon(Icons.remove_circle_outline,
+                                size: 20),
                             tooltip: 'Void item',
-                            onPressed: () => _openVoidItemSheet(index, raw, activeQty),
+                            onPressed: () =>
+                                _openVoidItemSheet(index, raw, activeQty),
                           )
                         : const SizedBox(width: 40),
                     title: Text(
@@ -2436,14 +2509,16 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                           ? '${qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1)}x $name (${voidedQty.toStringAsFixed(voidedQty.truncateToDouble() == voidedQty ? 0 : 1)} voided)'
                           : '${qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1)}x $name',
                       style: isFullyVoided
-                          ? const TextStyle(decoration: TextDecoration.lineThrough)
+                          ? const TextStyle(
+                              decoration: TextDecoration.lineThrough)
                           : isHiddenFromCustomer
                               ? TextStyle(color: Colors.orange.shade800)
                               : null,
                     ),
                     subtitle: activeVoid == null
                         ? (isHiddenFromCustomer
-                            ? const Text('Hidden from customer bill — awaiting manager',
+                            ? const Text(
+                                'Hidden from customer bill — awaiting manager',
                                 style: TextStyle(fontSize: 11))
                             : null)
                         : Padding(
@@ -2456,33 +2531,42 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                                   Chip(
                                     label: const Text('⏳ AWAITING KITCHEN',
                                         style: TextStyle(fontSize: 11)),
-                                    backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                                    backgroundColor:
+                                        Colors.orange.withValues(alpha: 0.15),
                                     visualDensity: VisualDensity.compact,
                                     padding: EdgeInsets.zero,
                                   ),
                                   Text(
                                     '${activeVoid.reason} • ${activeVoid.requestedByName ?? 'Unknown'}',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                   ),
-                                ] else if (activeVoid.isKitchenAcknowledged) ...[
+                                ] else if (activeVoid
+                                    .isKitchenAcknowledged) ...[
                                   Chip(
                                     label: const Text('⏳ AWAITING CASHIER',
                                         style: TextStyle(fontSize: 11)),
-                                    backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                                    backgroundColor:
+                                        Colors.orange.withValues(alpha: 0.15),
                                     visualDensity: VisualDensity.compact,
                                     padding: EdgeInsets.zero,
                                   ),
                                   Text(
                                     '${activeVoid.reason} • kitchen: ${activeVoid.kitchenName ?? 'Unknown'}',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                   ),
                                   if (_isCashier) ...[
                                     TextButton(
-                                      onPressed: _actioning ? null : () => _acknowledge(activeVoid),
+                                      onPressed: _actioning
+                                          ? null
+                                          : () => _acknowledge(activeVoid),
                                       child: const Text('✓ ACKNOWLEDGE'),
                                     ),
                                     TextButton(
-                                      onPressed: _actioning ? null : () => _decline(activeVoid),
+                                      onPressed: _actioning
+                                          ? null
+                                          : () => _decline(activeVoid),
                                       style: TextButton.styleFrom(
                                           foregroundColor: Colors.red),
                                       child: const Text('✗ DECLINE'),
@@ -2492,21 +2576,27 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                                   Chip(
                                     label: const Text('⏳ AWAITING MANAGER',
                                         style: TextStyle(fontSize: 11)),
-                                    backgroundColor: Colors.blue.withValues(alpha: 0.12),
+                                    backgroundColor:
+                                        Colors.blue.withValues(alpha: 0.12),
                                     visualDensity: VisualDensity.compact,
                                     padding: EdgeInsets.zero,
                                   ),
                                   Text(
                                     '${activeVoid.reason} • cashier: ${activeVoid.cashierName ?? 'Unknown'}',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                   ),
                                   if (_isReviewer) ...[
                                     TextButton(
-                                      onPressed: _actioning ? null : () => _approve(activeVoid),
+                                      onPressed: _actioning
+                                          ? null
+                                          : () => _approve(activeVoid),
                                       child: const Text('✓ APPROVE'),
                                     ),
                                     TextButton(
-                                      onPressed: _actioning ? null : () => _reject(activeVoid),
+                                      onPressed: _actioning
+                                          ? null
+                                          : () => _reject(activeVoid),
                                       style: TextButton.styleFrom(
                                           foregroundColor: Colors.red),
                                       child: const Text('✗ REJECT'),
@@ -2555,7 +2645,9 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                     : (canPrintDuplicate ? widget.onPrintDuplicate : null),
                 icon: const Icon(Icons.print_outlined),
                 label: Text(isOriginalUnprinted
-                    ? (canPrintOriginal ? 'Print Customer Bill' : 'Bill must be unpaid to print')
+                    ? (canPrintOriginal
+                        ? 'Print Customer Bill'
+                        : 'Bill must be unpaid to print')
                     : (canPrintDuplicate
                         ? 'Print duplicate bill'
                         : order.canReprintBill
@@ -2624,7 +2716,8 @@ class _VoidItemSheetState extends State<_VoidItemSheet> {
           children: [
             Text('Void item', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 4),
-            Text(widget.itemName, style: Theme.of(context).textTheme.bodyMedium),
+            Text(widget.itemName,
+                style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2634,12 +2727,15 @@ class _VoidItemSheetState extends State<_VoidItemSheet> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.remove),
-                      onPressed: _qty > 1 ? () => setState(() => _qty -= 1) : null,
+                      onPressed:
+                          _qty > 1 ? () => setState(() => _qty -= 1) : null,
                     ),
                     Text(_qty.toStringAsFixed(0)),
                     IconButton(
                       icon: const Icon(Icons.add),
-                      onPressed: _qty < widget.maxQty ? () => setState(() => _qty += 1) : null,
+                      onPressed: _qty < widget.maxQty
+                          ? () => setState(() => _qty += 1)
+                          : null,
                     ),
                   ],
                 ),
@@ -2652,7 +2748,8 @@ class _VoidItemSheetState extends State<_VoidItemSheet> {
                 border: OutlineInputBorder(),
               ),
               items: itemVoidReasonCategories.entries
-                  .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                  .map((entry) => DropdownMenuItem(
+                      value: entry.key, child: Text(entry.value)))
                   .toList(),
               onChanged: (value) {
                 if (value != null) setState(() => _reasonCategory = value);
@@ -2704,7 +2801,8 @@ class _ExchangeRequestSheet extends ConsumerStatefulWidget {
   final List<OutletPosItem> catalog;
 
   @override
-  ConsumerState<_ExchangeRequestSheet> createState() => _ExchangeRequestSheetState();
+  ConsumerState<_ExchangeRequestSheet> createState() =>
+      _ExchangeRequestSheetState();
 }
 
 class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
@@ -2735,7 +2833,8 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
     var sum = 0.0;
     for (final entry in _oldQty.entries) {
       if (entry.value <= 0) continue;
-      final raw = Map<String, dynamic>.from(widget.order.items[entry.key] as Map);
+      final raw =
+          Map<String, dynamic>.from(widget.order.items[entry.key] as Map);
       final unitPrice = (raw['unit_price'] is num)
           ? (raw['unit_price'] as num).toDouble()
           : double.tryParse('${raw['unit_price']}') ?? 0;
@@ -2755,8 +2854,8 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
       if (index == -1) {
         _newCart = [..._newCart, OutletCartItem(item: item, quantity: 1)];
       } else {
-        _newCart = [..._newCart]
-          ..[index] = _newCart[index].copyWith(quantity: _newCart[index].quantity + 1);
+        _newCart = [..._newCart]..[index] =
+            _newCart[index].copyWith(quantity: _newCart[index].quantity + 1);
       }
     });
   }
@@ -2794,18 +2893,22 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
             reason: _reasonController.text,
           );
       if (mounted) {
-        AppNotifier.showSnackBar(context,
-            const SnackBar(content: Text('Exchange request sent to cashier for approval')));
+        AppNotifier.showSnackBar(
+            context,
+            const SnackBar(
+                content:
+                    Text('Exchange request sent to cashier for approval')));
         Navigator.of(context).pop(true);
       }
     } on StateError catch (error) {
       if (mounted) {
-        AppNotifier.showSnackBar(context, SnackBar(content: Text(error.message)));
+        AppNotifier.showSnackBar(
+            context, SnackBar(content: Text(error.message)));
       }
     } catch (error) {
       if (mounted) {
-        AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('Could not send exchange request: $error')));
+        AppNotifier.showSnackBar(context,
+            SnackBar(content: Text('Could not send exchange request: $error')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -2860,14 +2963,16 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
               ],
             ),
             const SizedBox(height: 8),
-            Text('Items to return', style: Theme.of(context).textTheme.titleSmall),
+            Text('Items to return',
+                style: Theme.of(context).textTheme.titleSmall),
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 220),
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: order.items.length,
                 itemBuilder: (context, index) {
-                  final raw = Map<String, dynamic>.from(order.items[index] as Map);
+                  final raw =
+                      Map<String, dynamic>.from(order.items[index] as Map);
                   final activeQty = _activeQtyAt(index, raw);
                   if (activeQty <= 0) return const SizedBox.shrink();
                   final name = '${raw['name'] ?? ''}';
@@ -2876,7 +2981,8 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
                     dense: true,
                     value: selectedQty > 0,
                     title: Text(name),
-                    subtitle: Text('Active qty: ${activeQty.toStringAsFixed(activeQty.truncateToDouble() == activeQty ? 0 : 1)}'),
+                    subtitle: Text(
+                        'Active qty: ${activeQty.toStringAsFixed(activeQty.truncateToDouble() == activeQty ? 0 : 1)}'),
                     secondary: selectedQty > 0
                         ? Row(
                             mainAxisSize: MainAxisSize.min,
@@ -2884,14 +2990,16 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
                               IconButton(
                                 icon: const Icon(Icons.remove),
                                 onPressed: selectedQty > 1
-                                    ? () => setState(() => _oldQty[index] = selectedQty - 1)
+                                    ? () => setState(
+                                        () => _oldQty[index] = selectedQty - 1)
                                     : null,
                               ),
                               Text(selectedQty.toStringAsFixed(0)),
                               IconButton(
                                 icon: const Icon(Icons.add),
                                 onPressed: selectedQty < activeQty
-                                    ? () => setState(() => _oldQty[index] = selectedQty + 1)
+                                    ? () => setState(
+                                        () => _oldQty[index] = selectedQty + 1)
                                     : null,
                               ),
                             ],
@@ -2905,7 +3013,8 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
               ),
             ),
             const Divider(),
-            Text('Replacement items', style: Theme.of(context).textTheme.titleSmall),
+            Text('Replacement items',
+                style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),
             TextField(
               controller: _searchController,
@@ -2976,7 +3085,8 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
             ),
             const SizedBox(height: 4),
             Text(summaryLabel,
-                style: TextStyle(color: summaryColor, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    color: summaryColor, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             TextField(
               controller: _reasonController,
@@ -2991,7 +3101,8 @@ class _ExchangeRequestSheetState extends ConsumerState<_ExchangeRequestSheet> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _canSubmit ? _submit : null,
-                child: Text(_submitting ? 'Sending…' : 'SEND FOR CASHIER APPROVAL'),
+                child: Text(
+                    _submitting ? 'Sending…' : 'SEND FOR CASHIER APPROVAL'),
               ),
             ),
           ],
@@ -3173,4 +3284,3 @@ class _ReasonDialogState extends State<_ReasonDialog> {
     );
   }
 }
-

@@ -94,13 +94,22 @@ router.put('/update-pin', protect, async (req, res, next) => {
       res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
-    if (user.pos_pin && String(user.pos_pin) !== String(currentPin)) {
+    // pos_pin may be stored with a type prefix (e.g. "C2040" for cashier,
+    // "M1194" for main bar). Strip non-digit leading chars before comparing
+    // so users entering just "2040" can still verify their current PIN.
+    const storedRaw = String(user.pos_pin ?? '');
+    const storedDigits = storedRaw.replace(/^\D+/, '');
+    const enteredDigits = String(currentPin ?? '').replace(/^\D+/, '');
+    if (storedRaw && storedDigits !== enteredDigits) {
       res.status(400).json({ success: false, message: 'Current PIN is incorrect' });
       return;
     }
+    // Preserve the original type prefix so POS till authentication keeps working.
+    const prefix = storedRaw.match(/^\D+/)?.[0] ?? '';
+    const updatedPin = prefix + String(newPin);
     const { error: updateErr } = await supabase
       .from('users')
-      .update({ pos_pin: String(newPin), updated_at: new Date().toISOString() })
+      .update({ pos_pin: updatedPin, updated_at: new Date().toISOString() })
       .eq('id', req.user.id);
     if (updateErr) throw updateErr;
     res.json({ success: true, message: 'PIN updated successfully' });

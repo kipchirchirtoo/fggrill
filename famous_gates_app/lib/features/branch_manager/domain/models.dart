@@ -20,7 +20,11 @@ class BranchManagerStats {
       for (final key in keys) {
         final value = json[key];
         if (value is num) return value;
-        if (value is String) return num.tryParse(value) ?? 0;
+        if (value is String) {
+          final parsed = num.tryParse(value);
+          if (parsed != null) return parsed;
+          continue;
+        }
       }
       return 0;
     }
@@ -60,8 +64,10 @@ class RecentActivity {
     return RecentActivity(
       id: '${json['id']}',
       description: '${json['description'] ?? json['action'] ?? ''}',
-      userName: json['user_name'] as String? ?? json['cashier'] as String?,
-      amount: json['amount'] != null ? 'KES ${json['amount']}' : null,
+      userName: json['user_name']?.toString() ?? json['cashier']?.toString(),
+      amount: json['amount'] != null
+          ? 'KES ${(num.tryParse('${json['amount']}') ?? 0).toStringAsFixed(2)}'
+          : null,
       timeAgo: '${json['time_ago'] ?? json['created_at'] ?? ''}',
     );
   }

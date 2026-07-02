@@ -547,7 +547,6 @@ class _DataOverrideSectionState extends ConsumerState<DataOverrideSection>
                     ],
                     onChanged: (v) {
                       setState(() => _auditActionFilter = v);
-                      ref.invalidate(godAuditLogProvider);
                     },
                   ),
                 ),

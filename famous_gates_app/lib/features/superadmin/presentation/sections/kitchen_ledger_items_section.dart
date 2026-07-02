@@ -54,6 +54,7 @@ class _KitchenLedgerItemsSectionState
                 : int.tryParse('${branches.first['id']}'))
             : null;
       });
+      if (!mounted) return;
       await _loadLedger();
     } catch (e) {
       if (!mounted) return;

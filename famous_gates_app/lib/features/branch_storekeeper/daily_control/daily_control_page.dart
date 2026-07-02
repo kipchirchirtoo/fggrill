@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/domain/auth_notifier.dart';
+import '../../food_control_report/presentation/food_control_report_screen.dart';
 import 'providers/daily_control_provider.dart';
 import 'widgets/bom_control_tab.dart';
 import 'widgets/control_filter_bar.dart';
 import 'widgets/daily_summary_tab.dart';
 import 'widgets/kitchen_vs_sales_tab.dart';
+import 'widgets/stock_ledger_tab.dart';
 import 'widgets/stock_vs_sales_tab.dart';
 
-const _tabNames = ['bom_control', 'kitchen_vs_sales', 'stock_vs_sales', 'summary'];
+const _tabNames = ['stock_ledger', 'bom_control', 'kitchen_vs_sales', 'stock_vs_sales', 'summary'];
 
 class DailyControlPage extends ConsumerStatefulWidget {
   const DailyControlPage({super.key});
@@ -26,7 +28,7 @@ class _DailyControlPageState extends ConsumerState<DailyControlPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) return;
       setState(() => _activeTab = _tabController.index);
@@ -89,6 +91,14 @@ class _DailyControlPageState extends ConsumerState<DailyControlPage>
         ),
         actions: [
           IconButton(
+            tooltip: 'Stocksheet Report (Store Stocksheet + Controls)',
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                  builder: (_) => const FoodControlReportScreen()),
+            ),
+            icon: const Icon(Icons.table_chart_outlined),
+          ),
+          IconButton(
             tooltip: 'Export CSV',
             onPressed: state.isLoading ? null : _export,
             icon: const Icon(Icons.download_outlined),
@@ -107,6 +117,7 @@ class _DailyControlPageState extends ConsumerState<DailyControlPage>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           tabs: const [
+            Tab(text: 'Stock Ledger'),
             Tab(text: 'BOM Control'),
             Tab(text: 'Kitchen vs Sales'),
             Tab(text: 'Stock vs Sales'),
@@ -116,6 +127,23 @@ class _DailyControlPageState extends ConsumerState<DailyControlPage>
       ),
       body: Column(
         children: [
+          // ── Previous closed commercial day — finalized snapshot, frozen
+          // when the next cashier shift opened. Never mixed with the live
+          // date/shift-filtered view below.
+          if (state.snapshotLoading)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: LinearProgressIndicator(minHeight: 2),
+            )
+          else if (state.snapshot != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: _PreviousDaySnapshotCard(snapshot: state.snapshot!),
+            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: _LiveProvisionalLabel(),
+          ),
           // ── Filter bar (date + shift) ──────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(12),
@@ -155,6 +183,28 @@ class _DailyControlPageState extends ConsumerState<DailyControlPage>
               ),
             ),
 
+          // ── Kitchen session open but nothing confirmed yet ───────────────
+          // hasKitchenSession only means a shift row exists — it does not
+          // mean any usage was confirmed. Without this, all-zero Actual
+          // figures look identical to "genuinely zero usage" and to "no
+          // data was ever recorded", which is misleading.
+          if (!state.isLoading &&
+              state.hasKitchenSession &&
+              state.totalIssuedQty <= 0 &&
+              state.hasAnyData)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _Banner(
+                color: Colors.orange,
+                icon: Icons.warning_amber_rounded,
+                message:
+                    'A kitchen shift exists for this date${state.shift != null ? ' / Shift ${state.shift}' : ''}, but no ingredient '
+                    'usage has been confirmed yet. The "Actual" column below is showing 0 '
+                    'because nothing has been logged as used — not because zero was actually '
+                    'consumed. Confirm production yields in Kitchen Sessions to populate real Actual data.',
+              ),
+            ),
+
           // ── No POS sales hint ──────────────────────────────────────────
           if (!state.isLoading &&
               !state.hasAnyData &&
@@ -177,6 +227,10 @@ class _DailyControlPageState extends ConsumerState<DailyControlPage>
                 : TabBarView(
                     controller: _tabController,
                     children: [
+                      StockLedgerTab(
+                        items: state.stockLedger,
+                        isLoading: state.stockLedgerLoading,
+                      ),
                       BomControlTab(
                         items: state.bomControl,
                         noRecipeItems: state.noRecipeItems,
@@ -192,6 +246,122 @@ class _DailyControlPageState extends ConsumerState<DailyControlPage>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The previous CLOSED commercial day, frozen at handover time — distinct
+/// from, and never mixed with, the live/provisional view below it.
+class _PreviousDaySnapshotCard extends StatelessWidget {
+  const _PreviousDaySnapshotCard({required this.snapshot});
+  final Map<String, dynamic> snapshot;
+
+  num _num(dynamic v) => v is num ? v : num.tryParse('$v') ?? 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final revenue = _num(snapshot['total_food_revenue']);
+    final cogs = _num(snapshot['actual_ingredient_cost']);
+    final varianceCost = _num(snapshot['bom_variance_cost']);
+    final foodCostPct = snapshot['food_cost_percent'];
+    final shiftDate = '${snapshot['shift_date'] ?? ''}';
+    final shiftNumber = '${snapshot['shift_number'] ?? ''}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        border: Border.all(color: Colors.green.shade200),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade700,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('FINALIZED',
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Previous Closed Day — $shiftDate${shiftNumber.isEmpty ? '' : ' ($shiftNumber)'}',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.green.shade900),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            children: [
+              _statText('Revenue', 'KES ${revenue.toStringAsFixed(0)}'),
+              _statText('COGS', 'KES ${cogs.toStringAsFixed(0)}'),
+              _statText('Variance', 'KES ${varianceCost.toStringAsFixed(0)}'),
+              _statText('Food Cost %',
+                  foodCostPct == null ? 'N/A' : '${_num(foodCostPct).toStringAsFixed(1)}%'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statText(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+}
+
+/// Labels everything below it (filter bar + tabs) as a live recomputation —
+/// never a frozen/finalized number, regardless of which date is selected.
+class _LiveProvisionalLabel extends StatelessWidget {
+  const _LiveProvisionalLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade700,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: const Text('LIVE / PROVISIONAL',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white)),
+        ),
+        const SizedBox(width: 8),
+        const Expanded(
+          child: Text(
+            'Recomputed fresh on every refresh — not yet finalized.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ),
+      ],
     );
   }
 }

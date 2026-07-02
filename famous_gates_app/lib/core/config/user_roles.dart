@@ -57,6 +57,7 @@ enum UserRole {
   kyogongExecutiveBarCashier('kyogong_executive_bar_cashier'),
   kyogongSportsBarCashier('kyogong_sports_bar_cashier'),
   kyogongReceptionCashier('kyogong_reception_cashier'),
+  chomaZoneCashier('choma_zone_cashier'),
 
   // Additional restaurant roles
   foodRunner('food_runner'),
@@ -188,6 +189,8 @@ enum UserRole {
         return 'Kyogong Sports Bar Cashier';
       case UserRole.kyogongReceptionCashier:
         return 'Kyogong Reception Cashier';
+      case UserRole.chomaZoneCashier:
+        return 'Choma Zone Cashier';
       case UserRole.director:
         return 'Director';
       case UserRole.foodRunner:
@@ -234,6 +237,7 @@ enum UserRole {
         executiveBarCashier.value,
         nonConsumablesCashier.value,
         kyogongReceptionCashier.value,
+        chomaZoneCashier.value,
       };
 
   static Set<String> get barRoles => {
@@ -338,6 +342,7 @@ enum UserRole {
       case UserRole.cashier:
       case UserRole.kyogongReceptionCashier:
       case UserRole.kyogongSpaCashier:
+      case UserRole.chomaZoneCashier:
         return '/pos';
       case UserRole.bartender:
       case UserRole.barman:

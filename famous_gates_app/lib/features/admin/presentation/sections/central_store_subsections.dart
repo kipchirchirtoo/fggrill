@@ -2578,8 +2578,8 @@ class PackingSection extends ConsumerWidget {
                     child: const Text('View'),
                   ),
                   ElevatedButton(
-                    onPressed: () => _createDispatch(context, ref, row),
-                    child: const Text('Mark Ready'),
+                    onPressed: () => _showIssueStockDialog(context, ref, row),
+                    child: const Text('Issue Stock'),
                   ),
                 ]),
               ),
@@ -2588,37 +2588,318 @@ class PackingSection extends ConsumerWidget {
         ),
       );
 
-  Future<void> _createDispatch(
+  Future<void> _showIssueStockDialog(
       BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    final confirmed = await _confirm(
-      context,
-      title: 'Create Dispatch Note',
-      message: 'Mark ${_text(row, [
-            'request_number',
-            'id'
-          ])} as packed and ready for dispatch?',
-      confirmLabel: 'Mark Ready',
+    final items = _list(row['items'] ?? row['request_items'] ?? []);
+    if (items.isEmpty) {
+      _snack(context, 'No items found on this request');
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _IssueStockDialog(
+        row: row,
+        items: items,
+        onConfirm: (issuePayloads) async {
+          final repo = ref.read(adminRepositoryProvider);
+          final requestId = _id(row);
+          for (final payload in issuePayloads) {
+            final itemId = payload['item_id'] as String;
+            await repo.issueStockRequestItem(requestId, itemId, {
+              'issued_qty': payload['issued_qty'],
+              'issue_status': payload['issue_status'],
+            });
+          }
+          await repo.confirmStoreDispatch(requestId);
+          if (!context.mounted) return;
+          _refreshCentralStore(ref);
+          _snack(context, 'Stock issued and dispatch confirmed');
+        },
+      ),
     );
-    if (!confirmed) return;
+  }
+}
+
+class _IssueStockDialog extends StatefulWidget {
+  const _IssueStockDialog({
+    required this.row,
+    required this.items,
+    required this.onConfirm,
+  });
+
+  final Map<String, dynamic> row;
+  final List<Map<String, dynamic>> items;
+  final Future<void> Function(List<Map<String, dynamic>> payloads) onConfirm;
+
+  @override
+  State<_IssueStockDialog> createState() => _IssueStockDialogState();
+}
+
+class _IssueStockDialogState extends State<_IssueStockDialog> {
+  late final List<TextEditingController> _controllers;
+  late final List<bool> _deferred;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = widget.items.map((item) {
+      final approvedQty = _num(item, [
+        'quantity_approved',
+        'approved_quantity',
+        'quantity_requested',
+        'quantity',
+        'qty',
+      ]);
+      return TextEditingController(text: approvedQty.toStringAsFixed(0));
+    }).toList();
+    _deferred = List.filled(widget.items.length, false);
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  double _approvedQty(int index) => _num(widget.items[index], [
+        'quantity_approved',
+        'approved_quantity',
+        'quantity_requested',
+        'quantity',
+        'qty',
+      ]);
+
+  double _requestedQty(int index) => _num(widget.items[index], [
+        'quantity_requested',
+        'requested_quantity',
+        'quantity',
+        'qty',
+      ]);
+
+  double _unitCost(int index) =>
+      _num(widget.items[index], ['unit_cost', 'unit_price', 'price']);
+
+  double _issueQty(int index) {
+    if (_deferred[index]) return 0;
+    return double.tryParse(_controllers[index].text) ?? 0;
+  }
+
+  double get _totalRequested => List.generate(widget.items.length, (i) {
+        return _requestedQty(i) * _unitCost(i);
+      }).fold(0, (a, b) => a + b);
+
+  double get _totalApproved => List.generate(widget.items.length, (i) {
+        return _approvedQty(i) * _unitCost(i);
+      }).fold(0, (a, b) => a + b);
+
+  double get _totalIssued => List.generate(widget.items.length, (i) {
+        return _issueQty(i) * _unitCost(i);
+      }).fold(0, (a, b) => a + b);
+
+  void _approveAllFull() {
+    setState(() {
+      for (var i = 0; i < widget.items.length; i++) {
+        _deferred[i] = false;
+        _controllers[i].text = _approvedQty(i).toStringAsFixed(0);
+      }
+    });
+  }
+
+  Future<void> _confirm() async {
+    setState(() => _loading = true);
     try {
-      await ref.read(adminRepositoryProvider).createStoreDispatchNote({
-        'request_id': _id(row),
-        'to_branch_id': row['requesting_branch_id'] ?? row['branch_id'],
-        'notes': 'Packed from Flutter central store',
-        'items': row['items'] ?? row['request_items'] ?? [],
-      });
-      if (!context.mounted) return;
-      _refreshCentralStore(ref);
-      _snack(context, 'Dispatch note created');
+      final payloads = <Map<String, dynamic>>[];
+      for (var i = 0; i < widget.items.length; i++) {
+        final item = widget.items[i];
+        final itemId = _id(item);
+        if (itemId.isEmpty) continue;
+        payloads.add({
+          'item_id': itemId,
+          'issued_qty': _issueQty(i),
+          'issue_status': _deferred[i] ? 'backordered' : 'issued',
+        });
+      }
+      await widget.onConfirm(payloads);
+      if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (context.mounted) {
+      if (mounted) {
         await _showActionError(
           context,
-          title: 'Dispatch note could not be created',
+          title: 'Issue failed',
           error: error,
         );
       }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final requestNumber =
+        _text(widget.row, ['request_number', 'id']);
+    final branchName = _text(
+        widget.row, ['requesting_branch_name', 'branch_name', 'branch']);
+    final dateStr = _date(widget.row['created_at']);
+    return AlertDialog(
+      title: Text('Issue Stock — $requestNumber'),
+      content: SizedBox(
+        width: 820,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Branch: $branchName | $dateStr',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _approveAllFull,
+              child: const Text('Approve All Full'),
+            ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: SingleChildScrollView(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: StatefulBuilder(builder: (_, setS) {
+                    return DataTable(
+                      columnSpacing: 16,
+                      columns: const [
+                        DataColumn(label: Text('Item Name')),
+                        DataColumn(label: Text('Unit')),
+                        DataColumn(
+                            label: Text('Req Qty'), numeric: true),
+                        DataColumn(
+                            label: Text('Appr Qty'), numeric: true),
+                        DataColumn(
+                            label: Text('Issue Qty')),
+                        DataColumn(label: Text('Action')),
+                      ],
+                      rows: List.generate(widget.items.length, (i) {
+                        final item = widget.items[i];
+                        final unit = _text(
+                            item, ['unit', 'unit_of_measure'], '—');
+                        return DataRow(cells: [
+                          DataCell(Text(
+                            _text(item, [
+                              'item_name',
+                              'name',
+                              'description'
+                            ]),
+                            overflow: TextOverflow.ellipsis,
+                          )),
+                          DataCell(Text(unit)),
+                          DataCell(Text(
+                              _requestedQty(i).toStringAsFixed(0))),
+                          DataCell(
+                              Text(_approvedQty(i).toStringAsFixed(0))),
+                          DataCell(SizedBox(
+                            width: 90,
+                            child: TextField(
+                              controller: _controllers[i],
+                              keyboardType: TextInputType.number,
+                              enabled: !_deferred[i],
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                    vertical: 8, horizontal: 8),
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          )),
+                          DataCell(Wrap(spacing: 4, children: [
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _deferred[i] = false;
+                                _controllers[i].text =
+                                    _approvedQty(i).toStringAsFixed(0);
+                              }),
+                              child: const Text('Full',
+                                  style: TextStyle(fontSize: 11)),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _deferred[i] = true;
+                                _controllers[i].text = '0';
+                              }),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: Colors.orange),
+                              child: const Text('Defer',
+                                  style: TextStyle(fontSize: 11)),
+                            ),
+                          ])),
+                        ]);
+                      }),
+                    );
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(),
+            Row(children: [
+              Expanded(
+                  child: _summaryFooterChip(
+                      'Total Requested', _totalRequested)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child:
+                      _summaryFooterChip('Total Approved', _totalApproved)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _summaryFooterChip(
+                      'Total Issued', _totalIssued,
+                      highlight: true)),
+            ]),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _loading ? null : _confirm,
+          child: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Confirm Dispatch'),
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryFooterChip(String label, double value,
+      {bool highlight = false}) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: highlight
+            ? AppColors.kPrimary.withValues(alpha: 0.08)
+            : Colors.grey.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 10, color: AppColors.kTextSecondary)),
+        Text(_money(value),
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: highlight ? AppColors.kPrimary : null)),
+      ]),
+    );
   }
 }
 
@@ -3347,6 +3628,12 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _addManualItem,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Item Manually'),
+              ),
             ]),
             const SizedBox(height: 12),
             if (_parsedItems.isEmpty)
@@ -3657,13 +3944,34 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
       return;
     }
     setState(() {
+      // Re-parsing replaces previously parsed rows but keeps rows the user
+      // added manually — those were typed in on purpose, not pasted.
+      final manualRows =
+          _parsedItems.where((i) => i.key.startsWith('manual-')).toList();
       _parsedItems
         ..clear()
         ..addAll(lines.indexed.map((entry) {
           final item = _parseLine(entry.$2, entry.$1);
           _resolveItem(item, inventory);
           return item;
-        }));
+        }))
+        ..addAll(manualRows);
+      _validateItems();
+    });
+  }
+
+  /// Appends an empty, inline-editable row for items the bulk parser missed
+  /// (or that were never pasted). The row uses the same inline editors and
+  /// validation as parsed rows, so it must be filled in before saving.
+  void _addManualItem() {
+    setState(() {
+      _parsedItems.add(_ParsedPurchaseOrderItem(
+        key: 'manual-${DateTime.now().microsecondsSinceEpoch}',
+        sourceLine: '(added manually)',
+        itemName: '',
+        quantity: 1,
+        unit: '',
+      ));
       _validateItems();
     });
   }
@@ -7049,3 +7357,425 @@ class CentralReportsSection extends ConsumerWidget {
     }
   }
 }
+
+// ── DirectIssueSection ────────────────────────────────────────────────────────
+
+class DirectIssueSection extends ConsumerWidget {
+  const DirectIssueSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncIssues = ref.watch(_directIssuesProvider);
+    return _LiveSection(
+      title: 'Direct Issues',
+      subtitle: 'Stock issued directly to branches outside the requisition flow',
+      icon: PhosphorIcons.arrowUpRight(),
+      child: Column(children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: ElevatedButton.icon(
+              onPressed: () => _showNewDirectIssueDialog(context, ref),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('New Direct Issue'),
+            ),
+          ),
+        ),
+        _LiveRows(
+          value: asyncIssues,
+          data: (rows) => _RowsCard(
+            title: 'Recent Direct Issues',
+            rows: rows,
+            emptyMessage: 'No direct issues found',
+            trailing: OutlinedButton.icon(
+              onPressed: () => ref.invalidate(_directIssuesProvider),
+              icon: const Icon(Icons.refresh, size: 14),
+              label: const Text('Refresh'),
+            ),
+            builder: (row) => _rowTile(
+              icon: PhosphorIcons.arrowUpRight(),
+              title: _text(row, ['issue_number', 'id']),
+              subtitle:
+                  '${_text(row, ['branch_name', 'to_branch_name'])} • ${_text(row, ['reason'])} • ${_date(row['created_at'])}',
+              trailing: Wrap(spacing: 6, children: [
+                _statusChip(_text(row, ['status'], 'issued')),
+                OutlinedButton(
+                  onPressed: () => _showMapDetails(
+                      context,
+                      'Direct Issue ${_text(row, ['issue_number', 'id'])}',
+                      row),
+                  child: const Text('View'),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Future<void> _showNewDirectIssueDialog(
+      BuildContext context, WidgetRef ref, {
+      Map<String, dynamic>? prefill}) async {
+    final branches = await ref.read(adminRepositoryProvider).getStoreBranches();
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _DirectIssueDialog(
+        branches: branches,
+        prefill: prefill,
+        onSubmit: (data) async {
+          await ref.read(adminRepositoryProvider).createDirectIssue(data);
+          ref.invalidate(_directIssuesProvider);
+          if (context.mounted) _snack(context, 'Direct issue created');
+        },
+      ),
+    );
+  }
+}
+
+final _directIssuesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(adminRepositoryProvider).getDirectIssues();
+});
+
+const _directIssueReasons = [
+  'Backorder fulfillment',
+  'Push restock',
+  'Emergency top-up',
+  'Other',
+];
+
+class _DirectIssueDialog extends StatefulWidget {
+  const _DirectIssueDialog({
+    required this.branches,
+    required this.onSubmit,
+    this.prefill,
+  });
+
+  final List<Map<String, dynamic>> branches;
+  final Future<void> Function(Map<String, dynamic> data) onSubmit;
+  final Map<String, dynamic>? prefill;
+
+  @override
+  State<_DirectIssueDialog> createState() => _DirectIssueDialogState();
+}
+
+class _DirectIssueDialogState extends State<_DirectIssueDialog> {
+  String? _branchId;
+  String _reason = _directIssueReasons.first;
+  final List<_DirectIssueItem> _items = [];
+  final _skuController = TextEditingController();
+  final _qtyController = TextEditingController();
+  final _unitCostController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final prefill = widget.prefill;
+    if (prefill != null) {
+      _branchId = _text(prefill, ['branch_id']).isNotEmpty
+          ? _text(prefill, ['branch_id'])
+          : null;
+      _reason = _text(prefill, ['reason'], _directIssueReasons.first);
+      if (!_directIssueReasons.contains(_reason)) {
+        _reason = _directIssueReasons.first;
+      }
+      final prefillItem = prefill['item'];
+      if (prefillItem != null) {
+        final itemId = _text(prefill, ['item_id', 'id']);
+        final itemName = _text(prefill, ['item_name', 'name']);
+        final qty = _num(prefill, [
+          'backordered_qty',
+          'quantity_backordered',
+          'quantity',
+          'qty',
+        ]);
+        final cost = _num(prefill, ['unit_cost', 'unit_price', 'price']);
+        if (itemName.isNotEmpty) {
+          _items.add(_DirectIssueItem(
+            itemId: itemId,
+            itemName: itemName,
+            qty: qty,
+            unitCost: cost,
+          ));
+        }
+      }
+    }
+    if (widget.branches.isNotEmpty) {
+      _branchId ??= _id(widget.branches.first);
+    }
+  }
+
+  @override
+  void dispose() {
+    _skuController.dispose();
+    _qtyController.dispose();
+    _unitCostController.dispose();
+    super.dispose();
+  }
+
+  void _addItem() {
+    final name = _skuController.text.trim();
+    final qty = double.tryParse(_qtyController.text.trim()) ?? 0;
+    final cost = double.tryParse(_unitCostController.text.trim()) ?? 0;
+    if (name.isEmpty || qty <= 0) {
+      _snack(context, 'Enter item name/SKU and quantity');
+      return;
+    }
+    setState(() {
+      _items.add(_DirectIssueItem(
+          itemId: '', itemName: name, qty: qty, unitCost: cost));
+      _skuController.clear();
+      _qtyController.clear();
+      _unitCostController.clear();
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_branchId == null) {
+      _snack(context, 'Select a branch');
+      return;
+    }
+    if (_items.isEmpty) {
+      _snack(context, 'Add at least one item');
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      await widget.onSubmit({
+        'branch_id': _branchId,
+        'reason': _reason,
+        'items': _items
+            .map((item) => {
+                  if (item.itemId.isNotEmpty) 'item_id': item.itemId,
+                  'item_name': item.itemName,
+                  'quantity': item.qty,
+                  'unit_cost': item.unitCost,
+                })
+            .toList(),
+      });
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        await _showActionError(context, title: 'Issue failed', error: error);
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New Direct Issue'),
+      content: SizedBox(
+        width: 600,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _branchId,
+                decoration: const InputDecoration(labelText: 'Branch *'),
+                items: widget.branches
+                    .map((b) => DropdownMenuItem(
+                          value: _id(b),
+                          child: Text(_text(b, ['name'])),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _branchId = v),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _reason,
+                decoration: const InputDecoration(labelText: 'Reason *'),
+                items: _directIssueReasons
+                    .map((r) =>
+                        DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (v) =>
+                    setState(() => _reason = v ?? _reason),
+              ),
+              const SizedBox(height: 20),
+              const Text('Add Items',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 13)),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: _skuController,
+                      decoration: const InputDecoration(
+                          labelText: 'SKU / Item Name',
+                          isDense: true),
+                    )),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: TextField(
+                  controller: _qtyController,
+                  keyboardType: TextInputType.number,
+                  decoration:
+                      const InputDecoration(labelText: 'Qty', isDense: true),
+                )),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: TextField(
+                  controller: _unitCostController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Unit Cost', isDense: true),
+                )),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                    onPressed: _addItem,
+                    child: const Text('+ Add')),
+              ]),
+              if (_items.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ..._items.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final item = entry.value;
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.check_circle_outline,
+                        size: 16),
+                    title: Text(item.itemName),
+                    subtitle: Text(
+                        'Qty: ${item.qty} • Cost: ${_money(item.unitCost)}'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.remove_circle_outline,
+                          size: 18, color: Colors.red),
+                      onPressed: () =>
+                          setState(() => _items.removeAt(i)),
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _loading ? null : _submit,
+          child: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Issue Stock'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DirectIssueItem {
+  _DirectIssueItem({
+    required this.itemId,
+    required this.itemName,
+    required this.qty,
+    required this.unitCost,
+  });
+  final String itemId;
+  final String itemName;
+  final double qty;
+  final double unitCost;
+}
+
+// ── PendingBackordersSection ───────────────────────────────────────────────────
+
+class PendingBackordersSection extends ConsumerWidget {
+  const PendingBackordersSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _LiveSection(
+      title: 'Pending Backorders',
+      subtitle: 'Backordered items that could not be fulfilled during issue',
+      icon: PhosphorIcons.clockClockwise(),
+      child: _LiveRows(
+        value: ref.watch(_backordersProvider),
+        data: (rows) => _RowsCard(
+          title: 'Backordered Items',
+          rows: rows,
+          emptyMessage: 'No pending backorders',
+          trailing: OutlinedButton.icon(
+            onPressed: () => ref.invalidate(_backordersProvider),
+            icon: const Icon(Icons.refresh, size: 14),
+            label: const Text('Refresh'),
+          ),
+          builder: (row) => _rowTile(
+            icon: PhosphorIcons.clockClockwise(),
+            title: _text(row, ['item_name', 'name', 'description']),
+            subtitle:
+                '${_text(row, ['branch_name', 'requesting_branch_name'])} • Req# ${_text(row, ['request_number', 'requisition_number'])} • ${_date(row['created_at'])}',
+            trailing: Wrap(spacing: 6, children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                      'Backordered: ${_num(row, ['backordered_qty', 'quantity_backordered', 'quantity']).toStringAsFixed(0)}',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+              ElevatedButton(
+                onPressed: () =>
+                    _resolveBackorder(context, ref, row),
+                child: const Text('Resolve'),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resolveBackorder(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
+    final branches =
+        await ref.read(adminRepositoryProvider).getStoreBranches();
+    if (!context.mounted) return;
+    final prefill = {
+      'branch_id': _text(row, ['branch_id', 'requesting_branch_id']),
+      'reason': 'Backorder fulfillment',
+      'item': row,
+      'item_id': _text(row, ['item_id', 'store_item_id', 'id']),
+      'item_name': _text(row, ['item_name', 'name']),
+      'backordered_qty': _num(
+          row, ['backordered_qty', 'quantity_backordered', 'quantity']),
+      'unit_cost': _num(row, ['unit_cost', 'unit_price', 'price']),
+    };
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _DirectIssueDialog(
+        branches: branches,
+        prefill: prefill,
+        onSubmit: (data) async {
+          await ref.read(adminRepositoryProvider).createDirectIssue(data);
+          ref.invalidate(_backordersProvider);
+          if (context.mounted) _snack(context, 'Backorder resolved');
+        },
+      ),
+    );
+  }
+}
+
+final _backordersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(adminRepositoryProvider).getBackorders();
+});

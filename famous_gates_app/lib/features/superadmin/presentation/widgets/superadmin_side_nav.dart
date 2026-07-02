@@ -36,6 +36,14 @@ class SuperAdminNavItem {
                 label: 'Lina(Ai Service)',
                 icon: PhosphorIcons.sparkle()),
             SuperAdminNavItem(
+                section: SuperAdminSection.linaDailyControls,
+                label: 'Daily Controls (Lina)',
+                icon: PhosphorIcons.clipboardText()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.foodControlHealth,
+                label: 'Food Control Health',
+                icon: PhosphorIcons.heartbeat()),
+            SuperAdminNavItem(
                 section: SuperAdminSection.securityCenter,
                 label: 'Security Center',
                 icon: PhosphorIcons.shield()),

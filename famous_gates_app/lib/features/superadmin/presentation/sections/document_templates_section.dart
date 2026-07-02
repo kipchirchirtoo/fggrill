@@ -75,16 +75,16 @@ class _DocumentTemplatesSectionState
     if (t == null) return;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Reset to default?'),
         content: const Text(
             'This discards all customisations and restores the factory template.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Reset')),
         ],
       ),
@@ -428,11 +428,14 @@ class _SectionCardState extends State<_SectionCard> {
   late final _content =
       TextEditingController(text: widget.section.content ?? '');
   late final _label = TextEditingController(text: widget.section.label ?? '');
+  late final _size = TextEditingController(
+      text: (widget.section.size ?? 8).toStringAsFixed(0));
 
   @override
   void dispose() {
     _content.dispose();
     _label.dispose();
+    _size.dispose();
     super.dispose();
   }
 
@@ -538,8 +541,7 @@ class _SectionCardState extends State<_SectionCard> {
                   decoration:
                       const InputDecoration(labelText: 'Size', isDense: true),
                   keyboardType: TextInputType.number,
-                  controller: TextEditingController(
-                      text: (s.size ?? 8).toStringAsFixed(0)),
+                  controller: _size,
                   onChanged: (v) {
                     s.size = double.tryParse(v) ?? s.size;
                     widget.onChanged();

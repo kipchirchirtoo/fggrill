@@ -22,7 +22,10 @@ final dioProvider = Provider<Dio>((ref) {
     BaseOptions(
       baseUrl: AppConfig.mainApiUrl,
       connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
+      // 60 s receive timeout: the POS login endpoint makes several parallel
+      // Supabase calls that can take a combined 10–20 s on slow networks.
+      // 30 s was too tight and caused spurious receive-timeout exceptions.
+      receiveTimeout: const Duration(seconds: 60),
       headers: const {'Content-Type': 'application/json'},
     ),
   );
@@ -71,17 +74,25 @@ final pythonDioProvider = Provider<Dio>((ref) {
   ]);
 
   Future<void> keepAlive() async {
+    // Use a dedicated lightweight Dio for health pings:
+    //   - Short connectTimeout (5 s) so we fail fast instead of the 30 s
+    //     global default. Dio's Options can't override connectTimeout
+    //     per-request, so a separate instance is the only way.
+    //   - No interceptors → no LogInterceptor noise in debug output.
+    final pinger = Dio(
+      BaseOptions(
+        baseUrl: AppConfig.pythonServicesBaseUrl,
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+        sendTimeout: const Duration(seconds: 5),
+      ),
+    );
     try {
-      await dio.get(
-        '/health',
-        options: Options(
-          receiveTimeout: const Duration(seconds: 10),
-          sendTimeout: const Duration(seconds: 10),
-          extra: const {'disable_retry': true},
-        ),
-      );
+      await pinger.get('/health');
     } catch (_) {
       // Best-effort warm ping only. User-facing requests still surface errors.
+    } finally {
+      pinger.close(force: true);
     }
   }
 

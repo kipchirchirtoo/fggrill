@@ -73,107 +73,79 @@ class _BranchesSectionState extends ConsumerState<BranchesSection> {
   }
 
   void _showBranchDialog({Map<String, dynamic>? branch}) {
-    final nameCtrl =
-        TextEditingController(text: branch?['name'] as String? ?? '');
-    final codeCtrl =
-        TextEditingController(text: branch?['code'] as String? ?? '');
-    final cityCtrl =
-        TextEditingController(text: branch?['city'] as String? ?? '');
-    final addressCtrl =
-        TextEditingController(text: branch?['address'] as String? ?? '');
-    String status = branch?['status'] as String? ?? 'active';
-
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: Text(branch == null ? 'Add Branch' : 'Edit Branch'),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(children: [
-                  Expanded(
-                      child: TextField(
-                          controller: nameCtrl,
-                          decoration:
-                              const InputDecoration(labelText: 'Branch Name'))),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: TextField(
-                          controller: codeCtrl,
-                          decoration: const InputDecoration(
-                              labelText: 'Code (e.g. NRB-01)'))),
-                ]),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: cityCtrl,
-                    decoration: const InputDecoration(labelText: 'City')),
-                const SizedBox(height: 12),
-                TextField(
-                    controller: addressCtrl,
-                    decoration: const InputDecoration(labelText: 'Address'),
-                    maxLines: 2),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: status,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: ['active', 'inactive', 'suspended']
-                      .map((s) => DropdownMenuItem(
-                          value: s, child: Text(s.toUpperCase())))
-                      .toList(),
-                  onChanged: (v) => setS(() => status = v ?? status),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                try {
-                  final svc = ref.read(systemServiceProvider);
-                  final payload = {
-                    'name': nameCtrl.text,
-                    'code': codeCtrl.text,
-                    'city': cityCtrl.text,
-                    'address': addressCtrl.text,
-                    'status': status,
-                  };
-                  if (branch == null) {
-                    await svc.createBranch(payload);
-                  } else {
-                    await svc.updateBranch(branch['id'] as int, payload);
-                  }
-                  ref.invalidate(allBranchesProvider);
-                  if (mounted) {
-                    AppNotifier.showSnackBar(
-                        context,
-                        SnackBar(
-                            content: Text(branch == null
-                                ? 'Branch created'
-                                : 'Branch updated')));
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    AppNotifier.showSnackBar(
-                        context,
-                        SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: AppColors.kError));
-                  }
-                }
-              },
-              child: Text(branch == null ? 'Create' : 'Save'),
-            ),
-          ],
-        ),
+      builder: (ctx) => _BranchDialog(
+        branch: branch,
+        onSave: (payload) async {
+          final svc = ref.read(systemServiceProvider);
+          if (branch == null) {
+            await svc.createBranch(payload);
+          } else {
+            // Parse the id safely — the API may return it as int or String.
+            final id = int.parse('${branch['id']}');
+            await svc.updateBranch(id, payload);
+          }
+          ref.invalidate(allBranchesProvider);
+          if (mounted) {
+            AppNotifier.showSnackBar(
+                context,
+                SnackBar(
+                    content: Text(
+                        branch == null ? 'Branch created' : 'Branch updated')));
+          }
+        },
+        onError: (e) {
+          if (mounted) {
+            AppNotifier.showSnackBar(
+                context,
+                SnackBar(
+                    content: Text('Error: $e'),
+                    backgroundColor: AppColors.kError));
+          }
+        },
       ),
     );
+  }
+
+  Future<void> _deleteBranch(Map<String, dynamic> branch) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Branch'),
+        content: Text(
+            'Are you sure you want to delete "${branch['name'] ?? 'this branch'}"? '
+            'This action cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.kError),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final id = int.parse('${branch['id']}');
+      await ref.read(systemServiceProvider).deleteBranch(id);
+      ref.invalidate(allBranchesProvider);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context, const SnackBar(content: Text('Branch deleted')));
+      }
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context,
+            SnackBar(
+                content: Text('Error: $e'),
+                backgroundColor: AppColors.kError));
+      }
+    }
   }
 
   void _showBranchStats(Map<String, dynamic> branch) {
@@ -217,14 +189,15 @@ class _BranchesSectionState extends ConsumerState<BranchesSection> {
       );
 
   Widget _buildBranchesGrid(Map<String, dynamic> data) {
-    final branches = data['data'] as List<dynamic>? ?? [];
+    final branches = (data['data'] as List<dynamic>? ?? [])
+        .whereType<Map>()
+        .map((b) => Map<String, dynamic>.from(b))
+        .toList();
 
     return Wrap(
       spacing: 24,
       runSpacing: 24,
-      children: branches
-          .map((b) => _buildBranchCard(b as Map<String, dynamic>))
-          .toList(),
+      children: branches.map((b) => _buildBranchCard(b)).toList(),
     );
   }
 
@@ -312,13 +285,20 @@ class _BranchesSectionState extends ConsumerState<BranchesSection> {
                   label: const Text('Settings'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _showBranchStats(branch),
                   icon: Icon(PhosphorIcons.chartBar(), size: 18),
                   label: const Text('Analytics'),
                 ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Delete branch',
+                onPressed: () => _deleteBranch(branch),
+                icon: Icon(PhosphorIcons.trash(),
+                    size: 20, color: AppColors.kError),
               ),
             ],
           ),
@@ -339,6 +319,158 @@ class _BranchesSectionState extends ConsumerState<BranchesSection> {
           const SizedBox(height: 2),
           Text(label,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dedicated StatefulWidget for the branch create/edit dialog so controllers
+// are properly disposed via dispose().
+// ---------------------------------------------------------------------------
+class _BranchDialog extends StatefulWidget {
+  const _BranchDialog({
+    required this.onSave,
+    required this.onError,
+    this.branch,
+  });
+
+  final Map<String, dynamic>? branch;
+  final Future<void> Function(Map<String, dynamic> payload) onSave;
+  final void Function(Object error) onError;
+
+  @override
+  State<_BranchDialog> createState() => _BranchDialogState();
+}
+
+class _BranchDialogState extends State<_BranchDialog> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _codeCtrl;
+  late final TextEditingController _cityCtrl;
+  late final TextEditingController _addressCtrl;
+  late String _status;
+  late String _branchType;
+
+  static const _branchTypes = [
+    'hotel',
+    'restaurant',
+    'bar',
+    'mixed',
+    'spa',
+    'other',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final b = widget.branch;
+    _nameCtrl = TextEditingController(text: b?['name'] as String? ?? '');
+    _codeCtrl = TextEditingController(text: b?['code'] as String? ?? '');
+    _cityCtrl = TextEditingController(text: b?['city'] as String? ?? '');
+    _addressCtrl = TextEditingController(text: b?['address'] as String? ?? '');
+    _status = b?['status'] as String? ?? 'active';
+    final rawType =
+        (b?['branch_type'] ?? b?['type'])?.toString() ?? 'hotel';
+    _branchType = _branchTypes.contains(rawType) ? rawType : 'hotel';
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _codeCtrl.dispose();
+    _cityCtrl.dispose();
+    _addressCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StatefulBuilder(
+      builder: (ctx, setS) => AlertDialog(
+        title:
+            Text(widget.branch == null ? 'Add Branch' : 'Edit Branch'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(children: [
+                Expanded(
+                    child: TextField(
+                        controller: _nameCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Branch Name'))),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: TextField(
+                        controller: _codeCtrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Code (e.g. NRB-01)'))),
+              ]),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: _cityCtrl,
+                  decoration: const InputDecoration(labelText: 'City')),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: _addressCtrl,
+                  decoration: const InputDecoration(labelText: 'Address'),
+                  maxLines: 2),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _branchType,
+                decoration: const InputDecoration(labelText: 'Branch Type'),
+                items: _branchTypes
+                    .map((t) => DropdownMenuItem(
+                        value: t, child: Text(t.toUpperCase())))
+                    .toList(),
+                onChanged: (v) => setS(() => _branchType = v ?? _branchType),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _status,
+                decoration: const InputDecoration(labelText: 'Status'),
+                items: ['active', 'inactive', 'suspended']
+                    .map((s) => DropdownMenuItem(
+                        value: s, child: Text(s.toUpperCase())))
+                    .toList(),
+                onChanged: (v) => setS(() => _status = v ?? _status),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              // Bug fix 2: validate required fields before calling the API.
+              final name = _nameCtrl.text.trim();
+              final code = _codeCtrl.text.trim();
+              if (name.isEmpty || code.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                    content:
+                        Text('Branch Name and Code are required')));
+                return;
+              }
+              Navigator.pop(ctx);
+              try {
+                await widget.onSave({
+                  'name': name,
+                  'code': code,
+                  'city': _cityCtrl.text.trim(),
+                  'address': _addressCtrl.text.trim(),
+                  'branch_type': _branchType,
+                  'status': _status,
+                });
+              } catch (e) {
+                widget.onError(e);
+              }
+            },
+            child: Text(widget.branch == null ? 'Create' : 'Save'),
+          ),
         ],
       ),
     );

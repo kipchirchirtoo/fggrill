@@ -511,6 +511,7 @@ export const getRoles = async (
       { id: 'kyogong_executive_bar_cashier', name: 'kyogong_executive_bar_cashier', display_name: 'Kyogong Executive Bar Cashier', category: 'Finance' },
       { id: 'kyogong_sports_bar_cashier',name: 'kyogong_sports_bar_cashier',display_name: 'Kyogong Sports Bar Cashier',    category: 'Finance' },
       { id: 'kyogong_reception_cashier', name: 'kyogong_reception_cashier', display_name: 'Kyogong Reception Cashier',      category: 'Finance' },
+      { id: 'choma_zone_cashier',        name: 'choma_zone_cashier',        display_name: 'Choma Zone Cashier',             category: 'Finance' },
       // ── Store & Inventory ────────────────────────────────────────────────
       { id: 'central_storekeeper',       name: 'central_storekeeper',       display_name: 'Central Storekeeper',            category: 'Store' },
       { id: 'branch_storekeeper',        name: 'branch_storekeeper',        display_name: 'Branch Storekeeper',             category: 'Store' },

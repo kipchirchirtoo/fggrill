@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -23,7 +23,7 @@ import '../data/branch_storekeeper_repository.dart';
 import 'branch_po_create_screen.dart';
 import 'branch_stock_request_screen.dart';
 import '../daily_control/daily_control_page.dart';
-import 'pastry_production_screen.dart';
+import 'pos_outlet_issue_screen.dart';
 import 'bar_stocktake_screen.dart';
 import 'kitchen_stocktake_screen.dart';
 import 'store_stocktake_screen.dart';
@@ -43,14 +43,11 @@ enum BranchStorekeeperSection {
   purchaseOrders,
   requests,
   departmentRequestLogging,
-  posOutletAssembly,
   kitchenRequisitions,
   kitchenUsage,
   stockOut,
   dailyControls,
-  foodControl,
   kitchenProduction,
-  pastryProduction,
   storeStocktake,
   barStocktake,
   kitchenStocktake,
@@ -129,7 +126,6 @@ class _BranchStorekeeperDashboardState
   String _branchName = '';
   String _branchId = '';
   bool _outletItemsLoading = false;
-  bool _bulkIssuingBar = false;
   String _analyticsPeriod = 'month';
   bool _analyticsLoading = false;
 
@@ -145,12 +141,6 @@ class _BranchStorekeeperDashboardState
     'Gas',
     'Other',
   ];
-
-  static const _barOutlets = {
-    'main_bar': 'Main Bar',
-    'executive_bar': 'Executive Bar',
-    'sports_bar': 'Sports Bar',
-  };
 
   @override
   void initState() {
@@ -467,13 +457,6 @@ class _BranchStorekeeperDashboardState
   String _outletItemSku(Map<String, dynamic> item) =>
       '${item['sku'] ?? item['item_sku'] ?? item['output_sku'] ?? ''}'.trim();
 
-  String _outletItemName(Map<String, dynamic> item) {
-    final raw =
-        '${item['name'] ?? item['item_name'] ?? item['output_name'] ?? _outletItemSku(item)}'
-            .trim();
-    return raw.isEmpty || raw == 'null' ? 'Outlet Item' : raw;
-  }
-
   String _outletStockStatus(Map<String, dynamic> item) =>
       '${item['stock_status'] ?? item['status'] ?? ''}'.trim();
 
@@ -537,15 +520,6 @@ class _BranchStorekeeperDashboardState
               '${row['outlet_id'] ?? row['outletId'] ?? ''}' == outletId;
         }).toList(),
         _outletItemId);
-  }
-
-  Map<String, dynamic>? _selectedOutlet() {
-    final outlets = _posOutletOptions;
-    if (outlets.isEmpty) return null;
-    return outlets.firstWhere(
-      (row) => _outletId(row) == _selectedOutletId,
-      orElse: () => outlets.first,
-    );
   }
 
   String _optionSku(Map<String, dynamic> item) =>
@@ -999,12 +973,6 @@ class _BranchStorekeeperDashboardState
           icon: Icons.restaurant_menu_outlined,
           group: 'Inventory',
         ),
-        const MasterNavItem(
-          section: BranchStorekeeperSection.posOutletAssembly,
-          label: 'Outlet Production',
-          icon: Icons.precision_manufacturing_outlined,
-          group: 'Inventory',
-        ),
         MasterNavItem(
           section: BranchStorekeeperSection.inventoryLedger,
           label: 'Inventory Ledger',
@@ -1101,23 +1069,12 @@ class _BranchStorekeeperDashboardState
           icon: Icons.analytics_outlined,
           group: 'Usage',
         ),
-        const MasterNavItem(
-          section: BranchStorekeeperSection.foodControl,
-          label: 'Food Control',
-          icon: Icons.restaurant_outlined,
-          group: 'Usage',
-        ),
+        
         const MasterNavItem(
           section: BranchStorekeeperSection.kitchenProduction,
           label: 'Kitchen Sessions',
           icon: Icons.soup_kitchen_outlined,
           group: 'Usage',
-        ),
-        const MasterNavItem(
-          section: BranchStorekeeperSection.pastryProduction,
-          label: 'Pastry Production',
-          icon: Icons.bakery_dining_outlined,
-          group: 'Production',
         ),
         MasterNavItem(
           section: BranchStorekeeperSection.reports,
@@ -1147,7 +1104,20 @@ class _BranchStorekeeperDashboardState
       case BranchStorekeeperSection.stock:
         return _stockPage();
       case BranchStorekeeperSection.inventoryControl:
-        return _posOutletIssuePage();
+        return PosOutletIssueScreen(
+          outlets: _posOutletOptions,
+          selectedOutletId: _selectedOutletId,
+          onSelectOutlet: _selectOutlet,
+          branchStock: _stockOptions,
+          movements: _inventoryTruthMovements,
+          outletItemsLoading: _outletItemsLoading,
+          search: _search,
+          onSearchChanged: (value) => setState(() => _search = value),
+          onRefresh: _loadAll,
+          onViewDetail: _showJsonDetail,
+          stockForOutlet: _stockForOutlet,
+          outletDisplayName: _outletDisplayName,
+        );
       case BranchStorekeeperSection.inventoryLedger:
         return _inventoryLedgerPage();
       case BranchStorekeeperSection.receive:
@@ -1164,8 +1134,6 @@ class _BranchStorekeeperDashboardState
         return _selectedRequestId == null ? _requestsPage() : _requestDetail();
       case BranchStorekeeperSection.departmentRequestLogging:
         return _departmentRequestLoggingPage();
-      case BranchStorekeeperSection.posOutletAssembly:
-        return _outletProductionLedgerPage();
       case BranchStorekeeperSection.kitchenRequisitions:
         return _kitchenRequisitionsPage();
       case BranchStorekeeperSection.kitchenUsage:
@@ -1174,12 +1142,9 @@ class _BranchStorekeeperDashboardState
         return _stockOutPage();
       case BranchStorekeeperSection.dailyControls:
         return const DailyControlPage();
-      case BranchStorekeeperSection.foodControl:
-        return _FoodControlSection(stock: _stock);
+      
       case BranchStorekeeperSection.kitchenProduction:
         return _KitchenProductionSection(stock: _stock);
-      case BranchStorekeeperSection.pastryProduction:
-        return const PastryProductionScreen();
       case BranchStorekeeperSection.storeStocktake:
         return const StoreStocktakeScreen();
       case BranchStorekeeperSection.barStocktake:
@@ -3546,569 +3511,6 @@ class _BranchStorekeeperDashboardState
     );
   }
 
-  Widget _posOutletIssuePage() {
-    final outlets = _posOutletOptions;
-    final selected = _selectedOutlet();
-    final selectedId = selected == null ? null : _outletId(selected);
-    final query = _search.trim().toLowerCase();
-    final branchRows = _stockOptions.where((item) {
-      if (query.isEmpty) return true;
-      final haystack = [
-        _itemName(item),
-        _optionSku(item),
-        item['category'],
-        item['unit_of_measure'],
-        item['unit'],
-      ].join(' ').toLowerCase();
-      return haystack.contains(query);
-    }).toList();
-    final destinationRows = _stockForOutlet(selectedId);
-    final branchValue = branchRows.fold<num>(
-      0,
-      (sum, item) => sum +
-          (_num(item['quantity']) *
-              _num(item['cost_price'] ?? item['unit_price'])),
-    );
-    final available =
-        branchRows.where((item) => _num(item['quantity']) > 0).length;
-    final lowStock = branchRows.where((item) {
-      final reorder = _num(item['reorder_level'] ?? item['minimum_stock']);
-      return reorder > 0 && _num(item['quantity']) <= reorder;
-    }).length;
-    final outletIssueMovements = _inventoryTruthMovements.where((movement) {
-      final type =
-          '${movement['movement_type'] ?? movement['movementType'] ?? movement['type']}'
-              .toLowerCase();
-      final meta = _dynamicMap(movement['metadata']);
-      final destinationOutlet =
-          '${movement['destination_outlet_id'] ?? meta['destination_outlet_id'] ?? ''}';
-      return type.contains('production') &&
-          (destinationOutlet == (selectedId ?? '') ||
-              '${meta['source'] ?? ''}'.contains('pos_outlet_issue'));
-    }).toList();
-    final isBarSelected = selected != null &&
-        (_outletType(selected).contains('bar') ||
-            _barOutlets.containsKey(_outletType(selected)) ||
-            _outletDisplayName(selected).toLowerCase().contains('bar'));
-
-    return _Page(
-      title: 'POS Outlet Issue',
-      subtitle: isBarSelected
-          ? 'Bar Stock Transfer — Issue branch store stock directly to the bar counter. No production or recipes required.'
-          : 'POS outlet means a selling point such as Restaurant POS, Main Bar, Executive Bar, Sports Bar, kitchen pass, or cashier outlet. This screen issues branch-store stock into that outlet sellable counter.',
-      actions: [
-        _RefreshButton(onPressed: _loadAll),
-        FilledButton.icon(
-          onPressed:
-              selected == null ? null : () => _showPosOutletIssueForm(selected),
-          icon: Icon(isBarSelected
-              ? Icons.local_bar_outlined
-              : PhosphorIcons.package()),
-          label:
-              Text(isBarSelected ? 'Transfer to Bar' : 'Issue to POS Outlet'),
-          style: isBarSelected
-              ? FilledButton.styleFrom(backgroundColor: Colors.amber.shade700)
-              : null,
-        ),
-        if (isBarSelected)
-          OutlinedButton.icon(
-            onPressed: selected == null || _bulkIssuingBar
-                ? null
-                : () => _issueAllBarStock(selected),
-            icon: _bulkIssuingBar
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.playlist_add_check_circle_outlined),
-            label: Text(_bulkIssuingBar ? 'Issuing All...' : 'Issue All'),
-          ),
-        if (!isBarSelected)
-          OutlinedButton.icon(
-            onPressed: () => setState(
-                () => _section = BranchStorekeeperSection.posOutletAssembly),
-            icon: const Icon(Icons.precision_manufacturing_outlined),
-            label: const Text('Production Ledger'),
-          ),
-      ],
-      children: [
-        if (isBarSelected)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.amber.shade300),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.local_bar_outlined,
-                    color: Colors.amber.shade800, size: 26),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Bar Flow: Select items from branch stock → Transfer to bar counter → '
-                    'Bar stock increases → Cashier sells → Stock decrements. '
-                    'When bar runs low, come back here and transfer more.',
-                    style: TextStyle(
-                        color: Colors.amber.shade900,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        _SectionCard(
-          title: 'POS Outlets',
-          subtitle: isBarSelected
-              ? 'Select the bar counter to transfer stock into.'
-              : 'Choose the salable outlet first. Every issue updates that outlet, not generic branch stock.',
-          child: outlets.isEmpty
-              ? const _EmptyState(
-                  'No POS outlets configured for this branch. Create or sync POS outlets first.')
-              : Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: outlets.map((outlet) {
-                    final id = _outletId(outlet);
-                    final rows = _stockForOutlet(id);
-                    return ChoiceChip(
-                      selected: id == selectedId,
-                      label: Text(
-                        '${_outletDisplayName(outlet)} (${rows.length})',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      avatar: const Icon(Icons.storefront_outlined, size: 18),
-                      onSelected: (_) => _selectOutlet(id),
-                    );
-                  }).toList(),
-                ),
-        ),
-        _SectionCard(
-          title: 'Search Branch Stock',
-          child: TextField(
-            controller: TextEditingController(text: _search)
-              ..selection = TextSelection.collapsed(offset: _search.length),
-            decoration: InputDecoration(
-              labelText: selected == null
-                  ? 'Search branch stock by item, SKU or category'
-                  : 'Search branch stock to issue to ${_outletDisplayName(selected)}',
-              prefixIcon: const Icon(Icons.search),
-            ),
-            onChanged: (value) => setState(() => _search = value),
-          ),
-        ),
-        _StatGrid(cards: [
-          _StatCardData('Branch Stock SKUs', '${branchRows.length}',
-              PhosphorIcons.package(), AppColors.kPrimary),
-          _StatCardData('Available', '$available', PhosphorIcons.checkCircle(),
-              AppColors.kSuccess),
-          _StatCardData('Low / Zero', '$lowStock', PhosphorIcons.warning(),
-              AppColors.kWarning),
-          _StatCardData('Source Stock Value', _money(branchValue),
-              PhosphorIcons.coins(), Colors.teal),
-        ]),
-        _SectionCard(
-          title: selected == null
-              ? 'Branch Stock Available for Outlet Issue'
-              : 'Branch Stock Available for ${_outletDisplayName(selected)}',
-          subtitle:
-              'This is the source stock. Posting an issue deducts branch stock and writes movement audit logs.',
-          child: _RecordList(
-            emptyText: selected == null
-                ? 'No outlet selected'
-                : 'No branch stock available for outlet issue',
-            children: branchRows.take(150).map((item) {
-              final qty = _num(item['quantity']);
-              final matchedOutletItem =
-                  selectedId == null ? null : _matchingOutletItemForSource(selectedId, item);
-              return _RecordTile(
-                icon: PhosphorIcons.package(),
-                title: _itemName(item),
-                subtitle:
-                    '${_optionSku(item)} | Available ${_qtyText(qty)} ${item['unit_of_measure'] ?? item['unit'] ?? 'units'} | ${item['category'] ?? '-'}\n'
-                    'Destination match: ${matchedOutletItem == null ? 'not configured in outlet stock' : _outletItemName(matchedOutletItem)}',
-                trailing: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${_qtyText(qty)} ${item['unit_of_measure'] ?? item['unit'] ?? 'units'}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    Text(
-                      _money(qty * _num(item['cost_price'] ?? item['unit_price'])),
-                      style: const TextStyle(
-                        color: AppColors.kTextSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: selected == null
-                        ? null
-                        : () => _showPosOutletIssueForm(
-                              selected,
-                              presetOutput: item,
-                            ),
-                    child: const Text('Issue'),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-        _SectionCard(
-          title: selected == null
-              ? 'Current Outlet Stock'
-              : 'Current ${_outletDisplayName(selected)} Stock',
-          subtitle:
-              'Destination stock after previous issues and outlet sales. This is shown for audit context only.',
-          child: _RecordList(
-            emptyText: selected == null
-                ? 'Select an outlet to view destination stock'
-                : 'No destination outlet stock rows found',
-            children: destinationRows.take(100).map((item) {
-              final qty = _num(item['current_stock'] ?? item['quantity']);
-              return _RecordTile(
-                icon: Icons.storefront_outlined,
-                title: _outletItemName(item),
-                subtitle:
-                    '${_outletItemSku(item)} | ${_movementLabel(_outletType(item))} | ${item['category'] ?? '-'}',
-                trailing: Text(
-                  '${_qtyText(qty)} ${item['unit'] ?? 'units'}',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        _SectionCard(
-          title: 'Recent Outlet Issue Audit',
-          subtitle:
-              'Posted movement records created by branch-stock-to-outlet issues.',
-          child: _RecordList(
-            emptyText: 'No recent outlet issue movements',
-            children: outletIssueMovements.take(20).map((movement) {
-              final qty = _num(movement['quantity'] ??
-                  movement['quantity_in'] ??
-                  movement['quantity_out']);
-              return _RecordTile(
-                icon: PhosphorIcons.clipboardText(),
-                title:
-                    '${movement['item_name'] ?? movement['itemName'] ?? movement['item_sku'] ?? movement['sku'] ?? 'Stock movement'}',
-                subtitle:
-                    '${movement['movement_type'] ?? movement['movementType'] ?? 'movement'} | ${movement['document_number'] ?? movement['reference_number'] ?? movement['created_at'] ?? ''}',
-                trailing: Text(
-                  _qtyText(qty),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () =>
-                        _showJsonDetail('Outlet Issue Movement', movement),
-                    child: const Text('View'),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _outletProductionLedgerPage() {
-    final productionMovements = _inventoryTruthMovements.where((movement) {
-      final type = '${movement['movement_type'] ?? movement['movementType']}';
-      return type.contains('production');
-    }).toList();
-    final outputs = productionMovements
-        .where((movement) =>
-            '${movement['movement_type'] ?? movement['movementType']}'
-                .contains('output'))
-        .toList();
-    final inputs = productionMovements
-        .where((movement) =>
-            '${movement['movement_type'] ?? movement['movementType']}'
-                .contains('consumption'))
-        .toList();
-    final producedQty =
-        outputs.fold<num>(0, (sum, row) => sum + _num(row['quantity']));
-    final consumedQty =
-        inputs.fold<num>(0, (sum, row) => sum + _num(row['quantity']));
-    final outlets = _posOutletOptions;
-    final selectedOutlet = _selectedOutlet();
-    final selectedOutletId =
-        selectedOutlet == null ? null : _outletId(selectedOutlet);
-    final selectedOutletDropdownId =
-        outlets.any((outlet) => _outletId(outlet) == selectedOutletId)
-            ? selectedOutletId
-            : null;
-    final outletItems = selectedOutletId == null
-        ? <Map<String, dynamic>>[]
-        : _stockForOutlet(selectedOutletId)
-            .where((item) => _outletItemId(item).isNotEmpty)
-            .toList();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    bool isTodayMovement(Map<String, dynamic> row) {
-      final rawDate = row['created_at'] ??
-          row['createdAt'] ??
-          row['timestamp'] ??
-          row['date'];
-      final parsed = DateTime.tryParse('$rawDate');
-      if (parsed == null) return false;
-      final local = parsed.toLocal();
-      return !local.isBefore(today) &&
-          local.isBefore(today.add(const Duration(days: 1)));
-    }
-
-    num producedTodayFor(Map<String, dynamic> item) {
-      final itemId = _outletItemId(item);
-      final sku = _outletItemSku(item);
-      return outputs.fold<num>(0, (sum, row) {
-        if (!isTodayMovement(row)) return sum;
-        final meta = _dynamicMap(row['metadata']);
-        final matchesId =
-            itemId.isNotEmpty && '${meta['outlet_item_id'] ?? ''}' == itemId;
-        final matchesSku =
-            sku.isNotEmpty && '${row['item_sku'] ?? row['sku'] ?? ''}' == sku;
-        return matchesId || matchesSku ? sum + _num(row['quantity']) : sum;
-      });
-    }
-
-    final isBarOutlet = selectedOutlet != null &&
-        (_outletType(selectedOutlet).contains('bar') ||
-            _barOutlets.containsKey(_outletType(selectedOutlet)) ||
-            _outletDisplayName(selectedOutlet).toLowerCase().contains('bar'));
-
-    final filteredItems = outletItems.where((item) {
-      final query = _search.toLowerCase().trim();
-      if (query.isEmpty) return true;
-      return [
-        _outletItemName(item),
-        _outletItemSku(item),
-        item['category'],
-      ].any((value) => '$value'.toLowerCase().contains(query));
-    }).toList();
-
-    return _Page(
-      title: 'Outlet Production',
-      subtitle: 'Select outlet, enter today produced quantity, commit.',
-      actions: [
-        _RefreshButton(onPressed: _loadAll),
-        OutlinedButton.icon(
-          onPressed: () => setState(
-              () => _section = BranchStorekeeperSection.inventoryControl),
-          icon: const Icon(Icons.storefront_outlined),
-          label: const Text('POS Outlet Issue'),
-        ),
-      ],
-      children: [
-        _StatGrid(cards: [
-          _StatCardData('Production Runs', '${outputs.length}',
-              Icons.precision_manufacturing_outlined, AppColors.kPrimary),
-          _StatCardData('Raw Consumed', _qtyText(consumedQty),
-              PhosphorIcons.trendDown(), AppColors.kError),
-          _StatCardData('Output Produced', _qtyText(producedQty),
-              PhosphorIcons.trendUp(), AppColors.kSuccess),
-          _StatCardData('Menu Items', '${outletItems.length}',
-              Icons.storefront_outlined, Colors.teal),
-        ]),
-        _SectionCard(
-          title: 'Stockable Assembly',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      initialValue: selectedOutletDropdownId,
-                      decoration: const InputDecoration(
-                        labelText: 'Assembly produced from point',
-                        prefixIcon: Icon(Icons.storefront_outlined),
-                      ),
-                      items: outlets
-                          .map(
-                            (outlet) => DropdownMenuItem(
-                              value: _outletId(outlet),
-                              child: Text(
-                                _outletDisplayName(outlet),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) _selectOutlet(value);
-                      },
-                    ),
-                  ),
-                  // ── Bar outlet redirect banner inserted below dropdown ──
-                  const SizedBox(width: 12),
-                  if (_outletItemsLoading)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (isBarOutlet) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.amber.shade300),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.local_bar_outlined,
-                          color: Colors.amber.shade800, size: 28),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Bar Outlet — Direct Stock Issue',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                                color: Colors.amber.shade900,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Bar items (beers, spirits, sodas, water, wines) are NOT produced — '
-                              'they are issued directly from Branch Stock to the bar counter. '
-                              'No portioning or recipe is required. '
-                              'Use POS Outlet Issue to transfer stock into this bar.',
-                              style: TextStyle(
-                                  color: Colors.amber.shade900, fontSize: 13),
-                            ),
-                            const SizedBox(height: 12),
-                            FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.amber.shade700),
-                              onPressed: () => setState(() {
-                                _section =
-                                    BranchStorekeeperSection.inventoryControl;
-                              }),
-                              icon: const Icon(Icons.storefront_outlined,
-                                  size: 16),
-                              label: const Text('Go to POS Outlet Issue'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else ...[
-                TextField(
-                  onChanged: (value) => setState(() => _search = value),
-                  decoration: InputDecoration(
-                    hintText: selectedOutlet == null
-                        ? 'Search menu item'
-                        : 'Search ${_outletDisplayName(selectedOutlet)} menu item',
-                    prefixIcon: const Icon(Icons.search),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _OutletProductionSheet(
-                  items: filteredItems,
-                  emptyText: selectedOutlet == null
-                      ? 'Select POS outlet first'
-                      : 'No menu items found for ${_outletDisplayName(selectedOutlet)}',
-                  itemName: _outletItemName,
-                  itemSku: _outletItemSku,
-                  currentStock: producedTodayFor,
-                  maxProduce: (item) => item['max_producible_quantity'] == null
-                      ? null
-                      : _num(item['max_producible_quantity']),
-                  qtyText: _qtyText,
-                  onCommit: selectedOutlet == null
-                      ? null
-                      : (item, quantity) => _commitOutletProductionItem(
-                            selectedOutlet,
-                            item,
-                            quantity,
-                          ),
-                  onToggleTrackStock: selectedOutlet == null
-                      ? null
-                      : (item, trackStock) => _toggleOutletItemTrackStock(
-                            selectedOutlet,
-                            item,
-                            trackStock,
-                          ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '(Double click item line to view production turns)',
-                  style: TextStyle(
-                    color: AppColors.kError,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ], // end else (non-bar outlets)
-            ],
-          ),
-        ),
-        _SectionCard(
-          title: 'Recent Production',
-          child: _RecordList(
-            emptyText: 'No production ledger entries yet',
-            children: productionMovements.take(120).map((row) {
-              final type = '${row['movement_type'] ?? row['movementType']}';
-              final meta =
-                  Map<String, dynamic>.from((row['metadata'] as Map?) ?? {});
-              final name = meta['item_name'] ??
-                  row['item_name'] ??
-                  row['sku'] ??
-                  row['item_sku'] ??
-                  'Production Item';
-              return _RecordTile(
-                icon: type.contains('output')
-                    ? Icons.storefront_outlined
-                    : PhosphorIcons.trendDown(),
-                title: '$name',
-                subtitle:
-                    '${_movementLabel(type)} | ${row['document_number'] ?? row['documentNumber'] ?? '-'} | ${_date(row['created_at'])}',
-                trailing: _StatusChip(
-                  type.contains('output') ? 'POS Stock In' : 'Raw Stock Out',
-                  success: type.contains('output'),
-                  warning: !type.contains('output'),
-                ),
-                meta: [
-                  _InfoPill('Qty', _qtyText(row['quantity'])),
-                  if (meta['batch_reference'] != null)
-                    _InfoPill('Batch', '${meta['batch_reference']}'),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _movementGroup(String label, List<Map<String, dynamic>> rows,
       Color color, IconData icon) {
@@ -6184,385 +5586,6 @@ class _BranchStorekeeperDashboardState
     'accommodation_breakfast': (label: 'Guest / Room', pax: false),
   };
 
-  Map<String, dynamic>? _matchingOutletItemForSource(
-    String outletId,
-    Map<String, dynamic> source,
-  ) {
-    final sourceSku = _optionSku(source).toLowerCase();
-    final sourceName = _itemName(source).toLowerCase();
-    final outletItems = _stockForOutlet(outletId);
-    for (final item in outletItems) {
-      if (_outletItemSku(item).toLowerCase() == sourceSku) return item;
-    }
-    for (final item in outletItems) {
-      if (_outletItemName(item).toLowerCase() == sourceName) return item;
-    }
-    return null;
-  }
-
-  // Issues branch stock for every item in a bar outlet in one go, so the
-  // whole bar menu becomes sellable on POS without issuing item-by-item.
-  // Intended for quickly seeding a bar outlet to test POS in production.
-  Future<void> _issueAllBarStock(Map<String, dynamic> outlet) async {
-    final outletId = _outletId(outlet);
-    final items = _stockForOutlet(outletId);
-    if (items.isEmpty) {
-      _showSnack('No bar items found for ${_outletDisplayName(outlet)}',
-          error: true);
-      return;
-    }
-
-    const testQty = 50.0;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Issue All Bar Items'),
-        content: Text(
-          'Tops up branch stock into all ${items.length} item(s) in '
-          '${_outletDisplayName(outlet)} (up to ${_qtyText(testQty)} units each, '
-          'limited by what is available in branch store) so the whole bar menu '
-          'is available to sell on POS. Existing stock is added to, not reduced.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Issue All'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    setState(() => _bulkIssuingBar = true);
-    var issuedCount = 0;
-    var skippedCount = 0;
-    try {
-      for (final output in items) {
-        final outputSku = _outletItemSku(output);
-        final matches = _stockOptions.where((item) {
-          return _optionSku(item) == outputSku ||
-              _itemName(item).toLowerCase() ==
-                  _outletItemName(output).toLowerCase();
-        }).toList();
-        if (matches.isEmpty) {
-          skippedCount++;
-          continue;
-        }
-        final source = matches.first;
-        final available = _num(source['quantity']);
-        final qty = available < testQty ? available : testQty;
-        if (qty <= 0) {
-          skippedCount++;
-          continue;
-        }
-        try {
-          await _repo.createProductionRun({
-            'destination_outlet_id': outletId,
-            'production_area': 'pos_outlet_issue',
-            'batch_reference':
-                'BULK-${DateTime.now().millisecondsSinceEpoch}-$issuedCount',
-            'inputs': [
-              {
-                'item_sku': _optionSku(source),
-                'item_name': _itemName(source),
-                'quantity': qty,
-                'unit': source['unit_of_measure'] ?? source['unit'] ?? 'units',
-                'unit_cost': _num(source['cost_price'] ??
-                    source['unit_cost'] ??
-                    source['unit_price']),
-              }
-            ],
-            'outputs': [
-              {
-                'outlet_item_id': _outletItemId(output),
-                'item_sku': outputSku,
-                'item_name': _outletItemName(output),
-                'quantity': qty,
-                'unit': output['unit'] ?? 'units',
-                'unit_cost': _num(output['cost_price'] ??
-                    source['cost_price'] ??
-                    source['unit_cost']),
-                'category': output['category'],
-                'metadata': {
-                  'source': 'branch_store_pos_outlet_issue_bulk',
-                  'source_sku': _optionSku(source),
-                },
-              }
-            ],
-            'remarks':
-                'Bulk issue-all to ${_outletDisplayName(outlet)} (POS testing)',
-          });
-          issuedCount++;
-        } catch (_) {
-          skippedCount++;
-        }
-      }
-      await _loadAll();
-      _showSnack(
-        'Issued $issuedCount item(s) to ${_outletDisplayName(outlet)}'
-        '${skippedCount > 0 ? ' • $skippedCount skipped (no matching/available branch stock)' : ''}',
-      );
-    } finally {
-      if (mounted) setState(() => _bulkIssuingBar = false);
-    }
-  }
-
-  void _showPosOutletIssueForm(
-    Map<String, dynamic> outlet, {
-    Map<String, dynamic>? presetOutput,
-  }) {
-    final outletId = _outletId(outlet);
-    final quantity = TextEditingController();
-    final notes = TextEditingController();
-    Map<String, dynamic>? sourceItem;
-    Map<String, dynamic>? outputItem = presetOutput;
-    if (presetOutput != null) {
-      final outputSku = _outletItemSku(presetOutput);
-      final matches = _stockOptions.where((item) {
-        return _optionSku(item) == outputSku ||
-            _itemName(item).toLowerCase() ==
-                _outletItemName(presetOutput).toLowerCase();
-      }).toList();
-      sourceItem = matches.isEmpty ? null : matches.first;
-    }
-
-    showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
-        final outletItems = _stockForOutlet(outletId);
-        final qty = _num(quantity.text);
-        final available = _num(sourceItem?['quantity']);
-        final hasOutletItem = outputItem != null &&
-            _outletItemId(outputItem!).isNotEmpty &&
-            _outletItemSku(outputItem!).isNotEmpty;
-        final canPost =
-            sourceItem != null && hasOutletItem && qty > 0 && available >= qty;
-
-        return AlertDialog(
-          title: Text('Issue to ${_outletDisplayName(outlet)}'),
-          content: SizedBox(
-            width: 760,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _InfoPill('Outlet', _outletDisplayName(outlet)),
-                  const SizedBox(height: 12),
-                  _SearchPickField(
-                    label: 'Source branch stock',
-                    hint: 'Search item, SKU, barcode or category',
-                    options: _stockOptions,
-                    selected: sourceItem,
-                    titleFor: _itemName,
-                    subtitleFor: (item) =>
-                        '${_optionSku(item)} | Available ${_qty(item)}',
-                    icon: PhosphorIcons.package(),
-                    onSelected: (item) =>
-                        setDialogState(() => sourceItem = item),
-                  ),
-                  const SizedBox(height: 12),
-                  _SearchPickField(
-                    label: 'POS outlet item to increase',
-                    hint: 'Search the selected outlet menu/stock item',
-                    options: outletItems,
-                    selected: outputItem,
-                    titleFor: _outletItemName,
-                    subtitleFor: (item) =>
-                        '${_outletItemSku(item)} | Current ${_qtyText(item['current_stock'] ?? item['quantity'])} ${item['unit'] ?? 'units'}',
-                    icon: Icons.storefront_outlined,
-                    onSelected: (item) =>
-                        setDialogState(() => outputItem = item),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: quantity,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'Quantity to issue',
-                      prefixIcon: const Icon(Icons.numbers),
-                      helperText: sourceItem == null
-                          ? 'Select source stock first'
-                          : 'Available in branch store: ${_qtyText(available)}',
-                      errorText: qty > available && sourceItem != null
-                          ? 'Cannot issue more than branch stock available'
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: notes,
-                    minLines: 2,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _InfoPill('Branch Stock Out', _qtyText(qty)),
-                      _InfoPill('POS Outlet Stock In', _qtyText(qty)),
-                      if (outputItem != null)
-                        _InfoPill('POS Item ID', _outletItemId(outputItem!)),
-                    ],
-                  ),
-                  if (outletItems.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 10),
-                      child: Text(
-                        'This POS outlet has no stock/menu items. Sync or create POS outlet items before issuing stock to it.',
-                        style: TextStyle(
-                          color: AppColors.kError,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: canPost
-                  ? () async {
-                      Navigator.pop(context);
-                      try {
-                        final source = sourceItem!;
-                        final output = outputItem!;
-                        await _repo.createProductionRun({
-                          'destination_outlet_id': outletId,
-                          'production_area': 'pos_outlet_issue',
-                          'batch_reference':
-                              'OUT-${DateTime.now().millisecondsSinceEpoch}',
-                          'inputs': [
-                            {
-                              'item_sku': _optionSku(source),
-                              'item_name': _itemName(source),
-                              'quantity': qty,
-                              'unit': source['unit_of_measure'] ??
-                                  source['unit'] ??
-                                  'units',
-                              'unit_cost': _num(source['cost_price'] ??
-                                  source['unit_cost'] ??
-                                  source['unit_price']),
-                            }
-                          ],
-                          'outputs': [
-                            {
-                              'outlet_item_id': _outletItemId(output),
-                              'item_sku': _outletItemSku(output),
-                              'item_name': _outletItemName(output),
-                              'quantity': qty,
-                              'unit': output['unit'] ?? 'units',
-                              'unit_cost': _num(output['cost_price'] ??
-                                  source['cost_price'] ??
-                                  source['unit_cost']),
-                              'category': output['category'],
-                              'metadata': {
-                                'source': 'branch_store_pos_outlet_issue',
-                                'source_sku': _optionSku(source),
-                              },
-                            }
-                          ],
-                          'remarks': notes.text.trim().isEmpty
-                              ? 'Branch store issue to ${_outletDisplayName(outlet)}'
-                              : notes.text.trim(),
-                        });
-                        await _loadAll();
-                        _showSnack(
-                            '${_qtyText(qty)} ${_outletItemName(output)} issued to ${_outletDisplayName(outlet)}');
-                      } catch (error) {
-                        _showSnack(
-                            'POS outlet issue failed: ${_errorText(error)}',
-                            error: true);
-                      }
-                    }
-                  : null,
-              child: const Text('Post Issue'),
-            ),
-          ],
-        );
-      }),
-    );
-  }
-
-  Future<void> _commitOutletProductionItem(
-    Map<String, dynamic> outlet,
-    Map<String, dynamic> output,
-    num produced, {
-    String? turnReference,
-    String? notes,
-  }) async {
-    if (produced <= 0) {
-      _showSnack('Enter produced quantity', error: true);
-      return;
-    }
-    try {
-      await _repo.createProductionRun({
-        'destination_outlet_id': _outletId(outlet),
-        'production_area': 'outlet_production',
-        'batch_reference': turnReference?.trim().isNotEmpty == true
-            ? turnReference!.trim()
-            : 'TURN-${DateTime.now().millisecondsSinceEpoch}',
-        'outputs': [
-          {
-            'outlet_item_id': _outletItemId(output),
-            'item_sku': _outletItemSku(output),
-            'item_name': _outletItemName(output),
-            'quantity': produced,
-            'unit': output['unit'] ?? 'units',
-            'category': output['category'],
-            'metadata': {
-              'source': 'outlet_production_sheet',
-              'recipe_id': output['recipe_id'],
-              'menu_item_id':
-                  output['linked_menu_item_id'] ?? output['source_item_id'],
-            },
-          }
-        ],
-        'remarks': notes?.trim() ?? '',
-      });
-      await _loadAll();
-      _showSnack(
-        '${_qtyText(produced)} ${_outletItemName(output)} added to ${_outletDisplayName(outlet)}',
-      );
-    } catch (error) {
-      _showSnack('Production failed: ${_errorText(error)}', error: true);
-    }
-  }
-
-  Future<void> _toggleOutletItemTrackStock(
-    Map<String, dynamic> outlet,
-    Map<String, dynamic> item,
-    bool trackStock,
-  ) async {
-    try {
-      final outletId = _outletId(outlet);
-      final itemId = _outletItemId(item);
-      await _repo.patchOutletItemTrackStock(
-          outletId: outletId, itemId: itemId, trackStock: trackStock);
-      item['track_stock'] = trackStock;
-      await _loadAll();
-      _showSnack(trackStock
-          ? '${_outletItemName(item)} is now tracked — requires production.'
-          : '${_outletItemName(item)} marked as Always On — available in POS without stock.');
-    } catch (error) {
-      _showSnack('Failed to update: ${_errorText(error)}', error: true);
-    }
-  }
 
   void _showStockOutForm({
     List<Map<String, dynamic>>? preloadLines,
@@ -7196,109 +6219,6 @@ class _SupplierOptionsOverlay extends StatelessWidget {
   }
 }
 
-class _SearchPickField extends StatelessWidget {
-  const _SearchPickField({
-    required this.label,
-    required this.hint,
-    required this.options,
-    required this.selected,
-    required this.titleFor,
-    required this.subtitleFor,
-    required this.icon,
-    required this.onSelected,
-  });
-
-  final String label;
-  final String hint;
-  final List<Map<String, dynamic>> options;
-  final Map<String, dynamic>? selected;
-  final String Function(Map<String, dynamic>) titleFor;
-  final String Function(Map<String, dynamic>) subtitleFor;
-  final IconData icon;
-  final ValueChanged<Map<String, dynamic>> onSelected;
-
-  String _display(Map<String, dynamic>? item) {
-    if (item == null || item.isEmpty) return '';
-    final title = titleFor(item);
-    final subtitle = subtitleFor(item);
-    return subtitle.trim().isEmpty ? title : '$title - $subtitle';
-  }
-
-  String _searchText(Map<String, dynamic> item) =>
-      '${titleFor(item)} ${subtitleFor(item)} ${item.values.join(' ')}'
-          .toLowerCase();
-
-  @override
-  Widget build(BuildContext context) {
-    return Autocomplete<Map<String, dynamic>>(
-      key: ValueKey('$label-${_display(selected)}'),
-      initialValue: TextEditingValue(text: _display(selected)),
-      displayStringForOption: _display,
-      optionsBuilder: (value) {
-        final query = value.text.trim().toLowerCase();
-        return options
-            .where((item) => query.isEmpty || _searchText(item).contains(query))
-            .take(50);
-      },
-      onSelected: onSelected,
-      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-        return TextField(
-          controller: controller,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-            labelText: label,
-            hintText: hint,
-            prefixIcon: Icon(icon),
-          ),
-        );
-      },
-      optionsViewBuilder: (context, onSelected, values) {
-        final rows = values.toList();
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(12),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 320),
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                itemCount: rows.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, indent: 16, endIndent: 16),
-                itemBuilder: (context, index) {
-                  final item = rows[index];
-                  return ListTile(
-                    dense: true,
-                    leading: CircleAvatar(
-                      radius: 18,
-                      backgroundColor:
-                          AppColors.kPrimary.withValues(alpha: 0.1),
-                      child: Icon(icon, size: 18, color: AppColors.kPrimary),
-                    ),
-                    title: Text(
-                      titleFor(item),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    subtitle: Text(
-                      subtitleFor(item),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () => onSelected(item),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _EmptyState extends StatelessWidget {
   const _EmptyState(this.message);
 
@@ -7323,393 +6243,6 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _OutletProductionSheet extends StatefulWidget {
-  const _OutletProductionSheet({
-    required this.items,
-    required this.emptyText,
-    required this.itemName,
-    required this.itemSku,
-    required this.currentStock,
-    required this.maxProduce,
-    required this.qtyText,
-    required this.onCommit,
-    this.onToggleTrackStock,
-  });
-
-  final List<Map<String, dynamic>> items;
-  final String emptyText;
-  final String Function(Map<String, dynamic>) itemName;
-  final String Function(Map<String, dynamic>) itemSku;
-  final num Function(Map<String, dynamic>) currentStock;
-  final num? Function(Map<String, dynamic>) maxProduce;
-  final String Function(dynamic) qtyText;
-  final Future<void> Function(Map<String, dynamic>, num)? onCommit;
-  final Future<void> Function(Map<String, dynamic>, bool)? onToggleTrackStock;
-
-  @override
-  State<_OutletProductionSheet> createState() => _OutletProductionSheetState();
-}
-
-class _OutletProductionSheetState extends State<_OutletProductionSheet> {
-  final Map<String, TextEditingController> _controllers = {};
-  bool _posting = false;
-
-  @override
-  void didUpdateWidget(covariant _OutletProductionSheet oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final keys = widget.items.map(_keyFor).toSet();
-    for (final key in _controllers.keys.toList()) {
-      if (!keys.contains(key)) {
-        _controllers.remove(key)?.dispose();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _controllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  String _keyFor(Map<String, dynamic> item) =>
-      '${item['id'] ?? item['outlet_item_id'] ?? widget.itemSku(item)}';
-
-  TextEditingController _controllerFor(Map<String, dynamic> item) {
-    final key = _keyFor(item);
-    return _controllers.putIfAbsent(key, TextEditingController.new);
-  }
-
-  Future<void> _commit(Map<String, dynamic> item) async {
-    final controller = _controllerFor(item);
-    final quantity = num.tryParse(controller.text.trim()) ?? 0;
-    if (widget.onCommit == null || quantity <= 0 || _posting) return;
-    setState(() => _posting = true);
-    try {
-      await widget.onCommit!(item, quantity);
-      controller.clear();
-    } finally {
-      if (mounted) setState(() => _posting = false);
-    }
-  }
-
-  Future<void> _toggleTrackStock(
-      BuildContext ctx, Map<String, dynamic> item) async {
-    if (widget.onToggleTrackStock == null) return;
-    final current = item['track_stock'] != false;
-    final newValue = !current;
-    final label = newValue ? 'Track Stock' : 'Always On (no stock required)';
-    final confirmed = await showDialog<bool>(
-      context: ctx,
-      builder: (_) => AlertDialog(
-        title: Text(newValue ? 'Enable Stock Tracking' : 'Mark as Always On'),
-        content: Text(newValue
-            ? 'This item will require production commits and will show out-of-stock in POS when stock hits zero.'
-            : '"${item['name'] ?? item['item_name'] ?? 'This item'}" will be permanently available in POS. Stock tracking will be disabled — it won\'t block sales even at zero stock.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          FilledButton(
-            style: newValue
-                ? null
-                : FilledButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(label),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      setState(() => _posting = true);
-      try {
-        await widget.onToggleTrackStock!(item, newValue);
-      } finally {
-        if (mounted) setState(() => _posting = false);
-      }
-    }
-  }
-
-  Future<void> _turnOnAll(BuildContext ctx) async {
-    if (widget.onToggleTrackStock == null || widget.items.isEmpty) return;
-
-    // Count how many items are currently tracked
-    final trackedCount =
-        widget.items.where((item) => item['track_stock'] != false).length;
-
-    if (trackedCount == 0) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(
-          content: Text('All items are already set to Always On'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: ctx,
-      builder: (_) => AlertDialog(
-        title: const Text('Turn On All Items'),
-        content: Text(
-            'This will set ALL $trackedCount tracked items to "Always On" mode.\n\n'
-            'Items will be permanently available in POS without requiring production commits or stock tracking.\n\n'
-            'Are you sure you want to continue?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Turn On All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      setState(() => _posting = true);
-      try {
-        // Update all tracked items to Always On
-        int successCount = 0;
-        int failCount = 0;
-
-        for (final item in widget.items) {
-          final isTracked = item['track_stock'] != false;
-          if (isTracked) {
-            try {
-              await widget.onToggleTrackStock!(
-                  item, false); // false = Always On
-              successCount++;
-            } catch (e) {
-              failCount++;
-            }
-          }
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(ctx).showSnackBar(
-            SnackBar(
-              content: Text(
-                failCount == 0
-                    ? '✓ Successfully turned on all $successCount items'
-                    : '✓ Turned on $successCount items, $failCount failed',
-              ),
-              backgroundColor: failCount == 0 ? Colors.green : Colors.orange,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _posting = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.items.isEmpty) return _EmptyState(widget.emptyText);
-
-    // Count tracked items for the button
-    final trackedCount =
-        widget.items.where((item) => item['track_stock'] != false).length;
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.kDivider),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            color: AppColors.kPrimary,
-            child: Row(
-              children: [
-                const SizedBox(
-                    width: 48, child: Text('#', style: _headerStyle)),
-                const Expanded(
-                    flex: 3, child: Text('Item Name', style: _headerStyle)),
-                const Expanded(
-                    flex: 2,
-                    child: Text('[ Total Registered Production Of The Day ]',
-                        style: _headerStyle)),
-                SizedBox(
-                  width: 120,
-                  child: Row(
-                    children: [
-                      const Text('Stock Control', style: _headerStyle),
-                      const SizedBox(width: 4),
-                      if (trackedCount > 0)
-                        Tooltip(
-                          message: 'Turn on all $trackedCount tracked items',
-                          child: InkWell(
-                            onTap: _posting ? null : () => _turnOnAll(context),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.all_inclusive,
-                                    size: 12,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    'All',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(
-                    width: 170,
-                    child: Text('Add Qty Produced', style: _headerStyle)),
-                const SizedBox(
-                    width: 96, child: Text('Action', style: _headerStyle)),
-              ],
-            ),
-          ),
-          ...widget.items.asMap().entries.map((entry) {
-            final index = entry.key;
-            final item = entry.value;
-            final controller = _controllerFor(item);
-            final max = widget.maxProduce(item);
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: index.isEven ? Colors.white : Colors.blueGrey.shade50,
-              child: Row(
-                children: [
-                  SizedBox(width: 48, child: Text('${index + 1}')),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.itemName(item),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        Text(
-                          widget.itemSku(item),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.kTextSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      '[ ${widget.qtyText(widget.currentStock(item))} ]'
-                      '${max == null ? '' : '  Max ${widget.qtyText(max)}'}',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // ── Stock tracking toggle ──
-                  Builder(builder: (ctx) {
-                    final tracked = item['track_stock'] != false;
-                    return SizedBox(
-                      width: 120,
-                      child: GestureDetector(
-                        onTap: _posting
-                            ? null
-                            : () => _toggleTrackStock(ctx, item),
-                        child: Chip(
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          avatar: Icon(
-                            tracked
-                                ? Icons.track_changes_outlined
-                                : Icons.all_inclusive,
-                            size: 14,
-                            color: tracked ? Colors.blue : Colors.green,
-                          ),
-                          label: Text(
-                            tracked ? 'Tracked' : 'Always On',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: tracked
-                                  ? Colors.blue.shade800
-                                  : Colors.green.shade800,
-                            ),
-                          ),
-                          backgroundColor: tracked
-                              ? Colors.blue.shade50
-                              : Colors.green.shade50,
-                          side: BorderSide(
-                              color: tracked
-                                  ? Colors.blue.shade200
-                                  : Colors.green.shade200),
-                        ),
-                      ),
-                    );
-                  }),
-                  SizedBox(
-                    width: 170,
-                    child: TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        hintText: '0.00',
-                      ),
-                      onSubmitted: (_) => _commit(item),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 86,
-                    child: FilledButton(
-                      onPressed: _posting || widget.onCommit == null
-                          ? null
-                          : () => _commit(item),
-                      child: const Text('Commit'),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-const _headerStyle = TextStyle(
-  color: Colors.white,
-  fontWeight: FontWeight.w900,
-  fontSize: 12,
-);
 
 class _LineEditor extends StatefulWidget {
   const _LineEditor({
@@ -9632,2412 +8165,6 @@ class _StockBalanceSummaryCardState
 double _fcNum(dynamic v) {
   if (v == null) return 0;
   return (v is num) ? v.toDouble() : double.tryParse('$v') ?? 0;
-}
-
-class _FoodControlSection extends ConsumerStatefulWidget {
-  const _FoodControlSection({required this.stock});
-  final List<Map<String, dynamic>> stock;
-
-  @override
-  ConsumerState<_FoodControlSection> createState() =>
-      _FoodControlSectionState();
-}
-
-class _FoodControlSectionState extends ConsumerState<_FoodControlSection> {
-  List<Map<String, dynamic>> _recipes = [];
-  bool _loading = true;
-  String _stockSearch = '';
-  String _recipeSearch = '';
-  Map<String, dynamic>? _selectedStock;
-
-  List<Map<String, dynamic>> _shifts = [];
-  Map<String, dynamic>? _selectedShift;
-  bool _loadingShifts = false;
-  bool _loadingAnalytics = false;
-  Map<String, dynamic> _analyticsData = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRecipes();
-    _loadShifts();
-  }
-
-  Future<void> _loadShifts() async {
-    setState(() => _loadingShifts = true);
-    try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final data = await repo.getKitchenShifts();
-      if (mounted) setState(() => _shifts = data);
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _loadingShifts = false);
-    }
-  }
-
-  Future<void> _selectShift(Map<String, dynamic> shift) async {
-    setState(() {
-      _selectedShift = shift;
-      _loadingAnalytics = true;
-    });
-    try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final detail = await repo.getKitchenShiftDetail('${shift['id']}');
-      final posCons = await repo.getKitchenShiftPosConsumption('${shift['id']}');
-      
-      if (mounted) {
-        setState(() {
-          _analyticsData = {
-            'shift': detail['shift'] ?? shift,
-            'items': detail['items'] ?? [],
-            'productions': detail['productions'] ?? [],
-            'stock_take': detail['stock_take'] ?? [],
-            'consumption': posCons['consumption'] ?? [],
-            'cashier_shifts': posCons['cashier_shifts'] ?? [],
-            'unmatched_summary': posCons['unmatched_summary'] ?? {},
-            'summary': detail['summary'] ?? {},
-          };
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load shift analytics: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loadingAnalytics = false);
-    }
-  }
-
-  Future<void> _loadRecipes() async {
-    setState(() => _loading = true);
-    try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final data = await repo.getProductionRecipes();
-      if (mounted) setState(() => _recipes = data);
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  static bool _isBarItem(Map<String, dynamic> s) {
-    final cat = '${s['category'] ?? ''}'.toLowerCase();
-    final sku = '${s['item_sku'] ?? ''}'.toLowerCase();
-    final name = '${s['item_name'] ?? ''}'.toLowerCase();
-    // Common bar category keywords
-    return cat.contains('beer') ||
-        cat.contains('spirit') ||
-        cat.contains('wine') ||
-        cat.contains('whisky') ||
-        cat.contains('whiskey') ||
-        cat.contains('vodka') ||
-        cat.contains('gin') ||
-        cat.contains('rum') ||
-        cat.contains('brandy') ||
-        cat.contains('liqueur') ||
-        cat.contains('soft drink') ||
-        cat.contains('soda') ||
-        cat.contains('alcohol') ||
-        cat.contains('bar') ||
-        sku.startsWith('bar-') ||
-        sku.startsWith('bev-') ||
-        name.contains('beer') ||
-        name.contains('soda');
-  }
-
-  /// Opens a dialog to add (receive) stock for a parent/raw ingredient into
-  /// branch stock. This is the "parent stock that makes menu items" flow:
-  /// the storekeeper records that e.g. 10 kg of BEEF has arrived and should
-  /// be added to the branch store balance before kitchen sessions can issue it.
-  Future<void> _openAddParentStockDialog(Map<String, dynamic> stockItem) async {
-    final qtyCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-    final itemName = '${stockItem['item_name'] ?? stockItem['item_sku'] ?? ''}';
-    final sku = '${stockItem['item_sku'] ?? ''}';
-    final unit = '${stockItem['unit_of_measure'] ?? stockItem['unit'] ?? 'kg'}';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.add_box_outlined, color: Colors.teal.shade700),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Add Stock — $itemName',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.teal.shade100),
-                ),
-                child: Text(
-                  'SKU: $sku · Unit: $unit\n'
-                  'This will add to the branch store balance immediately. '
-                  'Use this when receiving parent ingredients (BEEF, RICE, FLOUR, etc.) '
-                  'that are consumed by kitchen production recipes.',
-                  style: TextStyle(fontSize: 12, color: Colors.teal.shade900, height: 1.5),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: qtyCtrl,
-                autofocus: true,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'Quantity to add ($unit)',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesCtrl,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (supplier, invoice ref, etc.)',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add to Branch Stock'),
-            style: FilledButton.styleFrom(backgroundColor: Colors.teal.shade700),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    final qty = double.tryParse(qtyCtrl.text.trim()) ?? 0;
-    if (qty <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a quantity greater than 0')),
-      );
-      return;
-    }
-
-    try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
-      await repo.adjustBranchStock({
-        'item_sku': sku,
-        'quantity_change': qty,
-        'adjustment_type': 'STOCK_IN',
-        'notes': notesCtrl.text.trim().isNotEmpty
-            ? notesCtrl.text.trim()
-            : 'Stock received for kitchen production — $itemName',
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Added $qty $unit of $itemName to branch stock.'),
-            backgroundColor: Colors.teal.shade700,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add stock: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  List<Map<String, dynamic>> get _filteredStock {
-    final q = _stockSearch.toLowerCase();
-    return widget.stock.where((s) {
-      if (_isBarItem(s)) return false; // bar items don't need recipes
-      if (q.isEmpty) return true;
-      return '${s['item_name']}'.toLowerCase().contains(q) ||
-          '${s['item_sku']}'.toLowerCase().contains(q);
-    }).toList();
-  }
-
-  List<Map<String, dynamic>> get _filteredRecipes {
-    final q = _recipeSearch.toLowerCase();
-    var list = _recipes;
-    if (_selectedStock != null) {
-      final sku = '${_selectedStock!['item_sku']}';
-      list = list.where((r) {
-        return '${r['raw_item_sku']}' == sku;
-      }).toList();
-    }
-    if (q.isNotEmpty) {
-      list = list
-          .where((r) =>
-              '${r['produced_item_name']}'.toLowerCase().contains(q) ||
-              '${r['raw_item_name']}'.toLowerCase().contains(q))
-          .toList();
-    }
-    return list;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: _Page(
-        title: 'Food Control & Shift Analytics',
-        subtitle:
-            'Kitchen production engine — recipe config, POS consumption sync, cashier shifts, and deep variance analytics.',
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _loadRecipes();
-              _loadShifts();
-            },
-            tooltip: 'Refresh',
-          ),
-          FilledButton.icon(
-            onPressed: () => _openRecipeDialog(null),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add Food Control'),
-          ),
-        ],
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.kPrimary,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const TabBar(
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white60,
-              indicatorColor: Colors.white,
-              indicatorSize: TabBarIndicatorSize.tab,
-              tabs: [
-                Tab(
-                  icon: Icon(Icons.restaurant_menu_outlined, size: 18),
-                  text: 'Recipes & BOM',
-                ),
-                Tab(
-                  icon: Icon(Icons.analytics_outlined, size: 18),
-                  text: 'Shift & Cashier Analytics',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: MediaQuery.of(context).size.height - 260,
-            child: TabBarView(
-              children: [
-                _buildRecipesAndStockTab(),
-                _buildShiftUsageAnalyticsTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecipesAndStockTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.blue.shade200),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, color: Colors.blue.shade700, size: 22),
-              const SizedBox(width: 10),
-              Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                        color: Colors.blue.shade900, fontSize: 13, height: 1.6),
-                    children: const [
-                      TextSpan(
-                          text: 'Restaurant items',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
-                      TextSpan(
-                          text:
-                              ' (food, snacks, meals): configure a recipe here → commit daily production in Outlet Production → ingredients auto-deducted from branch stock.\n'),
-                      TextSpan(
-                          text: 'Bar items',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
-                      TextSpan(
-                          text:
-                              ' (beers, spirits, sodas, wines): issue directly from Branch Stock via POS Outlet Issue → bar stock increases immediately. No recipe or production needed. Bar items are excluded from this page.'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Left: Branch Stock ──
-              SizedBox(
-                width: 300,
-                child: Card(
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.kPrimary,
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(12)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.inventory_2_outlined,
-                                color: Colors.white, size: 18),
-                            const SizedBox(width: 8),
-                            const Expanded(
-                              child: Text('Branch Stock',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700)),
-                            ),
-                            if (_selectedStock != null)
-                              GestureDetector(
-                                onTap: () =>
-                                    setState(() => _selectedStock = null),
-                                child: const Icon(Icons.close,
-                                    color: Colors.white70, size: 16),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: TextField(
-                          decoration: const InputDecoration(
-                            hintText: 'Search ingredients…',
-                            prefixIcon: Icon(Icons.search, size: 18),
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (v) => setState(() => _stockSearch = v),
-                        ),
-                      ),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: _filteredStock.length,
-                          itemBuilder: (ctx, i) {
-                            final s = _filteredStock[i];
-                            final selected =
-                                _selectedStock?['item_sku'] == s['item_sku'];
-                            final qty = _fcNum(s['quantity']);
-                            return ListTile(
-                              dense: true,
-                              selected: selected,
-                              selectedTileColor:
-                                  AppColors.kPrimary.withOpacity(0.08),
-                              onTap: () => setState(
-                                  () => _selectedStock = selected ? null : s),
-                              title: Text('${s['item_name']}',
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
-                              subtitle: Text(
-                                  '${s['item_sku']} · ${s['unit_of_measure'] ?? s['unit'] ?? ''}',
-                                  style: const TextStyle(fontSize: 11)),
-                              trailing: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(qty.toStringAsFixed(1),
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13,
-                                          color: qty <= 0
-                                              ? Colors.red
-                                              : AppColors.kPrimary)),
-                                  Text(
-                                      '${s['unit_of_measure'] ?? s['unit'] ?? ''}',
-                                      style: const TextStyle(fontSize: 10)),
-                                  const SizedBox(height: 2),
-                                  GestureDetector(
-                                    onTap: () => _openAddParentStockDialog(s),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.teal.shade50,
-                                        border: Border.all(
-                                            color: Colors.teal.shade300),
-                                        borderRadius:
-                                            BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '+ Add',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.teal.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // ── Right: Recipes ──
-              Expanded(
-                child: Card(
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.teal.shade700,
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(12)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.restaurant_outlined,
-                                color: Colors.white, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _selectedStock == null
-                                    ? 'All Recipes'
-                                    : 'Recipes using ${_selectedStock!['item_name']}',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: TextField(
-                          decoration: const InputDecoration(
-                            hintText: 'Search food controls…',
-                            prefixIcon: Icon(Icons.search, size: 18),
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (v) => setState(() => _recipeSearch = v),
-                        ),
-                      ),
-                      if (_loading)
-                        const Expanded(
-                            child: Center(child: CircularProgressIndicator()))
-                      else if (_filteredRecipes.isEmpty)
-                        Expanded(
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.restaurant_menu_outlined,
-                                    size: 48, color: Colors.grey.shade400),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _selectedStock != null
-                                      ? 'No food control uses ${_selectedStock!['item_name']} yet.'
-                                      : 'No food controls configured yet.',
-                                  style: TextStyle(color: Colors.grey.shade600),
-                                ),
-                                const SizedBox(height: 12),
-                                FilledButton.icon(
-                                  onPressed: () => _openRecipeDialog(null),
-                                  icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Add Food Control'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        Expanded(
-                          child: ListView.separated(
-                            padding: const EdgeInsets.all(8),
-                            itemCount: _filteredRecipes.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (ctx, i) {
-                              final r = _filteredRecipes[i];
-                              return _RecipeCard(
-                                recipe: r,
-                                onEdit: () => _openRecipeDialog(r),
-                                onDeactivate: () => _deactivateFoodControl(r),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShiftUsageAnalyticsTab() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Left Side: Shift List (width: 300) ──
-        SizedBox(
-          width: 300,
-          child: Card(
-            margin: EdgeInsets.zero,
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.kPrimary,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(12)),
-                  ),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.history, color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'Kitchen Shifts',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: _loadingShifts && _shifts.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
-                      : _shifts.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No shifts found',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _shifts.length,
-                              itemBuilder: (ctx, i) {
-                                final s = _shifts[i];
-                                final isSelected =
-                                    _selectedShift?['id'] == s['id'];
-                                final shiftNum = s['shift_number'] ??
-                                    '${s['id']}'.substring(0, 8);
-                                final shiftType = s['shift_type'] ?? 'Shift';
-                                final status = '${s['status'] ?? ''}'.toUpperCase();
-                                final dateStr = s['shift_date'] ?? '';
-                                
-                                return ListTile(
-                                  dense: true,
-                                  selected: isSelected,
-                                  selectedTileColor:
-                                      AppColors.kPrimary.withOpacity(0.08),
-                                  onTap: () => _selectShift(s),
-                                  title: Text(
-                                    '$shiftType - #$shiftNum',
-                                    style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  subtitle: Text(
-                                    dateStr,
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  trailing: _statusBadge(status),
-                                );
-                              },
-                            ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        // ── Right Side: Analytics Details ──
-        Expanded(
-          child: _selectedShift == null
-              ? Card(
-                  margin: EdgeInsets.zero,
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.analytics_outlined,
-                            size: 64, color: Colors.grey.shade300),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No Kitchen Shift Selected',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade700),
-                        ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            'Select a kitchen shift from the list to view end-of-shift usage, linked cashier shifts, and raw ingredient variance analytics.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 13, color: Colors.grey.shade500),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : _loadingAnalytics
-                  ? const Card(
-                      margin: EdgeInsets.zero,
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  : Card(
-                      margin: EdgeInsets.zero,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Shift Header Info
-                              _buildShiftHeaderSection(),
-                              const SizedBox(height: 20),
-                              // Linked Cashier Shifts
-                              _buildLinkedCashierShiftsSection(),
-                              const SizedBox(height: 20),
-                              // Raw Ingredient Variance Table
-                              _buildVarianceTableSection(),
-                              const SizedBox(height: 20),
-                              // Wastage Alerts
-                              _buildWastageAlertsSection(),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShiftHeaderSection() {
-    final shift = _analyticsData['shift'] ?? _selectedShift ?? {};
-    final shiftNum = shift['shift_number'] ?? '${shift['id']}'.substring(0, 8);
-    final shiftType = shift['shift_type'] ?? 'Shift';
-    final status = '${shift['status'] ?? ''}'.toUpperCase();
-    final dateStr = shift['shift_date'] ?? '';
-    final openedAt = shift['opened_at'] != null ? DateTime.tryParse('${shift['opened_at']}')?.toLocal().toString().substring(0, 16) ?? '' : '—';
-    final closedAt = shift['closed_at'] != null ? DateTime.tryParse('${shift['closed_at']}')?.toLocal().toString().substring(0, 16) ?? '' : '—';
-    
-    // Storekeeper
-    String skName = '—';
-    if (shift['store_keeper'] != null) {
-      final sk = shift['store_keeper'];
-      skName = '${sk['first_name'] ?? ''} ${sk['last_name'] ?? ''}'.trim();
-    } else if (shift['opened_by_user'] != null) {
-      final obu = shift['opened_by_user'];
-      skName = '${obu['first_name'] ?? ''} ${obu['last_name'] ?? ''}'.trim();
-    }
-    
-    // Chefs
-    String chefsList = '—';
-    final staff = _analyticsData['shift_staff'] as List?;
-    if (staff != null && staff.isNotEmpty) {
-      chefsList = staff.map((st) {
-        final profile = st['profile'] ?? {};
-        return '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'.trim();
-      }).where((name) => name.isNotEmpty).join(', ');
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$shiftType - Session #$shiftNum',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              _statusBadge(status),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 24,
-            runSpacing: 12,
-            children: [
-              _buildHeaderDetailItem('Date', dateStr, Icons.calendar_today_outlined),
-              _buildHeaderDetailItem('Opened At', openedAt, Icons.login_outlined),
-              _buildHeaderDetailItem('Closed At', closedAt, Icons.logout_outlined),
-              _buildHeaderDetailItem('Storekeeper', skName, Icons.person_outline),
-              _buildHeaderDetailItem('Assigned Chefs', chefsList, Icons.restaurant_menu_outlined),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderDetailItem(String label, String value, IconData icon) {
-    return SizedBox(
-      width: 180,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: Colors.grey.shade600),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade500,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLinkedCashierShiftsSection() {
-    final list = _analyticsData['cashier_shifts'] as List?;
-    final totalSales = list?.fold<double>(0, (sum, item) => sum + _fcNum(item['total_cost'])) ?? 0.0;
-    final totalPortions = list?.fold<double>(0, (sum, item) => sum + _fcNum(item['total_portions'])) ?? 0.0;
-    final unmatched = _analyticsData['unmatched_summary'] as Map?;
-    final unmatchedCount = (unmatched?['count'] as num?)?.toInt() ?? 0;
-    final unmatchedValue = _fcNum(unmatched?['value']);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (unmatchedCount > 0)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.report_problem_outlined, color: Colors.red.shade800),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '$unmatchedCount sale(s) worth KES ${unmatchedValue.toStringAsFixed(2)} were sold via POS but never issued to this kitchen shift (e.g. an unissued pastry batch). Issue the matching stock before closing the shift, or this variance will show as unexplained shortage.',
-                    style: TextStyle(color: Colors.red.shade900, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Linked Cashier Shifts',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (list != null && list.isNotEmpty)
-              Text(
-                'Total Sales: KES ${totalSales.toStringAsFixed(2)} (${totalPortions.toStringAsFixed(1)} portions sold)',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.kPrimary,
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        list == null || list.isEmpty
-            ? Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'No cashier shifts detected during this kitchen shift. Either no sales were made at POS cashier stations or POS sales were not associated with this kitchen shift yet.',
-                        style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 3.2,
-                ),
-                itemCount: list.length,
-                itemBuilder: (ctx, i) {
-                  final c = list[i];
-                  final shiftNum = c['shift_number'] ?? 'Shift';
-                  final cashier = c['cashier_name'] ?? 'Cashier';
-                  final outlet = c['outlet_name'] ?? 'Outlet';
-                  final sales = _fcNum(c['total_cost']);
-                  final portions = _fcNum(c['total_portions']);
-                  final status = '${c['status'] ?? ''}'.toUpperCase();
-
-                  return Card(
-                    margin: EdgeInsets.zero,
-                    color: Colors.grey.shade50,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(color: Colors.grey.shade200),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '$outlet - #$shiftNum',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              _statusBadge(status),
-                            ],
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                cashier,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                              Text(
-                                'KES ${sales.toStringAsFixed(2)} (${portions.toStringAsFixed(1)} sold)',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ],
-    );
-  }
-
-  Widget _buildVarianceTableSection() {
-    final list = _analyticsData['items'] as List?;
-    if (list == null || list.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Raw Ingredient Variance',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(16),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Text(
-              'No raw ingredients tracked in this kitchen shift.',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Raw Ingredient Variance',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade200),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Table(
-            columnWidths: const {
-              0: FlexColumnWidth(2.0), // Ingredient
-              1: FlexColumnWidth(1.0), // Opening
-              2: FlexColumnWidth(1.0), // Issued
-              3: FlexColumnWidth(1.0), // POS Consumed
-              4: FlexColumnWidth(1.0), // Spoilage
-              5: FlexColumnWidth(1.2), // Exp Closing
-              6: FlexColumnWidth(1.2), // Phy Closing
-              7: FlexColumnWidth(1.0), // Variance
-              8: FlexColumnWidth(1.2), // Variance Cost
-              9: FlexColumnWidth(1.2), // Status
-            },
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            children: [
-              // Table Header
-              TableRow(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                ),
-                children: [
-                  _buildTableHeaderCell('Ingredient'),
-                  _buildTableHeaderCell('Opening'),
-                  _buildTableHeaderCell('Issued'),
-                  _buildTableHeaderCell('POS Consumed'),
-                  _buildTableHeaderCell('Spoilage'),
-                  _buildTableHeaderCell('Expected'),
-                  _buildTableHeaderCell('Physical'),
-                  _buildTableHeaderCell('Variance'),
-                  _buildTableHeaderCell('Cost (KES)'),
-                  _buildTableHeaderCell('Alert'),
-                ],
-              ),
-              // Table Data
-              ...list.map((item) {
-                final name = item['item_name'] ?? '';
-                final sku = item['item_sku'] ?? '';
-                final unit = item['unit_of_measure'] ?? '';
-                final opening = _fcNum(item['opening_stock']);
-                final additions = _fcNum(item['additions']);
-                final posConsumed = _fcNum(item['sold_quantity']);
-                final spoilage = _fcNum(item['spoilage_quantity']);
-                final expected = _fcNum(item['system_closing_stock']);
-                
-                final hasPhysical = item['physical_count'] != null;
-                final physical = hasPhysical ? _fcNum(item['physical_count']) : 0.0;
-                final variance = hasPhysical ? _fcNum(item['variance']) : 0.0;
-                final varianceCost = hasPhysical ? _fcNum(item['variance_value']) : 0.0;
-
-                // Determine Alert Badge
-                Widget alertBadge;
-                if (!hasPhysical) {
-                  alertBadge = _buildAlertBadge('UNCLOSED', Colors.grey.shade100, Colors.grey.shade700);
-                } else if (variance == 0.0) {
-                  alertBadge = _buildAlertBadge('OK', Colors.green.shade100, Colors.green.shade800);
-                } else {
-                  final alerts = _analyticsData['alerts'] as List?;
-                  final matchedAlert = alerts?.firstWhere(
-                    (a) => a['item_sku'] == sku,
-                    orElse: () => null,
-                  );
-                  if (matchedAlert != null) {
-                    final severity = MatchedSeverity(matchedAlert['severity']);
-                    if (severity == 'critical') {
-                      alertBadge = _buildAlertBadge('CRITICAL', Colors.red.shade100, Colors.red.shade800);
-                    } else {
-                      alertBadge = _buildAlertBadge('WARNING', Colors.amber.shade100, Colors.amber.shade800);
-                    }
-                  } else {
-                    if (variance < 0) {
-                      alertBadge = _buildAlertBadge('SHORTAGE', Colors.orange.shade100, Colors.orange.shade800);
-                    } else {
-                      alertBadge = _buildAlertBadge('OVERAGE', Colors.blue.shade100, Colors.blue.shade800);
-                    }
-                  }
-                }
-
-                return TableRow(
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
-                  ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '$sku · $unit',
-                            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _buildTableCellText(opening.toStringAsFixed(1)),
-                    _buildTableCellText(additions.toStringAsFixed(1)),
-                    _buildTableCellText(posConsumed.toStringAsFixed(1)),
-                    _buildTableCellText(spoilage.toStringAsFixed(1)),
-                    _buildTableCellText(expected.toStringAsFixed(1)),
-                    _buildTableCellText(hasPhysical ? physical.toStringAsFixed(1) : '—'),
-                    _buildTableCellText(
-                      hasPhysical ? (variance > 0 ? '+${variance.toStringAsFixed(1)}' : variance.toStringAsFixed(1)) : '—',
-                      color: hasPhysical
-                          ? (variance < 0
-                              ? Colors.red
-                              : (variance > 0 ? Colors.blue : Colors.green))
-                          : null,
-                      bold: true,
-                    ),
-                    _buildTableCellText(
-                      hasPhysical ? varianceCost.toStringAsFixed(2) : '—',
-                      color: hasPhysical && varianceCost < 0 ? Colors.red : null,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: alertBadge,
-                    ),
-                  ],
-                );
-              }),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  String MatchedSeverity(dynamic severity) {
-    if (severity == null) return '';
-    return '$severity'.toLowerCase();
-  }
-
-  Widget _buildTableHeaderCell(String text) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: Colors.black87,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTableCellText(String text, {Color? color, bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAlertBadge(String label, Color bg, Color fg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w800,
-          color: fg,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWastageAlertsSection() {
-    final alerts = _analyticsData['alerts'] as List?;
-    final liabilityCases = _analyticsData['liability_cases'] as List?;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Wastage Alerts & Staff Liability',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        
-        if (liabilityCases != null && liabilityCases.isNotEmpty) ...[
-          ...liabilityCases.map((lc) {
-            final status = '${lc['status'] ?? ''}'.replaceAll('_', ' ').toUpperCase();
-            final action = '${lc['liability_action'] ?? ''}'.toUpperCase();
-            final totalCost = _fcNum(lc['total_variance_cost']);
-            final reason = lc['write_off_reason'] ?? lc['notes'] ?? '';
-            final isWriteOff = lc['status'] == 'written_off';
-            final allocations = lc['allocations'] as List?;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isWriteOff ? Colors.green.shade50 : Colors.purple.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isWriteOff ? Colors.green.shade200 : Colors.purple.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            isWriteOff ? Icons.check_circle_outline : Icons.gavel_outlined,
-                            color: isWriteOff ? Colors.green.shade800 : Colors.purple.shade800,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isWriteOff ? 'Accountant Write-off' : 'Staff Liability Billed',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: isWriteOff ? Colors.green.shade900 : Colors.purple.shade900,
-                            ),
-                          ),
-                        ],
-                      ),
-                      _statusBadge(status),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Total Reconciliation Cost: KES ${totalCost.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                  ),
-                  if (reason.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Reason/Notes: $reason',
-                      style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
-                    ),
-                  ],
-                  if (allocations != null && allocations.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Billing Details:',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    ...allocations.map((a) {
-                      final name = a['staff_name'] ?? a['user_name'] ?? 'Chef';
-                      final amt = _fcNum(a['amount']);
-                      return Padding(
-                        padding: const EdgeInsets.only(left: 12, bottom: 2),
-                        child: Text(
-                          '• $name: KES ${amt.toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
-                      );
-                    }),
-                  ],
-                ],
-              ),
-            );
-          }),
-          const SizedBox(height: 8),
-        ],
-
-        alerts == null || alerts.isEmpty
-            ? Container(
-                padding: const EdgeInsets.all(16),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_outline, color: Colors.green.shade700),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'No wastage alerts or shortages reported for this shift.',
-                        style: TextStyle(color: Colors.green.shade900, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: alerts.length,
-                itemBuilder: (ctx, i) {
-                  final a = alerts[i];
-                  final isCritical = a['severity'] == 'critical';
-                  final isAcknowledged = a['acknowledged_by'] != null;
-                  final type = '${a['alert_type'] ?? ''}'.replaceAll('_', ' ').toUpperCase();
-                  final message = a['message'] ?? '';
-                  final cost = _fcNum(a['variance_cost']);
-
-                  Color cardBg = isAcknowledged
-                      ? Colors.grey.shade50
-                      : (isCritical ? Colors.red.shade50 : Colors.amber.shade50);
-                  Color cardBorder = isAcknowledged
-                      ? Colors.grey.shade200
-                      : (isCritical ? Colors.red.shade200 : Colors.amber.shade200);
-                  Color fgColor = isAcknowledged
-                      ? Colors.grey.shade700
-                      : (isCritical ? Colors.red.shade900 : Colors.amber.shade900);
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    color: cardBg,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(color: cardBorder),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            isAcknowledged
-                                ? Icons.check_circle_outline
-                                : (isCritical ? Icons.error_outline : Icons.warning_amber_rounded),
-                            color: isAcknowledged
-                                ? Colors.grey.shade600
-                                : (isCritical ? Colors.red.shade800 : Colors.amber.shade800),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      type,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        color: fgColor,
-                                      ),
-                                    ),
-                                    if (cost > 0)
-                                      Text(
-                                        'Loss: KES ${cost.toStringAsFixed(2)}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: isAcknowledged ? Colors.grey.shade700 : Colors.red,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  message,
-                                  style: TextStyle(fontSize: 12, color: fgColor, fontWeight: FontWeight.w600),
-                                ),
-                                if (isAcknowledged) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Acknowledged',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade500,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          if (!isAcknowledged) ...[
-                            const SizedBox(width: 8),
-                            TextButton.icon(
-                              onPressed: () => _acknowledgeAlert(a),
-                              icon: const Icon(Icons.check, size: 14),
-                              label: const Text('Acknowledge', style: TextStyle(fontSize: 11)),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ],
-    );
-  }
-
-  Future<void> _acknowledgeAlert(Map<String, dynamic> alert) async {
-    try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
-      await repo.acknowledgeWastageAlert('${alert['id']}');
-      
-      if (_selectedShift != null) {
-        final alerts = await repo.kitchenWastageAlerts(shiftId: '${_selectedShift!['id']}');
-        if (mounted) {
-          setState(() {
-            _analyticsData['alerts'] = alerts;
-          });
-        }
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Wastage alert acknowledged successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to acknowledge alert: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _statusBadge(String raw) {
-    final s = raw.toLowerCase();
-    Color bg = Colors.grey.shade100;
-    Color fg = Colors.grey.shade700;
-    if (s == 'paid' || s == 'completed' || s == 'approved') {
-      bg = Colors.green.shade100; fg = Colors.green.shade800;
-    } else if (s == 'credit_bill' || s == 'credit' || s == 'pending_chef') {
-      bg = Colors.purple.shade100; fg = Colors.purple.shade800;
-    } else if (s == 'partial' || s == 'pending_review') {
-      bg = Colors.amber.shade100; fg = Colors.amber.shade900;
-    } else if (s == 'voided' || s == 'cancelled' || s == 'rejected') {
-      bg = Colors.red.shade100; fg = Colors.red.shade800;
-    } else if (s == 'open' || s == 'pending') {
-      bg = Colors.orange.shade100; fg = Colors.orange.shade800;
-    } else if (s == 'closed') {
-      bg = Colors.blue.shade100; fg = Colors.blue.shade800;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg, borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(raw.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: fg)),
-    );
-  }
-
-
-  Future<void> _openRecipeDialog(Map<String, dynamic>? existing) async {
-    final saved = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _FoodControlDialog(
-        existing: existing,
-        preselectedRawItem: existing == null ? _selectedStock : null,
-        stock: widget.stock,
-      ),
-    );
-    if (saved == true) _loadRecipes();
-  }
-
-  Future<void> _deactivateFoodControl(Map<String, dynamic> recipe) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Deactivate Food Control'),
-        content: Text(
-          'Deactivate ${recipe['raw_item_name']} to ${recipe['produced_item_name']}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Deactivate'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await ref
-        .read(branchStorekeeperRepositoryProvider)
-        .deactivateProductionRecipe('${recipe['id']}');
-    _loadRecipes();
-  }
-}
-
-// ─── Recipe Card ────────────────────────────────────────────────────────────
-
-class _RecipeCard extends StatelessWidget {
-  const _RecipeCard({
-    required this.recipe,
-    required this.onEdit,
-    required this.onDeactivate,
-  });
-  final Map<String, dynamic> recipe;
-  final VoidCallback onEdit;
-  final VoidCallback onDeactivate;
-
-  @override
-  Widget build(BuildContext context) {
-    final rawQty = _fcNum(recipe['raw_quantity']);
-    final producedQty = _fcNum(recipe['produced_quantity']);
-    final cost = _fcNum(recipe['cost_per_output']);
-    final variance = _fcNum(recipe['allowed_variance_percent']);
-    final spoilage = _fcNum(recipe['spoilage_threshold_percent']);
-    final ratio = rawQty > 0 ? producedQty / rawQty : 0;
-    final requiresConfirmation = recipe['requires_yield_confirmation'] != false;
-
-    return Card(
-      elevation: 0,
-      color: Colors.grey.shade50,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: Colors.grey.shade200)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.shade700,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '${recipe['produced_item_name'] ?? recipe['recipe_code'] ?? 'Food Control'}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    ratio > 0 ? '1 : ${ratio.toStringAsFixed(2)}' : '—',
-                    style: TextStyle(
-                        color: Colors.orange.shade800,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: requiresConfirmation
-                        ? Colors.purple.shade50
-                        : Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    requiresConfirmation ? 'Confirms yield' : 'Auto-finalizes',
-                    style: TextStyle(
-                        color: requiresConfirmation
-                            ? Colors.purple.shade700
-                            : Colors.green.shade700,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 10),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  onPressed: onEdit,
-                  tooltip: 'Edit food control',
-                  style:
-                      IconButton.styleFrom(foregroundColor: AppColors.kPrimary),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.block, size: 18),
-                  onPressed: onDeactivate,
-                  tooltip: 'Deactivate',
-                  style: IconButton.styleFrom(foregroundColor: Colors.red),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '${_qtyText(rawQty)} ${recipe['raw_unit'] ?? ''} ${recipe['raw_item_name'] ?? ''}  →  '
-              '${_qtyText(producedQty)} ${recipe['produced_unit'] ?? ''} ${recipe['produced_item_name'] ?? ''}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 14,
-              runSpacing: 4,
-              children: [
-                if (cost > 0)
-                  Text('Cost/output: KES ${cost.toStringAsFixed(2)}',
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                Text('Variance allowed: ${variance.toStringAsFixed(0)}%',
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                Text('Spoilage threshold: ${spoilage.toStringAsFixed(0)}%',
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _qtyText(double v) =>
-    v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(2);
-
-// ─── Food Control Create/Edit Dialog ────────────────────────────────────────
-
-class _FoodControlDialog extends ConsumerStatefulWidget {
-  const _FoodControlDialog({
-    this.existing,
-    this.preselectedRawItem,
-    required this.stock,
-  });
-
-  final Map<String, dynamic>? existing;
-  final Map<String, dynamic>? preselectedRawItem;
-  final List<Map<String, dynamic>> stock;
-
-  @override
-  ConsumerState<_FoodControlDialog> createState() => _FoodControlDialogState();
-}
-
-class _FoodControlOutput {
-  _FoodControlOutput({
-    required this.menuItem,
-    required this.name,
-    required this.quantity,
-    required this.unit,
-    required this.costPerOutput,
-    this.sku,
-    this.posOutletItemId,
-    this.poolItemId,
-    this.poolFraction,
-  });
-
-  final Map<String, dynamic> menuItem;
-  final String name;
-  final String? sku;
-  final String? posOutletItemId;
-  final double quantity;
-  final String unit;
-  final double costPerOutput;
-  final String? poolItemId;
-  final double? poolFraction;
-
-  Map<String, dynamic> toPayload(String rawItemName) => {
-        'recipe_name': '$rawItemName to $name',
-        'produced_item_name': name,
-        if (sku != null && sku!.isNotEmpty) 'produced_item_sku': sku,
-        'produced_quantity': quantity,
-        'produced_unit': unit,
-        if (posOutletItemId != null) 'pos_outlet_item_id': posOutletItemId,
-        'cost_per_output': costPerOutput,
-        if (poolItemId != null) 'pool_item_id': poolItemId,
-        if (poolFraction != null) 'pool_fraction': poolFraction,
-      };
-}
-
-class _FoodControlDialogState extends ConsumerState<_FoodControlDialog> {
-  final _rawSearchCtrl = TextEditingController();
-  final _rawQtyCtrl = TextEditingController(text: '1');
-  final _rawUnitCtrl = TextEditingController(text: 'KG');
-  final _menuCtrl = TextEditingController();
-  final _yieldQtyCtrl = TextEditingController(text: '1');
-  final _yieldUnitCtrl = TextEditingController(text: 'Portions');
-  final _varianceCtrl = TextEditingController(text: '2');
-  final _spoilageCtrl = TextEditingController(text: '1');
-  final _rawCostCtrl = TextEditingController(text: '0');
-  final _poolFractionCtrl = TextEditingController(text: '1');
-  bool _busy = false;
-  bool _menuLoading = true;
-  bool _requiresConfirmation = true;
-  List<Map<String, dynamic>> _menuItems = [];
-  final List<_FoodControlOutput> _outputs = [];
-  Map<String, dynamic>? _selectedRaw;
-  Map<String, dynamic>? _selectedMenu;
-  Map<String, dynamic>? _poolItem;
-
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.existing;
-    if (e != null) {
-      _rawSearchCtrl.text = '${e['raw_item_name'] ?? ''}';
-      _rawQtyCtrl.text = '${e['raw_quantity'] ?? 1}';
-      _rawUnitCtrl.text = '${e['raw_unit'] ?? 'KG'}';
-      _menuCtrl.text = '${e['produced_item_name'] ?? ''}';
-      _yieldQtyCtrl.text = '${e['produced_quantity'] ?? 1}';
-      _yieldUnitCtrl.text = '${e['produced_unit'] ?? 'Portions'}';
-      _varianceCtrl.text = '${e['allowed_variance_percent'] ?? 2}';
-      _spoilageCtrl.text = '${e['spoilage_threshold_percent'] ?? 1}';
-      _rawCostCtrl.text = _inferRawCost(e).toStringAsFixed(2);
-      _requiresConfirmation = e['requires_yield_confirmation'] != false;
-      _selectedRaw = {
-        'item_sku': e['raw_item_sku'],
-        'item_name': e['raw_item_name'],
-        'unit_of_measure': e['raw_unit'],
-      };
-      _selectedMenu = {
-        'id': e['pos_outlet_item_id'] ?? e['produced_item_sku'],
-        'name': e['produced_item_name'],
-      };
-    } else if (widget.preselectedRawItem != null) {
-      _applyRaw(widget.preselectedRawItem!);
-    }
-    _loadMenuItems();
-  }
-
-  double _inferRawCost(Map<String, dynamic> e) {
-    final stored = _fcNum(e['cost_per_output']);
-    final yieldQty = _fcNum(e['produced_quantity']);
-    if (stored > 0 && yieldQty > 0) return stored * yieldQty;
-    return 0;
-  }
-
-  Future<void> _loadMenuItems() async {
-    try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final items = await repo.getRecipeLinkableMenuItems();
-      if (mounted) {
-        setState(() {
-          _menuItems = items;
-          _menuLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _menuLoading = false);
-    }
-  }
-
-  void _applyRaw(Map<String, dynamic> item) {
-    _selectedRaw = item;
-    _rawSearchCtrl.text = '${item['item_name'] ?? item['name'] ?? ''}';
-    _rawUnitCtrl.text = '${item['unit_of_measure'] ?? item['unit'] ?? 'KG'}';
-    final cost = _fcNum(item['cost_price'] ?? item['unit_cost']);
-    if (cost > 0) _rawCostCtrl.text = cost.toStringAsFixed(2);
-  }
-
-  String? _uuid(dynamic value) {
-    final text = '$value';
-    final uuid = RegExp(
-      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-    );
-    return uuid.hasMatch(text) ? text : null;
-  }
-
-  double get _costPerOutput {
-    final rawCost = _fcNum(_rawCostCtrl.text);
-    final yieldQty = _fcNum(_yieldQtyCtrl.text);
-    return yieldQty <= 0 ? 0 : rawCost / yieldQty;
-  }
-
-  _FoodControlOutput? _buildCurrentOutput() {
-    final selected = _selectedMenu;
-    final name = _menuCtrl.text.trim();
-    final qty = _fcNum(_yieldQtyCtrl.text);
-    if (selected == null || name.isEmpty || qty <= 0) return null;
-    final sku = '${selected['sku'] ?? selected['item_sku'] ?? selected['id'] ?? ''}';
-    final posId = _uuid(selected['id']);
-    final poolId = _poolItem == null ? null : _uuid(_poolItem!['id']);
-    final poolFraction = poolId == null ? null : _fcNum(_poolFractionCtrl.text);
-    return _FoodControlOutput(
-      menuItem: selected,
-      name: name,
-      sku: sku,
-      posOutletItemId: posId,
-      quantity: qty,
-      unit: _yieldUnitCtrl.text.trim().isEmpty
-          ? 'Portions'
-          : _yieldUnitCtrl.text.trim(),
-      costPerOutput: _costPerOutput,
-      poolItemId: poolId,
-      poolFraction: poolFraction,
-    );
-  }
-
-  void _addCurrentOutput() {
-    final output = _buildCurrentOutput();
-    if (output == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a POS menu item and yield quantity first')),
-      );
-      return;
-    }
-    final exists = _outputs.any((o) =>
-        (o.posOutletItemId != null && o.posOutletItemId == output.posOutletItemId) ||
-        o.name.toLowerCase().trim() == output.name.toLowerCase().trim());
-    if (exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That POS menu item is already added')),
-      );
-      return;
-    }
-    setState(() {
-      _outputs.add(output);
-      _selectedMenu = null;
-      _menuCtrl.clear();
-      _yieldQtyCtrl.text = '1';
-      _poolItem = null;
-      _poolFractionCtrl.text = '1';
-    });
-  }
-
-  @override
-  void dispose() {
-    _rawSearchCtrl.dispose();
-    _rawQtyCtrl.dispose();
-    _rawUnitCtrl.dispose();
-    _menuCtrl.dispose();
-    _yieldQtyCtrl.dispose();
-    _yieldUnitCtrl.dispose();
-    _varianceCtrl.dispose();
-    _spoilageCtrl.dispose();
-    _rawCostCtrl.dispose();
-    _poolFractionCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_selectedRaw == null ||
-        '${_selectedRaw!['item_sku'] ?? _selectedRaw!['sku'] ?? ''}'.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Select a raw material from branch stock')),
-      );
-      return;
-    }
-    final currentOutput = _buildCurrentOutput();
-    final outputs = widget.existing == null
-        ? [..._outputs, if (currentOutput != null) currentOutput]
-        : <_FoodControlOutput>[];
-    if (widget.existing == null && outputs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one POS menu item')),
-      );
-      return;
-    }
-    if (widget.existing != null && currentOutput == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a POS menu item')),
-      );
-      return;
-    }
-    final rawQty = _fcNum(_rawQtyCtrl.text);
-    if (rawQty <= 0 || (widget.existing != null && _fcNum(_yieldQtyCtrl.text) <= 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Raw quantity and yield must be greater than zero')),
-      );
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final rawSku = '${_selectedRaw!['item_sku'] ?? _selectedRaw!['sku']}';
-      final rawName =
-          '${_selectedRaw!['item_name'] ?? _selectedRaw!['name'] ?? _rawSearchCtrl.text}';
-      final primaryOutput = widget.existing == null ? outputs.first : currentOutput!;
-      if (widget.existing == null) {
-        await repo.createProductionRecipe(
-          rawItemSku: rawSku,
-          rawItemName: rawName,
-          rawQuantity: rawQty,
-          rawUnit: _rawUnitCtrl.text.trim(),
-          producedItemName: primaryOutput.name,
-          producedItemSku: primaryOutput.sku,
-          producedQuantity: primaryOutput.quantity,
-          producedUnit: primaryOutput.unit,
-          posOutletItemId: primaryOutput.posOutletItemId,
-          allowedVariancePercent: _fcNum(_varianceCtrl.text),
-          spoilageThresholdPercent: _fcNum(_spoilageCtrl.text),
-          costPerOutput: primaryOutput.costPerOutput,
-          requiresYieldConfirmation: _requiresConfirmation,
-          poolItemId: primaryOutput.poolItemId,
-          poolFraction: primaryOutput.poolFraction,
-          outputs: outputs.map((o) => o.toPayload(rawName)).toList(),
-        );
-      } else {
-        await repo.updateProductionRecipe(
-          id: '${widget.existing!['id']}',
-          rawItemSku: rawSku,
-          rawItemName: rawName,
-          rawQuantity: rawQty,
-          rawUnit: _rawUnitCtrl.text.trim(),
-          producedItemName: primaryOutput.name,
-          producedItemSku: primaryOutput.sku,
-          producedQuantity: primaryOutput.quantity,
-          producedUnit: primaryOutput.unit,
-          posOutletItemId: primaryOutput.posOutletItemId,
-          allowedVariancePercent: _fcNum(_varianceCtrl.text),
-          spoilageThresholdPercent: _fcNum(_spoilageCtrl.text),
-          costPerOutput: primaryOutput.costPerOutput,
-          requiresYieldConfirmation: _requiresConfirmation,
-          poolItemId: primaryOutput.poolItemId,
-          poolFraction: primaryOutput.poolFraction,
-        );
-      }
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Food control save failed: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEdit = widget.existing != null;
-    return AlertDialog(
-      title: Text(isEdit ? 'Edit Food Control' : 'Create Food Control'),
-      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      content: SizedBox(
-        width: 720,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Step 1: Select Raw Material',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Autocomplete<Map<String, dynamic>>(
-                initialValue: TextEditingValue(text: _rawSearchCtrl.text),
-                optionsBuilder: (tv) {
-                  final q = tv.text.toLowerCase().trim();
-                  if (q.isEmpty) return widget.stock.take(20);
-                  return widget.stock.where((s) {
-                    final sku =
-                        '${s['item_sku'] ?? s['sku'] ?? ''}'.toLowerCase();
-                    final name =
-                        '${s['item_name'] ?? s['name'] ?? ''}'.toLowerCase();
-                    return sku.contains(q) || name.contains(q);
-                  }).take(20);
-                },
-                displayStringForOption: (s) =>
-                    '${s['item_name'] ?? s['name'] ?? s['item_sku'] ?? ''}',
-                onSelected: (s) => setState(() => _applyRaw(s)),
-                fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
-                  if (ctrl.text != _rawSearchCtrl.text) {
-                    ctrl.text = _rawSearchCtrl.text;
-                  }
-                  return TextField(
-                    controller: ctrl,
-                    focusNode: focus,
-                    decoration: const InputDecoration(
-                      labelText: 'Raw Material',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: (v) => _rawSearchCtrl.text = v,
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(
-                    child: TextField(
-                  controller: _rawQtyCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Standard Quantity',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                  onChanged: (_) => setState(() {}),
-                )),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: TextField(
-                  controller: _rawUnitCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Unit',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                )),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: TextField(
-                  controller: _rawCostCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Raw Cost',
-                      prefixText: 'KES ',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                  onChanged: (_) => setState(() {}),
-                )),
-              ]),
-              const SizedBox(height: 16),
-              const Text('Step 2: Link POS Menu Item',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Autocomplete<Map<String, dynamic>>(
-                initialValue: TextEditingValue(text: _menuCtrl.text),
-                optionsBuilder: (tv) {
-                  final q = tv.text.toLowerCase().trim();
-                  final source = q.isEmpty
-                      ? _menuItems.take(20)
-                      : _menuItems.where((m) {
-                          final name = '${m['name'] ?? m['item_name'] ?? ''}'
-                              .toLowerCase();
-                          final cat =
-                              '${m['category_name'] ?? m['category'] ?? ''}'
-                                  .toLowerCase();
-                          return name.contains(q) || cat.contains(q);
-                        }).take(20);
-                  return source;
-                },
-                displayStringForOption: (m) =>
-                    '${m['name'] ?? m['item_name'] ?? ''}',
-                onSelected: (m) {
-                  setState(() {
-                    _selectedMenu = m;
-                    _menuCtrl.text = '${m['name'] ?? m['item_name'] ?? ''}';
-                  });
-                },
-                fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
-                  if (ctrl.text != _menuCtrl.text) ctrl.text = _menuCtrl.text;
-                  return TextField(
-                    controller: ctrl,
-                    focusNode: focus,
-                    decoration: InputDecoration(
-                      labelText: _menuLoading
-                          ? 'Loading POS menu items...'
-                          : 'POS Menu Item',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      suffixIcon: _selectedMenu == null
-                          ? null
-                          : const Icon(Icons.check_circle,
-                              color: Colors.green, size: 18),
-                    ),
-                    onChanged: (v) {
-                      _menuCtrl.text = v;
-                      _selectedMenu = null;
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              const Text('Step 3: Define Yield',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Row(children: [
-                Expanded(
-                    child: TextField(
-                  controller: _yieldQtyCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Yield Quantity',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                  onChanged: (_) => setState(() {}),
-                )),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: TextField(
-                  controller: _yieldUnitCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Yield Unit',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                )),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: InputDecorator(
-                  decoration: const InputDecoration(
-                      labelText: 'Cost Per Output',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                  child: Text('KES ${_costPerOutput.toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                )),
-              ]),
-              if (!isEdit) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: OutlinedButton.icon(
-                    onPressed: _addCurrentOutput,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add this POS item'),
-                  ),
-                ),
-                if (_outputs.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _outputs.map((output) {
-                      return InputChip(
-                        label: Text(
-                          '${output.name} - ${_qtyText(output.quantity)} ${output.unit}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        avatar: const Icon(Icons.restaurant_menu, size: 16),
-                        onDeleted: () => setState(() => _outputs.remove(output)),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ],
-              const SizedBox(height: 16),
-              const Text('Step 4: Variance & Spoilage',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              Row(children: [
-                Expanded(
-                    child: TextField(
-                  controller: _varianceCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Allowed Variance %',
-                      suffixText: '%',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                )),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: TextField(
-                  controller: _spoilageCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Expected Waste %',
-                      suffixText: '%',
-                      border: OutlineInputBorder(),
-                      isDense: true),
-                )),
-              ]),
-              const SizedBox(height: 16),
-              const Text('Step 5: Yield Confirmation & Stock Pool',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                value: _requiresConfirmation,
-                title: const Text('Requires yield confirmation',
-                    style: TextStyle(fontSize: 13)),
-                subtitle: const Text(
-                  'ON for baking/pastry items (chapati, ndazi...) — expected yield posts to POS immediately, then the storekeeper confirms actual output and any shortfall is billed to the producer. OFF for exact conversions (rice, chicken cuts) which finalize immediately.',
-                  style: TextStyle(fontSize: 11),
-                ),
-                onChanged: (v) => setState(() => _requiresConfirmation = v),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Shares stock pool with (optional) — e.g. Half/Quarter Chicken share the Full Chicken pool. Selling any of them deducts the fraction below from the pool item\'s stock instead of its own.',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-              const SizedBox(height: 6),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  flex: 3,
-                  child: Autocomplete<Map<String, dynamic>>(
-                    optionsBuilder: (tv) {
-                      final q = tv.text.toLowerCase().trim();
-                      final source = q.isEmpty
-                          ? _menuItems.take(20)
-                          : _menuItems.where((m) {
-                              final name =
-                                  '${m['name'] ?? m['item_name'] ?? ''}'
-                                      .toLowerCase();
-                              return name.contains(q);
-                            }).take(20);
-                      return source;
-                    },
-                    displayStringForOption: (m) =>
-                        '${m['name'] ?? m['item_name'] ?? ''}',
-                    onSelected: (m) => setState(() => _poolItem = m),
-                    fieldViewBuilder: (ctx, ctrl, focus, onSubmit) => TextField(
-                      controller: ctrl,
-                      focusNode: focus,
-                      decoration: InputDecoration(
-                        labelText: 'Pool base item',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        suffixIcon: _poolItem == null
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.close, size: 16),
-                                onPressed: () {
-                                  setState(() => _poolItem = null);
-                                  ctrl.clear();
-                                },
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 1,
-                  child: TextField(
-                    controller: _poolFractionCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                        labelText: 'Fraction',
-                        border: OutlineInputBorder(),
-                        isDense: true),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _submit,
-          child: _busy
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-              : Text(isEdit ? 'Save Food Control' : 'Create Food Control'),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Stock SKU Autocomplete field ────────────────────────────────────────────
-
-class _StockAutocomplete extends StatelessWidget {
-  const _StockAutocomplete({
-    required this.controller,
-    required this.stock,
-    required this.onSelected,
-    this.hint = '',
-  });
-  final TextEditingController controller;
-  final List<Map<String, dynamic>> stock;
-  final ValueChanged<Map<String, dynamic>> onSelected;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Autocomplete<Map<String, dynamic>>(
-      initialValue: TextEditingValue(text: controller.text),
-      optionsBuilder: (tv) {
-        final q = tv.text.toLowerCase();
-        if (q.isEmpty) return const [];
-        return stock
-            .where((s) =>
-                '${s['item_sku']}'.toLowerCase().contains(q) ||
-                '${s['item_name']}'.toLowerCase().contains(q))
-            .take(8);
-      },
-      displayStringForOption: (s) => '${s['item_sku']}',
-      onSelected: (s) {
-        controller.text = '${s['item_sku']}';
-        onSelected(s);
-      },
-      fieldViewBuilder: (ctx, ctrl, focusNode, _) {
-        // sync external controller → internal
-        ctrl.text = controller.text;
-        ctrl.addListener(() => controller.text = ctrl.text);
-        return TextField(
-          controller: ctrl,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-              hintText: hint,
-              border: const OutlineInputBorder(),
-              isDense: true),
-        );
-      },
-      optionsViewBuilder: (ctx, onSel, opts) => Align(
-        alignment: Alignment.topLeft,
-        child: Material(
-          elevation: 4,
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 280,
-            child: ListView(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              children: opts
-                  .map((s) => ListTile(
-                        dense: true,
-                        title: Text('${s['item_name']}',
-                            style: const TextStyle(fontSize: 12)),
-                        subtitle: Text('${s['item_sku']}',
-                            style: const TextStyle(fontSize: 10)),
-                        onTap: () => onSel(s),
-                      ))
-                  .toList(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ─────────────────────── BRANCH INVENTORY TAB ───────────────────────────────
@@ -14174,9 +10301,20 @@ class _KitchenProductionSectionState
     setState(() => _selected = s);
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final detail = await repo.getKitchenShiftDetail('${s['id']}');
+      final detailFuture = repo.getKitchenShiftDetail('${s['id']}');
+      final summaryFuture = repo.getProductionSummary('${s['id']}');
+      final handoverFuture = repo.getShiftHandover('${s['id']}');
+      final detail = await detailFuture;
+      final productionSummary = await summaryFuture;
+      final handover = await handoverFuture;
       if (mounted && _selected != null && _selected!['id'] == s['id']) {
-        setState(() => _selected = _flatten(detail));
+        setState(() => _selected = {
+              ..._flatten(detail),
+              'production_by_recipe': productionSummary['by_recipe'] ?? [],
+              'pending_production_logs':
+                  productionSummary['pending_logs'] ?? [],
+              'handover': handover,
+            });
       }
     } catch (e) {
       if (mounted) {
@@ -14584,7 +10722,14 @@ class _KitchenProductionSectionState
         (s['approvals'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final shiftStaff =
         (s['shift_staff'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final canClose = status == 'open';
+    final pendingProductionLogs =
+        (s['pending_production_logs'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+    final productionByRecipe =
+        (s['production_by_recipe'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+    final handover = (s['handover'] as Map?)?.cast<String, dynamic>();
+    final canClose = status == 'open' && pendingProductionLogs.isEmpty;
     final canSubmit = status == 'closed';
 
     final recipeById = {for (final r in _recipes) '${r['id']}': r};
@@ -14600,7 +10745,7 @@ class _KitchenProductionSectionState
           label: const Text('Back'),
         ),
         _RefreshButton(onPressed: _refreshSelected),
-        if (canClose) ...[
+        if (status == 'open') ...[
           OutlinedButton.icon(
             onPressed: () => _openIssueStock(s),
             icon: const Icon(Icons.add_box_outlined, size: 16),
@@ -14616,11 +10761,16 @@ class _KitchenProductionSectionState
             icon: const Icon(Icons.restaurant_outlined, size: 16),
             label: const Text('Record Production'),
           ),
-          FilledButton.icon(
-            onPressed: () => _openComplete(s),
-            icon: const Icon(Icons.check, size: 16),
-            label: const Text('Close Shift'),
-            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+          Tooltip(
+            message: canClose
+                ? 'Close this shift'
+                : 'Log production output for every pending recipe issuance before closing',
+            child: FilledButton.icon(
+              onPressed: canClose ? () => _openComplete(s) : null,
+              icon: const Icon(Icons.check, size: 16),
+              label: const Text('Close Shift'),
+              style: FilledButton.styleFrom(backgroundColor: Colors.green),
+            ),
           ),
         ],
         if (canSubmit)
@@ -14659,6 +10809,50 @@ class _KitchenProductionSectionState
             ],
           ),
         ),
+        // Pending production logs — Type A issuances with no logged output yet.
+        // Blocks Close Shift both here (button disabled above) and server-side.
+        if (pendingProductionLogs.isNotEmpty)
+          _SectionCard(
+            title: 'Pending Production Logs (${pendingProductionLogs.length})',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'These recipe issuances have no production output logged yet. Enter output for each before this shift can be closed.',
+                    style: TextStyle(fontSize: 12, color: Colors.orange),
+                  ),
+                ),
+                ...pendingProductionLogs.map((p) {
+                  final recipe = (p['recipe'] as Map?)?.cast<String, dynamic>();
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber,
+                            size: 16, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${_fcNum(p['quantity'])} ${p['unit'] ?? ''} ${p['item_name'] ?? p['item_sku']}'
+                            '${recipe != null ? ' — ${recipe['recipe_name'] ?? recipe['produced_item_name']}' : ''}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        if (status == 'open')
+                          TextButton(
+                            onPressed: () => _openRecordProduction(s),
+                            child: const Text('Log Output',
+                                style: TextStyle(fontSize: 12)),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
         // Shift staff
         if (shiftStaff.isNotEmpty)
           _SectionCard(
@@ -14775,6 +10969,51 @@ class _KitchenProductionSectionState
                   ],
                 ),
         ),
+        // Production summary — Phase 3: aggregate output per recipe, distinct
+        // from the raw chronological log below.
+        if (productionByRecipe.isNotEmpty)
+          _SectionCard(
+            title: 'Production Summary',
+            child: Column(
+              children: productionByRecipe.map((r) {
+                final flaggedCount = (r['variance_flagged_count'] as num?)?.toInt() ?? 0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${r['produced_item_name'] ?? ''}',
+                              style: const TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              '${_fcNum(r['total_raw_quantity_used']).toStringAsFixed(2)} ${r['raw_unit'] ?? ''} ${r['raw_item_name'] ?? ''}  →  '
+                              '${_fcNum(r['total_produced_quantity']).toStringAsFixed(2)} ${r['produced_unit'] ?? ''} across ${r['entries']} entr${r['entries'] == 1 ? 'y' : 'ies'}',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (flaggedCount > 0)
+                        Chip(
+                          label: Text('$flaggedCount variance',
+                              style: const TextStyle(
+                                  fontSize: 10, color: Colors.white)),
+                          backgroundColor: Colors.orange,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         // Production records
         _SectionCard(
           title: 'Production (${productions.length})',
@@ -14832,6 +11071,43 @@ class _KitchenProductionSectionState
                   }).toList(),
                 ),
         ),
+        // Digital kitchen ledger — the witnessed handover document replacing
+        // the physical ledger, written when this shift closed (or, for a
+        // Shift B, the one its opening stock was seeded from).
+        if (handover != null)
+          _SectionCard(
+            title: 'Digital Kitchen Ledger (Handover)',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  handover['outgoing_shift_id'] == s['id']
+                      ? 'Confirmed ${handover['confirmed_at']?.toString().split('T').first ?? ''} — witnessed by both shift teams.'
+                      : 'Opening stock seeded from the previous shift\'s confirmed handover.',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                Builder(builder: (_) {
+                  final witnessStaff =
+                      (handover['witness_staff'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+                  final outgoingIds = (handover['outgoing_witness_ids'] as List?)?.cast<dynamic>().map((e) => '$e').toSet() ?? {};
+                  final incomingIds = (handover['incoming_witness_ids'] as List?)?.cast<dynamic>().map((e) => '$e').toSet() ?? {};
+                  final outgoingNames = witnessStaff.where((w) => outgoingIds.contains('${w['user_id']}')).map((w) => '${w['name']}').toList();
+                  final incomingNames = witnessStaff.where((w) => incomingIds.contains('${w['user_id']}')).map((w) => '${w['name']}').toList();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Outgoing witnesses: ${outgoingNames.isEmpty ? '—' : outgoingNames.join(', ')}',
+                          style: const TextStyle(fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Text('Incoming witnesses: ${incomingNames.isEmpty ? '—' : incomingNames.join(', ')}',
+                          style: const TextStyle(fontSize: 12)),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
         // Stock take / variance
         if (stockTake.isNotEmpty)
           _SectionCard(
@@ -14991,6 +11267,7 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
   };
 
   String _shiftType = 'shift_a';
+  String _department = 'KITCHEN';
   final List<Map<String, dynamic>> _items = [];
   bool _posting = false;
   bool _staffLoading = true;
@@ -15153,7 +11430,7 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
             })
         .toList();
 
-    if (openingItems.isEmpty) {
+    if (openingItems.isEmpty && _shiftType != 'shift_b') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Add at least one item with quantity'),
@@ -15170,6 +11447,8 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
         shiftDate: DateTime.now().toIso8601String().split('T').first,
         openingItems: openingItems,
         assignedChefIds: _selectedChefIds.toList(),
+        subShiftType: _shiftType == 'shift_a' ? 'A' : 'B',
+        department: _department,
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -15207,6 +11486,23 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
                 DropdownMenuItem(value: 'shift_b', child: Text('Shift B')),
               ],
               onChanged: (v) => setState(() => _shiftType = v ?? _shiftType),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Each shift type opens exactly once per commercial day. Shift B '
+              'cannot open until Shift A is closed and handed over.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _department,
+              decoration: const InputDecoration(
+                  labelText: 'Department', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'KITCHEN', child: Text('Kitchen')),
+                DropdownMenuItem(value: 'PASTRY', child: Text('Pastry')),
+              ],
+              onChanged: (v) => setState(() => _department = v ?? _department),
             ),
             const SizedBox(height: 16),
             const Text('Accountable Shift Team',
@@ -15265,10 +11561,32 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
                         ),
             ),
             const SizedBox(height: 16),
-            const Text('Opening Stock Items',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Flexible(
+            if (_shiftType == 'shift_b')
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Opening stock is seeded automatically from Shift A\'s confirmed handover counts — no manual entry needed.',
+                        style: TextStyle(fontSize: 12, color: Colors.blue),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              const Text('Opening Stock Items',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Flexible(
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: _items.length,
@@ -15417,6 +11735,7 @@ class _NewKitchenShiftSheetState extends ConsumerState<_NewKitchenShiftSheet> {
               icon: const Icon(Icons.add, size: 16),
               label: const Text('Add Item'),
             ),
+            ],
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -15457,6 +11776,14 @@ class _CloseKitchenShiftSheetState
   final _notesCtrl = TextEditingController();
   bool _posting = false;
 
+  // Digital kitchen ledger handover (Phase 4) — only required for Shift A/B
+  // kitchen shifts (sub_shift_type set); legacy/ad-hoc shifts skip it.
+  bool get _requiresHandover => widget.shift['sub_shift_type'] != null;
+  bool _staffLoading = true;
+  List<Map<String, dynamic>> _staff = [];
+  final Set<String> _outgoingWitnessIds = {};
+  final Set<String> _incomingWitnessIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -15468,6 +11795,30 @@ class _CloseKitchenShiftSheetState
         'quantity': TextEditingController(),
         'notes': TextEditingController(),
       });
+    }
+    final shiftStaff =
+        (widget.shift['shift_staff'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+    _outgoingWitnessIds.addAll(
+        shiftStaff.map((s) => '${s['user_id'] ?? ''}').where((id) => id.isNotEmpty));
+    if (_requiresHandover) _loadStaff();
+  }
+
+  Future<void> _loadStaff() async {
+    setState(() => _staffLoading = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final allStaff = await repo.getStaffList();
+      if (mounted) {
+        setState(() {
+          _staff =
+              allStaff.where(_NewKitchenShiftSheetState._isKitchenStaff).toList();
+        });
+      }
+    } catch (_) {
+      // Non-fatal — witness picker just stays empty until retried.
+    } finally {
+      if (mounted) setState(() => _staffLoading = false);
     }
   }
 
@@ -15482,6 +11833,17 @@ class _CloseKitchenShiftSheetState
   }
 
   Future<void> _submit() async {
+    if (_requiresHandover &&
+        (_outgoingWitnessIds.isEmpty || _incomingWitnessIds.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Name at least one outgoing and one incoming witness before closing.'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     final counts = _physicalCounts
         .where((c) =>
             '${c['sku']}'.isNotEmpty &&
@@ -15507,8 +11869,35 @@ class _CloseKitchenShiftSheetState
         counts,
         closingNotes:
             _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        outgoingWitnessIds: _outgoingWitnessIds.toList(),
+        incomingWitnessIds: _incomingWitnessIds.toList(),
       );
       if (mounted) Navigator.pop(context, result);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (mounted) {
+        if (data is Map && data['code'] == 'PENDING_PRODUCTION_LOGS') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('${data['message'] ?? 'Pending production logs must be resolved before closing.'}'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 6)),
+          );
+        } else if (data is Map && data['code'] == 'HANDOVER_WITNESSES_REQUIRED') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('${data['message'] ?? 'Outgoing and incoming witnesses are required.'}'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 6)),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Failed to close shift: ${e.message}'),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -15618,6 +12007,25 @@ class _CloseKitchenShiftSheetState
               },
             ),
           ),
+          if (_requiresHandover) ...[
+            const SizedBox(height: 12),
+            const Text('Digital Kitchen Ledger — Handover Witnesses',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text(
+              'Both teams must be named before this shift can close. Shift B\'s opening stock will be seeded directly from these physical counts.',
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            const SizedBox(height: 6),
+            _witnessPicker(
+              label: 'Outgoing Team (this shift)',
+              selected: _outgoingWitnessIds,
+            ),
+            const SizedBox(height: 8),
+            _witnessPicker(
+              label: 'Incoming Team (next shift)',
+              selected: _incomingWitnessIds,
+            ),
+          ],
           const SizedBox(height: 8),
           TextFormField(
             controller: _notesCtrl,
@@ -15646,6 +12054,62 @@ class _CloseKitchenShiftSheetState
       ),
     );
   }
+
+  Widget _witnessPicker({
+    required String label,
+    required Set<String> selected,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Container(
+          constraints: const BoxConstraints(maxHeight: 120),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: _staffLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child:
+                      Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              : _staff.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No kitchen staff found for this branch.',
+                          style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _staff.length,
+                      itemBuilder: (ctx, i) {
+                        final s = _staff[i];
+                        final id = '${s['user_id'] ?? s['id']}';
+                        final name =
+                            '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                .trim();
+                        return CheckboxListTile(
+                          dense: true,
+                          value: selected.contains(id),
+                          title: Text(name.isEmpty ? 'Staff' : name,
+                              style: const TextStyle(fontSize: 12)),
+                          onChanged: (v) => setState(() {
+                            if (v == true) {
+                              selected.add(id);
+                            } else {
+                              selected.remove(id);
+                            }
+                          }),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
 }
 
 // ── Issue Stock to Shift Sheet (mid-shift additions) ─────────────────────────
@@ -15663,11 +12127,16 @@ class _IssueShiftStockSheet extends ConsumerStatefulWidget {
 class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
   final List<Map<String, dynamic>> _items = [];
   bool _posting = false;
+  bool _staffLoading = true;
+  List<Map<String, dynamic>> _staff = [];
+  final Set<String> _selectedStaffIds = {};
+  List<Map<String, dynamic>> _recipes = [];
 
   @override
   void initState() {
     super.initState();
     _addItem();
+    _loadStaffAndRecipes();
   }
 
   @override
@@ -15680,6 +12149,31 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
     super.dispose();
   }
 
+  Future<void> _loadStaffAndRecipes() async {
+    setState(() => _staffLoading = true);
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final results = await Future.wait([
+        repo.getStaffList(),
+        repo.getProductionRecipes(),
+      ]);
+      final allStaff = results[0] as List<Map<String, dynamic>>;
+      final recipes = results[1] as List<Map<String, dynamic>>;
+      if (mounted) {
+        setState(() {
+          _staff = allStaff
+              .where(_NewKitchenShiftSheetState._isKitchenStaff)
+              .toList();
+          _recipes = recipes;
+        });
+      }
+    } catch (_) {
+      // Non-fatal — staff/recipe pickers just stay empty until retried.
+    } finally {
+      if (mounted) setState(() => _staffLoading = false);
+    }
+  }
+
   void _addItem() {
     setState(() {
       _items.add({
@@ -15690,6 +12184,9 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
         'unit': 'kg',
         'cost_price': TextEditingController(),
         'available': 0.0,
+        'food_control_type': null,
+        'type_loading': false,
+        'recipe_id': null,
       });
     });
   }
@@ -15703,27 +12200,77 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
     });
   }
 
-  void _applyStockSelection(Map<String, dynamic> row, Map<String, dynamic> s) {
-    row['sku'] = '${s['item_sku'] ?? s['sku'] ?? ''}';
-    row['name'] = '${s['item_name'] ?? s['name'] ?? ''}';
-    row['unit'] = '${s['unit_of_measure'] ?? s['unit'] ?? 'kg'}';
-    row['available'] = _fcNum(s['quantity']);
-    (row['searchCtrl'] as TextEditingController).text = row['name'];
+  Future<void> _applyStockSelection(
+      Map<String, dynamic> row, Map<String, dynamic> s) async {
+    final sku = '${s['item_sku'] ?? s['sku'] ?? ''}';
+    setState(() {
+      row['sku'] = sku;
+      row['name'] = '${s['item_name'] ?? s['name'] ?? ''}';
+      row['unit'] = '${s['unit_of_measure'] ?? s['unit'] ?? 'kg'}';
+      row['available'] = _fcNum(s['quantity']);
+      (row['searchCtrl'] as TextEditingController).text = row['name'];
+      row['food_control_type'] = null;
+      row['recipe_id'] = null;
+      row['type_loading'] = true;
+    });
     final cost = _fcNum(s['cost_price'] ?? s['unit_cost']);
-    if (cost > 0)
+    if (cost > 0) {
       (row['cost_price'] as TextEditingController).text =
           cost.toStringAsFixed(2);
+    }
+    try {
+      final type = await ref
+          .read(branchStorekeeperRepositoryProvider)
+          .getStockItemFoodControlType(sku);
+      if (mounted) setState(() => row['food_control_type'] = type);
+    } catch (_) {
+      if (mounted) setState(() => row['food_control_type'] = 'UNREGISTERED');
+    } finally {
+      if (mounted) setState(() => row['type_loading'] = false);
+    }
   }
 
+  List<Map<String, dynamic>> _recipesFor(String sku) =>
+      _recipes.where((r) => '${r['raw_item_sku']}' == sku).toList();
+
   Future<void> _submit() async {
-    final issueItems = _items
-        .where((it) =>
-            '${it['sku']}'.isNotEmpty &&
-            (double.tryParse((it['quantity'] as TextEditingController)
-                        .text
-                        .trim()) ??
-                    0) >
-                0)
+    final rows = _items.where((it) =>
+        '${it['sku']}'.isNotEmpty &&
+        (double.tryParse((it['quantity'] as TextEditingController).text.trim()) ??
+                0) >
+            0);
+
+    if (rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Add at least one item with quantity'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_selectedStaffIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Select at least one responsible staff member'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+    final missingRecipe = rows.firstWhere(
+      (it) => it['food_control_type'] == 'A_RECIPE_BOM' && it['recipe_id'] == null,
+      orElse: () => const {},
+    );
+    if (missingRecipe.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text('Select which recipe ${missingRecipe['name']} batch is for'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final issueItems = rows
         .map((it) => {
               'sku': it['sku'],
               'name': it['name'],
@@ -15735,17 +12282,10 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
                           .text
                           .trim()) ??
                   0,
+              'responsible_staff_ids': _selectedStaffIds.toList(),
+              if (it['recipe_id'] != null) 'recipe_id': it['recipe_id'],
             })
         .toList();
-
-    if (issueItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Add at least one item with quantity'),
-            backgroundColor: Colors.red),
-      );
-      return;
-    }
 
     setState(() => _posting = true);
     try {
@@ -15801,9 +12341,14 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
               itemBuilder: (ctx, i) {
                 final it = _items[i];
                 final searchCtrl = it['searchCtrl'] as TextEditingController;
+                final foodControlType = it['food_control_type'] as String?;
+                final typeLoading = it['type_loading'] == true;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
@@ -15823,8 +12368,7 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
                           },
                           displayStringForOption: (s) =>
                               '${s['item_name'] ?? s['name'] ?? ''}',
-                          onSelected: (s) =>
-                              setState(() => _applyStockSelection(it, s)),
+                          onSelected: (s) => _applyStockSelection(it, s),
                           fieldViewBuilder: (ctx, ctrl, focus, onSubmit) {
                             if (ctrl.text != searchCtrl.text)
                               ctrl.text = searchCtrl.text;
@@ -15866,6 +12410,27 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
                         onPressed: () => _removeItem(i),
                       ),
                     ],
+                      ),
+                      if (typeLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4, left: 4),
+                          child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2)),
+                        ),
+                      if (!typeLoading && foodControlType != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: _FoodControlTypeRow(
+                            type: foodControlType,
+                            recipes: _recipesFor('${it['sku']}'),
+                            selectedRecipeId: it['recipe_id'] as String?,
+                            onRecipeSelected: (id) =>
+                                setState(() => it['recipe_id'] = id),
+                          ),
+                        ),
+                    ],
                   ),
                 );
               },
@@ -15875,6 +12440,56 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
             onPressed: _addItem,
             icon: const Icon(Icons.add, size: 16),
             label: const Text('Add Item'),
+          ),
+          const SizedBox(height: 8),
+          const Text('Responsible Staff',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Required for every issuance — links this addition to whoever is accountable for it.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 130),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: _staffLoading
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                : _staff.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No kitchen staff found for this branch.',
+                            style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _staff.length,
+                        itemBuilder: (ctx, i) {
+                          final s = _staff[i];
+                          final id = '${s['user_id'] ?? s['id']}';
+                          final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                              .trim();
+                          return CheckboxListTile(
+                            dense: true,
+                            value: _selectedStaffIds.contains(id),
+                            title: Text(name.isEmpty ? 'Staff' : name,
+                                style: const TextStyle(fontSize: 12)),
+                            onChanged: (v) => setState(() {
+                              if (v == true) {
+                                _selectedStaffIds.add(id);
+                              } else {
+                                _selectedStaffIds.remove(id);
+                              }
+                            }),
+                          );
+                        },
+                      ),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -15894,6 +12509,90 @@ class _IssueShiftStockSheetState extends ConsumerState<_IssueShiftStockSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// Inline badge + forced recipe declaration shown under an issuance row once
+// its food control type is detected — this is the "force BOM declaration"
+// step: Type A cannot be saved without picking which recipe the batch is for.
+class _FoodControlTypeRow extends StatelessWidget {
+  const _FoodControlTypeRow({
+    required this.type,
+    required this.recipes,
+    required this.selectedRecipeId,
+    required this.onRecipeSelected,
+  });
+  final String type;
+  final List<Map<String, dynamic>> recipes;
+  final String? selectedRecipeId;
+  final ValueChanged<String?> onRecipeSelected;
+
+  ({Color color, String label}) get _badge {
+    switch (type) {
+      case 'A_RECIPE_BOM':
+        return (color: Colors.blue, label: 'Type A · Recipe BOM');
+      case 'B_YIELD_POOL':
+        return (color: Colors.teal, label: 'Type B · Yield Split');
+      case 'C_DIRECT':
+        return (color: Colors.amber.shade800, label: 'Type C · Direct');
+      case 'EXEMPT':
+        return (color: Colors.grey, label: 'Exempt');
+      default:
+        return (color: Colors.red, label: '⚠ Unregistered');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final b = _badge;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: b.color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(b.label,
+              style: TextStyle(
+                  color: b.color, fontSize: 11, fontWeight: FontWeight.w700)),
+        ),
+        if (type == 'A_RECIPE_BOM') ...[
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            initialValue: selectedRecipeId,
+            decoration: const InputDecoration(
+              labelText: 'Select recipe this batch is for',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: recipes
+                .map((r) => DropdownMenuItem(
+                      value: '${r['id']}',
+                      child: Text(
+                        '${r['recipe_name'] ?? r['produced_item_name']} (yield ${r['produced_quantity']} ${r['produced_unit']})',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ))
+                .toList(),
+            onChanged: onRecipeSelected,
+            hint: recipes.isEmpty
+                ? const Text('No recipe configured for this item yet',
+                    style: TextStyle(fontSize: 11, color: Colors.red))
+                : null,
+          ),
+        ] else if (type == 'UNREGISTERED')
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text(
+              'No recipe, yield split or direct mapping configured. Configure it in Food Control before relying on this issuance for reconciliation.',
+              style: TextStyle(fontSize: 11, color: Colors.red),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -3,6 +3,11 @@ import { Request, Response, NextFunction } from 'express';
 import { upstashRedis } from '../config/redis';
 import { logger } from '../utils/logger';
 
+const redisRateLimitEnabled = Boolean(
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+);
+let warnedRedisDisabled = false;
+
 /**
  * Enterprise-grade rate limiting for FamousGate Hotels API.
  *
@@ -55,6 +60,13 @@ const posRatelimit = new Ratelimit({
     analytics: true,
 });
 
+const healthRefreshRatelimit = new Ratelimit({
+    redis: upstashRedis,
+    limiter: Ratelimit.slidingWindow(1, '5 m'),
+    prefix: 'fg:rl:health-refresh',
+    analytics: true,
+});
+
 // ── Middleware factory ──────────────────────────────────────────────────────────
 
 type IdentifierFn = (req: Request) => string;
@@ -65,6 +77,15 @@ function createLimiterMiddleware(
     limiterName: string
 ) {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+        if (!redisRateLimitEnabled) {
+            if (!warnedRedisDisabled) {
+                warnedRedisDisabled = true;
+                logger.warn('Redis rate limiting disabled: UPSTASH_REDIS_REST_URL/TOKEN are not configured.');
+            }
+            next();
+            return;
+        }
+
         try {
             const identifier = identifierFn(req);
             const { success, limit, remaining, reset } = await ratelimit.limit(identifier);
@@ -133,3 +154,31 @@ export const posLimiter = createLimiterMiddleware(
     getBranchIdentifier,
     'pos'
 );
+
+/**
+ * Branch health-check refresh limiter — 1 forced refresh per branch per
+ * 5 minutes. Each refresh triggers a Claude API call, so this caps AI spend.
+ * Keyed by the :branchId route param (available because this is mounted as
+ * route-level middleware on the matched route).
+ */
+export const healthRefreshLimiter = createLimiterMiddleware(
+    healthRefreshRatelimit,
+    (req) => `health:branch:${req.params.branchId ?? getBranchIdentifier(req)}`,
+    'health-refresh'
+);
+
+/**
+ * Same limiter, but only when the request explicitly forces a refresh
+ * (GET /health-check?force_refresh=true). Cached reads pass through freely.
+ */
+export const healthRefreshLimiterIfForced = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void => {
+    if (req.query.force_refresh === 'true') {
+        void healthRefreshLimiter(req, res, next);
+        return;
+    }
+    next();
+};

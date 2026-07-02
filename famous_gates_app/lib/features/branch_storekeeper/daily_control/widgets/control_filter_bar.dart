@@ -52,7 +52,6 @@ class ControlFilterBar extends StatelessWidget {
                 }
               },
               child: Container(
-                height: 44,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey.shade300),

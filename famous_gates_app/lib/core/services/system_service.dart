@@ -47,6 +47,13 @@ class SystemService extends BaseApiService {
     return response;
   }
 
+  // DELETE /api/system/branches/:id
+  Future<Map<String, dynamic>> deleteBranch(int id) async {
+    final response =
+        await delete<Map<String, dynamic>>('/system/branches/$id');
+    return response;
+  }
+
   // PATCH /api/system/branches/:id/status
   Future<Map<String, dynamic>> updateBranchStatus(int id, String status) async {
     final response = await patch<Map<String, dynamic>>(
@@ -260,18 +267,26 @@ class SystemService extends BaseApiService {
 
   // GET /api/system/status
   // Gracefully returns a "not deployed yet" placeholder when the server
-  // returns 404, so the System Health section shows a degraded state
-  // instead of crashing.
+  // returns 404/405, or is unreachable (timeout / connection error).
+  // Only propagates unexpected server errors (5xx etc.) as real failures.
   Future<Map<String, dynamic>> getSystemStatus() async {
     try {
       final response = await get<Map<String, dynamic>>('/system/status');
       return response;
     } on DioException catch (e) {
       final code = e.response?.statusCode;
+      // Not deployed / method not allowed → safe placeholder.
       if (code == 404 || code == 405) {
-        // Route exists locally but hasn't been deployed to the production
-        // server yet — return a safe placeholder so the UI can render.
         return _unavailableStatus('Route not deployed on server');
+      }
+      // Network-level failures (timeout, no connection) → treat as degraded
+      // rather than crashing the System Health section with a 30-second wait.
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.unknown) {
+        return _unavailableStatus('Server not reachable: ${e.type.name}');
       }
       rethrow;
     }

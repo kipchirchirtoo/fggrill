@@ -5,6 +5,8 @@ import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
 import { loadCashierVoidAudit, compileShiftVoidAudit } from '../services/cashier-void-audit.service';
+import { buildDailyControlPayload } from './kitchen/kitchen-controls.controller';
+import { processFoodControlForClosedDays } from '../services/food-control-automation.service';
 import {
     loadAssignedPosOutlets,
     canAccessPosOutlet,
@@ -91,10 +93,13 @@ function requiredStocktakeLocationsForRole(
     const normalized = String(role || '').trim().toLowerCase();
     switch (normalized) {
         case 'restaurant_cashier':
+        case 'choma_zone_cashier':
             // Kitchen syncs one stock_counts row PER SHIFT (location: kitchen_a,
             // kitchen_b, ...) so an A-shift count can't overwrite a B-shift count
             // in the same day — group-match on store_type, rather than an exact
-            // 'kitchen' location that no row ever has anymore.
+            // 'kitchen' location that no row ever has anymore. Choma Zone shares
+            // this gate too — its grilled dishes (e.g. "Mbuzi Choma") are part of
+            // the same KITCHEN_STOCKTAKE_ITEMS list, not a separate stocktake.
             return [{ key: 'kitchen', label: 'Kitchen stocktake', groupStoreType: 'kitchen' }];
         case 'main_bar_cashier':
         case 'kyogong_sports_bar_cashier':
@@ -1258,6 +1263,54 @@ export const getShiftLog = async (
 // @desc    Start a new shift
 // @route   POST /api/cashier/shifts/start
 // @access  Private (Cashier)
+// ── DAILY CONTROLS SNAPSHOT (Phase 5) ────────────────────────
+// Triggered whenever a cashier shift actually transitions to 'open' — either
+// immediately below in startShift, or later via approveShiftOpening. At that
+// moment the branch's previous commercial day is definitively over, so its
+// Daily Controls numbers are computed once via buildDailyControlPayload and
+// frozen into daily_control_snapshots — the source of truth the Daily
+// Controls screen shows as "previous closed day", as opposed to a live call
+// to the same function for the still-open shift ("Live/provisional").
+// Idempotent (unique index on cashier_shift_id) and non-fatal — a failure
+// here must never block the new shift from opening.
+async function snapshotPreviousClosedCommercialDay(branchId: number): Promise<void> {
+    const { data: lastClosed } = await supabase
+        .from('cashier_shift_logs')
+        .select('id, shift_number, shift_start')
+        .eq('branch_id', branchId)
+        .eq('status', 'closed')
+        .order('shift_start', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (!lastClosed) return;
+
+    const { data: existing } = await supabase
+        .from('daily_control_snapshots')
+        .select('id')
+        .eq('cashier_shift_id', lastClosed.id)
+        .maybeSingle();
+    if (existing) return;
+
+    const shiftDate = new Date(lastClosed.shift_start).toISOString().split('T')[0];
+    const payload: any = await buildDailyControlPayload(branchId, shiftDate, null);
+
+    const { error } = await supabase.from('daily_control_snapshots').insert({
+        branch_id: branchId,
+        cashier_shift_id: lastClosed.id,
+        shift_date: shiftDate,
+        shift_number: lastClosed.shift_number,
+        snapshot_data: payload,
+        total_food_revenue: payload?.summary?.total_food_revenue ?? 0,
+        actual_ingredient_cost: payload?.summary?.actual_ingredient_cost ?? 0,
+        bom_variance_cost: payload?.summary?.bom_variance_cost ?? 0,
+        food_cost_percent: payload?.summary?.food_cost_percent ?? null,
+        computed_trigger: 'cashier_shift_open'
+    });
+    if (error && error.code !== '23505') {
+        throw new AppError(error.message, 500);
+    }
+}
+
 export const startShift = async (
     req: Request,
     res: Response,
@@ -1386,6 +1439,16 @@ export const startShift = async (
         if (shiftError) throw shiftError;
 
         if (opensImmediately) {
+            try {
+                await snapshotPreviousClosedCommercialDay(targetBranchId);
+            } catch (err: any) {
+                logger.error(`[startShift] snapshotPreviousClosedCommercialDay failed for branch ${targetBranchId}:`, err);
+            }
+            // Automated food-control pipeline for the just-finalized previous
+            // day — same lifecycle moment as the snapshot above, fire-and-forget
+            // so it never slows down opening the new shift.
+            void processFoodControlForClosedDays({ branchId: targetBranchId, triggerSource: 'event' })
+                .catch((err: any) => logger.error(`[startShift] food-control processing failed for branch ${targetBranchId}:`, err));
             if (targetCashierId !== userId) {
                 void notificationService.notifyUser(
                     targetCashierId,
@@ -1517,6 +1580,18 @@ export const approveShiftOpening = async (
 
         const { data, error } = await updateQuery.select().single();
         if (error) throw error;
+
+        if (data?.branch_id) {
+            try {
+                await snapshotPreviousClosedCommercialDay(Number(data.branch_id));
+            } catch (err: any) {
+                logger.error(`[approveShiftOpening] snapshotPreviousClosedCommercialDay failed for branch ${data.branch_id}:`, err);
+            }
+            // Automated food-control pipeline for the just-finalized previous
+            // day (fire-and-forget; see startShift for the same hook).
+            void processFoodControlForClosedDays({ branchId: Number(data.branch_id), triggerSource: 'event' })
+                .catch((err: any) => logger.error(`[approveShiftOpening] food-control processing failed for branch ${data.branch_id}:`, err));
+        }
 
         if (data?.cashier_id) {
             void notificationService.notifyUser(

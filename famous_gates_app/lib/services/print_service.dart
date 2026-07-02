@@ -34,7 +34,7 @@ class PrintService {
   final String companyAddress = 'Bomet, Kenya';
   final String companyPhone = '+254 706 782 828';
   final String companyEmail = 'info@famousgatehotels.com';
-  
+
   // Python service URL for direct printing (no dialogs!). Deliberately
   // defaults to localhost: this call is meant to hit a local print agent
   // running on the same machine as a USB/LAN-connected thermal printer,
@@ -50,11 +50,13 @@ class PrintService {
   /// Print directly via Python thermal printer service (NO DIALOG!)
   Future<bool> _printViaPythonService(Map<String, dynamic> receiptData) async {
     try {
-      final response = await http.post(
-        Uri.parse('$pythonServiceUrl/api/receipts/printer/print'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(receiptData),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse('$pythonServiceUrl/api/receipts/printer/print'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(receiptData),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body);
@@ -85,13 +87,19 @@ class PrintService {
     String? barcodeValue,
     num? amountTendered,
     num? changeGiven,
+    String? companyNameOverride,
     String? tillNumber,
     String? duplicateLabel,
   }) async {
     final billCode = (publicCode ?? '').trim();
+    final receiptCompanyName = (companyNameOverride ?? '').trim().isNotEmpty
+        ? companyNameOverride!.trim()
+        : companyName;
     // Try Python service first (NO DIALOG!)
     try {
       final receiptData = {
+        'company_name': receiptCompanyName,
+        'branch_name': branchName,
         'receipt_type': receiptType,
         'receipt_number': sale.receiptNumber,
         'short_code': publicCode,
@@ -103,15 +111,18 @@ class PrintService {
         'table_number': tableNumber,
         'room_number': roomNumber,
         'cashier_name': sale.cashierName,
-        'items': items.map((item) => {
-          'name': item.name,
-          'quantity': item.qty,
-          'unit_price': item.unitPrice,
-          'total_price': item.lineTotal,
-        }).toList(),
+        'items': items
+            .map((item) => {
+                  'name': item.name,
+                  'quantity': item.qty,
+                  'unit_price': item.unitPrice,
+                  'total_price': item.lineTotal,
+                })
+            .toList(),
         'total_amount': sale.total,
         'subtotal': sale.total / 1.16,
-        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt)),
+        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a')
+            .format(_toKenyaTime(sale.createdAt)),
         'payment_method': sale.paymentMethod,
         'till_number': tillNumber,
         'duplicate_label': duplicateLabel,
@@ -124,13 +135,15 @@ class PrintService {
       }
       debugPrint('⚠️ Python service print failed, falling back to Flutter PDF');
     } catch (e) {
-      debugPrint('⚠️ Python service unavailable: $e, using Flutter PDF fallback');
+      debugPrint(
+          '⚠️ Python service unavailable: $e, using Flutter PDF fallback');
     }
 
     // FALLBACK: Use Flutter PDF printing (may show dialog on some systems)
     final doc = pw.Document();
     final money = NumberFormat('#,##0.00', 'en_KE');
-    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt));
+    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(_toKenyaTime(sale.createdAt));
 
     final totalAmount = sale.total;
     final baseAmount = totalAmount > 0 ? totalAmount / 1.16 : 0;
@@ -172,7 +185,7 @@ class PrintService {
                       width: 24 * PdfPageFormat.mm,
                       height: 24 * PdfPageFormat.mm),
                 ),
-              pw.Text(companyName,
+              pw.Text(receiptCompanyName,
                   style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold, fontSize: 14)),
               pw.SizedBox(height: 2),
@@ -229,7 +242,8 @@ class PrintService {
               _dashedLine(context),
               pw.SizedBox(height: 4),
               _infoRow('Receipt #:', sale.receiptNumber ?? ''),
-              if (billCode.isNotEmpty) _infoRow('Bill code:', billCode.toUpperCase()),
+              if (billCode.isNotEmpty)
+                _infoRow('Bill code:', billCode.toUpperCase()),
               _infoRow('Date:', dateStr),
               if (tableNumber != null) _infoRow('Table:', tableNumber),
               if (roomNumber != null) _infoRow('Room:', roomNumber),
@@ -392,14 +406,17 @@ class PrintService {
         'room_number': roomNumber,
         'waiter_name': waiterName,
         'order_type': orderType ?? 'dine_in',
-        'items': items.map((item) => {
-          'name': item.name,
-          'quantity': item.qty,
-          'unit_price': item.unitPrice,
-          'line_total': item.lineTotal,
-        }).toList(),
+        'items': items
+            .map((item) => {
+                  'name': item.name,
+                  'quantity': item.qty,
+                  'unit_price': item.unitPrice,
+                  'line_total': item.lineTotal,
+                })
+            .toList(),
         'total_amount': sale.total,
-        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt)),
+        'date': DateFormat('MM/dd/yyyy, hh:mm:ss a')
+            .format(_toKenyaTime(sale.createdAt)),
       };
 
       final success = await _printViaPythonService(receiptData);
@@ -407,16 +424,19 @@ class PrintService {
         debugPrint('✅ Captain order printed via Python service (no dialog)');
         return; // Success - exit early
       }
-      debugPrint('⚠️ Python service print failed for captain order, falling back to Flutter PDF');
+      debugPrint(
+          '⚠️ Python service print failed for captain order, falling back to Flutter PDF');
     } catch (e) {
-      debugPrint('⚠️ Python service unavailable for captain order: $e, using Flutter PDF fallback');
+      debugPrint(
+          '⚠️ Python service unavailable for captain order: $e, using Flutter PDF fallback');
     }
 
     // FALLBACK: Use Flutter PDF printing (may show dialog on some systems).
     // Kept deliberately bare — no logo, no boxes/borders, no barcode — this
     // is a kitchen ticket meant to be glanced at and torn off, not a bill.
     final doc = pw.Document();
-    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a').format(_toKenyaTime(sale.createdAt));
+    final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(_toKenyaTime(sale.createdAt));
     final code = (shortCode ?? orderNumber).trim();
 
     // Table/room (when set) ride along on the Type line instead of getting

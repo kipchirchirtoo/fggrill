@@ -39,7 +39,8 @@ type OutletType =
   | 'kyogong_reception'
   | 'kyogong_spa'
   | 'kyogong_executive_bar'
-  | 'kyogong_sports_bar';
+  | 'kyogong_sports_bar'
+  | 'choma_zone';
 type PaymentMethod = 'cash' | 'mpesa' | 'card' | 'credit_bill';
 
 const FOOD_AND_BAR_OUTLET_TYPES = new Set<OutletType>([
@@ -47,8 +48,15 @@ const FOOD_AND_BAR_OUTLET_TYPES = new Set<OutletType>([
   'main_bar',
   'executive_bar',
   'kyogong_executive_bar',
-  'kyogong_sports_bar'
+  'kyogong_sports_bar',
+  'choma_zone'
 ]);
+
+// Grill/BBQ section — food, not a bar. Routes to the kitchen/KDS exactly like
+// the restaurant outlet (item_group 'restaurant'), not the bar item_group,
+// so it participates correctly in kitchen consumption, Daily Control variance,
+// and KDS ticket printing alongside restaurant orders.
+const FOOD_KITCHEN_OUTLET_TYPES = new Set<OutletType>(['restaurant', 'choma_zone']);
 
 const isFoodOrBarOutlet = (outletType: unknown): boolean =>
   FOOD_AND_BAR_OUTLET_TYPES.has(String(outletType || '') as OutletType);
@@ -81,14 +89,14 @@ const BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES = new Set<OutletType>([
 
 const outletItemGroup = (outletType: unknown): 'restaurant' | 'bar' | 'other' => {
   const type = String(outletType || '');
-  if (type === 'restaurant') return 'restaurant';
+  if (FOOD_KITCHEN_OUTLET_TYPES.has(type as OutletType)) return 'restaurant';
   if (isFoodOrBarOutlet(type)) return 'bar';
   return 'other';
 };
 
 const billTypeForOutlet = (outletType: unknown): 'restaurant' | 'bar' | 'pool' | 'carwash' | 'spa' | 'pos_outlet' | 'other' => {
   const type = String(outletType || '').toLowerCase();
-  if (type === 'restaurant') return 'restaurant';
+  if (type === 'restaurant' || type === 'choma_zone') return 'restaurant';
   if (type.includes('bar')) return 'bar';
   if (type.includes('spa')) return 'spa';
   if (type.includes('pool')) return 'pool';
@@ -481,20 +489,34 @@ const orderItemsTotal = (items: Array<Record<string, any>>): number =>
     return sum + numberValue(item.quantity ?? item.qty) * numberValue(item.unit_price ?? item.price);
   }, 0);
 
+const booleanValue = (value: unknown): boolean =>
+  value === true || String(value ?? '').trim().toLowerCase() === 'true';
+
 const activeOrderItemsTotal = (items: Array<Record<string, any>>): number =>
   items.reduce((sum, item) => {
+    const hasActiveTotal = item.active_total !== undefined && item.active_total !== null;
     const activeTotal = numberValue(item.active_total);
     if (activeTotal > 0) return sum + activeTotal;
 
     const quantity = numberValue(item.quantity ?? item.qty);
     const voidedQty = numberValue(item.voided_qty);
-    const activeQty = item.active_qty !== undefined && item.active_qty !== null
+    const hasActiveQty = item.active_qty !== undefined && item.active_qty !== null;
+    const activeQty = hasActiveQty
       ? numberValue(item.active_qty)
       : Math.max(quantity - voidedQty, 0);
     const unitPrice = numberValue(item.unit_price ?? item.price);
-    if (activeQty > 0 && unitPrice > 0) return sum + activeQty * unitPrice;
 
-    if (item.is_fully_voided === true || voidedQty >= quantity) return sum;
+    // Once void metadata exists, never fall back to the original line_total:
+    // that stale value is exactly what makes a removed/voided item keep its
+    // old price on the customer bill.
+    const hasVoidState = hasActiveTotal || hasActiveQty || voidedQty > 0 || booleanValue(item.is_fully_voided);
+    if (hasVoidState) {
+      if (booleanValue(item.is_fully_voided) || activeQty <= 0 || voidedQty >= quantity) return sum;
+      if (unitPrice > 0) return sum + activeQty * unitPrice;
+      return sum + Math.max(activeTotal, 0);
+    }
+
+    if (activeQty > 0 && unitPrice > 0) return sum + activeQty * unitPrice;
     return sum + numberValue(item.line_total ?? item.total_price ?? item.total);
   }, 0);
 
@@ -521,7 +543,7 @@ const isNullifiedZeroShiftOrder = (order: Record<string, any>): boolean => {
   return items.every((item: any) => {
     const activeQty = numberValue(item?.active_qty ?? item?.quantity ?? item?.qty);
     const activeTotal = numberValue(item?.active_total ?? item?.line_total);
-    return item?.is_fully_voided === true
+    return booleanValue(item?.is_fully_voided)
       || (activeQty <= 0 && activeTotal <= 0)
       || numberValue(item?.voided_qty) >= numberValue(item?.quantity ?? item?.qty);
   });
@@ -1123,16 +1145,39 @@ const seedOutletItemsFromExistingMenus = async (
     (existingRows || []).map((row: any) => [row.sku, row])
   );
 
+  const seededOutletType = (item: Record<string, any>): string =>
+    String(item.metadata?.outlet_type || '').trim().toLowerCase();
+
+  const normalizeMainBarPosName = (name: unknown): string => {
+    const value = String(name || '').trim();
+    if (!value) return value;
+
+    return value
+      .replace(/\b1\/4\s*(?:LTR|LITRE|LITER|L)\b/gi, '250ML')
+      .replace(/\b1\/2\s*(?:LTR|LITRE|LITER|L)\b/gi, '500ML')
+      .replace(/\b3\/4\s*(?:LTR|LITRE|LITER|L)\b/gi, '750ML')
+      .replace(/\b1\/4\b/g, '250ML')
+      .replace(/\b1\/2\b/g, '350ML')
+      .replace(/\b3\/4\b/g, '750ML')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   if (outletType === 'restaurant') {
     let query = supabase
       .from('restaurant_menu_items')
-      .select('id, name, price, selling_price, cost_price, category_id, category:restaurant_menu_categories(id, name), is_available, is_active, branch_id')
+      .select('id, name, price, selling_price, cost_price, category_id, category, metadata, is_available, is_active, branch_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
     if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
     const { data, error } = await query;
     if (error) throw error;
-    sourceRows = ((data || []) as Array<Record<string, any>>).map((item) => {
+    sourceRows = ((data || []) as Array<Record<string, any>>)
+      .filter((item) => {
+        const routedTo = seededOutletType(item);
+        return !routedTo || routedTo === 'restaurant';
+      })
+      .map((item) => {
       const sku = `R-${item.id}`;
       const existing = existingBySku.get(sku);
       return {
@@ -1204,6 +1249,43 @@ const seedOutletItemsFromExistingMenus = async (
         branch_id: item.branch_id ?? outlet.branch_id ?? null
       };
     });
+
+    if (outletType === 'main_bar') {
+      let seededMenuQuery = supabase
+        .from('restaurant_menu_items')
+        .select('id, name, price, selling_price, cost_price, category, metadata, is_available, is_active, branch_id, unit')
+        .eq('is_available', true)
+        .order('name', { ascending: true });
+      if (branchId) seededMenuQuery = seededMenuQuery.eq('branch_id', branchId);
+      const { data: seededMenuRows, error: seededMenuError } = await seededMenuQuery;
+      if (seededMenuError) throw seededMenuError;
+
+      const seededBarRows = ((seededMenuRows || []) as Array<Record<string, any>>)
+        .filter((item) => seededOutletType(item) === 'main_bar')
+        .map((item) => {
+          const sku = `MOG-BAR-${item.metadata?.source_code || item.id}`;
+          const existing = existingBySku.get(sku);
+          return {
+            outlet_id: outlet.id,
+            source_table: 'restaurant_menu_items',
+            source_item_id: item.id,
+            sku,
+            name: normalizeMainBarPosName(item.name),
+            category: categoryText(item.category) || 'Main Bar',
+            unit: item.unit || 'each',
+            cost_price: item.cost_price || 0,
+            selling_price: item.price ?? item.selling_price ?? 0,
+            opening_stock: 0,
+            current_stock: existing?.current_stock ?? 0,
+            track_stock: existing?.track_stock ?? true,
+            is_active: item.is_active !== false,
+            is_available: item.is_available !== false,
+            branch_id: item.branch_id ?? outlet.branch_id ?? null
+          };
+        });
+
+      sourceRows.push(...seededBarRows);
+    }
   }
 
   if (outletType === 'kyogong_spa') {
@@ -1303,9 +1385,12 @@ const seedOutletItemsFromExistingMenus = async (
 
   // Deactivate snapshot rows whose source item no longer exists (deleted/renamed
   // upstream) so removed menu items stop showing up as orderable in POS.
-  const sourceTable = sourceRows[0]?.source_table;
-  const currentSkus = sourceRows.map((row) => row.sku);
-  if (sourceTable && currentSkus.length) {
+  const sourceTables = [...new Set(sourceRows.map((row) => row.source_table).filter(Boolean))];
+  for (const sourceTable of sourceTables) {
+    const currentSkus = sourceRows
+      .filter((row) => row.source_table === sourceTable)
+      .map((row) => row.sku);
+    if (!currentSkus.length) continue;
     await supabase
       .from('pos_outlet_items')
       .update({ is_active: false })
@@ -1781,43 +1866,192 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
   }
 };
 
+const loadOpenShiftForOutlet = async (
+  req: Request,
+  outlet: Record<string, any>
+): Promise<Record<string, any> | null> => {
+  let { data, error } = await supabase
+    .from('pos_outlet_shifts')
+    .select('*')
+    .eq('outlet_id', outlet.id)
+    .eq('status', 'open')
+    .order('opened_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+
+  if (!data) {
+    const { data: branchShifts } = await supabase
+      .from('cashier_shift_logs')
+      .select('id, cashier_id')
+      .eq('branch_id', outlet.branch_id)
+      .eq('status', 'open');
+    const cashierIds = (branchShifts || [])
+      .map((s: any) => s.cashier_id)
+      .filter(Boolean);
+    if (cashierIds.length) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, role')
+        .in('id', cashierIds);
+      const roleById = new Map((users || []).map((u: any) => [u.id, u.role]));
+      const outletType = String(outlet.outlet_type || '').toLowerCase();
+      const match = (branchShifts || []).find((s: any) =>
+        stationTypesForCashierRole(roleById.get(s.cashier_id)).includes(outletType));
+      if (match) {
+        const { data: created, error: createErr } = await supabase
+          .from('pos_outlet_shifts')
+          .insert({
+            outlet_id: outlet.id,
+            branch_id: outlet.branch_id,
+            cashier_id: match.cashier_id,
+            opening_float: 0,
+            status: 'open',
+          })
+          .select('*')
+          .single();
+        if (createErr) throw createErr;
+        data = created;
+      }
+    }
+  }
+
+  return data && data.summary
+    ? { ...data, summary: sanitizeSummary(data.summary, canViewProfit(req)) }
+    : data;
+};
+
+const loadShiftOrdersForPos = async (
+  req: Request,
+  shiftId: string
+): Promise<Array<Record<string, any>>> => {
+  let query = supabase
+    .from('pos_shift_orders')
+    .select('*')
+    .eq('shift_id', shiftId)
+    .not('status', 'eq', 'cancelled')
+    .order('created_at', { ascending: false });
+  if (shouldScopeOrdersToOwner(req)) {
+    query = query.or(`waiter_id.eq.${req.user.id},created_by.eq.${req.user.id}`);
+  } else if (req.query.waiter_id) {
+    query = query.eq('waiter_id', String(req.query.waiter_id));
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const orderIds = (data || []).map((order: any) => order.id);
+  const activeExchangeOrderIds = new Set<string>();
+  if (orderIds.length) {
+    const { data: exchangeRows, error: exchangeError } = await supabase
+      .from('pos_item_exchange_requests')
+      .select('order_id')
+      .in('order_id', orderIds)
+      .in('status', ['pending', 'approved']);
+    if (exchangeError) {
+      logger.warn('Failed to fetch active exchange requests for POS order list', exchangeError.message);
+    } else {
+      for (const row of (exchangeRows || [])) activeExchangeOrderIds.add(row.order_id);
+    }
+  }
+
+  return (data || []).map((order: any) => ({
+    ...order,
+    has_active_exchange_request: activeExchangeOrderIds.has(order.id)
+  }));
+};
+
+const queryAccessibleOutlets = async (
+  req: Request,
+  outletType?: unknown,
+  branchIdOverride?: unknown
+): Promise<Array<Record<string, any>>> => {
+  let query = supabase
+    .from('pos_outlets')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+
+  if (outletType) query = query.eq('outlet_type', outletType as OutletType);
+  if (!isGlobalUser(req)) {
+    const branchId = branchIdFor(req);
+    if (branchId === null) return [];
+    query = query.eq('branch_id', branchId);
+  } else if (branchIdOverride) {
+    query = query.eq('branch_id', Number(branchIdOverride));
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const role = roleFor(req);
+  const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
+  const ids = assignedOutletIds(assignedOutlets);
+  let rows = ((data || []) as Array<Record<string, any>>);
+  if (shouldRestrictCashierStationAccess(role, ids)) {
+    const roleOutletTypes = stationTypesForCashierRole(role);
+    rows = rows.filter((outlet) =>
+      ids.includes(String(outlet.id)) ||
+      roleOutletTypes.includes(String(outlet.outlet_type || '').toLowerCase())
+    );
+  }
+  return removeCrossBranchOutletLeaks(rows);
+};
+
+export const getPosBootstrap = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const outlets = await queryAccessibleOutlets(
+      req,
+      req.query.all_outlets === 'true' ? undefined : req.query.outlet_type,
+      req.query.branch_id
+    );
+    const requestedOutletId = String(req.query.outlet_id || req.query.outletId || '').trim();
+    const requestedOutletType = String(req.query.selected_outlet_type || req.query.outlet_type || '').trim().toLowerCase();
+    const selectedOutlet = outlets.find((outlet) => String(outlet.id) === requestedOutletId) ||
+      outlets.find((outlet) => String(outlet.outlet_type || '').toLowerCase() === requestedOutletType) ||
+      outlets[0] ||
+      null;
+
+    if (!selectedOutlet) {
+      res.json({
+        success: true,
+        data: { outlets, outlet: null, shift: null, items: [], orders: [] }
+      });
+      return;
+    }
+
+    await ensureCashierOutletAccess(req, selectedOutlet);
+
+    const [shift, rawItems] = await Promise.all([
+      loadOpenShiftForOutlet(req, selectedOutlet),
+      loadActiveOutletItems(selectedOutlet, req.query.sync === 'true')
+    ]);
+    const items = enrichOutletItems(
+      selectedOutlet,
+      await hydrateOutletItemCategories(selectedOutlet, applyPoolDerivedStock(rawItems))
+    );
+    const orders = shift ? await loadShiftOrdersForPos(req, String(shift.id)) : [];
+
+    res.json({
+      success: true,
+      data: {
+        outlets,
+        outlet: selectedOutlet,
+        shift,
+        items,
+        orders
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getOutlets = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
     const { outlet_type } = req.query;
-    let query = supabase
-      .from('pos_outlets')
-      .select('*')
-      .eq('is_active', true)
-      .order('name', { ascending: true });
-
-    if (outlet_type) query = query.eq('outlet_type', outlet_type as OutletType);
-    if (!isGlobalUser(req)) {
-      const branchId = branchIdFor(req);
-      if (branchId === null) {
-        res.json({ success: true, data: [] });
-        return;
-      }
-      query = query.eq('branch_id', branchId);
-    } else if (req.query.branch_id) {
-      query = query.eq('branch_id', Number(req.query.branch_id));
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const role = roleFor(req);
-    const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
-    const ids = assignedOutletIds(assignedOutlets);
-    let rows = ((data || []) as Array<Record<string, any>>);
-    if (shouldRestrictCashierStationAccess(role, ids)) {
-      const roleOutletTypes = stationTypesForCashierRole(role);
-      rows = rows.filter((outlet) =>
-        ids.includes(String(outlet.id)) ||
-        roleOutletTypes.includes(String(outlet.outlet_type || '').toLowerCase())
-      );
-    }
-    rows = await removeCrossBranchOutletLeaks(rows);
+    const rows = await queryAccessibleOutlets(req, outlet_type, req.query.branch_id);
 
     res.json({ success: true, data: rows });
   } catch (error) {

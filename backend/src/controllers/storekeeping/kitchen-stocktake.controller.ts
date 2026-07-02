@@ -183,7 +183,7 @@ const getPastryAddedByInvId = async (
  * displayed variance reflects unexplained loss only — spoilage that the
  * accountant already approved is "explained" and shouldn't show as variance.
  */
-const getApprovedKitchenSpoilageByName = async (
+export const getApprovedKitchenSpoilageByName = async (
   branchId: number,
   itemNames: string[],
   stocktakeDate: string,
@@ -212,14 +212,78 @@ const getApprovedKitchenSpoilageByName = async (
 };
 
 /**
- * Sum restaurant POS sales for each fixed kitchen item, scoped to whichever
+ * POS menu item names almost never match the fixed kitchen stocktake catalog
+ * exactly (e.g. POS "mbuzi wet fry 1/4 kg" vs stocktake "Mbuzi Wetfry", POS
+ * "ndazi" vs stocktake "Mandazi") even though they're the same physical
+ * dish, so a plain normalized-name match misses nearly everything. This maps
+ * each POS menu name (lowercase, trimmed) to the stocktake item it
+ * represents. Only confident, unambiguous matches are listed (verified
+ * against this branch's real menu) — anything not listed is intentionally
+ * left unmatched rather than guessed, so Sold never silently misattributes
+ * one dish's sales to a different stock item.
+ */
+export const POS_NAME_TO_STOCKTAKE_ITEM: Record<string, string> = {
+  'mbuzi wet fry 1/4 kg': 'Mbuzi Wetfry',
+  'mbuzi wet fry 1/2 kg': 'Mbuzi Wetfry',
+  'mbuzi choma 1/4 kg': 'Mbuzi Choma',
+  'mbuzi choma 1/2 kg': 'Mbuzi Choma',
+  'mbuzi choma 1 kg': 'Mbuzi Choma',
+  '1/4 kg kuku kienyeji dry fry': 'Chicken K',
+  '1/4 kg kuku kienyeji wet fry': 'Chicken K',
+  '1/4 kg kuku kienyeji pan fry': 'Chicken K',
+  '1/2 kg kuku kienyeji wet fry': 'Chicken K',
+  '1/4 kg chicken dry fry': 'Chicken B',
+  '1/4 kg chicken wet fry': 'Chicken B',
+  '1/4 kg chicken pan fry': 'Chicken B',
+  '1/2 kg chicken dry fry': 'Chicken B',
+  '1/2 kg chicken pan fry': 'Chicken B',
+  '1/2 kg chicken wet fry': 'Chicken B',
+  '1 kg chicken dry fry': 'Chicken B',
+  'special chicken': 'Chicken B',
+  'sausage': 'Sausages',
+  'special sausage': 'Sausages',
+  'samosa': 'Samosa',
+  'special samosa': 'Samosa',
+  'chapati': 'Chapati',
+  'fish dry whole': 'Fish',
+  'fish wet whole': 'Fish',
+  'rice plain': 'Rice',
+  'special rice': 'Rice',
+  'pilau': 'Pilau',
+  'special pilau': 'Pilau',
+  'beef wet fry 1/4 kg': 'Beef',
+  'beef pan fry 1/4 kg': 'Beef',
+  'beef stew 1/4 kg': 'Beef',
+  'ndazi': 'Mandazi',
+  'kebab': 'Kebab',
+  'special kebab': 'Kebab',
+  'mahamri': 'Mahamri',
+  'chips': 'Chips',
+  'chips masala': 'Chips',
+  'boiled eggs broiler': 'Eggs B',
+  'fried eggs broiler': 'Eggs B',
+  'scrambled eggs broiler': 'Eggs B',
+  'spanish omelette broiler': 'Eggs B',
+  'boiled eggs kienyeji': 'Eggs K',
+  'fried eggs kienyeji': 'Eggs K',
+  'scrambled eggs kienyeji': 'Eggs K',
+  'spanish omelette kienyeji': 'Eggs K',
+  'kcc milk packet': 'Milk',
+  'fresh milk glass': 'Milk',
+};
+
+/**
+ * Sum real POS sales for each fixed kitchen item, scoped to whichever
  * portion of the day this shift is responsible for, so the same sale is
  * never counted against both shifts: Shift A claims sales up to its own
  * submission (or now, if still a draft); Shift B claims the rest of the day.
- * Matched by normalized item name, same approach already used to sync
- * kitchen closing counts into pos_outlet_items.
+ *
+ * Sales live in pos_shift_orders (JSONB items array) — restaurant_orders /
+ * restaurant_order_items are unused/empty tables in this deployment, so a
+ * query against them (the previous implementation) always returned zero
+ * regardless of real sales activity.
  */
-const getKitchenSoldByName = async (
+export const getKitchenSoldByName = async (
   branchId: number,
   itemNames: string[],
   stocktakeDate: string,
@@ -241,25 +305,155 @@ const getKitchenSoldByName = async (
     const to = shift === 'A' ? (shiftARow?.submitted_at || now) : (shiftBRow?.submitted_at || now);
 
     const { rows } = await db.query(
-      `SELECT LOWER(TRIM(roi.item_name)) AS item_name_norm, COALESCE(SUM(roi.quantity), 0) AS sold_qty
-       FROM public.restaurant_order_items roi
-       JOIN public.restaurant_orders ro ON ro.id = roi.order_id
-       WHERE ro.branch_id = $1
-         AND ro.created_at >= $2 AND ro.created_at <= $3
-         AND COALESCE(ro.status, '') != 'cancelled'
-         AND LOWER(TRIM(roi.item_name)) = ANY($4)
-       GROUP BY LOWER(TRIM(roi.item_name))`,
-      [branchId, from, to, itemNames.map((n) => n.toLowerCase().trim())]
+      `SELECT LOWER(TRIM(item->>'name')) AS item_name_norm,
+              COALESCE(SUM((item->>'quantity')::numeric), 0) AS sold_qty
+       FROM public.pos_shift_orders pso
+       CROSS JOIN LATERAL jsonb_array_elements(pso.items) AS item
+       WHERE pso.branch_id = $1
+         AND pso.created_at >= $2 AND pso.created_at <= $3
+         AND COALESCE(pso.status, '') != 'voided'
+       GROUP BY LOWER(TRIM(item->>'name'))`,
+      [branchId, from, to]
     );
     const byNormName = new Map<string, number>((rows || []).map((r: any) => [r.item_name_norm, num(r.sold_qty)]));
-    const map = new Map<string, number>();
-    for (const name of itemNames) {
-      const sold = byNormName.get(name.toLowerCase().trim());
-      if (sold != null) map.set(name, sold);
-    }
-    return map;
+    return await mapPosSalesToStocktakeItems(byNormName, itemNames, branchId);
   } catch (err) {
     logger.warn('getKitchenSoldByName failed:', (err as Error).message);
+    return new Map();
+  }
+};
+
+// Ledger rows measured in RAW units (KG / Litre) — their "system sold" must
+// be converted from menu portions into raw units via the set standard
+// recipes, never counted 1:1.
+const RAW_UNIT_ROWS = new Set([
+  'Mbuzi Raw', 'Chicken K', 'Chicken B', 'Fish', 'Rice', 'Beef', 'Chips', 'Milk',
+]);
+
+/** Maps a standard recipe's RAW item to its ledger row (raw rows only). */
+const resolveRawRow = (sku: string, name: string): string | null => {
+  const s = String(sku || '').toUpperCase();
+  const n = String(name || '').toUpperCase();
+  if (s === 'FG-149' || n.includes('MBUZI')) return 'Mbuzi Raw';
+  if (n.includes('KIENYEJI')) return 'Chicken K';
+  if (s === 'FG-15' || n.includes('BROILER')) return 'Chicken B';
+  if (s === 'FG-18' || n.includes('FISH')) return 'Fish';
+  if (s === 'FG-5' || n === 'RICE') return 'Rice';
+  if (s === 'FG-80' || s === 'BEEF-001' || n === 'BEEF') return 'Beef';
+  if (s === 'FG-86' || n.includes('POTATO')) return 'Chips';
+  if (s === 'FG-106' || s === 'MILK-001' || n === 'MILK') return 'Milk';
+  return null;
+};
+
+/**
+ * Converts the day's POS sales into ledger-item quantities.
+ *
+ * The SET STANDARD RECIPES (kitchen_production_recipes) are authoritative:
+ * a sold "1/4 Kg Chicken Wet Fry" consumes 0.25 KG of BROILERS per the
+ * standard, not 1 unit. Expected sales per the standards vs physical usage
+ * is what makes the ledger variance meaningful (negative variance = shorts,
+ * positive = surplus/under-recording). The static 1:1 name map below only
+ * covers menu items that have NO standard recipe set (finished piece items
+ * like Samosa/Chapati, or unmapped specials).
+ */
+// Weight factors for kg-named menu items whose ledger row is measured in KG:
+// a "1/4 kg" serving moves 0.25 KG of that row's stock, never 1 unit. Applies
+// to the name-map fallback only (standard recipes carry their own ratios).
+const POS_NAME_QTY_FACTOR: Record<string, number> = {
+  'mbuzi wet fry 1/4 kg': 0.25,
+  'mbuzi wet fry 1/2 kg': 0.5,
+  'mbuzi choma 1/4 kg': 0.25,
+  'mbuzi choma 1/2 kg': 0.5,
+  'mbuzi choma 1 kg': 1,
+  '1/4 kg kuku kienyeji dry fry': 0.25,
+  '1/4 kg kuku kienyeji wet fry': 0.25,
+  '1/4 kg kuku kienyeji pan fry': 0.25,
+  '1/2 kg kuku kienyeji wet fry': 0.5,
+};
+
+const mapPosSalesToStocktakeItems = async (
+  byNormName: Map<string, number>,
+  itemNames: string[],
+  branchId: number
+): Promise<Map<string, number>> => {
+  const itemNameSet = new Set(itemNames);
+  const map = new Map<string, number>();
+  // Pair-level suppression: a standard recipe only replaces the 1:1 fallback
+  // when both attribute the SAME menu item to the SAME ledger row. A parent
+  // raw item (e.g. Mbuzi Raw ← "Mbuzi Wet Fry 1/4 Kg") and the cooked-pan row
+  // (Mbuzi Wetfry ← same sale, weight-factored) are DIFFERENT physical
+  // control levels, so the sale legitimately reconciles at both.
+  const coveredPairs = new Set<string>();
+
+  try {
+    const { rows: rules } = await db.query(
+      `SELECT raw_item_sku, raw_item_name, raw_quantity, produced_item_name, produced_quantity
+         FROM kitchen_production_recipes
+        WHERE branch_id = $1 AND is_active = true
+          AND raw_quantity > 0 AND produced_quantity > 0`,
+      [branchId]
+    );
+    for (const rule of rules || []) {
+      const row = resolveRawRow(rule.raw_item_sku, rule.raw_item_name);
+      if (!row || !RAW_UNIT_ROWS.has(row) || !itemNameSet.has(row)) continue;
+      const producedNorm = String(rule.produced_item_name || '').trim().toLowerCase();
+      // Covered even when nothing sold: the standard owns this pairing.
+      coveredPairs.add(`${producedNorm}→${row}`);
+      const sold = byNormName.get(producedNorm);
+      if (!sold) continue;
+      map.set(
+        row,
+        (map.get(row) || 0) + (sold / num(rule.produced_quantity)) * num(rule.raw_quantity)
+      );
+    }
+  } catch (err) {
+    logger.warn('Standard-recipe sold conversion failed; using 1:1 name map only:',
+      (err as Error).message);
+  }
+
+  for (const [posName, stocktakeName] of Object.entries(POS_NAME_TO_STOCKTAKE_ITEM)) {
+    if (!itemNameSet.has(stocktakeName)) continue;
+    if (coveredPairs.has(`${posName}→${stocktakeName}`)) continue;
+    const qty = byNormName.get(posName);
+    if (qty == null) continue;
+    const factor = POS_NAME_QTY_FACTOR[posName] ?? 1;
+    map.set(stocktakeName, (map.get(stocktakeName) || 0) + qty * factor);
+  }
+  return map;
+};
+
+/**
+ * Sum real POS sales for each fixed kitchen item across a plain calendar-day
+ * window (not split by shift submission time). Shift submission timestamps
+ * for this branch are frequently backfilled — both shifts submitted within
+ * minutes of each other, often hours before the day's real sales even start
+ * — so splitting by submitted_at (as getKitchenSoldByName does, for the
+ * live per-shift Kitchen Stocktake screen) misses nearly all of a day's
+ * sales. The Stock Ledger's full-day view doesn't need shift-level
+ * splitting, so it uses the reliable calendar-day boundary instead.
+ */
+export const getKitchenSoldByNameForDay = async (
+  branchId: number,
+  itemNames: string[],
+  stocktakeDate: string
+): Promise<Map<string, number>> => {
+  if (itemNames.length === 0) return new Map();
+  try {
+    const { rows } = await db.query(
+      `SELECT LOWER(TRIM(item->>'name')) AS item_name_norm,
+              COALESCE(SUM((item->>'quantity')::numeric), 0) AS sold_qty
+       FROM public.pos_shift_orders pso
+       CROSS JOIN LATERAL jsonb_array_elements(pso.items) AS item
+       WHERE pso.branch_id = $1
+         AND pso.created_at >= $2::date AND pso.created_at < ($2::date + INTERVAL '1 day')
+         AND COALESCE(pso.status, '') != 'voided'
+       GROUP BY LOWER(TRIM(item->>'name'))`,
+      [branchId, stocktakeDate]
+    );
+    const byNormName = new Map<string, number>((rows || []).map((r: any) => [r.item_name_norm, num(r.sold_qty)]));
+    return await mapPosSalesToStocktakeItems(byNormName, itemNames, branchId);
+  } catch (err) {
+    logger.warn('getKitchenSoldByNameForDay failed:', (err as Error).message);
     return new Map();
   }
 };

@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import alertsService from './alerts.service';
 import reportsService from './reports.service';
 import { runDailyFinancialEngine } from './daily-financial-engine.service';
+import { processFoodControlForClosedDays } from './food-control-automation.service';
 
 class SchedulerService {
   private jobs: Map<string, cron.ScheduledTask> = new Map();
@@ -73,6 +74,21 @@ class SchedulerService {
       }
     });
     this.jobs.set('daily-financial-engine', dailyFinancialEngine);
+
+    // Food-control fallback sweep at 23:00 UTC = 02:00 Africa/Nairobi.
+    // Safety net only: the primary trigger is event-driven (cashier shift
+    // open finalizes the previous commercial day). Anything this catches was
+    // missed by the event path and is logged as a warning inside the sweep.
+    const foodControlFallback = cron.schedule('0 23 * * *', async () => {
+      try {
+        logger.info('[Scheduler] Running food-control fallback sweep (02:00 EAT)');
+        const results = await processFoodControlForClosedDays({ triggerSource: 'fallback' });
+        logger.info(`[Scheduler] Food-control fallback sweep completed — ${results.length} day(s) processed`);
+      } catch (error) {
+        logger.error('[Scheduler] Food-control fallback sweep failed:', error);
+      }
+    });
+    this.jobs.set('food-control-fallback', foodControlFallback);
 
     // Run daily performance reports at 1:00 AM
     const dailyReports = cron.schedule('0 1 * * *', async () => {

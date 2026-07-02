@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import notificationService from '../../services/notification.service';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 import { isGlobalRole } from '../../utils/branchIsolation';
+import { randomUUID } from 'crypto';
 
 const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
 
@@ -236,9 +237,29 @@ export const createStockRequest = async (
             requesting_branch_id = req.user.branch_id;
         }
 
-        if (!requesting_branch_id || !items || items.length === 0) {
+        if (!requesting_branch_id || !Array.isArray(items) || items.length === 0) {
             throw new AppError('Branch ID and items are required', 400);
         }
+
+        const normalizedItems = items.map((item: any, index: number) => {
+            const itemSku = normalizeSku(item.item_sku || item.sku);
+            const requestedQuantity = Number(
+                item.requested_quantity ?? item.quantity_requested ?? item.quantity ?? item.qty
+            );
+
+            if (!itemSku) {
+                throw new AppError(`Item ${index + 1} is missing a SKU`, 400);
+            }
+            if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+                throw new AppError(`Item ${index + 1} (${itemSku}) must have a quantity greater than zero`, 400);
+            }
+
+            return {
+                ...item,
+                item_sku: itemSku,
+                requested_quantity: requestedQuantity
+            };
+        });
 
         // Generate request number using database function
         const { data: requestNumberData, error: numberError } = await supabase
@@ -252,22 +273,29 @@ export const createStockRequest = async (
         const request_number = requestNumberData;
 
         // Create stock request
+        const requestId = randomUUID();
+        const now = new Date().toISOString();
+
         const { data: newRequest, error: requestError } = await supabase
             .from('stock_requests')
             .insert({
+                id: requestId,
                 request_number,
                 branch_id: requesting_branch_id,
                 requesting_branch_id,
                 requested_by: userId,
+                created_by: userId,
                 request_type: request_type || 'ROUTINE',
                 priority: (priority || 'normal').toLowerCase(),
                 reason,
                 needed_by_date,
                 status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
                 workflow_status: 'submitted_to_branch_accountant',
-                submitted_to_auditor_at: new Date().toISOString(),
+                submitted_to_auditor_at: now,
                 document_number: request_number,
-                barcode_value: request_number
+                barcode_value: request_number,
+                created_at: now,
+                updated_at: now
             })
             .select()
             .single();
@@ -276,7 +304,7 @@ export const createStockRequest = async (
 
         // Get current branch stock and resolve item UUIDs for each item
         const itemsWithStock = await Promise.all(
-            items.map(async (item: any) => {
+            normalizedItems.map(async (item: any) => {
                 const [stockResult, itemResult] = await Promise.all([
                     supabase
                         .from('branch_stock')
@@ -291,17 +319,24 @@ export const createStockRequest = async (
                         .maybeSingle()
                 ]);
 
+                const requestedQuantity = Number(item.requested_quantity);
+
                 return {
+                    id: randomUUID(),
                     branch_requisition_id: newRequest.id,
                     request_id: newRequest.id,
                     item_id: itemResult.data?.id || null,
                     item_sku: item.item_sku,
                     unit: itemResult.data?.unit || 'units',
-                    requested_quantity: item.requested_quantity,
+                    requested_quantity: requestedQuantity,
+                    quantity_requested: requestedQuantity,
+                    quantity: requestedQuantity,
                     current_branch_stock: stockResult.data?.quantity || 0,
                     status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
+                    line_status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
                     workflow_status: 'submitted_to_branch_accountant',
-                    reason: item.reason || reason || null
+                    reason: item.reason || reason || null,
+                    created_at: now
                 };
             })
         );
@@ -814,6 +849,297 @@ export const cancelStockRequest = async (
         });
     } catch (error) {
         logger.error('Error cancelling stock request:', error);
+        next(error);
+    }
+};
+
+// @desc    Set issued quantity and status per line item (central storekeeper)
+// @route   PATCH /api/storekeeping/stock-requests/:id/items/:itemId/issue
+// @access  Private (Central Store)
+export const setItemIssueQty = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id, itemId } = req.params;
+        const { issued_qty, issue_status, issue_notes } = req.body;
+
+        // Validate issued_qty
+        if (issued_qty === undefined || issued_qty === null || isNaN(Number(issued_qty)) || Number(issued_qty) < 0) {
+            throw new AppError('issued_qty must be a non-negative number', 400);
+        }
+
+        const validStatuses = ['issued', 'partially_issued', 'backordered'];
+        if (!issue_status || !validStatuses.includes(issue_status)) {
+            throw new AppError(`issue_status must be one of: ${validStatuses.join(', ')}`, 400);
+        }
+
+        const issuedQty = Number(issued_qty);
+
+        // Fetch the item to confirm it belongs to this request
+        const { data: existingItem, error: fetchError } = await supabase
+            .from('stock_request_items')
+            .select('*')
+            .eq('id', itemId)
+            .eq('request_id', id)
+            .maybeSingle();
+
+        if (fetchError) throw fetchError;
+        if (!existingItem) {
+            throw new AppError('Stock request item not found', 404);
+        }
+
+        // Update the item
+        const { data: updatedItem, error: updateError } = await supabase
+            .from('stock_request_items')
+            .update({
+                issued_qty: issuedQty,
+                issue_status,
+                issue_notes: issue_notes || null,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', itemId)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        // Auto-update parent stock_request workflow_status based on all items
+        const { data: allItems, error: allItemsError } = await supabase
+            .from('stock_request_items')
+            .select('issue_status, issued_qty')
+            .eq('request_id', id);
+
+        if (!allItemsError && allItems && allItems.length > 0) {
+            const hasIssued = allItems.some((i: any) => i.issue_status === 'issued' || i.issue_status === 'partially_issued');
+            const allIssuedFully = allItems.every((i: any) => i.issue_status === 'issued');
+            const hasBackordered = allItems.some((i: any) => i.issue_status === 'backordered');
+
+            let newWorkflowStatus: string | null = null;
+            if (allIssuedFully) {
+                newWorkflowStatus = 'fully_issued';
+            } else if (hasIssued || hasBackordered) {
+                newWorkflowStatus = 'partially_issued';
+            }
+
+            if (newWorkflowStatus) {
+                await supabase
+                    .from('stock_requests')
+                    .update({ workflow_status: newWorkflowStatus, updated_at: new Date().toISOString() })
+                    .eq('id', id);
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            data: updatedItem
+        });
+    } catch (error) {
+        logger.error('Error setting item issue quantity:', error);
+        next(error);
+    }
+};
+
+// @desc    Confirm dispatch — lock items, deduct stock, create dispatch record
+// @route   POST /api/storekeeping/stock-requests/:id/confirm-dispatch
+// @access  Private (Central Store)
+export const confirmDispatch = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { driver_name, vehicle_number, notes } = req.body;
+        const userId = req.user?.id;
+
+        // Fetch the stock request
+        const { data: request, error: requestError } = await supabase
+            .from('stock_requests')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (requestError) throw requestError;
+        if (!request) {
+            throw new AppError('Stock request not found', 404);
+        }
+
+        // Fetch all items for this request
+        const { data: items, error: itemsError } = await supabase
+            .from('stock_request_items')
+            .select('*')
+            .eq('request_id', id);
+
+        if (itemsError) throw itemsError;
+        if (!items || items.length === 0) {
+            throw new AppError('No items found for this stock request', 400);
+        }
+
+        const now = new Date().toISOString();
+
+        // Deduct stock from simple_items for each issued item
+        const deductionErrors: string[] = [];
+        let totalIssuedItems = 0;
+
+        for (const item of items) {
+            const issuedQty = Number(item.issued_qty || 0);
+            if (issuedQty <= 0) continue;
+
+            totalIssuedItems++;
+
+            // Deduct from central store stock
+            const { error: deductError } = await supabase.rpc('decrement_simple_item_qty', {
+                p_sku: item.item_sku,
+                p_qty: issuedQty
+            }).then(async (rpcResult) => {
+                if (rpcResult.error) {
+                    // Fallback: direct update if RPC not available
+                    const { data: currentItem } = await supabase
+                        .from('simple_items')
+                        .select('quantity')
+                        .eq('sku', item.item_sku)
+                        .maybeSingle();
+
+                    if (currentItem) {
+                        const newQty = Math.max(0, Number(currentItem.quantity || 0) - issuedQty);
+                        return supabase
+                            .from('simple_items')
+                            .update({ quantity: newQty, updated_at: now })
+                            .eq('sku', item.item_sku);
+                    }
+                }
+                return rpcResult;
+            });
+
+            if (deductError) {
+                logger.warn(`Failed to deduct stock for SKU ${item.item_sku}:`, deductError);
+                deductionErrors.push(item.item_sku);
+            }
+        }
+
+        // Mark backordered items that don't have an explicit issue_status yet
+        await supabase
+            .from('stock_request_items')
+            .update({ issue_status: 'backordered', updated_at: now })
+            .eq('request_id', id)
+            .is('issue_status', null);
+
+        // Update stock_request to dispatched
+        const { data: updatedRequest, error: updateError } = await supabase
+            .from('stock_requests')
+            .update({
+                workflow_status: 'dispatched',
+                status: 'DISPATCHED',
+                dispatched_at: now,
+                updated_at: now
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) throw updateError;
+
+        // Resolve destination branch code for dispatch number
+        const destBranchId = request.requesting_branch_id || request.branch_id;
+        const { data: branchData } = await supabase
+            .from('branches')
+            .select('code, name')
+            .eq('id', destBranchId)
+            .maybeSingle();
+
+        const branchCode = branchData?.code || `BR${destBranchId}`;
+
+        // Generate dispatch number
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const timestamp = Date.now().toString().slice(-4);
+        const dispatch_number = `DN-${branchCode}-${dateStr}-${timestamp}`;
+
+        // Get central warehouse
+        const { data: centralBranch } = await supabase
+            .from('branches')
+            .select('id')
+            .eq('is_central', true)
+            .maybeSingle();
+
+        const fromBranchId = centralBranch?.id || null;
+
+        // Create dispatch note record
+        const { data: dispatchNote, error: dispatchError } = await supabase
+            .from('dispatch_notes')
+            .insert({
+                dispatch_number,
+                stock_request_id: id,
+                from_branch_id: fromBranchId,
+                to_branch_id: destBranchId,
+                created_by: userId,
+                vehicle_number: vehicle_number || null,
+                driver_name: driver_name || null,
+                dispatch_notes: notes || null,
+                status: 'DISPATCHED',
+                dispatched_at: now
+            })
+            .select()
+            .single();
+
+        if (dispatchError) {
+            logger.warn('Failed to create dispatch note record:', dispatchError);
+        }
+
+        // Insert dispatch items for the dispatch note
+        if (dispatchNote && items.length > 0) {
+            const dispatchItems = items
+                .filter((item: any) => Number(item.issued_qty || 0) > 0)
+                .map((item: any) => ({
+                    dispatch_id: dispatchNote.id,
+                    item_sku: item.item_sku,
+                    dispatched_quantity: Number(item.issued_qty),
+                    status: 'DISPATCHED'
+                }));
+
+            if (dispatchItems.length > 0) {
+                await supabase.from('dispatch_items').insert(dispatchItems);
+            }
+        }
+
+        // Build summary
+        const issuedItems = items.filter((i: any) => Number(i.issued_qty || 0) > 0);
+        const backorderedItems = items.filter((i: any) => i.issue_status === 'backordered' || (!i.issue_status && Number(i.issued_qty || 0) === 0));
+        const totalIssuedQty = issuedItems.reduce((sum: number, i: any) => sum + Number(i.issued_qty || 0), 0);
+
+        // Notify branch storekeeper
+        notificationService.notifyRole(
+            'branch_storekeeper',
+            'Stock Dispatched — En Route',
+            `Stock request ${request.request_number} has been confirmed and dispatched (${dispatch_number}). Please prepare to receive.`,
+            {
+                type: 'success',
+                category: 'dispatch',
+                priority: 'high',
+                actionUrl: `/dashboard/branch-store/requests`,
+                branchId: destBranchId ?? null,
+                metadata: { request_id: id, dispatch_id: dispatchNote?.id }
+            }
+        ).catch(e => logger.error('Failed to notify branch_storekeeper of confirmed dispatch', e));
+
+        res.status(200).json({
+            success: true,
+            data: {
+                request: updatedRequest,
+                dispatch_note: dispatchNote || null,
+                dispatch_number,
+                summary: {
+                    total_items: items.length,
+                    issued_items: issuedItems.length,
+                    backordered_items: backorderedItems.length,
+                    total_issued_qty: totalIssuedQty,
+                    deduction_errors: deductionErrors
+                }
+            }
+        });
+    } catch (error) {
+        logger.error('Error confirming dispatch:', error);
         next(error);
     }
 };

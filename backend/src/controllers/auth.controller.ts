@@ -1134,7 +1134,8 @@ export const posLogin = async (
       kyogong_reception_cashier: 'kyogong_reception',
       kyogong_spa_cashier: 'kyogong_spa',
       kyogong_executive_bar_cashier: 'kyogong_executive_bar',
-      kyogong_sports_bar_cashier: 'kyogong_sports_bar'
+      kyogong_sports_bar_cashier: 'kyogong_sports_bar',
+      choma_zone_cashier: 'choma_zone'
     };
     const restaurantRoles = [
       'restaurant', 'restaurant_manager', 'head_chef', 'sous_chef',
@@ -1143,7 +1144,8 @@ export const posLogin = async (
       'kitchen', 'kitchen_helper', 'dishwasher', 'manager',
       'branch_manager', 'super_admin', 'cashier', 'restaurant_cashier',
       'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
-      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier'
+      'kyogong_sports_bar_cashier', 'kyogong_reception_cashier',
+      'choma_zone_cashier'
     ];
 
     const barRoles = [
@@ -1161,6 +1163,7 @@ export const posLogin = async (
       'non_consumables_cashier',
       'kyogong_spa_cashier', 'kyogong_executive_bar_cashier',
       'kyogong_sports_bar_cashier', 'kyogong_reception_cashier',
+      'choma_zone_cashier',
       'general_manager', 'director', 'auditor', 'finance_manager',
       'branch_accountant'
     ];
@@ -1193,112 +1196,88 @@ export const posLogin = async (
       logger.warn(`POS Login role-prefix mismatch allowed: Role ${user.role} using prefix C`);
     }
 
-    let outlet: any = null;
-    let activeShiftId: string | null = null;
     let resolvedOutletType = outletTypeByRole[normalizedRole] || outletTypeByPrefix[prefix];
 
-    if (user.branch_id) {
-      let outletQuery = supabase
+    // ── Stage 2: outlet lookup + branch enrich — run in parallel ─────────────
+    // Both only need the user object, so they can fire simultaneously.
+    const outletQueryBuilder = () => {
+      if (!user.branch_id) return Promise.resolve({ data: null, error: null });
+      let q = supabase
         .from('pos_outlets')
         .select('*')
         .eq('branch_id', user.branch_id)
         .eq('is_active', true);
-
       if (outletTypeByRole[normalizedRole]) {
-        outletQuery = outletQuery.eq('outlet_type', outletTypeByRole[normalizedRole]);
+        q = q.eq('outlet_type', outletTypeByRole[normalizedRole]);
       } else {
-        outletQuery = outletQuery.eq('pin_prefix', prefix);
+        q = q.eq('pin_prefix', prefix);
       }
+      return q.limit(1);
+    };
 
-      const { data: outletData, error: outletError } = await outletQuery.limit(1);
+    const [outletResult, enrichedBase] = await Promise.all([
+      outletQueryBuilder(),
+      enrichUserBranch({ ...user })
+    ]);
 
-      if (outletError) {
-        logger.warn('Failed to resolve POS outlet during PIN login', {
-          userId: user.id,
-          prefix,
-          error: outletError.message
-        });
-      }
-
-      outlet = Array.isArray(outletData) && outletData.length ? outletData[0] : null;
-      resolvedOutletType = outlet?.outlet_type || resolvedOutletType;
+    if (outletResult.error) {
+      logger.warn('Failed to resolve POS outlet during PIN login', {
+        userId: user.id, prefix, error: outletResult.error.message
+      });
     }
+    const outletData = outletResult.data;
+    let outlet: any = Array.isArray(outletData) && outletData.length ? outletData[0] : null;
+    resolvedOutletType = outlet?.outlet_type || resolvedOutletType;
 
-    if (outlet && prefix !== 'C') {
-      const stationCashierRoles = new Set([
-        'restaurant_cashier',
-        'main_bar_cashier',
-        'executive_bar_cashier',
-        'non_consumables_cashier',
-        'kyogong_spa_cashier',
-        'kyogong_executive_bar_cashier',
-        'kyogong_sports_bar_cashier',
-        'kyogong_reception_cashier'
-      ]);
-      const managerOverrideRoles = new Set([
-        'super_admin',
-        'general_manager',
-        'director',
-        'auditor',
-        'branch_manager',
-        'cashier',
-        'accountant',
-        'branch_accountant',
-        'finance_manager'
-      ]);
-      const { data: assignment, error: assignmentError } = await supabase
-        .from('pos_outlet_assignments')
-        .select('id')
-        .eq('outlet_id', outlet.id)
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle();
+    // ── Stage 3: assignment check + shift lookup — run in parallel ───────────
+    // Both need outlet.id; neither blocks the other.
+    const stationCashierRoles = new Set([
+      'restaurant_cashier', 'main_bar_cashier', 'executive_bar_cashier',
+      'non_consumables_cashier', 'kyogong_spa_cashier',
+      'kyogong_executive_bar_cashier', 'kyogong_sports_bar_cashier',
+      'kyogong_reception_cashier', 'choma_zone_cashier'
+    ]);
+    const managerOverrideRoles = new Set([
+      'super_admin', 'general_manager', 'director', 'auditor',
+      'branch_manager', 'cashier', 'accountant', 'branch_accountant', 'finance_manager'
+    ]);
 
-      if (assignmentError) {
+    const needsAssignmentCheck = outlet && prefix !== 'C';
+    const [assignmentResult, shiftResult] = await Promise.all([
+      needsAssignmentCheck
+        ? supabase.from('pos_outlet_assignments').select('id')
+            .eq('outlet_id', outlet.id).eq('user_id', user.id).eq('is_active', true).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      outlet
+        ? supabase.from('pos_outlet_shifts').select('id')
+            .eq('outlet_id', outlet.id).eq('status', 'open')
+            .order('opened_at', { ascending: false }).limit(1).maybeSingle()
+        : Promise.resolve({ data: null, error: null })
+    ]);
+
+    if (needsAssignmentCheck) {
+      if (assignmentResult.error) {
         logger.warn('Failed to verify POS outlet assignment', {
-          userId: user.id,
-          outletId: outlet.id,
-          error: assignmentError.message
+          userId: user.id, outletId: outlet.id, error: assignmentResult.error.message
         });
       }
-
-      if (!assignment && stationCashierRoles.has(normalizedRole)) {
+      if (!assignmentResult.data && stationCashierRoles.has(normalizedRole)) {
         res.status(403).json({
           success: false,
           message: `This cashier is not assigned to ${outlet.name || 'this POS station'}. Ask a manager to assign them to the station first.`
         });
         return;
       }
-
-      if (!assignment && !managerOverrideRoles.has(normalizedRole)) {
+      if (!assignmentResult.data && !managerOverrideRoles.has(normalizedRole)) {
         logger.warn('POS PIN login allowed without explicit outlet assignment', {
-          userId: user.id,
-          outletId: outlet.id,
-          role: user.role,
-          prefix
+          userId: user.id, outletId: outlet.id, role: user.role, prefix
         });
       }
     }
 
-    if (outlet) {
-      const { data: activeShift } = await supabase
-        .from('pos_outlet_shifts')
-        .select('id')
-        .eq('outlet_id', outlet.id)
-        .eq('status', 'open')
-        .order('opened_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      activeShiftId = activeShift?.id || null;
-    }
+    const activeShiftId: string | null = shiftResult.data?.id || null;
 
-    // Update last login
-    await supabase
-      .from('users')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', user.id);
-
-    // Generate JWT token
+    // Generate JWT token (synchronous — no network)
     const jwtSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'fallback-secret-key';
 
     logger.debug('Generating token for POS login', {
@@ -1323,32 +1302,39 @@ export const posLogin = async (
       }
     );
 
-    // Auto Clock-in for Staff Attendance
-    try {
-      const { data: existingAttendance } = await supabase
-        .from('staff_attendance')
-        .select('id')
-        .eq('user_id', user.id)
-        .is('clock_out', null)
-        .maybeSingle();
+    // ── Fire-and-forget side effects — do NOT await these ────────────────────
+    // last_login update, attendance clock-in, and session registry do not
+    // affect the response and are best-effort.  Awaiting them sequentially was
+    // the main source of the 30-second timeout.
+    void supabase
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', user.id);
 
-      if (!existingAttendance) {
-        await supabase
+    void (async () => {
+      try {
+        const { data: existingAttendance } = await supabase
           .from('staff_attendance')
-          .insert([{
+          .select('id')
+          .eq('user_id', user.id)
+          .is('clock_out', null)
+          .maybeSingle();
+        if (!existingAttendance) {
+          await supabase.from('staff_attendance').insert([{
             user_id: user.id,
             branch_id: user.branch_id,
             clock_in: new Date().toISOString(),
             status: 'present',
             notes: 'Auto clock-in via POS login'
           }]);
-        logger.info(`Auto clock-in for user ${user.id} during POS login`);
+          logger.info(`Auto clock-in for user ${user.id} during POS login`);
+        }
+      } catch (attendanceError) {
+        logger.error('Failed to auto clock-in during POS login:', attendanceError);
       }
-    } catch (attendanceError) {
-      logger.error('Failed to auto clock-in during POS login:', attendanceError);
-    }
+    })();
 
-    await registerManagedSession({
+    void registerManagedSession({
       userId: user.id,
       sessionId,
       ipAddress: req.ip,
@@ -1362,14 +1348,15 @@ export const posLogin = async (
       }
     });
 
-    const enrichedPosUser = await enrichUserBranch({
-      ...user,
+    // Build enriched user from the branch-enriched base fetched in Stage 2
+    const enrichedPosUser = {
+      ...enrichedBase,
       outlet,
       active_outlet_id: outlet?.id || null,
       active_outlet_type: resolvedOutletType,
       active_outlet_prefix: prefix,
       active_shift_id: activeShiftId
-    });
+    };
 
     res.status(200).json({
       success: true,

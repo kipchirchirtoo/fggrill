@@ -258,16 +258,16 @@ class _NonConsumablesCatalogSectionState
   Future<void> _delete(Map<String, dynamic> item) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Deactivate Item'),
         content: Text(
             'Deactivate "${item['name']}"? It will stop appearing in the POS catalogue.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(ctx, true),
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
               child: const Text('Deactivate')),
         ],
@@ -275,8 +275,9 @@ class _NonConsumablesCatalogSectionState
     );
     if (confirm != true) return;
     try {
-      await ref.read(superadminGodRepositoryProvider).deleteNonConsumable(
-          item['id'] is int ? item['id'] as int : int.parse('${item['id']}'));
+      final id = item['id'] is int ? item['id'] as int : int.tryParse('${item['id']}') ?? 0;
+      if (id == 0) return;
+      await ref.read(superadminGodRepositoryProvider).deleteNonConsumable(id);
       if (mounted) {
         AppNotifier.showSnackBar(
             context, const SnackBar(content: Text('Item deactivated')));

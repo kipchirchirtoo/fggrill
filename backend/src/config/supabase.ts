@@ -22,6 +22,18 @@ if (!supabaseServiceKey || supabaseServiceKey === 'undefined' || supabaseService
   throw new Error(errorMsg);
 }
 
+// Shared fetch wrapper: add a 12-second timeout so that a slow/unreachable
+// Supabase endpoint (e.g. local dev behind a restrictive NAT or firewall) fails
+// fast instead of hanging for 30+ seconds and causing spurious 401s in the auth
+// middleware.
+const fetchWithTimeout: typeof fetch = (input, init) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
+};
+
 // Service role client — for all DB operations (bypasses RLS)
 export const supabase = createClient(
   supabaseUrl,
@@ -30,7 +42,8 @@ export const supabase = createClient(
     auth: {
       autoRefreshToken: false,
       persistSession: false
-    }
+    },
+    global: { fetch: fetchWithTimeout }
   }
 );
 
@@ -44,6 +57,7 @@ export const supabaseAuth = createClient(
     auth: {
       autoRefreshToken: false,
       persistSession: false
-    }
+    },
+    global: { fetch: fetchWithTimeout }
   }
 );

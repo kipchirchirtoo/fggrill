@@ -120,7 +120,8 @@ class _FeatureFlagsSectionState extends ConsumerState<FeatureFlagsSection> {
   }
 
   Widget _buildFlagCard(Map<String, dynamic> flag) {
-    final id = flag['id'] is int ? flag['id'] as int : 0;
+    final rawId = flag['id'];
+    final id = rawId is int ? rawId : int.tryParse('${rawId ?? ''}');
     final flagName = flag['flag_name']?.toString() ?? flag['flag_key']?.toString() ?? 'Unnamed';
     final flagKey = flag['flag_key']?.toString() ?? '';
     final description = flag['description']?.toString() ?? '';
@@ -210,7 +211,9 @@ class _FeatureFlagsSectionState extends ConsumerState<FeatureFlagsSection> {
           Switch(
             value: isEnabled,
             activeThumbColor: AppColors.kPrimary,
-            onChanged: (newValue) => _onToggle(flag, id, newValue),
+            onChanged: id == null
+                ? null
+                : (newValue) => _onToggle(flag, id, newValue),
           ),
         ],
       ),
@@ -324,7 +327,7 @@ class _FeatureFlagsSectionState extends ConsumerState<FeatureFlagsSection> {
     }
   }
 
-  void _showAddFlagDialog() {
+  Future<void> _showAddFlagDialog() async {
     final flagKeyCtrl = TextEditingController();
     final flagNameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
@@ -332,13 +335,19 @@ class _FeatureFlagsSectionState extends ConsumerState<FeatureFlagsSection> {
     int? selectedBranch;
     final formKey = GlobalKey<FormState>();
 
-    final rawBranches = ref.read(allBranchesProvider).maybeWhen(
-          data: (data) => data['data'] as List<dynamic>? ?? const [],
-          orElse: () => const <dynamic>[],
-        );
-    final branches = rawBranches.whereType<Map>().map((b) {
-      return Map<String, dynamic>.from(b);
-    }).toList();
+    List<Map<String, dynamic>> branches = [];
+    try {
+      final data = await ref.read(allBranchesProvider.future);
+      final rawBranches = data['data'] as List<dynamic>? ?? const [];
+      branches = rawBranches
+          .whereType<Map>()
+          .map((b) => Map<String, dynamic>.from(b))
+          .toList();
+    } catch (_) {
+      branches = [];
+    }
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -434,6 +443,7 @@ class _FeatureFlagsSectionState extends ConsumerState<FeatureFlagsSection> {
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
                 Navigator.pop(ctx);
+                if (!mounted) return;
                 await _createFlag({
                   'flag_key': flagKeyCtrl.text.trim(),
                   'flag_name': flagNameCtrl.text.trim(),

@@ -653,6 +653,67 @@ type OutletPosOrderResolution = {
     originalOrder?: any;
 };
 
+async function reconcileSettledOutletPosOrder(order: any): Promise<any> {
+    const totalAmount = Number(order?.total_amount || 0);
+    if (!order?.id || totalAmount <= 0) return order;
+
+    const currentStatus = String(order.payment_status || '').toLowerCase();
+    if (['paid', 'credit_bill', 'voided'].includes(currentStatus)) return order;
+
+    const currentPaid = Number(order.amount_paid || 0);
+    const currentBalance = Number(order.balance_amount ?? Math.max(0, totalAmount - currentPaid));
+    let reconciledPaid = currentPaid;
+
+    // If power/network died between writing payment rows and finalizing the
+    // order row, recover from the durable payment ledger before showing or
+    // accepting another payment for the bill.
+    if (currentPaid + 0.01 < totalAmount || currentBalance > 0.01) {
+        const { data: paymentRows, error: paymentError } = await supabase
+            .from('pos_shift_payments')
+            .select('amount')
+            .eq('order_id', order.id);
+        if (paymentError) {
+            logger.warn('Failed to reconcile POS shift payments for settled order check', {
+                orderId: order.id,
+                error: paymentError.message
+            });
+        } else {
+            const ledgerPaid = (paymentRows || []).reduce(
+                (sum: number, row: any) => sum + Number(row.amount || 0),
+                0
+            );
+            if (ledgerPaid > reconciledPaid) reconciledPaid = ledgerPaid;
+        }
+    }
+
+    const nextBalance = Math.max(0, totalAmount - reconciledPaid);
+    const isSettled = reconciledPaid + 0.01 >= totalAmount || nextBalance <= 0.01;
+    if (!isSettled) return order;
+
+    const { data: updated, error: updateError } = await supabase
+        .from('pos_shift_orders')
+        .update({
+            status: 'paid',
+            payment_status: 'paid',
+            amount_paid: reconciledPaid,
+            balance_amount: 0,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', order.id)
+        .select('*')
+        .single();
+
+    if (updateError) {
+        logger.warn('Failed to auto-finalize settled POS order', {
+            orderId: order.id,
+            error: updateError.message
+        });
+        return order;
+    }
+
+    return updated || order;
+}
+
 async function loadOutletPosShiftIdsForLookup(req: Request): Promise<string[] | null> {
     const requestedBranchId = parseBranchId(req.query.branch_id);
     const userBranchId = parseBranchId(req.user?.branch_id ?? req.user?.branchId);
@@ -739,6 +800,8 @@ async function findOutletPosOrderByReference(
         const mergedTarget = await queryOutletPosOrderByColumn('id', String(order.merged_into), shiftIds);
         if (mergedTarget) targetOrder = mergedTarget;
     }
+
+    targetOrder = await reconcileSettledOutletPosOrder(targetOrder);
 
     const { data: shift, error: shiftError } = await supabase
         .from('pos_outlet_shifts')
@@ -2694,7 +2757,8 @@ export const processCashierPayment = async (
         if (outletPosPaymentOrder || resolvedSource === 'pos_shift_order' || bookingId.startsWith('POS') || bookingId.startsWith('MERGE-') || bookingId.startsWith('SPLIT-')) {
             if (!outletPosPaymentOrder) throw new AppError('POS order not found', 404);
 
-            const { order, shift } = outletPosPaymentOrder;
+            const { shift } = outletPosPaymentOrder;
+            const order = await reconcileSettledOutletPosOrder(outletPosPaymentOrder.order);
             const normalizedMethod = String(method || 'cash').toLowerCase().replace(/[\s_-]/g, '_');
             const paymentMethod = normalizedMethod.includes('mpesa')
                 ? 'mpesa'
