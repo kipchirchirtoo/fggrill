@@ -68,7 +68,9 @@ router.get('/', (req, res, next) => {
 }, getStaff);
 
 router.post('/',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.HR_MANAGER, UserRole.AUDITOR]),
+  // BRANCH_ACCOUNTANT is branch-scoped in the controller: own branch only,
+  // and cannot create global/executive user roles (same rules as BRANCH_MANAGER).
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.HR_MANAGER, UserRole.AUDITOR]),
   createStaffMember
 );
 

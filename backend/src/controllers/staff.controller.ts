@@ -496,11 +496,13 @@ export const createStaffMember = async (
       login_role,
       password,
       pos_pin,
+      employee_number,
       // Legacy field support (frontends may still send these)
       firstName,
       lastName,
       nationalId,
-      branchId
+      branchId,
+      employeeNumber
     } = req.body;
 
     // Normalize legacy field names
@@ -516,18 +518,20 @@ export const createStaffMember = async (
       createAccount === true ||
       createAccount === 'true';
 
-    if (callerRole === 'branch_manager') {
+    // Branch-scoped creators (manager, accountant) may only register staff
+    // in their own branch — the staff record is forced onto their branch.
+    if (['branch_manager', 'branch_accountant'].includes(callerRole)) {
       if (!callerBranchId) {
         res.status(403).json({
           success: false,
-          message: 'Branch manager account is not assigned to a branch'
+          message: 'Your account is not assigned to a branch'
         });
         return;
       }
       if (staffBranchId && !sameBranch(staffBranchId, callerBranchId)) {
         res.status(403).json({
           success: false,
-          message: 'Branch managers can only register staff in their own branch'
+          message: 'You can only register staff in your own branch'
         });
         return;
       }
@@ -595,10 +599,11 @@ export const createStaffMember = async (
       : effectiveDepartment;
     const requestedLoginRole = String(user_role || login_role || position || finalDepartment || 'employee').toLowerCase();
 
-    if (callerRole === 'branch_manager' && shouldCreateUserAccount && !canBranchManagerCreateRole(requestedLoginRole)) {
+    if (['branch_manager', 'branch_accountant'].includes(callerRole) &&
+        shouldCreateUserAccount && !canBranchManagerCreateRole(requestedLoginRole)) {
       res.status(403).json({
         success: false,
-        message: 'Branch managers cannot create global or executive user roles'
+        message: 'Branch-level roles cannot create global or executive user roles'
       });
       return;
     }
@@ -628,6 +633,9 @@ export const createStaffMember = async (
       basic_salary: basic_salary ? parseFloat(basic_salary) : 0,
       start_date: start_date || new Date().toISOString().split('T')[0],
       id_number: idNumber,
+      // employee_number is NOT NULL in staff_profiles — accept the branch's
+      // human numbering (e.g. FGM28) or fall back to the generated staff id.
+      employee_number: employee_number || employeeNumber || idNumber,
       status: 'active',
       employment_type: employment_type || 'permanent',
       contract_expiry: contract_expiry || null,

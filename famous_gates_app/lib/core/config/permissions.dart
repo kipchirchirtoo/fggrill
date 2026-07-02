@@ -215,6 +215,9 @@ class RolePermissions {
           Permission.canViewShiftPnl,
           Permission.canManageCreditBills,
           Permission.canViewFinanceReports,
+          // Branch accountants register staff for their own branch (backend
+          // enforces own-branch scope + blocks global/executive login roles).
+          Permission.canManageBranchStaff,
         };
 
       // Auditor / Night Auditor
