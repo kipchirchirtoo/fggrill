@@ -38,6 +38,11 @@ const sameText = (left: any, right: any): boolean => {
     return !!a && a === b;
 };
 
+const isUUID = (value: any): boolean => {
+    if (typeof value !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+};
+
 const firstPresent = (...values: any[]): string | null => {
     for (const value of values) {
         const text = normalizeText(value);
@@ -60,7 +65,7 @@ const findExistingMatchingGRN = async (params: {
     const { data, error } = await supabase
         .from('store_grn')
         .select('*')
-        .eq('po_id', params.poId)
+        .eq('purchase_order_id', params.poId)
         .eq('supplier_id', params.supplierId)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -86,7 +91,7 @@ const reconcilePOItemsFromGRNs = async (poId: string, poItems: any[]) => {
     const { data: grns, error: grnError } = await supabase
         .from('store_grn')
         .select('id, status')
-        .eq('po_id', poId);
+        .eq('purchase_order_id', poId);
 
     if (grnError) throw grnError;
 
@@ -95,7 +100,7 @@ const reconcilePOItemsFromGRNs = async (poId: string, poItems: any[]) => {
     const { data: grnItems, error: grnItemsError } = grnIds.length > 0
         ? await supabase
             .from('store_grn_items')
-            .select('po_item_id, item_id, accepted_quantity, quantity_accepted, quantity_received')
+            .select('po_item_id, item_id, quantity_accepted, quantity_received')
             .in('grn_id', grnIds)
         : { data: [], error: null } as any;
 
@@ -104,7 +109,7 @@ const reconcilePOItemsFromGRNs = async (poId: string, poItems: any[]) => {
     const receivedByPOItem = new Map<string, number>();
     const receivedBySku = new Map<string, number>();
     for (const item of grnItems || []) {
-        const qty = toNumber(item.accepted_quantity ?? item.quantity_accepted ?? item.quantity_received);
+        const qty = toNumber(item.quantity_accepted ?? item.quantity_received);
         const poItemId = normalizeText(item.po_item_id);
         const sku = normalizeText(item.item_id)?.toLowerCase();
         if (poItemId) {
@@ -165,7 +170,7 @@ const assertPurchaseOrderCanReceive = async (poId?: string | null): Promise<{ fu
     const { data: items, error: itemsError } = await supabase
         .from('store_po_items')
         .select('id, item_id, quantity_ordered, quantity_received, quantity_pending')
-        .eq('po_id', poId);
+        .eq('purchase_order_id', poId);
 
     if (itemsError) throw itemsError;
     const reconciledItems = await reconcilePOItemsFromGRNs(poId, items || []);
@@ -219,7 +224,7 @@ const updatePurchaseOrderReceipt = async (
         const { data: candidateItems, error: candidateError } = await supabase
             .from('store_po_items')
             .select('id, item_id, quantity_ordered, quantity_pending')
-            .eq('po_id', poId);
+            .eq('purchase_order_id', poId);
 
         if (candidateError) throw candidateError;
 
@@ -245,7 +250,7 @@ const updatePurchaseOrderReceipt = async (
     const { data: allItems, error: allError } = await supabase
         .from('store_po_items')
         .select('quantity_ordered, quantity_pending')
-        .eq('po_id', poId);
+        .eq('purchase_order_id', poId);
 
     if (allError) throw allError;
 
@@ -420,16 +425,34 @@ export const receiveFromSupplier = async (
         }
 
         const skus = [...new Set(normalizedItems.map((item: any) => String(item.item_id)))];
-        const { data: storeItems, error: storeItemsError } = await supabase
+        const uuids = skus.filter(s => isUUID(s));
+        const skuCodes = skus.filter(s => !isUUID(s));
+
+        let query = supabase
             .from('simple_items')
-            .select('sku, item_name, description, quantity, unit_of_measure, category, cost_price')
-            .in('sku', skus);
+            .select('id, sku, item_name, description, quantity, unit_of_measure, category, cost_price');
+
+        if (uuids.length > 0 && skuCodes.length > 0) {
+            query = query.or(`id.in.(${uuids.join(',')}),sku.in.(${skuCodes.map(s => `"${s}"`).join(',')})`);
+        } else if (uuids.length > 0) {
+            query = query.in('id', uuids);
+        } else {
+            query = query.in('sku', skuCodes);
+        }
+
+        const { data: storeItems, error: storeItemsError } = await query;
 
         if (storeItemsError) throw storeItemsError;
-        const itemDetails = new Map<string, any>(
-            (storeItems || []).map((item: any) => [item.sku, item] as [string, any])
-        );
-        const missingSkus = skus.filter((sku) => !itemDetails.has(sku));
+        const itemDetails = new Map<string, any>();
+        for (const item of storeItems || []) {
+            if (item.sku) {
+                itemDetails.set(String(item.sku).toLowerCase(), item);
+            }
+            if (item.id) {
+                itemDetails.set(String(item.id).toLowerCase(), item);
+            }
+        }
+        const missingSkus = skus.filter((sku) => !itemDetails.has(sku.toLowerCase()));
         if (missingSkus.length > 0) {
             throw new AppError(`Cannot post receipt. Missing inventory SKU(s): ${missingSkus.join(', ')}`, 400);
         }
@@ -470,7 +493,7 @@ export const receiveFromSupplier = async (
             const { data: existingGrns } = await supabase
                 .from('store_grn')
                 .select('*')
-                .eq('po_id', po_id)
+                .eq('purchase_order_id', po_id)
                 .order('created_at', { ascending: false })
                 .limit(1);
             const existingGrn = existingGrns?.[0] || null;
@@ -495,20 +518,20 @@ export const receiveFromSupplier = async (
             .from('store_grn')
             .insert({
                 grn_number: grnNumber,
-                po_id: po_id || null,
+                purchase_order_id: po_id || null,
                 supplier_id,
                 grn_date: grnDate,
                 invoice_number: resolvedInvoiceNumber,
                 delivery_note_number: resolvedDeliveryNote,
-                status: 'completed',
+                status: 'draft',
                 received_by_id: userId,
                 grn_approved: true,
                 approved_by_id: userId,
-                approved_at: receivedAt,
+                received_at: receivedAt,
                 total_items: totalItems,
                 total_quantity: totalQuantity,
                 total_value: totalValue,
-                remarks,
+                notes: remarks,
                 attachments: attachments || null
             })
             .select()
@@ -516,28 +539,30 @@ export const receiveFromSupplier = async (
 
         if (grnError) throw grnError;
 
-        const grnItems = normalizedItems.map((item: any) => ({
-            grn_id: grn.id,
-            po_item_id: item.po_item_id || null,
-            item_id: item.item_id,
-            quantity_ordered: item.quantity_ordered,
-            quantity_received: item.quantity_received,
-            quantity_accepted: item.quantity_accepted,
-            accepted_quantity: item.quantity_accepted,
-            quantity_rejected: toNumber(item.quantity_rejected),
-            rejected_quantity: toNumber(item.quantity_rejected),
-            quantity_damaged: toNumber(item.quantity_damaged),
-            damaged_quantity: toNumber(item.quantity_damaged),
-            short_quantity: toNumber(item.short_quantity),
-            expired_quantity: toNumber(item.expired_quantity),
-            unit_price: item.unit_price,
-            total_value: item.quantity_received * item.unit_price,
-            batch_number: normalizeText(item.batch_number),
-            expiry_date: normalizeText(item.expiry_date),
-            quality_status: item.quality_status || 'accepted',
-            condition_status: 'good',
-            notes: item.notes || null
-        }));
+        const grnItems = normalizedItems.map((item: any) => {
+            const details = itemDetails.get(String(item.item_id).toLowerCase());
+            return {
+                grn_id: grn.id,
+                goods_receipt_id: grn.id,
+                purchase_order_line_id: item.po_item_id || null,
+                po_item_id: item.po_item_id || null,
+                item_id: details?.id || item.item_id,
+                item_name: details?.item_name || item.item_name || 'Item',
+                sku: details?.sku || item.item_sku || '',
+                quantity_ordered: item.quantity_ordered,
+                quantity_received: item.quantity_received,
+                quantity_accepted: item.quantity_accepted,
+                quantity_rejected: toNumber(item.quantity_rejected),
+                quantity_damaged: toNumber(item.quantity_damaged),
+                unit: item.unit_of_measure || details?.unit_of_measure || 'units',
+                unit_price: item.unit_price,
+                line_total: item.quantity_received * item.unit_price,
+                total_value: item.quantity_received * item.unit_price,
+                batch_number: normalizeText(item.batch_number),
+                expiry_date: normalizeText(item.expiry_date),
+                quality_status: item.quality_status || 'accepted'
+            };
+        });
 
         const { data: savedItems, error: itemError } = await supabase
             .from('store_grn_items')
@@ -619,7 +644,7 @@ export const receiveFromSupplier = async (
         const { error: touchError } = await supabase
             .from('store_grn')
             .update({
-                status: 'completed',
+                status: 'posted',
                 updated_at: receivedAt
             })
             .eq('id', grn.id);
