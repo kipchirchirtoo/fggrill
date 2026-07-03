@@ -7913,7 +7913,7 @@ const _directIssueReasons = [
   'Other',
 ];
 
-class _DirectIssueDialog extends StatefulWidget {
+class _DirectIssueDialog extends ConsumerStatefulWidget {
   const _DirectIssueDialog({
     required this.branches,
     required this.onSubmit,
@@ -7925,10 +7925,10 @@ class _DirectIssueDialog extends StatefulWidget {
   final Map<String, dynamic>? prefill;
 
   @override
-  State<_DirectIssueDialog> createState() => _DirectIssueDialogState();
+  ConsumerState<_DirectIssueDialog> createState() => _DirectIssueDialogState();
 }
 
-class _DirectIssueDialogState extends State<_DirectIssueDialog> {
+class _DirectIssueDialogState extends ConsumerState<_DirectIssueDialog> {
   String? _branchId;
   String _reason = _directIssueReasons.first;
   final List<_DirectIssueItem> _items = [];
