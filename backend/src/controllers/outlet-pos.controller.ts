@@ -482,13 +482,6 @@ const normalizeOrderItems = async (
   });
 };
 
-const orderItemsTotal = (items: Array<Record<string, any>>): number =>
-  items.reduce((sum, item) => {
-    const lineTotal = numberValue(item.line_total ?? item.total_price ?? item.total);
-    if (lineTotal > 0) return sum + lineTotal;
-    return sum + numberValue(item.quantity ?? item.qty) * numberValue(item.unit_price ?? item.price);
-  }, 0);
-
 const booleanValue = (value: unknown): boolean =>
   value === true || String(value ?? '').trim().toLowerCase() === 'true';
 
@@ -519,6 +512,9 @@ const activeOrderItemsTotal = (items: Array<Record<string, any>>): number =>
     if (activeQty > 0 && unitPrice > 0) return sum + activeQty * unitPrice;
     return sum + numberValue(item.line_total ?? item.total_price ?? item.total);
   }, 0);
+
+const orderItemsTotal = (items: Array<Record<string, any>>): number =>
+  activeOrderItemsTotal(items);
 
 const isNullifiedZeroShiftOrder = (order: Record<string, any>): boolean => {
   const totalAmount = numberValue(order.total_amount);
