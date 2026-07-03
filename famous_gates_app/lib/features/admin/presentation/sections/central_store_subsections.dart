@@ -3338,6 +3338,11 @@ class DispatchNotesSection extends ConsumerWidget {
       if (!context.mounted) return;
       _refreshCentralStore(ref);
       _snack(context, 'Dispatch moved to transit');
+
+      // Auto-trigger printing of the dispatch note
+      if (context.mounted) {
+        await _printDispatchNote(context, ref, row);
+      }
     } catch (error) {
       if (context.mounted) {
         await _showActionError(
@@ -3369,7 +3374,14 @@ class DispatchNotesSection extends ConsumerWidget {
       if (!context.mounted) return;
       Navigator.pop(context); // Close loading dialog
       
-      _snack(context, 'Dispatch note PDF saved to: ${file.path}');
+      // Read bytes and trigger printer layout dialog
+      final bytes = await file.readAsBytes();
+      await Printing.layoutPdf(
+        name: 'Dispatch_Note_$dispatchNumber.pdf',
+        onLayout: (_) async => bytes,
+      );
+      
+      _snack(context, 'Dispatch note PDF sent to printer');
     } catch (error) {
       if (!context.mounted) return;
       Navigator.pop(context); // Close loading dialog
