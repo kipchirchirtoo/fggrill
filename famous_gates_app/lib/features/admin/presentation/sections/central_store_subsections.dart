@@ -35,6 +35,21 @@ double _num(Map<String, dynamic> row, List<String> keys) {
   return 0;
 }
 
+/// Display name for a request/dispatch line item. Stock-request lines carry
+/// the catalog record nested under `item` (only newer backends flatten
+/// item_name to the top level), so check both before falling back to the sku.
+String _lineItemName(Map<String, dynamic> item) {
+  final direct = _text(item, ['item_name', 'name', 'description'], '');
+  if (direct.isNotEmpty) return direct;
+  final nested = item['item'];
+  if (nested is Map) {
+    final nestedName =
+        _text(Map<String, dynamic>.from(nested), ['item_name', 'name'], '');
+    if (nestedName.isNotEmpty) return nestedName;
+  }
+  return _text(item, ['item_sku', 'sku']);
+}
+
 List<Map<String, dynamic>> _list(dynamic value) {
   final raw = value is Map
       ? value['data'] ?? value['items'] ?? value['rows'] ?? value['results']
@@ -2863,7 +2878,9 @@ class PackingSection extends ConsumerWidget {
                 title: _text(row, ['request_number', 'id']),
                 subtitle: '${_text(row, [
                       'requesting_branch_name',
-                      'branch_name'
+                      'branch_name',
+                      'requesting_branch_id',
+                      'branch_id'
                     ])} • ${_date(row['created_at'])}',
                 trailing: Wrap(spacing: 6, children: [
                   OutlinedButton(
@@ -3040,8 +3057,13 @@ class _IssueStockDialogState extends State<_IssueStockDialog> {
   Widget build(BuildContext context) {
     final requestNumber =
         _text(widget.row, ['request_number', 'id']);
-    final branchName = _text(
-        widget.row, ['requesting_branch_name', 'branch_name', 'branch']);
+    final branchName = _text(widget.row, [
+      'requesting_branch_name',
+      'branch_name',
+      'branch',
+      'requesting_branch_id',
+      'branch_id'
+    ]);
     final dateStr = _date(widget.row['created_at']);
     return AlertDialog(
       title: Text('Issue Stock — $requestNumber'),
@@ -3087,11 +3109,7 @@ class _IssueStockDialogState extends State<_IssueStockDialog> {
                             item, ['unit', 'unit_of_measure'], '—');
                         return DataRow(cells: [
                           DataCell(Text(
-                            _text(item, [
-                              'item_name',
-                              'name',
-                              'description'
-                            ]),
+                            _lineItemName(item),
                             overflow: TextOverflow.ellipsis,
                           )),
                           DataCell(Text(unit)),

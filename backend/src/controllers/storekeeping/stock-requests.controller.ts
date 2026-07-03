@@ -34,6 +34,10 @@ const attachCatalogItem = (row: any, itemMap: Map<string, any>): any => {
 
     return {
         ...row,
+        // Flatten the display name too — several screens (e.g. the central
+        // store Issue Stock dialog) read item_name off the line itself and
+        // rendered "—" when it only existed nested under item.
+        item_name: row.item_name || item?.item_name || sku || 'Unknown item',
         item: item ? {
             ...item,
             category: item.store_type || null,
@@ -1175,10 +1179,28 @@ export const getApprovedRequests = async (
 
         const requestsWithItems = await attachRequestItems(requests || []);
 
+        // Attach branch names — the packing queue and Issue Stock dialog
+        // display requesting_branch_name, which the raw row doesn't carry.
+        const branchIds = [...new Set(
+            requestsWithItems
+                .map((r: any) => r.requesting_branch_id ?? r.branch_id)
+                .filter((id: any) => id !== null && id !== undefined)
+        )];
+        const { data: branchRows } = branchIds.length
+            ? await supabase.from('branches').select('id, name').in('id', branchIds)
+            : { data: [] as any[] };
+        const branchNameById = new Map((branchRows || []).map((b: any) => [String(b.id), b.name]));
+
+        const enriched = requestsWithItems.map((r: any) => ({
+            ...r,
+            requesting_branch_name:
+                branchNameById.get(String(r.requesting_branch_id ?? r.branch_id)) || null
+        }));
+
         res.status(200).json({
             success: true,
-            count: requestsWithItems.length,
-            data: requestsWithItems
+            count: enriched.length,
+            data: enriched
         });
     } catch (error) {
         logger.error('Error fetching approved requests:', error);
