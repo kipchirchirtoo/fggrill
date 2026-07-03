@@ -668,7 +668,7 @@ export const receivePurchaseOrder = async (
       const { data: central, error } = await supabase
         .from("branches")
         .select("id")
-        .eq("is_central_store", true)
+        .eq("is_central_warehouse", true)
         .single();
       if (error) {
         console.error("Database error:", error);

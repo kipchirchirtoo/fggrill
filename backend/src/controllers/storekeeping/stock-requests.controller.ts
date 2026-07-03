@@ -1069,12 +1069,7 @@ export const confirmDispatch = async (
         const dispatch_number = `DN-${branchCode}-${dateStr}-${timestamp}`;
 
         // Get central warehouse
-        const { data: centralBranch } = await supabase
-            .from('branches')
-            .select('id')
-            .eq('is_central', true)
-            .maybeSingle();
-
+        const centralBranch = await BranchInventoryService.getCentralWarehouse();
         const fromBranchId = centralBranch?.id || null;
 
         // Create dispatch note record
