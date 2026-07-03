@@ -1866,6 +1866,49 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
   }
 };
 
+// Snapshot every active outlet item into pos_shift_stock_counts so the shift
+// has an opening-stock sheet. Every path that creates a pos_outlet_shifts row
+// must call this — the bridge paths that auto-open a POS shift from an
+// approved cashier shift used to skip it, leaving the shift with no stock
+// sheet, so nothing was tracked per-shift and the close automation posted
+// zero stock movements.
+const seedShiftStockCounts = async (shiftId: string, outletId: string): Promise<void> => {
+  const { data: existingCounts } = await supabase
+    .from('pos_shift_stock_counts')
+    .select('id')
+    .eq('shift_id', shiftId)
+    .limit(1);
+  if (existingCounts && existingCounts.length) return;
+
+  const { data: items, error: itemsError } = await supabase
+    .from('pos_outlet_items')
+    .select('*')
+    .eq('outlet_id', outletId)
+    .eq('is_active', true);
+  if (itemsError) throw itemsError;
+
+  const stockRows = ((items || []) as Array<Record<string, any>>).map((item) => ({
+    shift_id: shiftId,
+    outlet_id: outletId,
+    outlet_item_id: item.id,
+    item_name: item.name,
+    sku: item.sku,
+    unit: item.unit || 'each',
+    cost_price: item.cost_price || 0,
+    selling_price: item.selling_price || 0,
+    opening_stock: item.current_stock ?? item.opening_stock ?? 0,
+    additions: 0,
+    sold_quantity: 0,
+    system_closing_stock: item.current_stock ?? item.opening_stock ?? 0,
+    track_stock: item.track_stock !== false
+  }));
+
+  if (stockRows.length) {
+    const { error: stockError } = await supabase.from('pos_shift_stock_counts').insert(stockRows);
+    if (stockError) throw stockError;
+  }
+};
+
 const loadOpenShiftForOutlet = async (
   req: Request,
   outlet: Record<string, any>
@@ -1912,6 +1955,7 @@ const loadOpenShiftForOutlet = async (
           .single();
         if (createErr) throw createErr;
         data = created;
+        await seedShiftStockCounts(created.id, outlet.id);
       }
     }
   }
@@ -2225,6 +2269,7 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
             .single();
           if (createErr) throw createErr;
           data = created;
+          await seedShiftStockCounts(created.id, String(outletId));
         }
       }
     }
@@ -2305,33 +2350,7 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
       .single();
     if (shiftError || !shift) throw shiftError || new AppError('Failed to open POS shift', 500);
 
-    const { data: items, error: itemsError } = await supabase
-      .from('pos_outlet_items')
-      .select('*')
-      .eq('outlet_id', outletId)
-      .eq('is_active', true);
-    if (itemsError) throw itemsError;
-
-    const stockRows = ((items || []) as Array<Record<string, any>>).map((item) => ({
-      shift_id: shift.id,
-      outlet_id: outletId,
-      outlet_item_id: item.id,
-      item_name: item.name,
-      sku: item.sku,
-      unit: item.unit || 'each',
-      cost_price: item.cost_price || 0,
-      selling_price: item.selling_price || 0,
-      opening_stock: item.current_stock ?? item.opening_stock ?? 0,
-      additions: 0,
-      sold_quantity: 0,
-      system_closing_stock: item.current_stock ?? item.opening_stock ?? 0,
-      track_stock: item.track_stock !== false
-    }));
-
-    if (stockRows.length) {
-      const { error: stockError } = await supabase.from('pos_shift_stock_counts').insert(stockRows);
-      if (stockError) throw stockError;
-    }
+    await seedShiftStockCounts(shift.id, String(outletId));
 
     ensureShiftAutomationOpened(shift.id, targetCashierId)
       .catch((error) => logger.warn('Unable to record shift open automation marker', error));
@@ -3777,15 +3796,25 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
     if (activeQty <= 0) throw new AppError('This item is already fully voided', 400);
     if (qtyToVoid > activeQty) throw new AppError('Void quantity exceeds the remaining active quantity for this item', 400);
 
-    const { data: existing, error: existingError } = await supabase
+    // One open request per bill line. 'kitchen_acknowledged' counts as open
+    // too — checking only 'pending' let waiters re-request the same item the
+    // moment kitchen acknowledged, stacking duplicates the cashier could
+    // never apply ("Void quantity exceeds the remaining active quantity").
+    const { data: existingOpen, error: existingError } = await supabase
       .from('pos_item_void_requests')
-      .select('id')
+      .select('id, status, qty_to_void')
       .eq('order_id', orderId)
       .eq('item_index', itemIndex)
-      .eq('status', 'pending')
-      .maybeSingle();
+      .in('status', ['pending', 'kitchen_acknowledged'])
+      .limit(1);
     if (existingError) throw existingError;
-    if (existing) throw new AppError('A pending void request already exists for this item', 409);
+    if (existingOpen && existingOpen.length > 0) {
+      const stage = existingOpen[0].status === 'pending' ? 'kitchen' : 'cashier';
+      throw new AppError(
+        `A void request for this item is already awaiting ${stage} action — wait for it to be processed or ask the ${stage} to decline it first`,
+        409
+      );
+    }
 
     const unitPrice = numberValue(item.unit_price ?? item.price);
     const { data: requestRow, error } = await supabase
@@ -4328,8 +4357,30 @@ export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, ne
       p_actioned_by: req.user.id
     });
     if (rpcError) {
-      if (String(rpcError.message || '').includes('already processed')) {
+      const rpcMessage = String(rpcError.message || '');
+      if (rpcMessage.includes('already processed')) {
         throw new AppError('Void request already actioned', 409);
+      }
+      // Stale request: the item was already voided through another (usually
+      // duplicate) request, so this one can never apply. Auto-decline it so
+      // it stops clogging the cashier queue instead of erroring forever.
+      if (rpcMessage.includes('exceeds the remaining active quantity') ||
+          rpcMessage.includes('Item no longer exists')) {
+        await supabase
+          .from('pos_item_void_requests')
+          .update({
+            status: 'void_cashier_declined',
+            cashier_id: req.user.id,
+            cashier_acknowledged_at: now,
+            cashier_action: 'declined',
+            updated_at: now
+          })
+          .eq('id', id)
+          .eq('status', 'kitchen_acknowledged');
+        throw new AppError(
+          'This item was already voided by another request — the duplicate has been removed from the queue',
+          409
+        );
       }
       throw rpcError;
     }

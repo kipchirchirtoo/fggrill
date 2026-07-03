@@ -290,8 +290,51 @@ const postAutomatedStockMovements = async (
   let quantity = 0;
   const warnings: string[] = [];
 
+  // branch_stock is keyed by the central catalog sku (inventory_items.sku,
+  // e.g. FG-190) while POS outlet items carry M-<uuid> skus — resolve the
+  // branch sku through pos_outlet_items → bar_drinks → inventory_items so
+  // sold quantities actually land on the branch_stock rows. Falls back to
+  // the raw count sku for non-bar items.
+  const outletItemIds = ((counts || []) as Array<Record<string, any>>)
+    .map((c) => String(c.outlet_item_id || ''))
+    .filter(Boolean);
+  const branchSkuByOutletItemId = new Map<string, string>();
+  if (outletItemIds.length) {
+    const { data: outletItems } = await supabase
+      .from('pos_outlet_items')
+      .select('id, source_table, source_item_id')
+      .in('id', outletItemIds);
+    const barSourced = (outletItems || []).filter(
+      (oi: any) => oi.source_table === 'bar_drinks' && oi.source_item_id
+    );
+    if (barSourced.length) {
+      const { data: drinks } = await supabase
+        .from('bar_drinks')
+        .select('id, inventory_item_id')
+        .in('id', barSourced.map((oi: any) => oi.source_item_id));
+      const invIdByDrinkId = new Map<string, string>();
+      for (const d of (drinks || []) as Array<Record<string, any>>) {
+        if (d.inventory_item_id) invIdByDrinkId.set(String(d.id), String(d.inventory_item_id));
+      }
+      const invIds = Array.from(new Set(Array.from(invIdByDrinkId.values())));
+      if (invIds.length) {
+        const { data: invItems } = await supabase
+          .from('inventory_items')
+          .select('id, sku')
+          .in('id', invIds);
+        const skuByInvId = new Map((invItems || []).map((i: any) => [String(i.id), i.sku]));
+        for (const oi of barSourced) {
+          const invId = invIdByDrinkId.get(String(oi.source_item_id));
+          const branchSku = invId ? skuByInvId.get(String(invId)) : null;
+          if (branchSku) branchSkuByOutletItemId.set(String(oi.id), String(branchSku));
+        }
+      }
+    }
+  }
+
   for (const count of (counts || []) as Array<Record<string, any>>) {
-    const sku = String(count.sku || '').trim();
+    const sku = branchSkuByOutletItemId.get(String(count.outlet_item_id || ''))
+      || String(count.sku || '').trim();
     const sold = Math.max(0, Math.round(numberValue(count.sold_quantity)));
     const systemClosing = numberValue(count.opening_stock) + numberValue(count.additions) - numberValue(count.sold_quantity);
 
@@ -340,6 +383,7 @@ const postAutomatedStockMovements = async (
         .from('branch_stock')
         .update({
           quantity: newStock,
+          current_stock: newStock,
           last_stock_out: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -361,7 +405,6 @@ const postAutomatedStockMovements = async (
         reference_type: 'SALE',
         reference_id: shift.id,
         reference_number: `POS-${shortRef(shift.id)}`,
-        reason: 'Automated POS shift close',
         notes: `Automated stock adjustment from POS shift ${shift.id}`,
         performed_by: actorId || shift.cashier_id
       });

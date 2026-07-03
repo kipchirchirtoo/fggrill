@@ -765,12 +765,22 @@ class _RecordDetailPage extends StatelessWidget {
     return num.tryParse('${v ?? ''}'.replaceAll(',', '').trim());
   }
 
+  /// A list whose elements are maps is an item/line list (requisition items,
+  /// dispatch items, GRN lines…) — rendered as a document table, not as
+  /// joined text inside the details grid.
+  static bool _isItemList(dynamic v) =>
+      v is List && v.isNotEmpty && v.every((e) => e is Map);
+
   @override
   Widget build(BuildContext context) {
-    final entries = row.entries
+    final allEntries = row.entries
         .where((entry) => _shouldShowDetailEntry(row, entry))
         .take(60)
         .toList();
+    final itemTableEntries =
+        allEntries.where((e) => _isItemList(e.value)).toList();
+    final entries =
+        allEntries.where((e) => !_isItemList(e.value)).toList();
 
     final status = _text(row, ['status', 'approval_status'], '');
 
@@ -888,6 +898,25 @@ class _RecordDetailPage extends StatelessWidget {
                     ],
                   ),
                 ),
+                for (final e in itemTableEntries) ...[
+                  const SizedBox(height: 14),
+                  _ItemsDocumentCard(
+                    title: _detailLabel(e.key),
+                    documentNumber: _text(row, [
+                      'document_number',
+                      'request_number',
+                      'dispatch_number',
+                      'grn_number',
+                      'po_number',
+                      'issue_number',
+                    ], ''),
+                    documentDate: _text(
+                        row, ['created_at', 'requested_at', 'dispatch_date'], ''),
+                    items: (e.value as List)
+                        .map((it) => Map<String, dynamic>.from(it as Map))
+                        .toList(),
+                  ),
+                ],
               ],
             ),
           ),
@@ -937,6 +966,276 @@ class _RecordDetailPage extends StatelessWidget {
         ),
         child: child,
       );
+}
+
+/// Renders a record's line items as a clean, printed-document style table
+/// (like a delivery note / requisition form): numbered lines, item name,
+/// SKU, quantity + unit, optional unit cost and line total, and a totals
+/// footer. Replaces the old joined-text dump of "SKU — Qty n".
+class _ItemsDocumentCard extends StatelessWidget {
+  const _ItemsDocumentCard({
+    required this.title,
+    required this.items,
+    this.documentNumber = '',
+    this.documentDate = '',
+  });
+
+  final String title;
+  final List<Map<String, dynamic>> items;
+  final String documentNumber;
+  final String documentDate;
+
+  static num? _num(dynamic v) {
+    if (v is num) return v;
+    final s = '${v ?? ''}'.replaceAll(',', '').trim();
+    if (s.isEmpty) return null;
+    return num.tryParse(s);
+  }
+
+  static String _pick(Map<String, dynamic> it, List<String> keys) {
+    for (final k in keys) {
+      final v = it[k];
+      if (v == null) continue;
+      if (v is Map) continue;
+      final s = '$v'.trim();
+      if (s.isNotEmpty && s != 'null') return s;
+    }
+    // Nested catalog record (item: {...})
+    final nested = it['item'];
+    if (nested is Map) {
+      for (final k in keys) {
+        final v = nested[k];
+        if (v == null || v is Map) continue;
+        final s = '$v'.trim();
+        if (s.isNotEmpty && s != 'null') return s;
+      }
+    }
+    return '';
+  }
+
+  static String _qtyText(num? v) {
+    if (v == null) return '—';
+    return v == v.roundToDouble()
+        ? v.toStringAsFixed(0)
+        : v.toStringAsFixed(2);
+  }
+
+  static String _money(num v) {
+    final s = v.toStringAsFixed(2).replaceAllMapped(
+        RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
+    return 'KES $s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Resolve each line once so column visibility and totals agree.
+    final lines = items.map((it) {
+      final sku = _pick(it, ['item_sku', 'sku', 'item_code']);
+      var name = _pick(it, ['item_name', 'name', 'description', 'drink_name']);
+      if (name.isEmpty) name = sku.isNotEmpty ? sku : 'Item';
+      final qty = _num(it['quantity_approved'] ??
+          it['approved_quantity'] ??
+          it['dispatched_quantity'] ??
+          it['issued_qty'] ??
+          it['quantity_received'] ??
+          it['quantity_requested'] ??
+          it['requested_quantity'] ??
+          it['quantity'] ??
+          it['qty']);
+      final unit = _pick(it, ['unit', 'unit_of_measure', 'uom']);
+      final cost = _num(it['unit_cost'] ??
+          it['unit_price'] ??
+          it['cost_price'] ??
+          (it['item'] is Map ? (it['item'] as Map)['cost_price'] : null));
+      return (
+        name: name,
+        sku: sku,
+        qty: qty,
+        unit: unit,
+        cost: cost,
+        amount: (qty != null && cost != null) ? qty * cost : null,
+      );
+    }).toList();
+
+    final showSku =
+        lines.any((l) => l.sku.isNotEmpty && l.sku != l.name);
+    final showCost = lines.any((l) => l.cost != null);
+    final totalQty = lines.fold<num>(0, (sum, l) => sum + (l.qty ?? 0));
+    final totalAmount =
+        lines.fold<num>(0, (sum, l) => sum + (l.amount ?? 0));
+
+    const headStyle = TextStyle(
+        fontSize: 10.5,
+        fontWeight: FontWeight.w800,
+        color: AppColors.kTextSecondary,
+        letterSpacing: 0.4);
+    const cellStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w600);
+    const mutedStyle = TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w500,
+        color: AppColors.kTextSecondary);
+
+    Widget cell(String text,
+            {TextStyle style = cellStyle, TextAlign align = TextAlign.left}) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+          child: Text(text, textAlign: align, style: style),
+        );
+
+    final columnWidths = <int, TableColumnWidth>{
+      0: const FixedColumnWidth(40),
+      1: const FlexColumnWidth(3),
+      if (showSku) 2: const FlexColumnWidth(1.3),
+      (showSku ? 3 : 2): const FlexColumnWidth(0.9),
+      (showSku ? 4 : 3): const FlexColumnWidth(0.8),
+      if (showCost) (showSku ? 5 : 4): const FlexColumnWidth(1.1),
+      if (showCost) (showSku ? 6 : 5): const FlexColumnWidth(1.2),
+    };
+
+    List<Widget> rowCells({
+      required String no,
+      required String name,
+      required String sku,
+      required String qty,
+      required String unit,
+      required String cost,
+      required String amount,
+      TextStyle style = cellStyle,
+      TextStyle secondaryStyle = mutedStyle,
+    }) =>
+        [
+          cell(no, style: secondaryStyle, align: TextAlign.center),
+          cell(name, style: style),
+          if (showSku) cell(sku, style: secondaryStyle),
+          cell(qty, style: style, align: TextAlign.right),
+          cell(unit, style: secondaryStyle),
+          if (showCost) cell(cost, style: secondaryStyle, align: TextAlign.right),
+          if (showCost) cell(amount, style: style, align: TextAlign.right),
+        ];
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.kDivider.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Document header strip
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+            child: Row(
+              children: [
+                Icon(PhosphorIcons.listChecks(),
+                    size: 18, color: AppColors.kPrimary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(title.toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6)),
+                ),
+                if (documentNumber.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(documentNumber, style: mutedStyle),
+                  ),
+                if (documentDate.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(_formatDateTimeValue(documentDate),
+                        style: mutedStyle),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.kPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('${lines.length} ITEMS',
+                        style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.kPrimary)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Form-style bordered table
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Table(
+                columnWidths: columnWidths,
+                border: TableBorder.all(
+                    color: AppColors.kDivider.withValues(alpha: 0.7),
+                    width: 1),
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  TableRow(
+                    decoration:
+                        const BoxDecoration(color: Color(0xFFF3F4F6)),
+                    children: rowCells(
+                      no: '#',
+                      name: 'ITEM DESCRIPTION',
+                      sku: 'SKU',
+                      qty: 'QTY',
+                      unit: 'UNIT',
+                      cost: 'UNIT COST',
+                      amount: 'AMOUNT',
+                      style: headStyle,
+                      secondaryStyle: headStyle,
+                    ),
+                  ),
+                  for (var i = 0; i < lines.length; i++)
+                    TableRow(
+                      decoration: BoxDecoration(
+                          color:
+                              i.isOdd ? const Color(0xFFFAFAFA) : Colors.white),
+                      children: rowCells(
+                        no: '${i + 1}',
+                        name: lines[i].name,
+                        sku: lines[i].sku,
+                        qty: _qtyText(lines[i].qty),
+                        unit: lines[i].unit.isEmpty ? '—' : lines[i].unit,
+                        cost: lines[i].cost == null
+                            ? '—'
+                            : _money(lines[i].cost!),
+                        amount: lines[i].amount == null
+                            ? '—'
+                            : _money(lines[i].amount!),
+                      ),
+                    ),
+                  TableRow(
+                    decoration: const BoxDecoration(color: Color(0xFFF3F4F6)),
+                    children: rowCells(
+                      no: '',
+                      name: 'TOTAL',
+                      sku: '',
+                      qty: _qtyText(totalQty),
+                      unit: '',
+                      cost: '',
+                      amount: showCost ? _money(totalAmount) : '',
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _MetricTile extends StatelessWidget {
@@ -4199,7 +4498,10 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
               quantity: _num(item, ['quantity_ordered', 'quantity']),
               unit: _text(item, ['unit_of_measure', 'unit'], '').toUpperCase(),
             );
-            parsed.sku = _text(item, ['item_id', 'sku'], '');
+            // Prefer the catalog sku — store_po_items.item_id is the
+            // inventory UUID, which used to leak into the SKU column and
+            // make the update endpoint reject every edited draft.
+            parsed.sku = _text(item, ['sku', 'item_sku', 'item_id'], '');
             parsed.unitCost = _num(item, ['unit_price']);
             return parsed;
           }));

@@ -562,12 +562,22 @@ export const receiveFromSupplier = async (
             : { data: [] };
         const barDrinkIdByInvId = new Map((barDrinksForItems || []).map((d: any) => [String(d.inventory_item_id), String(d.id)]));
 
+        // branch_stock is keyed by inventory_items.sku (e.g. FG-190), not the
+        // inventory UUID — passing item.item_id straight through created
+        // orphan branch_stock rows keyed by UUID that no sale/dispatch flow
+        // ever matched. Resolve the sku first; fall back to the UUID only if
+        // the item row is somehow missing.
+        const { data: invItemsForSku } = receivedItemIds.length
+            ? await supabase.from('inventory_items').select('id, sku').in('id', receivedItemIds)
+            : { data: [] };
+        const skuByInvItemId = new Map((invItemsForSku || []).map((i: any) => [String(i.id), String(i.sku)]));
+
         for (const item of savedItems || grnItems) {
             const qty = toNumber(item.quantity_accepted || item.quantity_received);
             if (qty <= 0) continue;
             const stockUpdate = await updateBranchStock(
                 branchId,
-                item.item_id,
+                skuByInvItemId.get(String(item.item_id)) || item.item_id,
                 qty,
                 'SUPPLIER_RECEIPT',
                 userId,
@@ -577,7 +587,7 @@ export const receiveFromSupplier = async (
                 `Goods received from ${supplier.name} via GRN ${grnNumber}. ${remarks || ''}`
             );
             stockResults.push({
-                item_sku: item.item_id,
+                item_sku: skuByInvItemId.get(String(item.item_id)) || item.item_id,
                 quantity: qty,
                 previous_stock: stockUpdate.previousStock,
                 new_stock: stockUpdate.newStock

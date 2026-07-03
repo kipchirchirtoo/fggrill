@@ -26,7 +26,7 @@ const branchIdForRequest = (req: Request): number | null => {
 };
 
 const isBranchManagerRequest = (req: Request): boolean =>
-  roleForRequest(req) === 'branch_manager';
+  ['branch_manager', 'branch_accountant'].includes(roleForRequest(req));
 
 const isGlobalUserAdminRequest = (req: Request): boolean =>
   GLOBAL_USER_ADMIN_ROLES.has(roleForRequest(req));

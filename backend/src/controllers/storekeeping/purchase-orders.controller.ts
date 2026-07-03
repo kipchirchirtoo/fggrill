@@ -14,6 +14,61 @@ const toNumber = (value: any): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve PO line identifiers against the inventory catalog, mutating each
+ * line with item_sku / item_uuid / item_name / item_unit. Lines may carry
+ * either the catalog sku (bulk-paste create flow) or the inventory_items
+ * UUID — drafts reopened for editing send back store_po_items.item_id, so a
+ * sku-only lookup 400'd every "Update Draft"/"Submit" from the edit screen.
+ */
+const resolvePoLineItems = async (items: any[]): Promise<void> => {
+  if (!items.length) return;
+
+  const identifiers = [...new Set(items.map((item: any) => String(item.item_id)))];
+  const skus = identifiers.filter((v) => !UUID_RE.test(v));
+  const uuids = identifiers.filter((v) => UUID_RE.test(v));
+
+  const [bySkuRes, byIdRes] = await Promise.all([
+    skus.length
+      ? supabase.from("inventory_items").select("id, sku, item_name, unit").in("sku", skus)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    uuids.length
+      ? supabase.from("inventory_items").select("id, sku, item_name, unit").in("id", uuids)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+
+  const resolveError = bySkuRes.error || byIdRes.error;
+  if (resolveError) {
+    logger.error("PO item resolution error:", resolveError);
+    throw new AppError(
+      `Error resolving item identifiers: ${resolveError.message}`,
+      500,
+    );
+  }
+
+  const bySku = new Map(
+    (bySkuRes.data || []).map((item: any) => [String(item.sku), item]),
+  );
+  const byId = new Map(
+    (byIdRes.data || []).map((item: any) => [String(item.id), item]),
+  );
+
+  for (const item of items) {
+    const key = String(item.item_id);
+    const resolved = UUID_RE.test(key) ? byId.get(key) : bySku.get(key);
+    if (!resolved) {
+      throw new AppError(`Item not found with SKU: ${item.item_id}`, 400);
+    }
+    item.item_sku = resolved.sku || key;
+    item.item_uuid = resolved.id;
+    item.item_name = resolved.item_name;
+    item.item_unit = resolved.unit;
+  }
+};
+
 const activeInvoiceStatuses = new Set([
   "draft",
   "submitted",
@@ -364,51 +419,13 @@ export const createPurchaseOrder = async (
       throw new AppError("Invalid supplier ID format", 400);
     }
 
-    // Handle item IDs - we use SKU directly in the new logic
+    // Resolve line identifiers (sku or inventory UUID) to catalog records.
     const resolvedItems = [...items];
-    const skusToResolve = items.map((item: any) => item.item_id);
-
-    if (skusToResolve.length > 0) {
-      if (debugProcurement)
-        logger.debug("Resolving purchase order SKUs", { skusToResolve });
-
-      // Resolve SKUs from inventory_items to get UUID, name and unit
-      const { data: storeItems, error: resolveError } = await supabase
-        .from("inventory_items")
-        .select("id, sku, item_name, unit")
-        .in("sku", skusToResolve);
-
-      if (resolveError) {
-        logger.error(
-          "SKU resolution error while creating purchase order:",
-          resolveError,
-        );
-        throw new AppError(
-          `Error resolving item identifiers: ${resolveError.message}`,
-          500,
-        );
-      }
-
-      // Build map: SKU → { uuid, item_name, unit }
-      const skuToIdMap = (storeItems || []).reduce((acc: any, item: any) => {
-        if (item.sku) acc[item.sku] = { uuid: item.id, item_name: item.item_name, unit: item.unit };
-        return acc;
-      }, {});
-
-      if (debugProcurement)
-        logger.debug("Purchase order SKU resolution map", { skuToIdMap });
-
-      for (const item of resolvedItems) {
-        const resolved = skuToIdMap[item.item_id];
-        if (!resolved) {
-          throw new AppError(`Item not found with SKU: ${item.item_id}`, 400);
-        }
-        item.item_sku = item.item_id;
-        item.item_uuid = resolved.uuid;
-        item.item_name = resolved.item_name;
-        item.item_unit = resolved.unit;
-      }
-    }
+    if (debugProcurement)
+      logger.debug("Resolving purchase order items", {
+        identifiers: resolvedItems.map((item: any) => item.item_id),
+      });
+    await resolvePoLineItems(resolvedItems);
 
     // Generate PO number using database function
     const { data: po_number, error: numberError } =
@@ -809,42 +826,9 @@ export const updatePurchaseOrder = async (
       );
     }
 
-    // Handle item IDs - use SKU directly
+    // Resolve line identifiers (sku or inventory UUID) to catalog records.
     const resolvedItems = [...items];
-    const skusToResolve = items.map((item: any) => item.item_id);
-
-    if (skusToResolve.length > 0) {
-      const { data: storeItems, error: resolveError } = await supabase
-        .from("inventory_items")
-        .select("id, sku, item_name, unit")
-        .in("sku", skusToResolve);
-
-      if (resolveError) {
-        console.error(
-          "CRITICAL: SKU Resolution Error (Update):",
-          JSON.stringify(resolveError, null, 2),
-        );
-        throw new AppError(
-          `Error resolving item identifiers: ${resolveError.message}`,
-          500,
-        );
-      }
-
-      const skuToIdMap = (storeItems || []).reduce((acc: any, item: any) => {
-        if (item.sku) acc[item.sku] = { uuid: item.id, item_name: item.item_name, unit: item.unit };
-        return acc;
-      }, {});
-
-      for (const item of resolvedItems) {
-        const resolved = skuToIdMap[item.item_id];
-        if (!resolved)
-          throw new AppError(`Item not found with SKU: ${item.item_id}`, 400);
-        item.item_sku = item.item_id;
-        item.item_uuid = resolved.uuid;
-        item.item_name = resolved.item_name;
-        item.item_unit = resolved.unit;
-      }
-    }
+    await resolvePoLineItems(resolvedItems);
 
     // Calculate totals WITHOUT VAT
     const subtotal = resolvedItems.reduce(

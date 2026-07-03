@@ -283,8 +283,11 @@ export const createStockRequest = async (
                 request_number,
                 branch_id: requesting_branch_id,
                 requesting_branch_id,
+                // Only requested_by: the stock_requests view aliases
+                // requested_by AS created_by, so writing both through the
+                // view assigns the same base column twice (error 42601:
+                // "multiple assignments to same column").
                 requested_by: userId,
-                created_by: userId,
                 request_type: request_type || 'ROUTINE',
                 priority: (priority || 'normal').toLowerCase(),
                 reason,
@@ -328,12 +331,17 @@ export const createStockRequest = async (
                     item_id: itemResult.data?.id || null,
                     item_sku: item.item_sku,
                     unit: itemResult.data?.unit || 'units',
+                    // Only requested_quantity: the stock_request_items view
+                    // aliases requested_quantity AS quantity_requested AND AS
+                    // quantity — writing more than one assigns the same base
+                    // column twice ("multiple assignments to same column").
                     requested_quantity: requestedQuantity,
-                    quantity_requested: requestedQuantity,
-                    quantity: requestedQuantity,
                     current_branch_stock: stockResult.data?.quantity || 0,
                     status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
-                    line_status: 'PENDING_BRANCH_ACCOUNTANT_APPROVAL',
+                    // line_status has a lowercase check constraint on the base
+                    // table (pending/approved/packed/…) — the uppercase
+                    // workflow value lives on status only.
+                    line_status: 'pending',
                     workflow_status: 'submitted_to_branch_accountant',
                     reason: item.reason || reason || null,
                     created_at: now

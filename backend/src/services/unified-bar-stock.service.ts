@@ -338,6 +338,83 @@ export async function recordBarStockMovement(
     }
   }
 
+  // ── Step 2b: Sync branch_stock for sales ───────────────────────────
+  // branch_stock is keyed by the CENTRAL catalog sku (inventory_items.sku,
+  // e.g. FG-190), not the POS sku (M-<uuid>) — resolve it via
+  // bar_drinks.inventory_item_id. Only sales/reversals post here: receipts
+  // from the central store (DISPATCH_RECEIVE) and suppliers (SUPPLIER_RECEIPT)
+  // already credit branch_stock through their own flows, so crediting
+  // restock/dispatch_receive here would double-count every receipt.
+  if (drinkId && (movementType === 'sale' || movementType === 'sale_reversal')) {
+    try {
+      const { data: drinkLink } = await supabase
+        .from('bar_drinks')
+        .select('inventory_item_id')
+        .eq('id', drinkId)
+        .maybeSingle();
+
+      let branchSku: string | null = null;
+      if (drinkLink?.inventory_item_id) {
+        const { data: invItem } = await supabase
+          .from('inventory_items')
+          .select('sku')
+          .eq('id', drinkLink.inventory_item_id)
+          .maybeSingle();
+        branchSku = invItem?.sku || null;
+      }
+
+      if (branchSku) {
+        const { data: branchRow } = await supabase
+          .from('branch_stock')
+          .select('id, quantity')
+          .eq('branch_id', branchId)
+          .eq('item_sku', branchSku)
+          .maybeSingle();
+
+        if (branchRow?.id) {
+          const branchPrev = toNumber(branchRow.quantity);
+          const branchNext = Math.max(0, branchPrev + quantityDelta);
+          const { error: branchUpdateError } = await supabase
+            .from('branch_stock')
+            .update({
+              quantity: branchNext,
+              current_stock: branchNext,
+              ...(quantityDelta < 0
+                ? { last_stock_out: new Date().toISOString() }
+                : { last_stock_in: new Date().toISOString() }),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', branchRow.id);
+          if (branchUpdateError) throw branchUpdateError;
+
+          // The shift-close automation dedupes its aggregate SALE posting on
+          // (branch_id, item_sku, reference_id, movement_type) — logging the
+          // per-sale movement under the shift id keeps the two paths from
+          // double-decrementing the same shift's sales.
+          const { error: branchMovementError } = await supabase
+            .from('branch_stock_movements')
+            .insert({
+              branch_id: branchId,
+              item_sku: branchSku,
+              movement_type: movementType === 'sale' ? 'SALE' : 'SALE_REVERSAL',
+              quantity: Math.abs(quantityDelta),
+              previous_stock: branchPrev,
+              new_stock: branchNext,
+              reference_type: 'POS_SHIFT',
+              reference_id: shiftId || referenceId || null,
+              reference_number: referenceNumber || null,
+              performed_by: performedBy || null,
+              shift_id: shiftId || null,
+              notes: notes || `POS bar ${movementType}`
+            });
+          if (branchMovementError) throw branchMovementError;
+        }
+      }
+    } catch (branchErr: any) {
+      logger.warn(`Bar stock movement: branch_stock sync failed for drink ${drinkId}:`, branchErr?.message || branchErr);
+    }
+  }
+
   // ── Step 3: Update pos_outlet_items (legacy POS) ───────────────────
   if (outletId) {
     try {

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { cloneBranchSetup } from '../services/branchSetup.service';
 
 const DEFAULT_SYSTEM_CONFIG: Record<string, any> = {
   vatRate: 16.0,
@@ -137,6 +138,14 @@ export const createBranch = async (
     if (error) throw error;
 
     logger.info(`Branch created: ${name} (${code}) by user ${req.user.id}`);
+
+    // Automatically clone reference branch setup (Bomet Town) for the new branch
+    try {
+      await cloneBranchSetup(data.id, data.name);
+    } catch (cloneErr: any) {
+      logger.error(`Failed to clone Bomet Town setup for new branch ${name} (ID: ${data.id}):`, cloneErr);
+      // Log the error but continue to return success, as the branch record itself was successfully created
+    }
 
     res.status(201).json({
       success: true,
