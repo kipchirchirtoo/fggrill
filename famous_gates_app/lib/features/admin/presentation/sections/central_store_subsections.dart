@@ -7732,6 +7732,11 @@ class DirectIssueSection extends ConsumerWidget {
                   '${_text(row, ['branch_name', 'to_branch_name'])} • ${_text(row, ['reason'])} • ${_date(row['created_at'])}',
               trailing: Wrap(spacing: 6, children: [
                 _statusChip(_text(row, ['status'], 'issued')),
+                OutlinedButton.icon(
+                  onPressed: () => _printDirectIssueNote(context, row),
+                  icon: Icon(PhosphorIcons.printer(), size: 14),
+                  label: const Text('Print'),
+                ),
                 OutlinedButton(
                   onPressed: () => _showMapDetails(
                       context,
@@ -7758,12 +7763,141 @@ class DirectIssueSection extends ConsumerWidget {
         branches: branches,
         prefill: prefill,
         onSubmit: (data) async {
-          await ref.read(adminRepositoryProvider).createDirectIssue(data);
+          final res = await ref.read(adminRepositoryProvider).createDirectIssue(data);
           ref.invalidate(_directIssuesProvider);
-          if (context.mounted) _snack(context, 'Direct issue created');
+          if (context.mounted) {
+            _snack(context, 'Direct issue created');
+            final issueData = res['data'] ?? res;
+            await _printDirectIssueNote(context, issueData);
+
+            if (prefill != null) {
+              final prefillItem = prefill['item'];
+              if (prefillItem is Map) {
+                final req = {
+                  'request_number': _text(Map<String, dynamic>.from(prefillItem['stock_request'] ?? {}), ['request_number', 'id']),
+                  'created_at': _text(Map<String, dynamic>.from(prefillItem['stock_request'] ?? {}), ['created_at']),
+                  'reason': _text(Map<String, dynamic>.from(prefillItem['stock_request'] ?? {}), ['reason']),
+                  'branch_name': _text(Map<String, dynamic>.from(prefillItem['stock_request'] ?? {}), ['requesting_branch_name', 'branch_name']),
+                  'items': [
+                    {
+                      'item_sku': _text(Map<String, dynamic>.from(prefillItem), ['item_sku', 'sku']),
+                      'item_name': _lineItemName(Map<String, dynamic>.from(prefillItem)),
+                      'requested_quantity': _num(Map<String, dynamic>.from(prefillItem), ['requested_quantity', 'quantity_requested', 'quantity']),
+                      'unit_cost': _num(Map<String, dynamic>.from(prefillItem), ['unit_cost']),
+                    }
+                  ]
+                };
+                await _printRequisitionNote(context, req);
+              }
+            }
+          }
         },
       ),
     );
+  }
+}
+
+Future<void> _printDirectIssueNote(BuildContext context, Map<String, dynamic> row) async {
+  final issueNumber = _text(row, ['issue_number', 'request_number', 'id']);
+  final branchName = _text(row, ['branch_name', 'to_branch_name'], 'Branch');
+  final reason = _text(row, ['reason'], 'Direct issue');
+  final date = _date(row['created_at']);
+  
+  final itemsList = _list(row['items']);
+  final tableRows = itemsList.map((item) {
+    final name = _lineItemName(item);
+    final sku = _text(item, ['item_sku', 'sku']);
+    final qty = _num(item, ['issued_qty', 'quantity_approved', 'requested_quantity', 'quantity']);
+    final cost = _num(item, ['unit_cost']);
+    final total = qty * cost;
+    
+    return [
+      sku,
+      name,
+      qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2),
+      cost > 0 ? 'KES ${ReportService().money.format(cost)}' : '—',
+      total > 0 ? 'KES ${ReportService().money.format(total)}' : '—',
+    ];
+  }).toList();
+  
+  final double totalAmount = itemsList.fold(0.0, (sum, item) {
+    final qty = _num(item, ['issued_qty', 'quantity_approved', 'requested_quantity', 'quantity']);
+    final cost = _num(item, ['unit_cost']);
+    return sum + (qty * cost);
+  });
+
+  try {
+    await ReportService().generateAndPrint(
+      title: 'DIRECT ISSUE NOTE',
+      subtitle: 'Issue Number: $issueNumber\nDate: $date\nReason: $reason',
+      branch: branchName,
+      sections: [
+        ReportSection(
+          title: 'Issued Items',
+          tableHeaders: const ['SKU', 'Item Name', 'Qty Issued', 'Unit Cost', 'Total'],
+          tableRows: tableRows,
+          columnWidths: const [80, 220, 80, 100, 100],
+          totalLabel: 'Total Value',
+          totalValue: 'KES ${ReportService().money.format(totalAmount)}',
+        ),
+      ],
+    );
+  } catch (error) {
+    if (context.mounted) {
+      _snack(context, 'Printing direct issue note failed: $error');
+    }
+  }
+}
+
+Future<void> _printRequisitionNote(BuildContext context, Map<String, dynamic> row) async {
+  final reqNumber = _text(row, ['request_number', 'requisition_number', 'id']);
+  final branchName = _text(row, ['branch_name', 'requesting_branch_name'], 'Branch');
+  final reason = _text(row, ['reason'], 'Stock Requisition');
+  final date = _date(row['created_at']);
+  
+  final itemsList = _list(row['items']);
+  final tableRows = itemsList.map((item) {
+    final name = _lineItemName(item);
+    final sku = _text(item, ['item_sku', 'sku']);
+    final qty = _num(item, ['requested_quantity', 'quantity_requested', 'quantity']);
+    final cost = _num(item, ['unit_cost']);
+    final total = qty * cost;
+    
+    return [
+      sku,
+      name,
+      qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2),
+      cost > 0 ? 'KES ${ReportService().money.format(cost)}' : '—',
+      total > 0 ? 'KES ${ReportService().money.format(total)}' : '—',
+    ];
+  }).toList();
+  
+  final double totalAmount = itemsList.fold(0.0, (sum, item) {
+    final qty = _num(item, ['requested_quantity', 'quantity_requested', 'quantity']);
+    final cost = _num(item, ['unit_cost']);
+    return sum + (qty * cost);
+  });
+
+  try {
+    await ReportService().generateAndPrint(
+      title: 'STOCK REQUISITION NOTE',
+      subtitle: 'Request Number: $reqNumber\nDate: $date\nReason: $reason',
+      branch: branchName,
+      sections: [
+        ReportSection(
+          title: 'Requested Items',
+          tableHeaders: const ['SKU', 'Item Name', 'Qty Requested', 'Unit Cost', 'Total'],
+          tableRows: tableRows,
+          columnWidths: const [80, 220, 80, 100, 100],
+          totalLabel: 'Total Value',
+          totalValue: 'KES ${ReportService().money.format(totalAmount)}',
+        ),
+      ],
+    );
+  } catch (error) {
+    if (context.mounted) {
+      _snack(context, 'Printing requisition note failed: $error');
+    }
   }
 }
 
@@ -7803,9 +7937,14 @@ class _DirectIssueDialogState extends State<_DirectIssueDialog> {
   final _unitCostController = TextEditingController();
   bool _loading = false;
 
+  List<Map<String, dynamic>> _availableItems = [];
+  bool _loadingItems = false;
+  Map<String, dynamic>? _selectedItem;
+
   @override
   void initState() {
     super.initState();
+    _loadItems();
     final prefill = widget.prefill;
     if (prefill != null) {
       _branchId = _text(prefill, ['branch_id']).isNotEmpty
@@ -7817,8 +7956,9 @@ class _DirectIssueDialogState extends State<_DirectIssueDialog> {
       }
       final prefillItem = prefill['item'];
       if (prefillItem != null) {
-        final itemId = _text(prefill, ['item_id', 'id']);
-        final itemName = _text(prefill, ['item_name', 'name']);
+        final itemId = _text(prefill, ['item_id']); // requisition item ID
+        final itemName = _text(prefill, ['item_name']);
+        final itemSku = _text(prefill, ['item_sku']);
         final qty = _num(prefill, [
           'backordered_qty',
           'quantity_backordered',
@@ -7828,16 +7968,33 @@ class _DirectIssueDialogState extends State<_DirectIssueDialog> {
         final cost = _num(prefill, ['unit_cost', 'unit_price', 'price']);
         if (itemName.isNotEmpty) {
           _items.add(_DirectIssueItem(
-            itemId: itemId,
+            itemId: _text(prefillItem is Map ? (prefillItem['item'] ?? {}) : {}, ['id']), // catalog ID if present
             itemName: itemName,
+            itemSku: itemSku.isNotEmpty ? itemSku : itemName,
             qty: qty,
             unitCost: cost,
+            linkedRequisitionItemId: itemId,
           ));
         }
       }
     }
     if (widget.branches.isNotEmpty) {
       _branchId ??= _id(widget.branches.first);
+    }
+  }
+
+  Future<void> _loadItems() async {
+    if (mounted) setState(() => _loadingItems = true);
+    try {
+      final items = await ref.read(adminRepositoryProvider).getStoreItems(limit: 500);
+      if (mounted) {
+        setState(() {
+          _availableItems = items;
+          _loadingItems = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingItems = false);
     }
   }
 
@@ -7850,16 +8007,33 @@ class _DirectIssueDialogState extends State<_DirectIssueDialog> {
   }
 
   void _addItem() {
+    final item = _selectedItem;
     final name = _skuController.text.trim();
     final qty = double.tryParse(_qtyController.text.trim()) ?? 0;
     final cost = double.tryParse(_unitCostController.text.trim()) ?? 0;
-    if (name.isEmpty || qty <= 0) {
-      _snack(context, 'Enter item name/SKU and quantity');
+    if (qty <= 0) {
+      _snack(context, 'Enter a valid quantity');
       return;
     }
+
+    final itemId = item != null ? _text(item, ['id']) : '';
+    final itemName = item != null ? _text(item, ['item_name', 'name']) : name;
+    final itemSku = item != null ? _text(item, ['sku']) : name;
+
+    if (itemName.isEmpty) {
+      _snack(context, 'Select or enter an item');
+      return;
+    }
+
     setState(() {
       _items.add(_DirectIssueItem(
-          itemId: '', itemName: name, qty: qty, unitCost: cost));
+        itemId: itemId,
+        itemName: itemName,
+        itemSku: itemSku,
+        qty: qty,
+        unitCost: cost,
+      ));
+      _selectedItem = null;
       _skuController.clear();
       _qtyController.clear();
       _unitCostController.clear();
@@ -7882,10 +8056,12 @@ class _DirectIssueDialogState extends State<_DirectIssueDialog> {
         'reason': _reason,
         'items': _items
             .map((item) => {
-                  if (item.itemId.isNotEmpty) 'item_id': item.itemId,
-                  'item_name': item.itemName,
-                  'quantity': item.qty,
-                  'unit_cost': item.unitCost,
+                  'item_sku': item.itemSku,
+                  'qty': item.qty,
+                  if (item.unitCost > 0) 'unit_cost': item.unitCost,
+                  if (item.linkedRequisitionItemId != null &&
+                      item.linkedRequisitionItemId!.isNotEmpty)
+                    'linked_requisition_item_id': item.linkedRequisitionItemId,
                 })
             .toList(),
       });
@@ -7939,13 +8115,51 @@ class _DirectIssueDialogState extends State<_DirectIssueDialog> {
               const SizedBox(height: 8),
               Row(children: [
                 Expanded(
-                    flex: 3,
-                    child: TextField(
-                      controller: _skuController,
-                      decoration: const InputDecoration(
-                          labelText: 'SKU / Item Name',
-                          isDense: true),
-                    )),
+                  flex: 3,
+                  child: Autocomplete<Map<String, dynamic>>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (_availableItems.isEmpty) {
+                        return const Iterable<Map<String, dynamic>>.empty();
+                      }
+                      final term = textEditingValue.text.trim().toLowerCase();
+                      return _availableItems.where((item) {
+                        final name = _text(item, ['item_name', 'name']).toLowerCase();
+                        final sku = _text(item, ['sku']).toLowerCase();
+                        return name.contains(term) || sku.contains(term);
+                      });
+                    },
+                    displayStringForOption: (option) {
+                      final name = _text(option, ['item_name', 'name']);
+                      final sku = _text(option, ['sku']);
+                      final qty = _num(option, ['quantity']);
+                      return '$name ($sku) - Stock: ${qty.toStringAsFixed(0)}';
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                      controller.addListener(() {
+                        _skuController.text = controller.text;
+                      });
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'SKU / Item Name *',
+                          isDense: true,
+                          hintText: 'Search stock...',
+                        ),
+                      );
+                    },
+                    onSelected: (option) {
+                      setState(() {
+                        _selectedItem = option;
+                        _skuController.text = _text(option, ['item_name', 'name']);
+                        final cost = _num(option, ['cost_price', 'default_unit_cost']);
+                        if (cost > 0) {
+                          _unitCostController.text = cost.toStringAsFixed(0);
+                        }
+                      });
+                    },
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                     child: TextField(
@@ -8016,13 +8230,17 @@ class _DirectIssueItem {
   _DirectIssueItem({
     required this.itemId,
     required this.itemName,
+    required this.itemSku,
     required this.qty,
     required this.unitCost,
+    this.linkedRequisitionItemId,
   });
   final String itemId;
   final String itemName;
+  final String itemSku;
   final double qty;
   final double unitCost;
+  final String? linkedRequisitionItemId;
 }
 
 // ── PendingBackordersSection ───────────────────────────────────────────────────
@@ -8058,12 +8276,33 @@ class PendingBackordersSection extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                      'Backordered: ${_num(row, ['backordered_qty', 'quantity_backordered', 'quantity']).toStringAsFixed(0)}',
+                      'Backordered: ${_num(row, ['backorder_qty', 'backordered_qty', 'quantity_backordered', 'quantity']).toStringAsFixed(0)}',
                       style: const TextStyle(
                           fontSize: 11,
                           color: Colors.orange,
                           fontWeight: FontWeight.w700)),
                 ],
+              ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  final req = {
+                    'request_number': _text(row['stock_request'] ?? {}, ['request_number', 'id']),
+                    'created_at': _text(row['stock_request'] ?? {}, ['created_at']),
+                    'reason': _text(row['stock_request'] ?? {}, ['reason']),
+                    'branch_name': _text(row['stock_request'] ?? {}, ['requesting_branch_name', 'branch_name']),
+                    'items': [
+                      {
+                        'item_sku': _text(row, ['item_sku', 'sku']),
+                        'item_name': _lineItemName(row),
+                        'requested_quantity': _num(row, ['requested_quantity', 'quantity_requested', 'quantity']),
+                        'unit_cost': _num(row, ['unit_cost']),
+                      }
+                    ]
+                  };
+                  _printRequisitionNote(context, req);
+                },
+                icon: Icon(PhosphorIcons.printer(), size: 14),
+                label: const Text('Print Request'),
               ),
               ElevatedButton(
                 onPressed: () =>
@@ -8086,10 +8325,10 @@ class PendingBackordersSection extends ConsumerWidget {
       'branch_id': _text(row, ['branch_id', 'requesting_branch_id']),
       'reason': 'Backorder fulfillment',
       'item': row,
-      'item_id': _text(row, ['item_id', 'store_item_id', 'id']),
-      'item_name': _text(row, ['item_name', 'name']),
-      'backordered_qty': _num(
-          row, ['backordered_qty', 'quantity_backordered', 'quantity']),
+      'item_id': _text(row, ['id']), // requisition item ID
+      'item_name': _lineItemName(row),
+      'item_sku': _text(row, ['item_sku', 'sku']),
+      'backordered_qty': _num(row, ['backorder_qty', 'backordered_qty', 'quantity_backordered', 'quantity']),
       'unit_cost': _num(row, ['unit_cost', 'unit_price', 'price']),
     };
     await showDialog<void>(
@@ -8098,9 +8337,30 @@ class PendingBackordersSection extends ConsumerWidget {
         branches: branches,
         prefill: prefill,
         onSubmit: (data) async {
-          await ref.read(adminRepositoryProvider).createDirectIssue(data);
+          final res = await ref.read(adminRepositoryProvider).createDirectIssue(data);
           ref.invalidate(_backordersProvider);
-          if (context.mounted) _snack(context, 'Backorder resolved');
+          if (context.mounted) {
+            _snack(context, 'Backorder resolved');
+            final issueData = res['data'] ?? res;
+            await _printDirectIssueNote(context, issueData);
+
+            // Auto print request note
+            final req = {
+              'request_number': _text(row['stock_request'] ?? {}, ['request_number', 'id']),
+              'created_at': _text(row['stock_request'] ?? {}, ['created_at']),
+              'reason': _text(row['stock_request'] ?? {}, ['reason']),
+              'branch_name': _text(row['stock_request'] ?? {}, ['requesting_branch_name', 'branch_name']),
+              'items': [
+                {
+                  'item_sku': _text(row, ['item_sku', 'sku']),
+                  'item_name': _lineItemName(row),
+                  'requested_quantity': _num(row, ['requested_quantity', 'quantity_requested', 'quantity']),
+                  'unit_cost': _num(row, ['unit_cost']),
+                }
+              ]
+            };
+            await _printRequisitionNote(context, req);
+          }
         },
       ),
     );

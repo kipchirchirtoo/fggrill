@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6303,6 +6303,7 @@ class _LineEditorState extends State<_LineEditor> {
 
   String _qty(Map<String, dynamic> item) {
     final quantity = _num(item['quantity'] ?? item['available_quantity']);
+    if (quantity <= 0) return 'PENDING ARRIVAL';
     final unit = item['item'] is Map
         ? item['item']['unit_of_measure'] ?? item['item']['unit']
         : item['unit_of_measure'] ?? item['unit'];
@@ -6457,7 +6458,9 @@ class _LineEditorState extends State<_LineEditor> {
                                 ),
                               ),
                               child: Text(
-                                'Central: ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
+                                centralQty <= 0
+                                    ? 'PENDING ARRIVAL'
+                                    : 'Central: ${centralQty.toStringAsFixed(centralQty % 1 == 0 ? 0 : 2)} $unit',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
