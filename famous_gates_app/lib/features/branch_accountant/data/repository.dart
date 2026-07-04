@@ -55,11 +55,13 @@ class BranchAccountantRepository {
   Future<List<Map<String, dynamic>>> getBarStocktakeRecords({
     String? status,
     String? barLocation,
+    bool history = false,
   }) async {
     final branchId = await getBranchId();
     return _getList('/storekeeping/bar-stocktake', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (status != null && status.isNotEmpty) 'status': status,
+      if (history) 'history': 'true',
       if (barLocation != null && barLocation.isNotEmpty)
         'bar_location': barLocation,
     });
@@ -83,11 +85,15 @@ class BranchAccountantRepository {
   }
 
   // ── Store stocktake ──────────────────────────────────────────────────────
-  Future<List<Map<String, dynamic>>> getStoreStocktakeRecords({String? status}) async {
+  Future<List<Map<String, dynamic>>> getStoreStocktakeRecords({
+    String? status,
+    bool history = false,
+  }) async {
     final branchId = await getBranchId();
     return _getList('/storekeeping/store-stocktake', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       if (status != null && status.isNotEmpty) 'status': status,
+      if (history) 'history': 'true',
     });
   }
 
@@ -104,11 +110,49 @@ class BranchAccountantRepository {
   }
 
   Future<void> rejectStoreStocktake(String id, {required String notes}) async {
-    await _dio.patch('/storekeeping/store-stocktake/$id/reject', data: {'notes': notes});
+    await _dio.patch('/storekeeping/store-stocktake/$id/reject',
+        data: {'notes': notes});
+  }
+
+  Future<void> batchReviewStoreStocktake({
+    required String branchId,
+    required String stocktakeDate,
+    String? notes,
+  }) async {
+    await _dio.patch('/storekeeping/store-stocktake/batch/review', data: {
+      'branch_id': int.tryParse(branchId) ?? branchId,
+      'stocktake_date': stocktakeDate,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> batchApproveStoreStocktake({
+    required String branchId,
+    required String stocktakeDate,
+    String? notes,
+  }) async {
+    await _dio.patch('/storekeeping/store-stocktake/batch/approve', data: {
+      'branch_id': int.tryParse(branchId) ?? branchId,
+      'stocktake_date': stocktakeDate,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+  }
+
+  Future<void> batchRejectStoreStocktake({
+    required String branchId,
+    required String stocktakeDate,
+    required String notes,
+  }) async {
+    await _dio.patch('/storekeeping/store-stocktake/batch/reject', data: {
+      'branch_id': int.tryParse(branchId) ?? branchId,
+      'stocktake_date': stocktakeDate,
+      'notes': notes,
+    });
   }
 
   // ── Kitchen stocktake ────────────────────────────────────────────────────
-  Future<List<Map<String, dynamic>>> getKitchenStocktakeShifts({String? status}) async {
+  Future<List<Map<String, dynamic>>> getKitchenStocktakeShifts(
+      {String? status}) async {
     final branchId = await getBranchId();
     return _getList('/storekeeping/kitchen-stocktake/list', query: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
@@ -128,8 +172,16 @@ class BranchAccountantRepository {
     });
   }
 
-  Future<void> rejectKitchenStocktake(String id, {required String notes}) async {
-    await _dio.patch('/storekeeping/kitchen-stocktake/$id/reject', data: {'notes': notes});
+  Future<void> rejectKitchenStocktake(String id,
+      {required String notes}) async {
+    await _dio.patch('/storekeeping/kitchen-stocktake/$id/reject',
+        data: {'notes': notes});
+  }
+
+  Future<void> updateKitchenStocktakeItems(String shiftId, List<Map<String, dynamic>> items) async {
+    await _dio.put('/storekeeping/kitchen-stocktake/$shiftId/items', data: {
+      'items': items,
+    });
   }
 
   // ----------------------------------------------------------------------
@@ -154,7 +206,8 @@ class BranchAccountantRepository {
   }
 
   Future<void> rejectSpoilage(String id, {required String notes}) async {
-    await _dio.patch('/storekeeping/spoilage/$id/reject', data: {'notes': notes});
+    await _dio
+        .patch('/storekeeping/spoilage/$id/reject', data: {'notes': notes});
   }
 
   // ----------------------------------------------------------------------
@@ -708,23 +761,6 @@ class BranchAccountantRepository {
     );
   }
 
-  /// Pass either [period] (quick-select 7/30/90) or an explicit
-  /// [startDate]/[endDate] custom range — not both.
-  Future<Map<String, dynamic>> getRevenueOversight({
-    int? period,
-    String? startDate,
-    String? endDate,
-  }) async {
-    final branchId = await getBranchId();
-    return _getMap('/finance/revenue-oversight', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-      if (startDate != null && endDate != null) ...{
-        'from_date': startDate,
-        'to_date': endDate,
-      } else
-        'period': period ?? 30,
-    });
-  }
 
   Future<Map<String, dynamic>> getSoldItems({
     required String startDate,
@@ -793,9 +829,18 @@ class BranchAccountantRepository {
     return _getMap('/cashier/shifts/$id');
   }
 
-  Future<void> reconcileShift(String id, String notes) async {
+  Future<void> reconcileShift(
+    String id,
+    String notes, {
+    String? varianceReasonCode,
+    String? varianceComment,
+  }) async {
     await _dio.put('/cashier/shifts/$id/reconcile', data: {
       'reconciliation_notes': notes,
+      if (varianceReasonCode != null && varianceReasonCode.trim().isNotEmpty)
+        'variance_reason_code': varianceReasonCode.trim(),
+      if (varianceComment != null && varianceComment.trim().isNotEmpty)
+        'variance_comment': varianceComment.trim(),
     });
   }
 
@@ -1073,8 +1118,9 @@ class BranchAccountantRepository {
     };
     if (nssfAmount != null) data['nssf_amount'] = nssfAmount;
     if (shifAmount != null) data['shif_amount'] = shifAmount;
-    if (housingFundAmount != null)
+    if (housingFundAmount != null) {
       data['housing_fund_amount'] = housingFundAmount;
+    }
     final res = await _dio.put('/staff/$staffId', data: data);
     return _asMap(res.data);
   }
@@ -1348,23 +1394,6 @@ class BranchAccountantRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getPendingFoodVariances() async {
-    final branchId = await getBranchId();
-    return _getList('/food-control/variance/pending', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
-  }
-
-  Future<void> approveFoodVariance(String id) async {
-    await _dio.post('/food-control/variance/$id/approve');
-  }
-
-  Future<void> flagFoodVariance(String id, String notes) async {
-    await _dio.post('/food-control/variance/$id/flag', data: {
-      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
-    });
-  }
-
   Future<List<Map<String, dynamic>>> getPendingKitchenShiftReviews() async {
     final branchId = await getBranchId();
     return _getList('/kitchen/shifts', query: {
@@ -1395,204 +1424,6 @@ class BranchAccountantRepository {
         'write_off_reason': writeOffReason.trim(),
     });
     return _asMap(res.data);
-  }
-
-  /// Daily Control's variance data (recipe-based theoretical vs actual
-  /// ingredient consumption, computed from real POS sales) for a given
-  /// branch/date/shift — independent of whether that shift ever completed
-  /// the formal kitchen_shifts open->close->chef-confirm lifecycle that
-  /// [getPendingKitchenShiftReviews] requires.
-  Future<Map<String, dynamic>> getDailyControlVariance({
-    required String date,
-    String? shift,
-  }) async {
-    final branchId = await getBranchId();
-    return _getMap('/kitchen/daily-control', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-      'date': date,
-      if (shift != null) 'shift': shift,
-    });
-  }
-
-  /// Charge the staff responsible for a Daily Control variance line. See
-  /// billDailyControlVariance on the backend — creates staff_credit_bills
-  /// directly, with no kitchen_shifts lifecycle gating.
-  Future<Map<String, dynamic>> billDailyControlVariance({
-    required String date,
-    String? shift,
-    required String itemName,
-    String? itemSku,
-    num? varianceCost,
-    required String liabilityAction,
-    List<Map<String, dynamic>> allocations = const [],
-    String? notes,
-    String? writeOffReason,
-  }) async {
-    final branchId = await getBranchId();
-    final res = await _dio.post('/kitchen/daily-control/bill-staff', data: {
-      'branch_id': branchId,
-      'date': date,
-      if (shift != null) 'shift': shift,
-      'item_name': itemName,
-      if (itemSku != null) 'item_sku': itemSku,
-      if (varianceCost != null) 'variance_cost': varianceCost,
-      'liability_action': liabilityAction,
-      if (allocations.isNotEmpty) 'allocations': allocations,
-      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-      if (writeOffReason != null && writeOffReason.trim().isNotEmpty)
-        'write_off_reason': writeOffReason.trim(),
-    });
-    return _asMap(res.data);
-  }
-
-  Future<List<Map<String, dynamic>>> getShiftPnLs({
-    String status = 'all',
-  }) async {
-    final branchId = await getBranchId();
-    try {
-      return await _getList('/finance/shift-pnl', query: {
-        if (branchId.isNotEmpty) 'branch_id': branchId,
-        if (status != 'all') 'status': status,
-      });
-    } on DioException catch (e) {
-      // Shift P&L is optional for this role/deployment — degrade to empty
-      if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
-        return [];
-      }
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> getShiftPnLSummary() async {
-    final branchId = await getBranchId();
-    try {
-      return await _getMap('/finance/shift-pnl/summary', query: {
-        if (branchId.isNotEmpty) 'branch_id': branchId,
-      });
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
-        return {};
-      }
-      rethrow;
-    }
-  }
-
-  Future<void> reviewShiftPnL(String shiftId, String notes) async {
-    await _dio.post('/finance/shift-pnl/$shiftId/review', data: {
-      if (notes.trim().isNotEmpty) 'notes': notes.trim(),
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getStockTakes() async {
-    final branchId = await getBranchId();
-    return _getList('/stock-takes', query: {
-      if (branchId.isNotEmpty) 'branch_id': branchId,
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getStockTakeItems(String id) async {
-    return _getList('/stock-takes/$id/items');
-  }
-
-  Future<Map<String, dynamic>> createStockTake({
-    String countType = 'monthly',
-    String? notes,
-  }) async {
-    final branchId = await getBranchId();
-    final res = await _dio.post('/stock-takes', data: {
-      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
-      'count_type': countType,
-      if (notes != null) 'notes': notes,
-    });
-    return _asMap(res.data);
-  }
-
-  /// Approve a storekeeper-submitted stock take and submit it to auditor.
-  Future<Map<String, dynamic>> approveStockTake(String id,
-      {String? notes}) async {
-    final res =
-        await _dio.post('/store/stock-takes/$id/accountant-review', data: {
-      'approved': true,
-      'action': 'approve',
-      'notes': notes?.trim().isNotEmpty == true
-          ? notes!.trim()
-          : 'Approved by branch accountant from Flutter app',
-    });
-    return _asMap(res.data);
-  }
-
-  Future<Map<String, dynamic>> rejectStockTake(String id, String notes) async {
-    final res =
-        await _dio.post('/store/stock-takes/$id/accountant-review', data: {
-      'approved': false,
-      'action': 'reject',
-      'notes': notes.trim(),
-    });
-    return _asMap(res.data);
-  }
-
-  Future<Map<String, dynamic>> requestStockTakeClarification(
-    String id,
-    String notes,
-  ) async {
-    final res =
-        await _dio.post('/store/stock-takes/$id/accountant-review', data: {
-      'approved': false,
-      'action': 'request_clarification',
-      'notes': notes.trim(),
-    });
-    return _asMap(res.data);
-  }
-
-  Future<File> downloadStockTakeWorksheet({String? stockTakeId}) async {
-    final branchId = await getBranchId();
-    final path = stockTakeId != null
-        ? '/stock-takes/$stockTakeId/worksheet'
-        : '/stock-takes/worksheet';
-    final res = await _dio.get<List<int>>(
-      path,
-      queryParameters: {
-        if (stockTakeId == null && branchId.isNotEmpty) 'branch_id': branchId,
-      },
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return _saveBytes(
-      res.data ?? const [],
-      'Stock_Take_Worksheet_${stockTakeId ?? DateTime.now().millisecondsSinceEpoch}.pdf',
-    );
-  }
-
-  /// FG-branded branch accountant review report (PDF). Highlights variances,
-  /// valuation and the review chain for the accountant's sign-off.
-  Future<File> downloadStockTakeReviewReport(
-    String stockTakeId, {
-    String variant = 'accountant_review',
-  }) async {
-    final res = await _dio.get<List<int>>(
-      '/stock-takes/$stockTakeId/report.pdf',
-      queryParameters: {'variant': variant},
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return _saveBytes(
-      res.data ?? const [],
-      'FG_StockTakeReview_$stockTakeId.pdf',
-    );
-  }
-
-  /// FG-branded multi-sheet stock take Excel workbook.
-  Future<File> downloadStockTakeWorkbook(
-    String stockTakeId, {
-    String variant = 'accountant_review',
-  }) async {
-    final res = await _dio.get<List<int>>(
-      '/stock-takes/$stockTakeId/report.xlsx',
-      queryParameters: {'variant': variant},
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return _saveBytes(
-      res.data ?? const [],
-      'FG_StockTakeWorkbook_$stockTakeId.xlsx',
-    );
   }
 
   Future<List<Map<String, dynamic>>> getDepartmentIssueJournals({
@@ -1755,43 +1586,6 @@ class BranchAccountantRepository {
 
   Future<Map<String, dynamic>> getSupplierPerformance(String supplierId) {
     return _getMap('/procurement/performance/$supplierId');
-  }
-
-  Future<List<Map<String, dynamic>>> getBuffets() {
-    return _getList('/buffet');
-  }
-
-  Future<void> openBuffet(String id) async {
-    await _dio.post('/buffet/$id/open');
-  }
-
-  Future<void> closeBuffet(String id, Map<String, dynamic> data) async {
-    await _dio.post('/buffet/$id/close', data: data);
-  }
-
-  Future<void> cancelBuffet(String id, String reason) async {
-    await _dio.post('/buffet/$id/cancel', data: {
-      if (reason.trim().isNotEmpty) 'reason': reason.trim(),
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getCateringEvents() async {
-    try {
-      return await _getList('/catering-food-control/events');
-    } on DioException catch (e) {
-      if (_isRecoverableBranchEndpointError(e)) return [];
-      rethrow;
-    }
-  }
-
-  Future<void> completeCateringEvent(String id) async {
-    await _dio.post('/catering-food-control/events/$id/complete');
-  }
-
-  Future<void> cancelCateringEvent(String id, String reason) async {
-    await _dio.post('/catering-food-control/events/$id/cancel', data: {
-      if (reason.trim().isNotEmpty) 'reason': reason.trim(),
-    });
   }
 
   Future<List<Map<String, dynamic>>> getBudgets() async {

@@ -27,7 +27,7 @@ const BAR_CASHIER_ROLES_BY_LOCATION: Record<string, string[]> = {
     executive_bar: ['executive_bar_cashier', 'kyogong_executive_bar_cashier'],
 };
 
-const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stocktakeDate: string) =>
+const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stocktakeDate: string): Promise<any> =>
     getLastClosedCashierShiftWindow(supabase, branchId, BAR_CASHIER_ROLES_BY_LOCATION[barLocation] || [], stocktakeDate);
 
 // Additions/sales must be summed over everything since opening_stock was last
@@ -67,6 +67,32 @@ const loadRecord = async (id: string): Promise<Record<string, any> | null> => {
     if (error) throw error;
     return data || null;
 };
+
+/**
+ * Enrich a list of bar_stocktake_records with cashier shift metadata by
+ * looking up cashier_shift_logs for each distinct shift_id in the records.
+ */
+const enrichWithShiftInfo = async (records: any[]): Promise<any[]> => {
+    const shiftIds = [...new Set(records.map((r: any) => r.shift_id).filter(Boolean))] as string[];
+    if (shiftIds.length === 0) return records;
+    const { data: shifts } = await supabase
+        .from('cashier_shift_logs')
+        .select('id, shift_number, cashier_name, shift_start, shift_end, status')
+        .in('id', shiftIds);
+    const shiftMap = new Map((shifts || []).map((s: any) => [s.id, s]));
+    return records.map((r: any) => {
+        const shift = shiftMap.get(r.shift_id);
+        return {
+            ...r,
+            shift_number: shift?.shift_number ?? null,
+            cashier_name: shift?.cashier_name ?? null,
+            shift_opened_at: shift?.shift_start ?? null,
+            shift_closed_at: shift?.shift_end ?? null,
+            shift_status: shift?.status ?? null,
+        };
+    });
+};
+
 
 /**
  * Sync the bar stocktake records for a branch/date/location into the unified
@@ -218,18 +244,17 @@ const ensureInventoryItems = async (
     }
 
     // Stamp inventory_item_id back onto bar_drinks rows that were missing it,
-    // so future approvals can sync via the direct inventory_item_id JOIN.
-    const toStamp = drinks.filter(d => d.sku && existingBySku.has(d.sku));
-    if (toStamp.length > 0) {
-        for (const d of toStamp) {
-            const invId = existingBySku.get(d.sku);
-            if (!invId) continue;
-            await supabase
-                .from('bar_drinks')
-                .update({ inventory_item_id: invId })
-                .eq('id', d.id)
-                .is('inventory_item_id', null);
-        }
+    // using the SAME resolved UUID returned in the candidate list (name-match takes priority
+    // over SKU-match, so we must stamp the resolved id — not just existingBySku — or the
+    // GET and POST will use different UUIDs for the same drink).
+    for (const d of drinks) {
+        const resolvedId = drinkIdToInvId.get(d.id);
+        if (!resolvedId) continue;
+        await supabase
+            .from('bar_drinks')
+            .update({ inventory_item_id: resolvedId })
+            .eq('id', d.id)
+            .is('inventory_item_id', null);
     }
 
     return drinkIdToInvId;
@@ -245,7 +270,7 @@ const ensureInventoryItems = async (
  */
 export const listBarStocktakes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { branch_id, bar_location, date, stocktake_date, status } = req.query;
+        const { branch_id, bar_location, date, stocktake_date, status, history } = req.query;
         if (!branch_id) {
             res.status(400).json({ success: false, message: 'branch_id is required' });
             return;
@@ -256,28 +281,33 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             return;
         }
 
-        // A status filter with no explicit bar_location/date (the Branch
-        // Accountant review queue: GET ?branch_id=&status=pending) means the
-        // caller wants real submitted records across every location/date,
+        // A status filter or history=true with no explicit bar_location/date means
+        // the caller wants real submitted records across every location/date,
         // not a single day's count sheet. Answer it directly from
         // bar_stocktake_records and never fall through to the synthesized
         // "candidates" branch below — that branch returns un-submitted bar
         // catalog rows with no bar_location/stocktake_date/item_name/
         // system_quantity/variance, which is what rendered as "null"
         // everywhere on the review screen.
-        if (status && !bar_location && !date && !stocktake_date) {
-            const { data: reviewRecords, error: reviewErr } = await supabase
+        if ((status || history === 'true') && !bar_location && !date && !stocktake_date) {
+            const shiftIdFilter = req.query.shift_id as string | undefined;
+            let reviewQuery = supabase
                 .from('bar_stocktake_records')
                 .select('*, item:inventory_items(id, item_name, unit)')
                 .eq('branch_id', branchId)
-                .eq('status', String(status))
                 .order('stocktake_date', { ascending: false });
+            if (status && String(status).toLowerCase() !== 'all') {
+                reviewQuery = reviewQuery.eq('status', String(status));
+            }
+            if (shiftIdFilter) reviewQuery = reviewQuery.eq('shift_id', shiftIdFilter);
+            const { data: reviewRecords, error: reviewErr } = await reviewQuery;
             if (reviewErr) throw reviewErr;
 
-            const result = (reviewRecords || []).map((r: any) => ({
+            const rawResult = (reviewRecords || []).map((r: any) => ({
                 ...r,
                 item_name: r.item?.item_name || r.item_name || null,
             }));
+            const result = await enrichWithShiftInfo(rawResult);
             res.status(200).json({ success: true, data: result });
             return;
         }
@@ -330,6 +360,8 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             .map((d) => d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id)))
             .filter(Boolean) as string[];
 
+        const shiftWindow = await getLastClosedBarShiftWindow(branchId, locationFilter, rawDate);
+
         // 2. Check for existing bar_stocktake_records for this branch/date/location
         let recordsQuery = supabase
             .from('bar_stocktake_records')
@@ -343,25 +375,20 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         const { data: existingRecords, error: recErr } = await recordsQuery;
         if (recErr) throw recErr;
 
-        // If stocktake records exist, return them (submitted view)
+        // If stocktake records exist, return them (submitted view) enriched with shift metadata
         if (existingRecords && existingRecords.length > 0) {
-            const result = existingRecords.map((r: any) => ({
+            const rawResult = existingRecords.map((r: any) => ({
                 ...r,
                 item_name: r.item?.item_name || r.item_name || null,
             }));
-            res.status(200).json({ success: true, data: result });
+            const result = await enrichWithShiftInfo(rawResult);
+            res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId });
             return;
         }
 
-        // 3. No stocktake submitted yet — return ALL catalog items as candidates.
-        //    opening_stock  = bar_stock.current_stock (set by the last approved stocktake)
-        //    additions      = restock movements since the last approved stocktake
-        //    sales          = sale movements since the last approved stocktake
-        //    quantity       = opening + additions − sales  (system/expected closing)
         const drinkIds = drinkRows.map((d: any) => String(d.id)).filter(Boolean);
         const additionsByDrinkId = new Map<string, number>();
         const salesByDrinkId = new Map<string, number>();
-        const shiftWindow = await getLastClosedBarShiftWindow(branchId, locationFilter, rawDate);
         const sumWindow = await getSinceLastApprovalWindow(branchId, locationFilter, rawDate);
         if (drinkIds.length > 0) {
             const { data: ledgerRows } = await supabase
@@ -404,7 +431,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             };
         }).filter(Boolean);
 
-        res.status(200).json({ success: true, data: candidates });
+        res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId });
     } catch (error) {
         logger.error('listBarStocktakes failed:', error);
         next(error);
@@ -431,6 +458,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
         const { branch_id, bar_location, items } = req.body || {};
         const stocktakeDate = req.body?.stocktake_date || new Date().toISOString().split('T')[0];
         const branchId = Number(branch_id);
+        logger.info(`recordBarStocktake: branch_id=${branch_id} bar_location=${bar_location} date=${stocktakeDate} items=${Array.isArray(items) ? items.length : 'non-array'}`);
         if (!Number.isInteger(branchId)) {
             res.status(400).json({ success: false, message: 'branch_id must be an integer' });
             return;
@@ -552,13 +580,6 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                 return null;
             }
 
-            // Variance must be explained whenever it is non-zero.
-            if (hasVariance && !String(it.reason_for_variance || '').trim()) {
-                const itemName = invItem?.item_name || invId;
-                missingReasons.push(`${itemName} (variance ${variance >= 0 ? '+' : ''}${variance})`);
-                return null;
-            }
-
             return {
                 branch_id: branchId,
                 bar_location,
@@ -571,7 +592,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                 system_quantity: sysQty,
                 physical_quantity: physQty,
                 // variance is a GENERATED column — do NOT include it
-                reason_for_variance: hasVariance ? String(it.reason_for_variance).trim() : null,
+                reason_for_variance: hasVariance && it.reason_for_variance ? String(it.reason_for_variance).trim() : null,
                 recorded_by: req.user?.id || null,
                 recorded_at: now,
                 status: 'pending'
@@ -609,7 +630,9 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
         if (error) throw error;
 
         // Sync into the unified stock_counts table so the cashier shift gate works.
-        await syncBarStocktakeToStockCounts(branchId, bar_location, stocktakeDate, 'submitted');
+        // Non-fatal: a constraint or schema error in stock_counts must not block the stocktake submission itself.
+        syncBarStocktakeToStockCounts(branchId, bar_location, stocktakeDate, 'pending')
+            .catch((syncErr: any) => logger.warn('recordBarStocktake: stock_counts sync failed (non-fatal):', syncErr?.message || syncErr));
 
         // Flatten item_name to top level for the Flutter UI
         const result = (data || []).map((r: any) => ({

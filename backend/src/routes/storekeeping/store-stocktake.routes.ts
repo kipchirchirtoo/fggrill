@@ -6,6 +6,9 @@ import {
     reviewStoreStocktake,
     approveStoreStocktake,
     rejectStoreStocktake,
+    batchReviewStoreStocktake,
+    batchApproveStoreStocktake,
+    batchRejectStoreStocktake,
     getStoreStocktakeSummary
 } from '../../controllers/storekeeping/store-stocktake.controller';
 
@@ -26,6 +29,9 @@ const accountantRoles = [UserRole.SUPER_ADMIN, UserRole.BRANCH_ACCOUNTANT];
 
 // Must come before '/:id/...' so it isn't swallowed by the param route.
 router.get('/summary', authorize(viewRoles), getStoreStocktakeSummary);
+router.patch('/batch/review', authorize(accountantRoles), batchReviewStoreStocktake);
+router.patch('/batch/approve', authorize(accountantRoles), batchApproveStoreStocktake);
+router.patch('/batch/reject', authorize(accountantRoles), batchRejectStoreStocktake);
 
 router.get('/', authorize(viewRoles), listStoreStocktakes);
 router.post('/', authorize(recordRoles), recordStoreStocktake);

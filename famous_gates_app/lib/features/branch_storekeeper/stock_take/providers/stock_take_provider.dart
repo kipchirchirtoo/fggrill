@@ -18,6 +18,10 @@ class StockTakeState {
   final String dateFilter;
   final bool isSubmitting;
   final bool hasExecutiveBar;
+  /// The cashier shift this stocktake is being recorded for.
+  /// Populated from the backend response's `shift_id` field and
+  /// joined shift_number / cashier_name. Null until first load completes.
+  final Map<String, dynamic>? currentShift;
 
   StockTakeState({
     required this.items,
@@ -30,6 +34,7 @@ class StockTakeState {
     required this.dateFilter,
     required this.isSubmitting,
     required this.hasExecutiveBar,
+    this.currentShift,
   });
 
   StockTakeState copyWith({
@@ -43,6 +48,8 @@ class StockTakeState {
     String? dateFilter,
     bool? isSubmitting,
     bool? hasExecutiveBar,
+    Map<String, dynamic>? currentShift,
+    bool clearShift = false,
   }) {
     return StockTakeState(
       items: items ?? this.items,
@@ -55,6 +62,7 @@ class StockTakeState {
       dateFilter: dateFilter ?? this.dateFilter,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       hasExecutiveBar: hasExecutiveBar ?? this.hasExecutiveBar,
+      currentShift: clearShift ? null : (currentShift ?? this.currentShift),
     );
   }
 }
@@ -99,11 +107,37 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       bool submitted = false;
 
       if (_type == StockTakeType.bar) {
-        final records = await repo.barStocktakeRecords(
+        final response = await repo.barStocktakeRecords(
           barLocation: targetLoc,
           date: targetDate,
         );
+        final records = _unwrapResponseList(response);
+        final responseShiftId = response['shift_id'] as String?;
 
+        submitted = records.isNotEmpty && records.first['physical_quantity'] != null;
+
+        // Capture shift info from any record that has it, or from the top-level shift_id
+        Map<String, dynamic>? shiftInfo;
+        if (records.isNotEmpty) {
+          final firstWithShift = records.firstWhere(
+            (r) => r['shift_id'] != null,
+            orElse: () => <String, dynamic>{},
+          );
+          if (firstWithShift.isNotEmpty) {
+            shiftInfo = {
+              'shift_id': firstWithShift['shift_id'],
+              'shift_number': firstWithShift['shift_number'],
+              'cashier_name': firstWithShift['cashier_name'],
+              'shift_opened_at': firstWithShift['shift_opened_at'],
+              'shift_closed_at': firstWithShift['shift_closed_at'],
+            };
+          }
+        }
+        if (shiftInfo == null && responseShiftId != null) {
+          shiftInfo = {'shift_id': responseShiftId};
+        }
+
+        state = state.copyWith(currentShift: shiftInfo);
         submitted = records.isNotEmpty && records.first['physical_quantity'] != null;
 
         loadedItems = records.map((r) {
@@ -127,15 +161,41 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
                 ? _toInt(r['physical_quantity'])
                 : null,
             reason: r['reason_for_variance'] ?? r['notes'],
+            explanation: r['explanation'] ?? r['reason_for_variance'] ?? r['notes'],
+            actionTaken: r['action_taken'],
             category: getBarCategory('${r['item_name'] ?? r['name'] ?? 'Item'}'),
           );
         }).toList();
       } else {
         // Store Stocktake
-        final records = await repo.storeStocktakeRecords(
+        final response = await repo.storeStocktakeRecords(
           date: targetDate,
         );
+        final records = _unwrapResponseList(response);
+        final responseShiftId = response['shift_id'] as String?;
 
+        // Capture shift info
+        Map<String, dynamic>? shiftInfo;
+        if (records.isNotEmpty) {
+          final firstWithShift = records.firstWhere(
+            (r) => r['shift_id'] != null,
+            orElse: () => <String, dynamic>{},
+          );
+          if (firstWithShift.isNotEmpty) {
+            shiftInfo = {
+              'shift_id': firstWithShift['shift_id'],
+              'shift_number': firstWithShift['shift_number'],
+              'cashier_name': firstWithShift['cashier_name'],
+              'shift_opened_at': firstWithShift['shift_opened_at'],
+              'shift_closed_at': firstWithShift['shift_closed_at'],
+            };
+          }
+        }
+        if (shiftInfo == null && responseShiftId != null) {
+          shiftInfo = {'shift_id': responseShiftId};
+        }
+
+        state = state.copyWith(currentShift: shiftInfo);
         submitted = records.isNotEmpty && records.first['physical_quantity'] != null;
 
         loadedItems = records.map((r) {
@@ -161,6 +221,8 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
                 ? _toInt(r['physical_quantity'])
                 : null,
             reason: r['notes'] ?? r['reason_for_variance'],
+            explanation: r['explanation'] ?? r['notes'] ?? r['reason_for_variance'],
+            actionTaken: r['action_taken'],
             category: '${r['category'] ?? r['item']?['category'] ?? 'Other'}',
           );
         }).toList();
@@ -281,16 +343,10 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         continue;
       }
 
-      if (item.variance != 0 && (item.reason == null || item.reason!.isEmpty)) {
-        errors.add('${item.productName} has a variance of ${item.variance >= 0 ? '+' : ''}${item.variance} but no explanation reason.');
-        continue;
-      }
-
       itemsToSubmit.add({
         'item_id': item.id,
         'physical_quantity': item.physicalCount!.toDouble(),
-        if (item.variance != 0) 'reason_for_variance': item.reason,
-        if (item.variance != 0) 'notes': item.reason, // For store stocktake compatibility
+        if (item.reason != null) 'reason_for_variance': item.reason,
       });
     }
 
@@ -310,8 +366,7 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       final repo = _ref.read(branchStorekeeperRepositoryProvider);
 
       if (_type == StockTakeType.bar) {
-        // Tag shift ID if any returned candidate has it
-        final shiftId = state.items.isNotEmpty ? null : null; // Backend handles shift search based on location
+        final shiftId = state.currentShift?['shift_id'] as String?;
         await repo.submitBarStocktake(
           barLocation: state.locationFilter,
           items: itemsToSubmit,
@@ -319,9 +374,11 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
           shiftId: shiftId,
         );
       } else {
+        final shiftId = state.currentShift?['shift_id'] as String?;
         await repo.submitStoreStocktake(
           items: itemsToSubmit,
           stocktakeDate: state.dateFilter,
+          shiftId: shiftId,
         );
       }
 
@@ -334,10 +391,15 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       await loadData();
       return true;
     } catch (e) {
-      state = state.copyWith(
-        isSubmitting: false,
-        errorMessage: 'Submission failed: $e',
-      );
+      // Extract the server error message from Dio response body if available.
+      String msg = 'Submission failed: $e';
+      try {
+        final dynamic data = (e as dynamic).response?.data;
+        if (data is Map && data['message'] != null) {
+          msg = 'Submission failed: ${data['message']}';
+        }
+      } catch (_) {}
+      state = state.copyWith(isSubmitting: false, errorMessage: msg);
       return false;
     }
   }
@@ -353,6 +415,15 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       return double.tryParse(v)?.toInt() ?? int.tryParse(v) ?? 0;
     }
     return 0;
+  }
+
+  /// Safely unwrap the data list from a full API response map.
+  List<Map<String, dynamic>> _unwrapResponseList(Map<String, dynamic> response) {
+    final raw = response['data'];
+    if (raw is List) {
+      return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
   }
 }
 
