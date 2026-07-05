@@ -44,6 +44,7 @@ jobs:
           flutter config --enable-linux-desktop
           VERSION="${{ github.event.release.tag_name || github.ref_name }}"
           VERSION="${VERSION#v}"
+          VERSION="${VERSION%%+*}"
           VERSION="${VERSION:-3.3.2}"
           IFS='.' read -r -a VERSION_PARTS <<< "$VERSION"
           if [ "${#VERSION_PARTS[@]}" -eq 1 ]; then
@@ -124,6 +125,7 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           $version = "${{ github.event.release.tag_name || github.ref_name }}".TrimStart("v")
+          $version = $version -replace '\+.*$', ''
           if ([string]::IsNullOrWhiteSpace($version)) { $version = "3.3.2" }
           $parts = $version.Split(".")
           if ($parts.Length -eq 1) {
@@ -152,6 +154,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.release.tag_name || github.ref_name }}".TrimStart("v")
+          $version = $version -replace '\+.*$', ''
           if ([string]::IsNullOrWhiteSpace($version)) { $version = "3.3.2" }
           $parts = $version.Split(".")
           if ($parts.Length -eq 1) {
@@ -200,6 +203,7 @@ jobs:
         run: |
           VERSION="${{ github.event.release.tag_name || github.ref_name }}"
           VERSION="${VERSION#v}"
+          VERSION="${VERSION%%+*}"
           VERSION="${VERSION:-3.3.2}"
           IFS='.' read -r -a VERSION_PARTS <<< "$VERSION"
           if [ "${#VERSION_PARTS[@]}" -eq 1 ]; then
