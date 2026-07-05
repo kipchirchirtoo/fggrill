@@ -8,8 +8,26 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
-import { computeVariance } from '../services/foodControlService';
-import { CreateBuffetInput, CloseBuffetInput } from '../types/foodControl';
+
+type CreateBuffetInput = {
+  name: string;
+  buffetType: string;
+  pricePerPerson: number;
+  expectedGuests: number;
+  shiftId?: number | null;
+  notes?: string | null;
+  menuItems?: Array<{
+    menuItemId?: string | null;
+    menuItemName: string;
+    portionPerGuest?: number | null;
+    recipeId?: number | null;
+  }>;
+};
+
+type CloseBuffetInput = {
+  actualGuests: number;
+  notes?: string | null;
+};
 
 /**
  * @desc    Get all buffets
@@ -279,7 +297,7 @@ export const openBuffet = async (
 };
 
 /**
- * @desc    Close buffet and trigger variance calculation
+ * @desc    Close buffet
  * @route   POST /api/v1/buffet/:id/close
  * @access  Private (Manager, Chef)
  */
@@ -314,17 +332,6 @@ export const closeBuffet = async (
       .single();
 
     if (updateError) throw updateError;
-
-    // Trigger variance calculation if shift_id exists
-    if (buffet.shift_id) {
-      try {
-        await computeVariance(buffet.shift_id, 'BUFFET', id, branchId);
-        logger.info(`Variance calculated for buffet ${id}, shift ${buffet.shift_id}`);
-      } catch (varianceError) {
-        logger.error('Error calculating buffet variance:', varianceError);
-        // Don't fail the close operation if variance calculation fails
-      }
-    }
 
     logger.info(`Buffet closed: ${id} by user ${userId}, actual guests: ${input.actualGuests}`);
 

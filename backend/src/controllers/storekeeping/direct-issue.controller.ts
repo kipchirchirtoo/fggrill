@@ -86,20 +86,41 @@ export const createDirectIssue = async (
 
         if (requestError) throw requestError;
 
+        // --- Resolve inventory_items.id and unit for each SKU (NOT NULL in branch_requisition_lines) ---
+        const skusToResolve = [...new Set(items.map((i: any) => normalizeSku(i.item_sku)).filter(Boolean))];
+        const { data: invItems } = await supabase
+            .from('inventory_items')
+            .select('id, sku, unit')
+            .in('sku', skusToResolve);
+        const invBySkuUpper = new Map(
+            (invItems || []).map((ii: any) => [String(ii.sku).trim().toUpperCase(), ii])
+        );
+        const resolveInv = (sku: string) =>
+            invBySkuUpper.get(sku.trim().toUpperCase());
+
         // --- Insert stock_request_items ---
-        const itemRows = items.map((item: any) => ({
-            request_id: newRequest.id,
-            branch_requisition_id: newRequest.id,
-            item_sku: normalizeSku(item.item_sku),
-            requested_quantity: Number(item.qty),
-            approved_quantity: Number(item.qty),
-            issued_qty: Number(item.qty),
-            issue_status: 'issued',
-            status: 'APPROVED',
-            workflow_status: 'dispatched',
-            reason: item.reason || reason || null,
-            unit_cost: item.unit_cost ? Number(item.unit_cost) : null
-        }));
+        const itemRows = items.map((item: any) => {
+            const sku = normalizeSku(item.item_sku);
+            const inv = resolveInv(sku);
+            if (!inv) {
+                throw new AppError(`Item SKU "${sku}" not found in inventory catalog`, 400);
+            }
+            return {
+                request_id: newRequest.id,
+                branch_requisition_id: newRequest.id,
+                item_id: inv.id,
+                item_sku: sku,
+                unit: inv.unit || 'Unit',
+                requested_quantity: Number(item.qty),
+                approved_quantity: Number(item.qty),
+                issued_qty: Number(item.qty),
+                issue_status: 'issued',
+                status: 'APPROVED',
+                workflow_status: 'dispatched',
+                reason: item.reason || reason || null,
+                unit_cost: item.unit_cost ? Number(item.unit_cost) : null,
+            };
+        });
 
         const { error: itemsInsertError } = await supabase
             .from('stock_request_items')

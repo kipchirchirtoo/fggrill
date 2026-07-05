@@ -734,6 +734,24 @@ export const createStaffMember = async (
       }
 
       const userId = authData.user.id;
+
+      // Enforce PIN uniqueness before creating the account
+      if (pos_pin) {
+        const { data: pinConflict } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('pos_pin', pos_pin)
+          .maybeSingle();
+        if (pinConflict) {
+          await supabase.auth.admin.deleteUser(userId);
+          res.status(409).json({
+            success: false,
+            message: `PIN ${pos_pin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
+          });
+          return;
+        }
+      }
+
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(userPassword, salt);
 

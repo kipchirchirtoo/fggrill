@@ -53,13 +53,61 @@ const attachCatalogItem = (row: any, itemMap: Map<string, any>): any => {
     };
 };
 
-const fetchDispatchItemsWithCatalog = async (dispatchId: string): Promise<any[]> => {
+// Stamp requested/approved quantities from the originating stock request
+// onto dispatch items — dispatch_items only stores what was actually packed,
+// so without this the dispatch views can't show requested vs approved vs
+// dispatched. approved_quantity already stored on the dispatch line wins.
+const attachRequestQuantities = async (
+    dispatches: Array<{ id: any; stock_request_id?: any }>,
+    items: any[]
+): Promise<void> => {
+    const requestIds = [...new Set(dispatches.map(d => d.stock_request_id).filter(Boolean))];
+    if (!requestIds.length || !items.length) return;
+
+    const { data: requestLines } = await supabase
+        .from('stock_request_items')
+        .select('request_id, item_sku, requested_quantity, approved_quantity')
+        .in('request_id', requestIds);
+    if (!requestLines || !requestLines.length) return;
+
+    const requestIdByDispatchId = new Map(
+        dispatches.map(d => [String(d.id), String(d.stock_request_id || '')])
+    );
+    const normalizeKey = (requestId: any, sku: any) =>
+        `${requestId}|${String(sku || '').trim().toUpperCase()}`;
+    const lineByKey = new Map(
+        requestLines.map((l: any) => [normalizeKey(l.request_id, l.item_sku), l])
+    );
+
+    for (const item of items) {
+        const requestId = requestIdByDispatchId.get(String(item.dispatch_id));
+        if (!requestId) continue;
+        const line = lineByKey.get(normalizeKey(requestId, item.item_sku));
+        if (!line) continue;
+        item.requested_quantity = line.requested_quantity;
+        if (item.approved_quantity === null || item.approved_quantity === undefined) {
+            item.approved_quantity = line.approved_quantity;
+        }
+    }
+};
+
+const fetchDispatchItemsWithCatalog = async (
+    dispatchId: string,
+    stockRequestId?: string | null
+): Promise<any[]> => {
     const { data: items, error } = await supabase
         .from('dispatch_items')
         .select('*')
         .eq('dispatch_id', dispatchId);
 
     if (error) throw error;
+
+    if (stockRequestId) {
+        await attachRequestQuantities(
+            [{ id: dispatchId, stock_request_id: stockRequestId }],
+            items || []
+        );
+    }
 
     const itemMap = await fetchSimpleItemsBySku((items || []).map((item: any) => item.item_sku));
     return (items || []).map((item: any) => attachCatalogItem(item, itemMap));
@@ -130,6 +178,9 @@ export const getDispatchNotes = async (
             .from('dispatch_items')
             .select('*')
             .in('dispatch_id', dispatchIds);
+
+        // Show requested vs approved vs dispatched on every dispatch line.
+        await attachRequestQuantities(dispatches, items || []);
 
         // Get item details
         const itemSkus = [...new Set(items?.map(i => i.item_sku) || [])];
@@ -268,7 +319,7 @@ export const getDispatchNote = async (
         }
 
         // Fetch dispatch items separately with item details
-        dispatch.items = await fetchDispatchItemsWithCatalog(id);
+        dispatch.items = await fetchDispatchItemsWithCatalog(id, dispatch.stock_request_id);
 
         res.status(200).json({
             success: true,
@@ -502,7 +553,8 @@ export const createDispatchNote = async (
 
             // Fetch dispatch items separately
             if (completeDispatch) {
-                completeDispatch.items = await fetchDispatchItemsWithCatalog(createdDispatch.id);
+                completeDispatch.items = await fetchDispatchItemsWithCatalog(
+                    createdDispatch.id, completeDispatch.stock_request_id);
             }
 
             res.status(201).json({
@@ -592,7 +644,8 @@ export const createDispatchNote = async (
 
         // Fetch dispatch items separately
         if (completeDispatch) {
-            completeDispatch.items = await fetchDispatchItemsWithCatalog(createdDispatch2.id);
+            completeDispatch.items = await fetchDispatchItemsWithCatalog(
+                createdDispatch2.id, completeDispatch.stock_request_id);
         }
 
         res.status(201).json({

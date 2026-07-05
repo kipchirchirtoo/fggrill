@@ -1321,10 +1321,6 @@ const _branchManagerSectionRouteSpecs =
 const _branchAccountantSectionRouteSpecs =
     <MapEntry<String, BranchAccountantSection>>[
   MapEntry('/branch-accountant/analytics', BranchAccountantSection.analytics),
-  MapEntry(
-      '/branch-accountant/data-health', BranchAccountantSection.dataHealth),
-  MapEntry('/branch-accountant/daily-controls-lina',
-      BranchAccountantSection.linaDailyControls),
   MapEntry('/branch-accountant/financial-close',
       BranchAccountantSection.financialClose),
   MapEntry('/branch-accountant/supplier-finance',
@@ -1333,14 +1329,10 @@ const _branchAccountantSectionRouteSpecs =
       BranchAccountantSection.discrepancies),
   MapEntry('/branch-accountant/reports/profit-loss',
       BranchAccountantSection.profitLoss),
-  MapEntry('/branch-accountant/revenue-oversight',
-      BranchAccountantSection.revenueOversight),
   MapEntry('/branch-accountant/sold-items', BranchAccountantSection.soldItems),
   MapEntry(
       '/branch-accountant/staff/audit', BranchAccountantSection.staffAudit),
   MapEntry('/branch-accountant/budgets', BranchAccountantSection.budgets),
-  MapEntry('/branch-accountant/food-control',
-      BranchAccountantSection.foodControl),
 ];
 
 const _branchStorekeeperSectionRouteSpecs =
@@ -1362,6 +1354,9 @@ const _branchStorekeeperSectionRouteSpecs =
       BranchStorekeeperSection.receiptVerification),
   MapEntry('/store/receipt-verification',
       BranchStorekeeperSection.receiptVerification),
+  MapEntry(
+      '/branch-store/food-stuffs-stock', BranchStorekeeperSection.foodStuffsStock),
+  MapEntry('/store/food-stuffs-stock', BranchStorekeeperSection.foodStuffsStock),
   MapEntry('/store/receive', BranchStorekeeperSection.receive),
   MapEntry('/store/receive-goods', BranchStorekeeperSection.receive),
   MapEntry('/branch-store/suppliers', BranchStorekeeperSection.suppliers),
@@ -1446,10 +1441,6 @@ const _centralStoreSectionRouteSpecs = <MapEntry<String, AdminSection>>[
 
 const _superAdminSectionRouteSpecs = <MapEntry<String, SuperAdminSection>>[
   MapEntry('/superadmin/lina', SuperAdminSection.lina),
-  MapEntry(
-      '/superadmin/food-control-health', SuperAdminSection.foodControlHealth),
-  MapEntry('/superadmin/daily-controls-lina',
-      SuperAdminSection.linaDailyControls),
   MapEntry('/superadmin/admin-dashboard', SuperAdminSection.adminDashboard),
   MapEntry('/superadmin/audit-logs', SuperAdminSection.securityCenter),
   MapEntry('/super/admin/security', SuperAdminSection.securityCenter),

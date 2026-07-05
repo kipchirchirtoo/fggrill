@@ -45,6 +45,7 @@ interface RecordBarStockMovementInput {
   notes?: string | null;
   costPerUnit?: number | null;
   shiftId?: string | null;
+  auditQuantity?: number | null;
 }
 
 interface BarStockResult {
@@ -225,7 +226,8 @@ export async function recordBarStockMovement(
     performedBy,
     notes,
     costPerUnit,
-    shiftId
+    shiftId,
+    auditQuantity
   } = input;
 
   // ── Resolve identifiers ────────────────────────────────────────────
@@ -490,9 +492,9 @@ export async function recordBarStockMovement(
         branch_id: branchId,
         movement_type: movementType,
         item_id: itemId,
-        source_location_id: quantityDelta < 0 ? locationId : null,
-        destination_location_id: quantityDelta >= 0 ? locationId : null,
-        quantity: Math.abs(quantityDelta),
+        source_location_id: quantityDelta < 0 || movementType === 'waste' ? locationId : null,
+        destination_location_id: quantityDelta >= 0 && movementType !== 'waste' ? locationId : null,
+        quantity: auditQuantity !== undefined && auditQuantity !== null ? auditQuantity : Math.abs(quantityDelta),
         reason: notes || movementType,
         document_type: referenceId ? 'order' : 'manual',
         document_number: referenceNumber || referenceId || null,
@@ -517,8 +519,9 @@ export async function recordBarStockMovement(
                           movementType === 'dispatch_receive' ? 'restock' :
                           movementType === 'stock_take_adjustment' ? 'stock_take' :
                           movementType === 'production' ? 'restock' :
+                          movementType === 'waste' ? 'waste' :
                           'adjustment',
-        quantity: Math.abs(quantityDelta),
+        quantity: auditQuantity !== undefined && auditQuantity !== null ? auditQuantity : Math.abs(quantityDelta),
         opening_balance: previousStock,
         closing_balance: newStock,
         reference: referenceNumber || notes || movementType,

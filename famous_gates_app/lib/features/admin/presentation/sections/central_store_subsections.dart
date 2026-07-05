@@ -211,6 +211,159 @@ class _ParsedPurchaseOrderItem {
   num get total => quantity * unitCost;
 }
 
+// Top-level helpers so _ItemSearchCell (a separate widget) can access them.
+String _poInvSku(Map<String, dynamic> row) =>
+    _text(row, ['sku', 'item_sku', 'id'], '');
+String _poInvName(Map<String, dynamic> row) =>
+    _text(row, ['item_name', 'name', 'description'], '');
+String _poInvUnit(Map<String, dynamic> row) =>
+    _text(row, ['unit_of_measure', 'unit'], '').toUpperCase();
+num _poInvCost(Map<String, dynamic> row) =>
+    _num(row, ['cost_price', 'default_unit_cost', 'unit_cost', 'unit_price', 'last_purchase_price']);
+
+/// Autocomplete cell for the item name column in the PO items table.
+/// Uses [RawAutocomplete] so we can own the [TextEditingController] and keep
+/// the field in sync when the parent calls [_applyInventorySuggestion].
+class _ItemSearchCell extends StatefulWidget {
+  const _ItemSearchCell({
+    required super.key,
+    required this.initialName,
+    required this.inventory,
+    required this.onItemSelected,
+    required this.onTextChanged,
+    required this.inventorySuggestions,
+  });
+
+  final String initialName;
+  final List<Map<String, dynamic>> inventory;
+  final void Function(Map<String, dynamic> match) onItemSelected;
+  final void Function(String value) onTextChanged;
+  final List<Map<String, dynamic>> Function(
+      String query, List<Map<String, dynamic>> inv) inventorySuggestions;
+
+  @override
+  State<_ItemSearchCell> createState() => _ItemSearchCellState();
+}
+
+class _ItemSearchCellState extends State<_ItemSearchCell> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(_ItemSearchCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync when name was changed externally (e.g. after autocomplete selection
+    // in the parent propagated back via setState).
+    if (widget.initialName != oldWidget.initialName &&
+        _controller.text != widget.initialName) {
+      _controller.text = widget.initialName;
+      _controller.selection =
+          TextSelection.collapsed(offset: widget.initialName.length);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Map<String, dynamic>>(
+      textEditingController: _controller,
+      focusNode: _focusNode,
+      displayStringForOption: _poInvName,
+      optionsBuilder: (textEditingValue) {
+        final text = textEditingValue.text.trim();
+        if (text.length < 2) return const Iterable.empty();
+        return widget.inventorySuggestions(text, widget.inventory);
+      },
+      optionsViewBuilder: (context, onSelected, options) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints:
+                const BoxConstraints(maxHeight: 260, maxWidth: 440),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: options.length,
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1, indent: 12, endIndent: 12),
+              itemBuilder: (context, index) {
+                final option = options.elementAt(index);
+                final unit = _poInvUnit(option);
+                final cost = _poInvCost(option);
+                return InkWell(
+                  onTap: () => onSelected(option),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _poInvName(option),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13),
+                            ),
+                            Text(
+                              '${_poInvSku(option)} · ${unit.isEmpty ? 'No unit' : unit}',
+                              style: const TextStyle(
+                                  color: AppColors.kTextSecondary,
+                                  fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (cost > 0)
+                        Text(
+                          'KES ${cost.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.kTextSecondary),
+                        ),
+                    ]),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) =>
+          TextFormField(
+        controller: controller,
+        focusNode: focusNode,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Type to search master inventory…',
+          hintStyle:
+              TextStyle(fontSize: 12, color: AppColors.kTextSecondary),
+        ),
+        onChanged: widget.onTextChanged,
+      ),
+      onSelected: widget.onItemSelected,
+    );
+  }
+}
+
 final _uuidPattern = RegExp(
   r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   caseSensitive: false,
@@ -1048,15 +1201,17 @@ class _ItemsDocumentCard extends StatelessWidget {
       final sku = _pick(it, ['item_sku', 'sku', 'item_code']);
       var name = _pick(it, ['item_name', 'name', 'description', 'drink_name']);
       if (name.isEmpty) name = sku.isNotEmpty ? sku : 'Item';
-      final qty = _num(it['quantity_approved'] ??
-          it['approved_quantity'] ??
-          it['dispatched_quantity'] ??
+      final reqQty = _num(it['quantity_requested'] ?? it['requested_quantity']);
+      final apprQty = _num(it['quantity_approved'] ?? it['approved_quantity']);
+      final movedQty = _num(it['dispatched_quantity'] ??
           it['issued_qty'] ??
-          it['quantity_received'] ??
-          it['quantity_requested'] ??
-          it['requested_quantity'] ??
-          it['quantity'] ??
-          it['qty']);
+          it['quantity_received']);
+      // Main QTY: what actually moved (dispatched/issued/received) when
+      // known, else approved, else requested, else the plain quantity.
+      final qty = movedQty ??
+          apprQty ??
+          reqQty ??
+          _num(it['quantity'] ?? it['qty']);
       final unit = _pick(it, ['unit', 'unit_of_measure', 'uom']);
       final cost = _num(it['unit_cost'] ??
           it['unit_price'] ??
@@ -1065,6 +1220,9 @@ class _ItemsDocumentCard extends StatelessWidget {
       return (
         name: name,
         sku: sku,
+        reqQty: reqQty,
+        apprQty: apprQty,
+        movedQty: movedQty,
         qty: qty,
         unit: unit,
         cost: cost,
@@ -1075,7 +1233,16 @@ class _ItemsDocumentCard extends StatelessWidget {
     final showSku =
         lines.any((l) => l.sku.isNotEmpty && l.sku != l.name);
     final showCost = lines.any((l) => l.cost != null);
+    // Requested/Approved columns appear when the payload carries them and
+    // the main QTY column shows something different (a dispatch/issue), or
+    // when both requested and approved exist (requisition: REQ vs approved).
+    final hasMoved = lines.any((l) => l.movedQty != null);
+    final showAppr = hasMoved && lines.any((l) => l.apprQty != null);
+    final showReq = lines.any((l) => l.reqQty != null) &&
+        (hasMoved || lines.any((l) => l.apprQty != null));
     final totalQty = lines.fold<num>(0, (sum, l) => sum + (l.qty ?? 0));
+    final totalReq = lines.fold<num>(0, (sum, l) => sum + (l.reqQty ?? 0));
+    final totalAppr = lines.fold<num>(0, (sum, l) => sum + (l.apprQty ?? 0));
     final totalAmount =
         lines.fold<num>(0, (sum, l) => sum + (l.amount ?? 0));
 
@@ -1097,20 +1264,27 @@ class _ItemsDocumentCard extends StatelessWidget {
           child: Text(text, textAlign: align, style: style),
         );
 
+    final widths = <TableColumnWidth>[
+      const FixedColumnWidth(40),
+      const FlexColumnWidth(3),
+      if (showSku) const FlexColumnWidth(1.3),
+      if (showReq) const FlexColumnWidth(0.8),
+      if (showAppr) const FlexColumnWidth(0.8),
+      const FlexColumnWidth(0.9),
+      const FlexColumnWidth(0.8),
+      if (showCost) const FlexColumnWidth(1.1),
+      if (showCost) const FlexColumnWidth(1.2),
+    ];
     final columnWidths = <int, TableColumnWidth>{
-      0: const FixedColumnWidth(40),
-      1: const FlexColumnWidth(3),
-      if (showSku) 2: const FlexColumnWidth(1.3),
-      (showSku ? 3 : 2): const FlexColumnWidth(0.9),
-      (showSku ? 4 : 3): const FlexColumnWidth(0.8),
-      if (showCost) (showSku ? 5 : 4): const FlexColumnWidth(1.1),
-      if (showCost) (showSku ? 6 : 5): const FlexColumnWidth(1.2),
+      for (var i = 0; i < widths.length; i++) i: widths[i],
     };
 
     List<Widget> rowCells({
       required String no,
       required String name,
       required String sku,
+      required String req,
+      required String appr,
       required String qty,
       required String unit,
       required String cost,
@@ -1122,6 +1296,9 @@ class _ItemsDocumentCard extends StatelessWidget {
           cell(no, style: secondaryStyle, align: TextAlign.center),
           cell(name, style: style),
           if (showSku) cell(sku, style: secondaryStyle),
+          if (showReq) cell(req, style: secondaryStyle, align: TextAlign.right),
+          if (showAppr)
+            cell(appr, style: secondaryStyle, align: TextAlign.right),
           cell(qty, style: style, align: TextAlign.right),
           cell(unit, style: secondaryStyle),
           if (showCost) cell(cost, style: secondaryStyle, align: TextAlign.right),
@@ -1202,7 +1379,9 @@ class _ItemsDocumentCard extends StatelessWidget {
                       no: '#',
                       name: 'ITEM DESCRIPTION',
                       sku: 'SKU',
-                      qty: 'QTY',
+                      req: 'REQ QTY',
+                      appr: 'APPR QTY',
+                      qty: hasMoved ? 'ISSUED' : 'QTY',
                       unit: 'UNIT',
                       cost: 'UNIT COST',
                       amount: 'AMOUNT',
@@ -1219,6 +1398,8 @@ class _ItemsDocumentCard extends StatelessWidget {
                         no: '${i + 1}',
                         name: lines[i].name,
                         sku: lines[i].sku,
+                        req: _qtyText(lines[i].reqQty),
+                        appr: _qtyText(lines[i].apprQty),
                         qty: _qtyText(lines[i].qty),
                         unit: lines[i].unit.isEmpty ? '—' : lines[i].unit,
                         cost: lines[i].cost == null
@@ -1235,6 +1416,8 @@ class _ItemsDocumentCard extends StatelessWidget {
                       no: '',
                       name: 'TOTAL',
                       sku: '',
+                      req: _qtyText(totalReq),
+                      appr: _qtyText(totalAppr),
                       qty: _qtyText(totalQty),
                       unit: '',
                       cost: '',
@@ -2527,29 +2710,61 @@ class _InventoryListSection extends ConsumerWidget {
       text: isEdit ? _num(item, ['reorder_level']).toStringAsFixed(0) : '0',
     );
 
+    final originalSku = isEdit ? _text(item!, ['sku'], '') : '';
+    final allLoadedItems = itemsAsync.valueOrNull ?? [];
+
     final body = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEdit ? 'Edit Item' : 'Add Item'),
-        content: SizedBox(
-          width: 460,
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Item Name *'),
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: skuCtrl,
-                enabled: !isEdit,
-                decoration: const InputDecoration(
-                  labelText: 'SKU',
-                  helperText: 'Leave blank to auto-generate',
-                ),
-              ),
-              const SizedBox(height: 12),
+      builder: (ctx) {
+        String? skuWarning;
+        return StatefulBuilder(builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: Text(isEdit ? 'Edit Item' : 'Add Item'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Item Name *'),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: skuCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'SKU',
+                      helperText: isEdit ? 'Changing SKU will update the item identifier' : 'Leave blank to auto-generate',
+                    ),
+                    onChanged: (value) {
+                      final trimmed = value.trim().toLowerCase();
+                      final isDuplicate = trimmed.isNotEmpty &&
+                          trimmed != originalSku.toLowerCase() &&
+                          allLoadedItems.any(
+                              (i) => _text(i, ['sku'], '').toLowerCase() == trimmed);
+                      setDialogState(() {
+                        skuWarning = isDuplicate
+                            ? 'SKU "${value.trim()}" is already used by another item'
+                            : null;
+                      });
+                    },
+                  ),
+                  if (skuWarning != null) ...[
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 14, color: Colors.orange),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          skuWarning!,
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.orange),
+                        ),
+                      ),
+                    ]),
+                  ],
+                  const SizedBox(height: 12),
               TextField(
                 controller: categoryCtrl,
                 decoration: const InputDecoration(
@@ -2633,7 +2848,9 @@ class _InventoryListSection extends ConsumerWidget {
             child: Text(isEdit ? 'Update' : 'Create'),
           ),
         ],
-      ),
+          );  // AlertDialog
+        });   // StatefulBuilder
+      },      // outer builder
     );
 
     for (final controller in [
@@ -2666,7 +2883,8 @@ class _InventoryListSection extends ConsumerWidget {
     } catch (error) {
       if (context.mounted) {
         AppNotifier.showSnackBar(
-            context, SnackBar(content: Text('Failed: $error')));
+            context,
+            SnackBar(content: Text(apiErrorMessage(error, fallback: isEdit ? 'Failed to update item' : 'Failed to create item'))));
       }
     }
   }
@@ -2825,6 +3043,15 @@ class RequisitionsSection extends ConsumerWidget {
                             _showRequisitionDetails(context, ref, row),
                         child: const Text('View'),
                       ),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.bolt, size: 14),
+                        label: const Text('Process All'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white),
+                        onPressed: () =>
+                            _processRequisitionNow(context, ref, row),
+                      ),
                     ]),
                   );
                 },
@@ -2851,6 +3078,59 @@ class RequisitionsSection extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Future<void> _processRequisitionNow(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
+    final items = _list(row['items'] ?? row['request_items'] ?? []);
+    if (items.isEmpty) {
+      _snack(context, 'No items found on this request');
+      return;
+    }
+    final requestNumber = _text(row, ['request_number', 'id']);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Process Requisition'),
+        content: Text(
+            'Issue all ${items.length} items at full approved qty and confirm dispatch for $requestNumber?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Process All')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      final requestId = _id(row);
+      for (final item in items) {
+        final itemId = _id(item);
+        if (itemId.isEmpty) continue;
+        final approvedQty = _num(item, [
+          'quantity_approved',
+          'approved_quantity',
+          'quantity_requested',
+          'quantity',
+          'qty',
+        ]);
+        await repo.issueStockRequestItem(requestId, itemId, {
+          'issued_qty': approvedQty,
+          'issue_status': 'issued',
+        });
+      }
+      await repo.confirmStoreDispatch(requestId);
+      if (!context.mounted) return;
+      _refreshCentralStore(ref);
+      _snack(context, 'All items issued — navigating to Dispatch');
+      ref.read(adminSectionProvider.notifier).state = AdminSection.dispatchNotes;
+    } catch (error) {
+      if (context.mounted) _snack(context, 'Failed: $error');
+    }
   }
 }
 
@@ -2930,6 +3210,8 @@ class PackingSection extends ConsumerWidget {
           if (!context.mounted) return;
           _refreshCentralStore(ref);
           _snack(context, 'Stock issued and dispatch confirmed');
+          ref.read(adminSectionProvider.notifier).state =
+              AdminSection.dispatchNotes;
         },
       ),
     );
@@ -3419,11 +3701,36 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
   final _bulkController = TextEditingController();
   final _notesController = TextEditingController();
   final List<_ParsedPurchaseOrderItem> _parsedItems = [];
+  // Controllers keyed by item.key so _applyInventorySuggestion can push values
+  // into already-rendered unit and cost fields (initialValue-only fields don't update).
+  final Map<String, TextEditingController> _unitControllers = {};
+  final Map<String, TextEditingController> _costControllers = {};
+
+  TextEditingController _unitCtrl(_ParsedPurchaseOrderItem item) =>
+      _unitControllers.putIfAbsent(
+          item.key, () => TextEditingController(text: item.unit));
+
+  TextEditingController _costCtrl(_ParsedPurchaseOrderItem item) =>
+      _costControllers.putIfAbsent(
+          item.key,
+          () => TextEditingController(
+              text: item.unitCost == 0 ? '' : _plainNum(item.unitCost)));
+
+  void _removeItemControllers(_ParsedPurchaseOrderItem item) {
+    _unitControllers.remove(item.key)?.dispose();
+    _costControllers.remove(item.key)?.dispose();
+  }
 
   @override
   void dispose() {
     _bulkController.dispose();
     _notesController.dispose();
+    for (final c in _unitControllers.values) {
+      c.dispose();
+    }
+    for (final c in _costControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -3790,12 +4097,30 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
         ),
       ]),
       const SizedBox(height: 12),
-      Text(
-        _editingPoId == null
-            ? 'New Purchase Order'
-            : 'Editing Draft ${_editingPoNumber ?? _editingPoId}',
-        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-      ),
+      Row(children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppColors.kPrimary.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(PhosphorIcons.fileText(),
+              color: AppColors.kPrimary, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            _editingPoId == null
+                ? 'New Purchase Order'
+                : 'Editing Draft ${_editingPoNumber ?? _editingPoId}',
+            style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
+                color: AppColors.kTextPrimary),
+          ),
+        ),
+      ]),
       const SizedBox(height: 16),
       Card(
         elevation: 0,
@@ -3897,13 +4222,26 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.kPrimary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(PhosphorIcons.listBullets(),
+                    color: AppColors.kPrimary, size: 16),
+              ),
+              const SizedBox(width: 10),
               const Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Bulk Item Entry',
                           style: TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 15)),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: AppColors.kTextPrimary)),
                       Text(
                         'Paste lines like "KC PINEAPPLE 750ML, 120, PCS" or "FANTA ORANGE 500ML 50 PCS".',
                         style: TextStyle(
@@ -3917,6 +4255,7 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                 label: const Text('Parse Items'),
               ),
             ]),
+            const Divider(height: 20),
             const SizedBox(height: 12),
             TextField(
               controller: _bulkController,
@@ -3944,10 +4283,23 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.kPrimary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(PhosphorIcons.fileSpreadsheet(),
+                    color: AppColors.kPrimary, size: 16),
+              ),
+              const SizedBox(width: 10),
               const Expanded(
                   child: Text('Parsed Items',
                       style: TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 15))),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: AppColors.kTextPrimary))),
               Text(
                 hasErrors
                     ? 'Fix invalid rows before saving'
@@ -3964,7 +4316,7 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
                 label: const Text('Add Item Manually'),
               ),
             ]),
-            const SizedBox(height: 12),
+            const Divider(height: 20),
             if (_parsedItems.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
@@ -3976,6 +4328,12 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
+                  headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: AppColors.kTextSecondary,
+                    letterSpacing: 0.4,
+                  ),
                   columns: const [
                     DataColumn(label: Text('Item')),
                     DataColumn(label: Text('SKU')),
@@ -4004,9 +4362,21 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(children: [
-            Text('Grand Total: ${_money(total)}',
-                style:
-                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: AppColors.kTextPrimary),
+                children: [
+                  const TextSpan(text: 'Grand Total: '),
+                  TextSpan(
+                    text: _money(total),
+                    style: const TextStyle(color: AppColors.kPrimary),
+                  ),
+                ],
+              ),
+            ),
             const Spacer(),
             OutlinedButton(
                 onPressed: (_saving || _printingPdf)
@@ -4054,13 +4424,18 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
       cells: [
         DataCell(SizedBox(
           width: 240,
-          child: TextFormField(
+          child: _ItemSearchCell(
             key: ValueKey('${item.key}-name'),
-            initialValue: item.itemName,
-            decoration: const InputDecoration(border: InputBorder.none),
-            onChanged: (value) => setState(() {
+            initialName: item.itemName,
+            inventory: inventory,
+            inventorySuggestions: _inventorySuggestions,
+            onTextChanged: (value) => setState(() {
               item.itemName = value;
               _resolveItem(item, inventory);
+              _validateItems();
+            }),
+            onItemSelected: (match) => setState(() {
+              _applyInventorySuggestion(item, match);
               _validateItems();
             }),
           ),
@@ -4087,9 +4462,13 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
         DataCell(SizedBox(
           width: 86,
           child: TextFormField(
-            key: ValueKey('${item.key}-unit'),
-            initialValue: item.unit,
-            decoration: const InputDecoration(border: InputBorder.none),
+            controller: _unitCtrl(item),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              hintText: 'unit',
+              hintStyle: TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary),
+            ),
             onChanged: (value) => setState(() {
               item.unit = value.toUpperCase();
               _validateItems();
@@ -4099,10 +4478,14 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
         DataCell(SizedBox(
           width: 100,
           child: TextFormField(
-            key: ValueKey('${item.key}-cost'),
-            initialValue: item.unitCost == 0 ? '' : _plainNum(item.unitCost),
+            controller: _costCtrl(item),
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(border: InputBorder.none),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              hintText: '0.00',
+              hintStyle: TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary),
+            ),
             onChanged: (value) => setState(() {
               item.unitCost = num.tryParse(value) ?? 0;
               _validateItems();
@@ -4116,6 +4499,7 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
           icon: const Icon(Icons.close, size: 18),
           onPressed: () => setState(() {
             _parsedItems.remove(item);
+            _removeItemControllers(item);
             _validateItems();
           }),
         )),
@@ -4250,7 +4634,30 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
     item.sku = _itemSku(match);
     item.itemName = _itemName(match);
     final unit = _itemUnit(match);
-    if (unit.isNotEmpty) item.unit = unit;
+    if (unit.isNotEmpty) {
+      item.unit = unit;
+      final ctrl = _unitControllers[item.key];
+      if (ctrl != null) {
+        ctrl.text = unit;
+        ctrl.selection = TextSelection.collapsed(offset: unit.length);
+      }
+    }
+    final cost = _num(match, [
+      'cost_price',
+      'default_unit_cost',
+      'unit_cost',
+      'unit_price',
+      'last_purchase_price',
+    ]);
+    if (cost > 0) {
+      item.unitCost = cost;
+      final costStr = _plainNum(cost);
+      final ctrl = _costControllers[item.key];
+      if (ctrl != null) {
+        ctrl.text = costStr;
+        ctrl.selection = TextSelection.collapsed(offset: costStr.length);
+      }
+    }
   }
 
   String _itemSku(Map<String, dynamic> row) =>
@@ -4493,6 +4900,14 @@ class _PurchaseOrdersSectionState extends ConsumerState<PurchaseOrdersSection> {
     _expectedDate = null;
     _bulkController.clear();
     _notesController.clear();
+    for (final c in _unitControllers.values) {
+      c.dispose();
+    }
+    _unitControllers.clear();
+    for (final c in _costControllers.values) {
+      c.dispose();
+    }
+    _costControllers.clear();
     _parsedItems.clear();
   }
 

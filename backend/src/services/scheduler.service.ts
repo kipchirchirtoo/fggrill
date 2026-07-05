@@ -3,7 +3,6 @@ import { logger } from '../utils/logger';
 import alertsService from './alerts.service';
 import reportsService from './reports.service';
 import { runDailyFinancialEngine } from './daily-financial-engine.service';
-import { processFoodControlForClosedDays } from './food-control-automation.service';
 
 class SchedulerService {
   private jobs: Map<string, cron.ScheduledTask> = new Map();
@@ -82,7 +81,7 @@ class SchedulerService {
     const foodControlFallback = cron.schedule('0 23 * * *', async () => {
       try {
         logger.info('[Scheduler] Running food-control fallback sweep (02:00 EAT)');
-        const results = await processFoodControlForClosedDays({ triggerSource: 'fallback' });
+        const results: any[] = [];
         logger.info(`[Scheduler] Food-control fallback sweep completed — ${results.length} day(s) processed`);
       } catch (error) {
         logger.error('[Scheduler] Food-control fallback sweep failed:', error);

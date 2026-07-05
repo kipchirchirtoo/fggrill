@@ -539,6 +539,8 @@ const syncKitchenStocktakeToStockCounts = async (
       counted_quantity: physicalQty,
       variance: physicalQty - systemQty,
       status,
+      explanation: (it as any).explanation || null,
+      action_taken: (it as any).action_taken || null,
       created_at: now,
       updated_at: now,
     };
@@ -636,6 +638,35 @@ export const approveKitchenStocktake = async (req: Request, res: Response, next:
       res.status(400).json({ success: false, message: `Cannot approve a shift that is ${existing.status}` });
       return;
     }
+
+    // Validate that all items with non-zero variance have an explanation and action taken
+    const branchId = existing.branch_id;
+    const stocktakeDate = existing.stocktake_date;
+    const shift = existing.shift;
+
+    const [spoilageByName, soldByName] = await Promise.all([
+      getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
+      getKitchenSoldByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
+    ]);
+
+    const savedItems = (existing.items || []) as any[];
+    const unexplained = savedItems.filter((it: any) => {
+      const spoilage = spoilageByName.get(it.item_name) ?? 0;
+      const sold = soldByName.get(it.item_name) ?? 0;
+      const system = num(it.opening_qty) + num(it.added_qty) - spoilage - sold;
+      const physical = num(it.closing_qty);
+      const variance = physical - system;
+      return variance !== 0 && (!it.explanation || !it.action_taken);
+    });
+
+    if (unexplained.length > 0) {
+      res.status(400).json({
+        success: false,
+        message: `All kitchen item variances must have an explanation and action taken before approval. Missing for: ${unexplained.map(i => i.item_name).join(', ')}`,
+      });
+      return;
+    }
+
     const now = new Date().toISOString();
     const { data, error } = await supabase
       .from('kitchen_stocktake_shifts')
@@ -648,7 +679,6 @@ export const approveKitchenStocktake = async (req: Request, res: Response, next:
     // Re-apply closing counts to pos_outlet_items so approval is the
     // authoritative stock-update trigger (submit already does this too,
     // but approval confirms the accountant has verified the counts).
-    const savedItems = (existing.items || []) as Array<{ item_name: string; closing_qty: any }>;
     if (savedItems.length > 0) {
       try {
         await db.query(
@@ -656,7 +686,7 @@ export const approveKitchenStocktake = async (req: Request, res: Response, next:
            SET current_stock = kti.closing_qty::numeric,
                updated_at    = NOW()
            FROM (VALUES ${savedItems.map((_: any, i: number) => `($${i * 2 + 1}::text, $${i * 2 + 2}::numeric)`).join(', ')})
-                AS kti(item_name, closing_qty)
+                 AS kti(item_name, closing_qty)
            JOIN public.pos_outlets po ON po.branch_id = $${savedItems.length * 2 + 1}
                                      AND po.outlet_type = 'restaurant'
            WHERE poi.outlet_id = po.id
@@ -671,6 +701,87 @@ export const approveKitchenStocktake = async (req: Request, res: Response, next:
     res.status(200).json({ success: true, data });
   } catch (error) {
     logger.error('approveKitchenStocktake failed:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Accountant updates explanation and action_taken for kitchen stocktake items.
+ * @route   PUT /api/storekeeping/kitchen-stocktake/:id/items
+ * @access  Branch Accountant, Super Admin
+ */
+export const updateKitchenStocktakeItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+
+    const { data: existingShift, error: fetchErr } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !existingShift) {
+      res.status(404).json({ success: false, message: 'Stocktake shift not found' });
+      return;
+    }
+
+    if (existingShift.status !== 'submitted' && existingShift.status !== 'reviewed') {
+      res.status(400).json({ success: false, message: `Cannot update items when shift is in status ${existingShift.status}` });
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    for (const item of items) {
+      const { error: itemErr } = await supabase
+        .from('kitchen_stocktake_items')
+        .update({
+          explanation: item.explanation !== undefined ? item.explanation : null,
+          action_taken: item.action_taken !== undefined ? item.action_taken : null,
+          updated_at: now
+        })
+        .eq('shift_id', id)
+        .eq('item_name', item.item_name);
+
+      if (itemErr) {
+        logger.warn(`Could not update kitchen_stocktake_items row for ${item.item_name}: ${itemErr.message}`);
+      }
+    }
+
+    // Load updated shift items and sync to stock_counts
+    const { data: updatedItems, error: itemsErr } = await supabase
+      .from('kitchen_stocktake_items')
+      .select('*')
+      .eq('shift_id', id);
+
+    if (itemsErr) throw itemsErr;
+
+    const [spoilageByName, soldByName] = await Promise.all([
+      getApprovedKitchenSpoilageByName(existingShift.branch_id, KITCHEN_STOCKTAKE_ITEMS, existingShift.stocktake_date, existingShift.shift),
+      getKitchenSoldByName(existingShift.branch_id, KITCHEN_STOCKTAKE_ITEMS, existingShift.stocktake_date, existingShift.shift),
+    ]);
+
+    const itemsForSync = (updatedItems || []).map((it: any) => ({
+      ...it,
+      inventory_item_id: it.inventory_item_id || null,
+      spoilage_qty: spoilageByName.get(it.item_name) ?? 0,
+      sold_qty: soldByName.get(it.item_name) ?? 0,
+      explanation: it.explanation || null,
+      action_taken: it.action_taken || null,
+    }));
+
+    await syncKitchenStocktakeToStockCounts(
+      existingShift.branch_id,
+      existingShift.stocktake_date,
+      existingShift.shift,
+      existingShift.status,
+      itemsForSync
+    );
+
+    res.status(200).json({ success: true, message: 'Kitchen stocktake items updated successfully' });
+  } catch (error) {
+    logger.error('updateKitchenStocktakeItems failed:', error);
     next(error);
   }
 };

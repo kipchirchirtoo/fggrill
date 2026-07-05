@@ -8,8 +8,6 @@ enum SuperAdminSection {
   // Command
   adminDashboard,
   lina,
-  linaDailyControls,
-  foodControlHealth,
   securityCenter,
   systemHealth,
   globalSearch,

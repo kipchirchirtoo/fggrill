@@ -115,7 +115,8 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         ref.invalidate(cashierPendingExchangesProvider);
         ref.invalidate(cashierAwaitingRefundExchangesProvider);
       }, onError: (Object err) {
-        debugPrint('❌ Cashier void badge Realtime error: $err — falling back to polling');
+        debugPrint(
+            '❌ Cashier void badge Realtime error: $err — falling back to polling');
         _startVoidBadgePolling();
       });
     } else {
@@ -2502,8 +2503,7 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
                     icon: Icons.check_circle_outline,
                     message: 'No bill void requests waiting on you.',
                   )
-                : Column(
-                    children: [for (final r in rows) _billRequestCard(r)]),
+                : Column(children: [for (final r in rows) _billRequestCard(r)]),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(
               message: apiErrorMessage(error),
@@ -2516,9 +2516,7 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
                 ? const SizedBox.shrink()
                 : _awaitingKitchenPanel(
                     'Awaiting kitchen (whole bill)',
-                    rows
-                        .map((r) => 'Bill ${r['order_number'] ?? ''}')
-                        .toList(),
+                    rows.map((r) => 'Bill ${r['order_number'] ?? ''}').toList(),
                   ),
             orElse: () => const SizedBox.shrink(),
           ),
@@ -2607,9 +2605,7 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 OutlinedButton.icon(
-                  onPressed: busy || id.isEmpty
-                      ? null
-                      : () => _declineBill(id),
+                  onPressed: busy || id.isEmpty ? null : () => _declineBill(id),
                   icon: const Icon(Icons.close,
                       size: 16, color: AppColors.kError),
                   label: const Text('Decline',
@@ -2617,9 +2613,8 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  onPressed: busy || id.isEmpty
-                      ? null
-                      : () => _acknowledgeBill(id),
+                  onPressed:
+                      busy || id.isEmpty ? null : () => _acknowledgeBill(id),
                   icon: busy
                       ? const SizedBox(
                           width: 16,
@@ -2671,9 +2666,7 @@ class _VoidRequestsTabState extends ConsumerState<_VoidRequestsTab> {
     if (confirmed != true) return;
     setState(() => _busyBillIds.add(id));
     try {
-      await ref
-          .read(outletPosRepositoryProvider)
-          .cashierDeclineVoidRequest(id);
+      await ref.read(outletPosRepositoryProvider).cashierDeclineVoidRequest(id);
       ref.invalidate(cashierPendingWholeBillVoidsProvider);
       _snack('Bill void request declined.');
     } catch (error) {
@@ -3186,8 +3179,9 @@ class _VoidManagementTabState extends ConsumerState<_VoidManagementTab> {
       _error = null;
     });
     try {
-      final rows =
-          await ref.read(outletPosRepositoryProvider).searchVoidableBills(query);
+      final rows = await ref
+          .read(outletPosRepositoryProvider)
+          .searchVoidableBills(query);
       if (!mounted) return;
       setState(() {
         _results = rows;
@@ -3283,16 +3277,16 @@ class _VoidManagementTabState extends ConsumerState<_VoidManagementTab> {
       if (!mounted) return;
       AppNotifier.showSnackBar(
         context,
-        SnackBar(content: Text('Could not void bill: ${apiErrorMessage(error)}')),
+        SnackBar(
+            content: Text('Could not void bill: ${apiErrorMessage(error)}')),
       );
     }
   }
 
   Future<void> _voidItemsFlow(Map<String, dynamic> bill) async {
     final rawItems = (bill['items'] as List?) ?? const [];
-    final items = rawItems
-        .map((item) => Map<String, dynamic>.from(item as Map))
-        .toList();
+    final items =
+        rawItems.map((item) => Map<String, dynamic>.from(item as Map)).toList();
 
     final selected = await showModalBottomSheet<List<Map<String, dynamic>>>(
       context: context,
@@ -3330,8 +3324,7 @@ class _VoidManagementTabState extends ConsumerState<_VoidManagementTab> {
       AppNotifier.showSnackBar(
         context,
         SnackBar(
-            content:
-                Text('Could not void item(s): ${apiErrorMessage(error)}')),
+            content: Text('Could not void item(s): ${apiErrorMessage(error)}')),
       );
     }
   }
@@ -3343,7 +3336,8 @@ class _VoidManagementTabState extends ConsumerState<_VoidManagementTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Void Management', style: Theme.of(context).textTheme.titleLarge),
+          Text('Void Management',
+              style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
           const Text(
             'Search by server name, bill shortcode, or order number to void a bill or specific items. Only your branch\'s unpaid/partial bills are searchable.',
@@ -3387,7 +3381,8 @@ class _VoidManagementTabState extends ConsumerState<_VoidManagementTab> {
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final bill = _results[index];
-                      final total = (bill['total_amount'] as num?)?.toDouble() ?? 0;
+                      final total =
+                          (bill['total_amount'] as num?)?.toDouble() ?? 0;
                       return ListTile(
                         title: Text(_billLabel(bill)),
                         subtitle: Text(
@@ -3439,7 +3434,8 @@ class _VoidReasonDialogState extends State<_VoidReasonDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (widget.subtitle != null) ...[
-            Text(widget.subtitle!, style: Theme.of(context).textTheme.bodyMedium),
+            Text(widget.subtitle!,
+                style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 12),
           ],
           DropdownButtonFormField<String>(
@@ -3447,8 +3443,8 @@ class _VoidReasonDialogState extends State<_VoidReasonDialog> {
             decoration: const InputDecoration(
                 labelText: 'Reason', border: OutlineInputBorder()),
             items: cashierVoidReasonCategories.entries
-                .map((entry) =>
-                    DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                .map((entry) => DropdownMenuItem(
+                    value: entry.key, child: Text(entry.value)))
                 .toList(),
             onChanged: (value) {
               if (value != null) setState(() => _category = value);
@@ -3468,7 +3464,8 @@ class _VoidReasonDialogState extends State<_VoidReasonDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         FilledButton(
           onPressed: (requiresNote && _noteController.text.trim().isEmpty)
               ? null
@@ -3527,8 +3524,8 @@ class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
             ),
             const SizedBox(height: 12),
             ConstrainedBox(
-              constraints:
-                  BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.55),
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.55),
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: widget.items.length,
@@ -3560,7 +3557,8 @@ class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
                       ),
                       if (isSelected)
                         Padding(
-                          padding: const EdgeInsets.only(left: 56, right: 16, bottom: 8),
+                          padding: const EdgeInsets.only(
+                              left: 56, right: 16, bottom: 8),
                           child: Row(
                             children: [
                               const Text('Qty to void:'),
@@ -3568,21 +3566,26 @@ class _VoidItemsPickerSheetState extends State<_VoidItemsPickerSheet> {
                               IconButton(
                                 icon: const Icon(Icons.remove_circle_outline),
                                 onPressed: qty > 1
-                                    ? () => setState(() => _qtyToVoid[index] = qty - 1)
+                                    ? () => setState(
+                                        () => _qtyToVoid[index] = qty - 1)
                                     : null,
                               ),
                               Text(
-                                qty.toStringAsFixed(qty.truncateToDouble() == qty ? 0 : 1),
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                                qty.toStringAsFixed(
+                                    qty.truncateToDouble() == qty ? 0 : 1),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.add_circle_outline),
                                 onPressed: qty < activeQty
-                                    ? () => setState(() => _qtyToVoid[index] = qty + 1)
+                                    ? () => setState(
+                                        () => _qtyToVoid[index] = qty + 1)
                                     : null,
                               ),
                               const Spacer(),
-                              Text('= KES ${(qty * unitPrice).toStringAsFixed(2)}'),
+                              Text(
+                                  '= KES ${(qty * unitPrice).toStringAsFixed(2)}'),
                             ],
                           ),
                         ),
@@ -4103,8 +4106,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                         final isClosed =
                             status == 'closed' || status == 'reconciled';
                         final statusColor = _statusColor(status);
-                        final shiftNum =
-                            _text(row, ['shift_number', 'id']);
+                        final shiftNum = _text(row, ['shift_number', 'id']);
                         final cashierName = _text(row, [
                           'cashier_name',
                           'opened_by_name',
@@ -4127,12 +4129,12 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
 
                         // Money values — shown only after shift is closed.
                         final showMoney = isClosed;
-                        final baseCash = _num(
-                            row['total_cash_sales'] ?? row['total_cash']);
+                        final baseCash =
+                            _num(row['total_cash_sales'] ?? row['total_cash']);
                         final baseMpesa = _num(
                             row['total_mpesa_sales'] ?? row['total_mpesa']);
-                        final baseCard = _num(
-                            row['total_card_sales'] ?? row['total_card']);
+                        final baseCard =
+                            _num(row['total_card_sales'] ?? row['total_card']);
                         final credits = _num(row['credit_bills_taken'] ??
                             row['total_credit'] ??
                             row['credit_bills_value']);
@@ -4177,8 +4179,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color:
-                                        statusColor.withValues(alpha: 0.12),
+                                    color: statusColor.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
@@ -4219,8 +4220,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                             trailing: showMoney
                                 ? Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.end,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Text(
                                         'Cash ${_money(closingFloat)}',
@@ -4251,27 +4251,25 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                   entries: [
                                     _LogbookEntry('Opening float',
                                         _money(_num(row['opening_float']))),
-                                    _LogbookEntry('Cash sales',
-                                        _money(baseCash),
+                                    _LogbookEntry(
+                                        'Cash sales', _money(baseCash),
                                         accent: AppColors.kSuccess),
-                                    _LogbookEntry('M-Pesa sales',
-                                        _money(baseMpesa),
+                                    _LogbookEntry(
+                                        'M-Pesa sales', _money(baseMpesa),
                                         accent: AppColors.kPrimary),
-                                    _LogbookEntry('Card sales',
-                                        _money(baseCard)),
-                                    _LogbookEntry('Credit bills',
-                                        _money(credits),
+                                    _LogbookEntry(
+                                        'Card sales', _money(baseCard)),
+                                    _LogbookEntry(
+                                        'Credit bills', _money(credits),
                                         accent: AppColors.kWarning),
-                                    _LogbookEntry('Expected cash',
-                                        _money(expectedCash)),
+                                    _LogbookEntry(
+                                        'Expected cash', _money(expectedCash)),
                                     _LogbookEntry('Actual cash counted',
                                         _money(closingFloat),
                                         accent: AppColors.kSuccess),
                                     _LogbookEntry(
                                       'Variance',
-                                      (variance >= 0
-                                          ? '+'
-                                          : '') +
+                                      (variance >= 0 ? '+' : '') +
                                           _money(variance),
                                       accent: variance >= 0
                                           ? AppColors.kSuccess
@@ -4283,8 +4281,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                               ] else ...[
                                 // Open shifts: do not reveal financial figures
                                 const Padding(
-                                  padding:
-                                      EdgeInsets.symmetric(vertical: 8),
+                                  padding: EdgeInsets.symmetric(vertical: 8),
                                   child: Row(
                                     children: [
                                       Icon(Icons.lock_outline,
@@ -4314,15 +4311,14 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleSmall
-                                        ?.copyWith(
-                                            fontWeight: FontWeight.w700),
+                                        ?.copyWith(fontWeight: FontWeight.w700),
                                   ),
                                 ),
                                 const SizedBox(height: 6),
                                 for (final c in _creditBillDetails(row))
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 3),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 3),
                                     child: Row(
                                       children: [
                                         const Icon(Icons.badge_outlined,
@@ -4339,8 +4335,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                           ),
                                         ),
                                         Text(
-                                          _money(c['amount'] ??
-                                              c['total_amount']),
+                                          _money(
+                                              c['amount'] ?? c['total_amount']),
                                           style: const TextStyle(
                                               fontWeight: FontWeight.w700),
                                         ),
@@ -4358,7 +4354,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                       onPressed: () => _closeShift(row),
                                       icon: const Icon(Icons.stop_circle,
                                           size: 16),
-                                      label: const Text('Close Shift & Submit Logbook'),
+                                      label: const Text(
+                                          'Close Shift & Submit Logbook'),
                                       style: FilledButton.styleFrom(
                                         backgroundColor: AppColors.kError,
                                       ),
@@ -4400,8 +4397,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                             ],
                           ),
                         );
-                       }),
-                     ],
+                      }),
+                    ],
                   ),
             loading: () => const LoadingSkeleton(type: SkeletonType.list),
             error: (error, _) => ErrorState(message: apiErrorMessage(error)),
@@ -4429,16 +4426,10 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
     final shiftId = _text(row, ['id']);
     if (!mounted) return;
 
-    // Fetch stock items and staff concurrently for the logbook dialog.
-    List<Map<String, dynamic>> stockItems = const [];
+    // Staff is needed for credit bill and paid bill assignment.
     List<Map<String, dynamic>> staffMembers = const [];
     try {
-      final results = await Future.wait([
-        repo.getPOSItems(),
-        repo.getBranchStaff(),
-      ]);
-      stockItems = results[0];
-      staffMembers = results[1];
+      staffMembers = await repo.getBranchStaff();
     } catch (_) {
       // Non-fatal — logbook will still open with empty lists.
     }
@@ -4449,7 +4440,6 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
     final payload = await _shiftCloseLogbookDialog(
       context,
       shift: row,
-      stockItems: stockItems,
       staffMembers: staffMembers,
     );
     if (payload == null) return;
@@ -4471,8 +4461,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
 
 /// A single key-value row used inside the logbook summary grid.
 class _LogbookEntry {
-  const _LogbookEntry(this.label, this.value,
-      {this.accent, this.bold = false});
+  const _LogbookEntry(this.label, this.value, {this.accent, this.bold = false});
   final String label;
   final String value;
   final Color? accent;
@@ -4488,7 +4477,9 @@ class _LogbookSummaryGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
             .withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
@@ -4520,9 +4511,8 @@ class _LogbookSummaryGrid extends StatelessWidget {
                           entry.value,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: entry.bold
-                                ? FontWeight.w800
-                                : FontWeight.w600,
+                            fontWeight:
+                                entry.bold ? FontWeight.w800 : FontWeight.w600,
                             color: entry.accent,
                           ),
                         ),
@@ -4550,8 +4540,7 @@ Future<Map<String, dynamic>?> _automatedShiftCloseDialog(BuildContext context) {
           final cashText = cashController.text.trim();
           final cashVal = num.tryParse(cashText) ?? -1;
           final bool isValid = cashVal > 0;
-          final bool showError =
-              cashText.isNotEmpty && cashVal <= 0;
+          final bool showError = cashText.isNotEmpty && cashVal <= 0;
 
           return AlertDialog(
             title: const Row(
@@ -4765,7 +4754,8 @@ class _ExpenseEntryPanelBodyState extends State<_ExpenseEntryPanelBody> {
                   width: 260,
                   child: TextField(
                     controller: widget.description,
-                    decoration: const InputDecoration(labelText: 'Expense description'),
+                    decoration:
+                        const InputDecoration(labelText: 'Expense description'),
                   ),
                 ),
                 SizedBox(
@@ -4937,50 +4927,16 @@ class _StaffSearchFieldState extends State<_StaffSearchField> {
   }
 }
 
-class _ShiftStockEntry {
-  _ShiftStockEntry(Map<String, dynamic> item)
-      : itemName = _text(item, ['name', 'product_name', 'item_name']),
-        unit = _text(item, ['unit']),
-        opening = _num(item['current_stock'] ?? item['opening_stock']),
-        additions = 0,
-        sold = 0,
-        physical = null,
-        reason = '';
-
-  final String itemName;
-  final String unit;
-  final num opening;
-  num additions;
-  num sold;
-  num? physical;
-  String reason;
-
-  num get systemClosing => opening + additions - sold;
-  num get variance => physical == null ? 0 : physical! - systemClosing;
-
-  Map<String, dynamic> toJson() => {
-        'item_name': itemName,
-        'unit': unit,
-        'opening_stock': opening,
-        'additions': additions,
-        'sold_quantity': sold,
-        'system_closing_stock': systemClosing,
-        'physical_count': physical,
-        'variance': variance,
-        'variance_reason': reason,
-      };
-}
-
 Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   BuildContext context, {
   required Map<String, dynamic> shift,
-  required List<Map<String, dynamic>> stockItems,
   required List<Map<String, dynamic>> staffMembers,
 }) {
-  final closingCash = TextEditingController();
   final cashAtHand = TextEditingController();
-  final cashDeposited = TextEditingController();
-  final bankRef = TextEditingController();
+  final mpesaLogged = TextEditingController();
+  final cardLogged = TextEditingController();
+  final mpesaSummaryRef = TextEditingController();
+  final cardBatchRef = TextEditingController();
 
   final creditStaffId = TextEditingController();
   final creditName = TextEditingController();
@@ -5004,10 +4960,11 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   final expenseEntries = _shiftExpenseEntries(shift);
 
   void disposeAll() {
-    closingCash.dispose();
     cashAtHand.dispose();
-    cashDeposited.dispose();
-    bankRef.dispose();
+    mpesaLogged.dispose();
+    cardLogged.dispose();
+    mpesaSummaryRef.dispose();
+    cardBatchRef.dispose();
     creditStaffId.dispose();
     creditName.dispose();
     creditAmount.dispose();
@@ -5050,10 +5007,13 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
         final cardExpenses = expenseByMethod('card');
         final expenseTotal =
             expenseEntries.fold<num>(0, (sum, entry) => sum + entry.amount);
-        final baseCashSales = (rawCashSales - cashExpenses).clamp(0, rawCashSales);
-        final baseMpesaSales = (rawMpesaSales - mpesaExpenses).clamp(0, rawMpesaSales);
-        final baseCardSales = (rawCardSales - cardExpenses).clamp(0, rawCardSales);
-        final actualCash = num.tryParse(closingCash.text.trim()) ?? 0;
+        final baseCashSales =
+            (rawCashSales - cashExpenses).clamp(0, rawCashSales);
+        final baseMpesaSales =
+            (rawMpesaSales - mpesaExpenses).clamp(0, rawMpesaSales);
+        final baseCardSales =
+            (rawCardSales - cardExpenses).clamp(0, rawCardSales);
+        final actualCash = num.tryParse(cashAtHand.text.trim()) ?? 0;
         // Cash-drawer reconciliation legitimately includes paid credits (the
         // cashier is physically holding that cash) and excludes cash spent on
         // expenses (it physically left the drawer) — but this must stay
@@ -5093,12 +5053,10 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _KeyValueGrid(values: {
-                          'Opening float': _money(openingFloat),
-                          'Cash sales': _money(baseCashSales),
-                          'M-Pesa sales': _money(baseMpesaSales),
-                          'Card sales': _money(baseCardSales),
+                          'Net sales': _money(
+                              baseCashSales + baseMpesaSales + baseCardSales),
                           'Credit bills': _money(creditBillsTotal),
-                          'Paid credits': _money(paidBillsTotal),
+                          'Paid bills': _money(paidBillsTotal),
                           'Expenses': _money(expenseTotal),
                           'Expected cash': _money(expectedCash),
                           'Variance': _money(variance),
@@ -5111,22 +5069,34 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           spacing: 12,
                           runSpacing: 12,
                           children: [
-                            _amountField(closingCash, 'Actual cash counted',
+                            _amountField(cashAtHand, 'Cash at hand',
                                 onChanged: (_) => setDialogState(() {})),
-                            _amountField(cashAtHand, 'Cash at hand'),
-                            _amountField(cashDeposited, 'Cash deposited'),
-                            SizedBox(
-                              width: 260,
-                              child: TextField(
-                                controller: bankRef,
-                                decoration: const InputDecoration(
-                                    labelText: 'Bank deposit reference'),
-                              ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 24),
-                        Text('Credit bills and paid credits',
+                        Text('Blind digital logbook',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Enter the physical M-Pesa and card totals from the till statements. Expected system totals stay hidden on purpose.',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.grey.shade700),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _amountField(mpesaLogged, 'M-Pesa logged'),
+                            _amountField(cardLogged, 'Card logged'),
+                            _inputField(mpesaSummaryRef, 'M-Pesa summary ref'),
+                            _inputField(cardBatchRef, 'Card batch ref'),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Text('Credit bills and paid bills',
                             style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 12),
                         Wrap(
@@ -5135,7 +5105,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           children: [
                             _creditEntryPanel(
                               context,
-                              title: 'Credit issued',
+                              title: 'Credit bill',
                               staffMembers: staffOptions,
                               staffId: creditStaffId,
                               name: creditName,
@@ -5159,7 +5129,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             ),
                             _creditEntryPanel(
                               context,
-                              title: 'Paid credits (cash)',
+                              title: 'Paid bill',
                               staffMembers: staffOptions,
                               staffId: paidStaffId,
                               name: paidName,
@@ -5190,7 +5160,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                         const SizedBox(height: 4),
                         const Text(
                           'Petty purchases, fuel, etc. paid out of this shift\'s collections — reduces the matching sales total.',
-                          style: TextStyle(color: AppColors.kTextSecondary, fontSize: 12),
+                          style: TextStyle(
+                              color: AppColors.kTextSecondary, fontSize: 12),
                         ),
                         const SizedBox(height: 12),
                         _expenseEntryPanel(
@@ -5201,7 +5172,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           onAdd: (method) => setDialogState(() {
                             final amount =
                                 num.tryParse(expenseAmount.text.trim()) ?? 0;
-                            if (amount <= 0 || expenseDescription.text.trim().isEmpty) {
+                            if (amount <= 0 ||
+                                expenseDescription.text.trim().isEmpty) {
                               return;
                             }
                             expenseEntries.add(_ShiftExpenseEntry(
@@ -5234,11 +5206,16 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                       const SizedBox(width: 12),
                       ElevatedButton.icon(
                         onPressed: () {
-                          if (closingCash.text.trim().isEmpty) return;
                           if (cashAtHand.text.trim().isEmpty) return;
                           Navigator.pop(context, {
                             'closing_float':
-                                num.tryParse(closingCash.text.trim()) ?? 0,
+                                num.tryParse(cashAtHand.text.trim()) ?? 0,
+                            'actual_cash_counted':
+                                num.tryParse(cashAtHand.text.trim()) ?? 0,
+                            'actual_mpesa_logged':
+                                num.tryParse(mpesaLogged.text.trim()) ?? 0,
+                            'actual_card_logged':
+                                num.tryParse(cardLogged.text.trim()) ?? 0,
                             'notes': '',
                             'credit_bills_taken': creditBillsTotal,
                             'credit_bills_count': creditEntries.length,
@@ -5257,12 +5234,11 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             'unpaid_bills_value': creditBillsTotal,
                             'unpaid_bills_count': creditEntries.length,
                             'cash_at_hand':
-                                num.tryParse(cashAtHand.text.trim()) ??
-                                    num.tryParse(closingCash.text.trim()) ??
-                                    0,
-                            'cash_deposited':
-                                num.tryParse(cashDeposited.text.trim()) ?? 0,
-                            'bank_deposit_ref': bankRef.text.trim(),
+                                num.tryParse(cashAtHand.text.trim()) ?? 0,
+                            if (mpesaSummaryRef.text.trim().isNotEmpty)
+                              'mpesa_summary_ref': mpesaSummaryRef.text.trim(),
+                            if (cardBatchRef.text.trim().isNotEmpty)
+                              'card_batch_ref': cardBatchRef.text.trim(),
                           });
                         },
                         icon: const Icon(Icons.archive, size: 16),
@@ -5293,6 +5269,21 @@ Widget _amountField(
       enabled: enabled,
       onChanged: onChanged,
       keyboardType: TextInputType.number,
+      decoration: InputDecoration(labelText: label),
+    ),
+  );
+}
+
+Widget _inputField(
+  TextEditingController controller,
+  String label, {
+  bool enabled = true,
+}) {
+  return SizedBox(
+    width: 220,
+    child: TextField(
+      controller: controller,
+      enabled: enabled,
       decoration: InputDecoration(labelText: label),
     ),
   );
@@ -5541,125 +5532,6 @@ Widget _creditEntryPanel(
           ],
         ),
       ),
-    ),
-  );
-}
-
-Widget _stockTakeTable(
-  List<_ShiftStockEntry> rows,
-  void Function(void Function()) setDialogState,
-) {
-  const tableWidth = 1120.0;
-  return Card(
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: tableWidth,
-          child: Column(
-            children: [
-              const _StockHeaderRow(),
-              const Divider(height: 1),
-              for (final row in rows) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      SizedBox(width: 200, child: Text(row.itemName)),
-                      SizedBox(
-                          width: 115,
-                          child: Text('${row.opening} ${row.unit}')),
-                      SizedBox(
-                        width: 115,
-                        child: _smallNumberCell(
-                          initial: row.additions,
-                          onChanged: (value) =>
-                              setDialogState(() => row.additions = value),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 100,
-                        child: _smallNumberCell(
-                          initial: row.sold,
-                          onChanged: (value) =>
-                              setDialogState(() => row.sold = value),
-                        ),
-                      ),
-                      SizedBox(
-                          width: 110,
-                          child: Text(row.systemClosing.toStringAsFixed(2))),
-                      SizedBox(
-                        width: 115,
-                        child: _smallNumberCell(
-                          initial: row.physical,
-                          onChanged: (value) =>
-                              setDialogState(() => row.physical = value),
-                        ),
-                      ),
-                      SizedBox(
-                          width: 100,
-                          child: Text(row.variance.toStringAsFixed(2))),
-                      SizedBox(
-                        width: 260,
-                        child: TextField(
-                          onChanged: (value) => row.reason = value,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            hintText: 'Required if variance',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-              ],
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _StockHeaderRow extends StatelessWidget {
-  const _StockHeaderRow();
-
-  @override
-  Widget build(BuildContext context) {
-    const style = TextStyle(fontWeight: FontWeight.bold);
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          SizedBox(width: 200, child: Text('Item', style: style)),
-          SizedBox(width: 115, child: Text('Opening', style: style)),
-          SizedBox(width: 115, child: Text('Additions', style: style)),
-          SizedBox(width: 100, child: Text('Sold', style: style)),
-          SizedBox(width: 110, child: Text('System', style: style)),
-          SizedBox(width: 115, child: Text('Physical', style: style)),
-          SizedBox(width: 100, child: Text('Variance', style: style)),
-          SizedBox(width: 260, child: Text('Reason', style: style)),
-        ],
-      ),
-    );
-  }
-}
-
-Widget _smallNumberCell({
-  required num? initial,
-  required ValueChanged<num> onChanged,
-}) {
-  final controller = TextEditingController(
-      text: initial == null ? '' : initial.toStringAsFixed(0));
-  return SizedBox(
-    width: 90,
-    child: TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      onChanged: (value) => onChanged(num.tryParse(value.trim()) ?? 0),
-      decoration: const InputDecoration(isDense: true),
     ),
   );
 }
@@ -6238,33 +6110,50 @@ class _BillList extends StatelessWidget {
                   Builder(builder: (context) {
                     final rawQty = _num(item['quantity'] ?? item['qty']);
                     final voidedQty = _num(item['voided_qty'] ?? 0);
-                    final activeQty = _num(item['active_qty'] ?? (rawQty - voidedQty));
+                    final activeQty =
+                        _num(item['active_qty'] ?? (rawQty - voidedQty));
                     final unitPrice = _num(item['unit_price'] ?? item['price']);
                     final isFullyVoided = activeQty <= 0;
                     final displayQty = isFullyVoided ? rawQty : activeQty;
-                    final activeTotal = _num(item['active_total'] ?? (activeQty * unitPrice));
-                    final originalTotal = _num(item['total_price'] ?? item['line_total'] ?? item['total']);
+                    final activeTotal =
+                        _num(item['active_total'] ?? (activeQty * unitPrice));
+                    final originalTotal = _num(item['total_price'] ??
+                        item['line_total'] ??
+                        item['total']);
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        _text(item, ['item_name', 'name', 'description', 'drink_name']) +
+                        _text(item, [
+                              'item_name',
+                              'name',
+                              'description',
+                              'drink_name'
+                            ]) +
                             (voidedQty > 0 && !isFullyVoided
                                 ? ' (${voidedQty.toStringAsFixed(0)} voided)'
                                 : ''),
                         style: isFullyVoided
-                            ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.red)
+                            ? const TextStyle(
+                                decoration: TextDecoration.lineThrough,
+                                color: Colors.red)
                             : null,
                       ),
                       trailing: Text(
                         '${displayQty.toStringAsFixed(0)} x ${_money(unitPrice)}',
                         style: isFullyVoided
-                            ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.red)
+                            ? const TextStyle(
+                                decoration: TextDecoration.lineThrough,
+                                color: Colors.red)
                             : null,
                       ),
                       subtitle: Text(
-                        isFullyVoided ? 'VOIDED • was ${_money(originalTotal)}' : _money(activeTotal),
-                        style: isFullyVoided ? const TextStyle(color: Colors.red) : null,
+                        isFullyVoided
+                            ? 'VOIDED • was ${_money(originalTotal)}'
+                            : _money(activeTotal),
+                        style: isFullyVoided
+                            ? const TextStyle(color: Colors.red)
+                            : null,
                       ),
                     );
                   }),
@@ -6349,29 +6238,37 @@ class _BillSummary extends StatelessWidget {
               final item = items[index];
               final rawQty = _num(item['quantity'] ?? item['qty']);
               final voidedQty = _num(item['voided_qty'] ?? 0);
-              final activeQty = _num(item['active_qty'] ?? (rawQty - voidedQty));
+              final activeQty =
+                  _num(item['active_qty'] ?? (rawQty - voidedQty));
               final unitPrice = _num(item['unit_price'] ?? item['price']);
               final isFullyVoided = activeQty <= 0;
               final displayQty = isFullyVoided ? rawQty : activeQty;
-              final activeTotal = _num(item['active_total'] ?? (activeQty * unitPrice));
+              final activeTotal =
+                  _num(item['active_total'] ?? (activeQty * unitPrice));
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   _text(item, ['name', 'description', 'item_name']) +
-                      (voidedQty > 0 && !isFullyVoided ? ' (${voidedQty.toStringAsFixed(0)} voided)' : ''),
+                      (voidedQty > 0 && !isFullyVoided
+                          ? ' (${voidedQty.toStringAsFixed(0)} voided)'
+                          : ''),
                   style: isFullyVoided
-                      ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.red)
+                      ? const TextStyle(
+                          decoration: TextDecoration.lineThrough,
+                          color: Colors.red)
                       : null,
                 ),
                 subtitle: Text(
                   'Qty ${displayQty.toStringAsFixed(0)}',
-                  style: isFullyVoided ? const TextStyle(color: Colors.red) : null,
+                  style:
+                      isFullyVoided ? const TextStyle(color: Colors.red) : null,
                 ),
                 trailing: Text(
                   isFullyVoided ? 'VOIDED' : _money(activeTotal),
                   style: isFullyVoided
-                      ? const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)
+                      ? const TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.w600)
                       : null,
                 ),
               );
@@ -7326,8 +7223,6 @@ Map<String, num> _shiftPaidCredits(Map<String, dynamic> row) {
   }
   return result;
 }
-
-
 
 // Choose a short, human/scannable CREDIT BILL CODE for the receipt. Avoid raw
 // UUIDs (staff_credit_bill_id): prefer a real credit number, else the order's

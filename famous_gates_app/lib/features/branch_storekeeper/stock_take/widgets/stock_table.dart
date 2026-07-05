@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:data_table_2/data_table_2.dart';
 
@@ -20,15 +21,23 @@ const _kRowH        = 36.0;  // row height — enough for two-line product cell
 class StockTable extends StatefulWidget {
   final List<StockTakeItem> items;
   final bool isReadOnly;
+  final bool isStorekeeper;
+  final List<Map<String, dynamic>> staffList;
   final ValueChanged2<String, int?> onPhysicalCountChanged;
   final ValueChanged2<String, String?> onReasonChanged;
+  final void Function(String itemId, String explanation)? onExplanationChanged;
+  final void Function(String itemId, String action)? onActionTakenChanged;
 
   const StockTable({
     super.key,
     required this.items,
     required this.isReadOnly,
+    this.isStorekeeper = false,
+    this.staffList = const [],
     required this.onPhysicalCountChanged,
     required this.onReasonChanged,
+    this.onExplanationChanged,
+    this.onActionTakenChanged,
   });
 
   @override
@@ -56,10 +65,22 @@ class _StockTableState extends State<StockTable> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    const reasonsList = [
-      'Damaged', 'Expired', 'Theft', 'Supplier Error',
-      'Counting Error', 'Transfer', 'Adjustment', 'Other',
-    ];
+    final actionsList = <String>[];
+    for (final staff in widget.staffList) {
+      final name = getStaffName(staff);
+      if (name.isNotEmpty) {
+        actionsList.add('Credited to $name');
+      }
+    }
+    actionsList.addAll([
+      'Approved Spoilage',
+      'Stock Adjustment',
+      'Write Off',
+      'Supplier Refund',
+      'Pending Investigation',
+      'No Action Needed',
+      'Other',
+    ]);
 
     if (widget.items.isEmpty) {
       return Center(
@@ -118,7 +139,7 @@ class _StockTableState extends State<StockTable> {
                 ),
               ),
             ])),
-            for (int _ = 0; _ < 7; _++) const DataCell(SizedBox.shrink()),
+            for (int _ = 0; _ < (widget.isStorekeeper ? 1 : 8); _++) const DataCell(SizedBox.shrink()),
           ],
         ));
       }
@@ -144,91 +165,136 @@ class _StockTableState extends State<StockTable> {
           }
           return bgColor;
         }),
-        cells: [
-          // # ─────────────────────────────────────────────────────────────
-          DataCell(Text(
-            '$idx',
-            style: TextStyle(
-              fontSize: 9.5,
-              color: Colors.grey.shade500,
-              fontWeight: FontWeight.w600,
-            ),
-          )),
-
-          // Product ─────────────────────────────────────────────────────
-          DataCell(Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  item.productName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: _kFontSz, fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  item.sku,
+        cells: widget.isStorekeeper
+            ? [
+                // #
+                DataCell(Text(
+                  '$idx',
                   style: TextStyle(
-                      fontSize: 8.5,
-                      color: Colors.grey.shade500,
-                      letterSpacing: 0.2),
-                ),
+                    fontSize: 9.5,
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.w600,
+                  ),
+                )),
+                // Product
+                DataCell(Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.productName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: _kFontSz, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        item.sku,
+                        style: TextStyle(
+                            fontSize: 8.5,
+                            color: Colors.grey.shade500,
+                            letterSpacing: 0.2),
+                      ),
+                    ],
+                  ),
+                )),
+                // Count
+                DataCell(EditableCell(
+                  value: item.physicalCount,
+                  readOnly: widget.isReadOnly,
+                  focusNode: _focusNodes[fi],
+                  onNext: fi < _focusNodes.length - 1
+                      ? () => _focusNodes[fi + 1].requestFocus()
+                      : null,
+                  onChanged: (val) => widget.onPhysicalCountChanged(item.id, val),
+                )),
+              ]
+            : [
+                // #
+                DataCell(Text(
+                  '$idx',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.w600,
+                  ),
+                )),
+                // Product
+                DataCell(Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.productName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: _kFontSz, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        item.sku,
+                        style: TextStyle(
+                            fontSize: 8.5,
+                            color: Colors.grey.shade500,
+                            letterSpacing: 0.2),
+                      ),
+                    ],
+                  ),
+                )),
+                // Opening
+                DataCell(_numCell('${item.openingStock}', isDark)),
+                // Sales
+                DataCell(_numCell(
+                  item.sales > 0 ? '-${item.sales}' : '${item.sales}',
+                  isDark,
+                  color: item.sales > 0 ? Colors.red.shade700 : null,
+                )),
+                // Adds
+                DataCell(_numCell(
+                  item.sdds != 0 ? '+${-item.sdds}' : '0',
+                  isDark,
+                  color: item.sdds < 0 ? Colors.green.shade700 : null,
+                )),
+                // Closing
+                DataCell(_numCell(
+                  '${item.closingStock}',
+                  isDark,
+                  bold: true,
+                )),
+                // Count (Read-only count for Accountant)
+                DataCell(_numCell('${item.physicalCount ?? ''}', isDark, bold: true)),
+                // Var
+                DataCell(VarianceBadge(variance: variance, hasCount: hasCount)),
+                // Explanation
+                DataCell(EditableTextCell(
+                  value: item.explanation ?? '',
+                  readOnly: widget.isReadOnly,
+                  onChanged: (val) {
+                    if (widget.onExplanationChanged != null) {
+                      widget.onExplanationChanged!(item.id, val);
+                    }
+                  },
+                )),
+                // Action Taken
+                DataCell(_ReasonDropdown(
+                  value: hasVar && actionsList.contains(item.actionTaken)
+                      ? item.actionTaken
+                      : null,
+                  items: actionsList,
+                  enabled: !widget.isReadOnly && hasVar,
+                  onChanged: (v) {
+                    if (widget.onActionTakenChanged != null && v != null) {
+                      widget.onActionTakenChanged!(item.id, v);
+                    }
+                  },
+                )),
               ],
-            ),
-          )),
-
-          // Opening ─────────────────────────────────────────────────────
-          DataCell(_numCell('${item.openingStock}', isDark)),
-
-          // Sales ───────────────────────────────────────────────────────
-          DataCell(_numCell(
-            item.sales > 0 ? '-${item.sales}' : '${item.sales}',
-            isDark,
-            color: item.sales > 0 ? Colors.red.shade700 : null,
-          )),
-
-          // Adds ────────────────────────────────────────────────────────
-          DataCell(_numCell(
-            item.sdds != 0 ? '+${-item.sdds}' : '0',
-            isDark,
-            color: item.sdds < 0 ? Colors.green.shade700 : null,
-          )),
-
-          // Closing (auto) ──────────────────────────────────────────────
-          DataCell(_numCell(
-            '${item.closingStock}',
-            isDark,
-            bold: true,
-          )),
-
-          // Physical Count ──────────────────────────────────────────────
-          DataCell(EditableCell(
-            value: item.physicalCount,
-            readOnly: widget.isReadOnly,
-            focusNode: _focusNodes[fi],
-            onNext: fi < _focusNodes.length - 1
-                ? () => _focusNodes[fi + 1].requestFocus()
-                : null,
-            onChanged: (val) => widget.onPhysicalCountChanged(item.id, val),
-          )),
-
-          // Variance ────────────────────────────────────────────────────
-          DataCell(VarianceBadge(variance: variance, hasCount: hasCount)),
-
-          // Reason ──────────────────────────────────────────────────────
-          DataCell(_ReasonDropdown(
-            value: hasVar && reasonsList.contains(item.reason)
-                ? item.reason
-                : null,
-            items: reasonsList,
-            enabled: !widget.isReadOnly && hasVar,
-            onChanged: (v) => widget.onReasonChanged(item.id, v),
-          )),
-        ],
       ));
       fi++;
     }
@@ -245,7 +311,7 @@ class _StockTableState extends State<StockTable> {
         child: DataTable2(
           columnSpacing: 8,
           horizontalMargin: 8,
-          minWidth: 900,
+          minWidth: widget.isStorekeeper ? 400 : 980,
           dataRowHeight: _kRowH,
           headingRowHeight: 32,
           fixedTopRows: 1,
@@ -264,17 +330,24 @@ class _StockTableState extends State<StockTable> {
             top: const BorderSide(color: _kGridLine, width: 0.5),
             bottom: const BorderSide(color: _kGridLine, width: 0.5),
           ),
-          columns: const [
-            DataColumn2(label: Text('#'),            size: ColumnSize.S, fixedWidth: 32, numeric: true),
-            DataColumn2(label: Text('Product'),      size: ColumnSize.L),
-            DataColumn2(label: Text('Opening'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
-            DataColumn2(label: Text('Sales'),        size: ColumnSize.S, fixedWidth: 60, numeric: true),
-            DataColumn2(label: Text('Adds'),         size: ColumnSize.S, fixedWidth: 60, numeric: true),
-            DataColumn2(label: Text('Closing'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
-            DataColumn2(label: Text('Count'),        size: ColumnSize.M, fixedWidth: 110),
-            DataColumn2(label: Text('Var'),          size: ColumnSize.S, fixedWidth: 60, numeric: true),
-            DataColumn2(label: Text('Reason'),       size: ColumnSize.L),
-          ],
+          columns: widget.isStorekeeper
+              ? const [
+                  DataColumn2(label: Text('#'),            size: ColumnSize.S, fixedWidth: 32, numeric: true),
+                  DataColumn2(label: Text('Product'),      size: ColumnSize.L),
+                  DataColumn2(label: Text('Count'),        size: ColumnSize.M, fixedWidth: 110),
+                ]
+              : const [
+                  DataColumn2(label: Text('#'),            size: ColumnSize.S, fixedWidth: 32, numeric: true),
+                  DataColumn2(label: Text('Product'),      size: ColumnSize.L),
+                  DataColumn2(label: Text('Opening'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
+                  DataColumn2(label: Text('Sales'),        size: ColumnSize.S, fixedWidth: 60, numeric: true),
+                  DataColumn2(label: Text('Adds'),         size: ColumnSize.S, fixedWidth: 60, numeric: true),
+                  DataColumn2(label: Text('Closing'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
+                  DataColumn2(label: Text('Count'),        size: ColumnSize.M, fixedWidth: 70, numeric: true),
+                  DataColumn2(label: Text('Var'),          size: ColumnSize.S, fixedWidth: 60, numeric: true),
+                  DataColumn2(label: Text('Explanation'),  size: ColumnSize.L),
+                  DataColumn2(label: Text('Action Taken'), size: ColumnSize.L),
+                ],
           rows: rows,
         ),
       ),
@@ -340,6 +413,95 @@ class _ReasonDropdown extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Compact inline text editor cell for explanations ───────────────────────
+class EditableTextCell extends StatefulWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  final bool readOnly;
+  final String hintText;
+
+  const EditableTextCell({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.readOnly,
+    this.hintText = 'Explain…',
+  });
+
+  @override
+  State<EditableTextCell> createState() => _EditableTextCellState();
+}
+
+class _EditableTextCellState extends State<EditableTextCell> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant EditableTextCell old) {
+    super.didUpdateWidget(old);
+    if (old.value != widget.value) {
+      if (_ctrl.text != widget.value) {
+        _ctrl.text = widget.value;
+        _ctrl.selection = TextSelection.collapsed(offset: widget.value.length);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.readOnly) {
+      return Text(
+        widget.value.isNotEmpty ? widget.value : '—',
+        style: const TextStyle(fontSize: 10),
+      );
+    }
+
+    return SizedBox(
+      height: 24,
+      child: TextField(
+        controller: _ctrl,
+        style: const TextStyle(fontSize: 10),
+        onChanged: widget.onChanged,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: widget.hintText,
+          hintStyle: TextStyle(fontSize: 9, color: Colors.grey.shade400),
+          contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+          filled: true,
+          fillColor: Colors.grey.shade50,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(2),
+            borderSide: BorderSide(color: Colors.grey.shade300, width: 0.8),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(2),
+            borderSide: const BorderSide(color: Color(0xFF217346), width: 1.2),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String getStaffName(Map<String, dynamic> row) {
+  final explicit = '${row['staff_name'] ?? row['full_name'] ?? row['name'] ?? ''}'.trim();
+  if (explicit.isNotEmpty && explicit.toLowerCase() != 'null') return explicit;
+  final first = '${row['first_name'] ?? row['firstName'] ?? ''}'.trim();
+  final last = '${row['last_name'] ?? row['lastName'] ?? ''}'.trim();
+  return '$first $last'.trim();
 }
 
 typedef ValueChanged2<T1, T2> = void Function(T1 value1, T2 value2);

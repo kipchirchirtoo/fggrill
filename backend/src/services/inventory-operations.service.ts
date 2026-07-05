@@ -1,6 +1,7 @@
 import db from '../db';
 import { AppError } from '../middleware/errorHandler';
 import { supabase } from '../config/supabase';
+import { logger } from '../utils/logger';
 import * as BranchInventoryService from './branch-inventory.service';
 import * as InventoryFoundationService from './inventory-foundation.service';
 
@@ -544,6 +545,23 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
   const productionArea = textValue(input.production_area ?? input.productionArea, 'branch_store');
   const batchReference = textValue(input.batch_reference ?? input.batchReference, productionNumber);
 
+  // Resolve active cashier shift if not explicitly provided
+  let shiftId = input.shift_id ?? input.shiftId ?? null;
+  if (!shiftId && destinationOutletId) {
+    const activeShiftResult = await db.query(
+      `
+        SELECT id FROM pos_outlet_shifts
+        WHERE outlet_id = $1 AND status = 'open'
+        ORDER BY opened_at DESC
+        LIMIT 1
+      `,
+      [destinationOutletId]
+    );
+    if (activeShiftResult.rows[0]) {
+      shiftId = activeShiftResult.rows[0].id;
+    }
+  }
+
   const created = await db.query(
     `
       INSERT INTO inventory_production_runs (
@@ -559,7 +577,7 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
       input.production_date ?? input.productionDate ?? null,
       productionArea,
       destinationOutletId,
-      input.shift_id ?? input.shiftId ?? null,
+      shiftId,
       batchReference,
       actorId,
       input.remarks ?? input.notes ?? null
@@ -579,25 +597,30 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
     const item = await getSimpleItem(sku);
     await seedFoundationBranchBalance(branchId, item, actorId);
 
-    const movement = await InventoryFoundationService.recordMovement({
-      movementType: 'production_consumption',
-      item: {
-        sku,
-        itemName: item.item_name || row.item_name || sku,
-        category: item.category,
-        unit: row.unit || item.unit_of_measure || 'units',
-        defaultUnitCost: numberValue(row.unit_cost ?? item.cost_price)
-      },
-      sourceLocation: branchStoreLocation(branchId),
-      destinationLocation: productionLocation(branchId, productionArea),
-      quantity,
-      unitCost: numberValue(row.unit_cost ?? item.cost_price),
-      reason: `Production input consumed for ${productionNumber}`,
-      documentType: 'production_run',
-      documentReference: run.id,
-      documentNumber: productionNumber,
-      metadata: { production_run_id: run.id, batch_reference: batchReference }
-    }, actorId);
+    let movement: any = { movement: { id: null } };
+    try {
+      movement = await InventoryFoundationService.recordMovement({
+        movementType: 'production_consumption',
+        item: {
+          sku,
+          itemName: item.item_name || row.item_name || sku,
+          category: item.category,
+          unit: row.unit || item.unit_of_measure || 'units',
+          defaultUnitCost: numberValue(row.unit_cost ?? item.cost_price)
+        },
+        sourceLocation: branchStoreLocation(branchId),
+        destinationLocation: productionLocation(branchId, productionArea),
+        quantity,
+        unitCost: numberValue(row.unit_cost ?? item.cost_price),
+        reason: `Production input consumed for ${productionNumber}`,
+        documentType: 'production_run',
+        documentReference: run.id,
+        documentNumber: productionNumber,
+        metadata: { production_run_id: run.id, batch_reference: batchReference }
+      }, actorId);
+    } catch (foundationErr: any) {
+      logger.warn(`Foundation movement record failed for production input ${sku} (non-critical):`, foundationErr?.message);
+    }
 
     await BranchInventoryService.updateBranchStock(
       branchId,
@@ -661,35 +684,40 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
     const expectedQuantity = numberValue(row.expected_quantity ?? row.expectedQuantity);
     const yieldVariance = expectedQuantity > 0 ? quantity - expectedQuantity : 0;
 
-    const movement = await InventoryFoundationService.recordMovement({
-      movementType: 'production_output',
-      item: {
-        sku,
-        itemName: row.item_name || row.output_name || outletItem?.name || sku,
-        category: row.category || outletItem?.category,
-        unit: row.unit || outletItem?.unit || 'units',
-        defaultUnitCost: unitCost,
-        sourceTable: outletItem ? 'pos_outlet_items' : 'production_outputs',
-        sourceItemKey: outletItem?.id || sku
-      },
-      sourceLocation: productionLocation(branchId, productionArea),
-      destinationLocation: outletLocation(outlet),
-      quantity,
-      unitCost,
-      reason: `Production output posted for ${productionNumber}`,
-      documentType: 'production_run',
-      documentReference: run.id,
-      documentNumber: productionNumber,
-      metadata: {
-        production_run_id: run.id,
-        batch_reference: batchReference,
-        outlet_item_id: outletItem?.id || null,
-        expected_quantity: expectedQuantity || null,
-        actual_quantity: quantity,
-        yield_variance: yieldVariance,
-        yield_variance_reason: row.yield_variance_reason ?? row.yieldVarianceReason ?? null
-      }
-    }, actorId);
+    let movement: any = { movement: { id: null } };
+    try {
+      movement = await InventoryFoundationService.recordMovement({
+        movementType: 'production_output',
+        item: {
+          sku,
+          itemName: row.item_name || row.output_name || outletItem?.name || sku,
+          category: row.category || outletItem?.category,
+          unit: row.unit || outletItem?.unit || 'units',
+          defaultUnitCost: unitCost,
+          sourceTable: outletItem ? 'pos_outlet_items' : 'production_outputs',
+          sourceItemKey: outletItem?.id || sku
+        },
+        sourceLocation: productionLocation(branchId, productionArea),
+        destinationLocation: outletLocation(outlet),
+        quantity,
+        unitCost,
+        reason: `Production output posted for ${productionNumber}`,
+        documentType: 'production_run',
+        documentReference: run.id,
+        documentNumber: productionNumber,
+        metadata: {
+          production_run_id: run.id,
+          batch_reference: batchReference,
+          outlet_item_id: outletItem?.id || null,
+          expected_quantity: expectedQuantity || null,
+          actual_quantity: quantity,
+          yield_variance: yieldVariance,
+          yield_variance_reason: row.yield_variance_reason ?? row.yieldVarianceReason ?? null
+        }
+      }, actorId);
+    } catch (foundationErr: any) {
+      logger.warn(`Foundation movement record failed for production output ${sku} (non-critical):`, foundationErr?.message);
+    }
 
     if (outletItem) {
       await db.query(
@@ -705,8 +733,8 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
       // Pool-aware + bar-ledger-aware credit (shared with Kitchen Shift
       // production posting) instead of a raw current_stock increment, so
       // pooled portions and bar-sourced items credit correctly here too.
-      await BranchInventoryService.creditOutletItemStock(outletItem.id, quantity);
-      if (input.shift_id || input.shiftId) {
+      await BranchInventoryService.creditOutletItemStock(outletItem.id, quantity, shiftId);
+      if (shiftId) {
         const countColumns = await tableColumns('pos_shift_stock_counts');
         const setClauses = [
           'additions = COALESCE(additions, 0) + $3',
@@ -729,7 +757,7 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
             SET ${setClauses.join(', ')}
             WHERE shift_id = $1 AND outlet_item_id = $2
           `,
-          [input.shift_id ?? input.shiftId, outletItem.id, quantity]
+          [shiftId, outletItem.id, quantity]
         );
       }
     }

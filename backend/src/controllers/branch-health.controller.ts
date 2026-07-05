@@ -111,29 +111,6 @@ export const getFleetHealthCheck = async (req: Request, res: Response): Promise<
   }
 };
 
-/**
- * Monitoring view for the automated food-control engine: last processing run
- * per branch, failed days needing manual attention, unresolved anomaly flags.
- */
-export const getFoodControlRunsMonitor = async (req: Request, res: Response): Promise<void> => {
-  const user: any = (req as any).user;
-  const branchScopedRoles = ['branch_manager', 'branch_accountant', 'branch_operations_manager'];
-  if (!user || branchScopedRoles.includes(user.role)) {
-    res.status(403).json({ success: false, message: 'Requires a central oversight role' });
-    return;
-  }
-  try {
-    const { getFoodControlRunsOverview } = await import('../services/food-control-automation.service');
-    const overview = await getFoodControlRunsOverview();
-    res.status(200).json({ success: true, data: overview });
-  } catch (err) {
-    logger.error('branch-health: food-control runs monitor failed', {
-      error: (err as Error).message,
-    });
-    res.status(500).json({ success: false, message: 'Monitor query failed. Please try again.' });
-  }
-};
-
 function handleHealthCheckError(err: unknown, branchId: number, res: Response): void {
   if (err instanceof BranchNotFoundError) {
     res.status(404).json({ success: false, message: err.message });

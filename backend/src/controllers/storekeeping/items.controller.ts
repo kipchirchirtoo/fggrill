@@ -512,7 +512,8 @@ export const updateItem = async (
     if (cost_price !== undefined) updatePayload.default_unit_cost = cost_price;
     if (retail_price !== undefined) updatePayload.default_selling_price = retail_price;
     if (quantity !== undefined) updatePayload.quantity = quantity;
-    // Remove simple_items-only fields that don't exist in inventory_items
+    // Remove fields that must not be updated: lookup key and view-only aliases
+    delete updatePayload.sku;
     delete updatePayload.last_updated;
     delete updatePayload.is_auto_sku;
     delete updatePayload.category_code;
@@ -528,12 +529,12 @@ export const updateItem = async (
 
     if (error) throw error;
 
-    // Log history if quantity changed
+    // Log history if quantity changed (non-fatal — stock_history is audit-only)
     if (quantity !== undefined && quantity !== currentItem.quantity) {
       const diff = quantity - currentItem.quantity;
       const type = diff > 0 ? 'IN' : 'OUT';
 
-      const { error } = await supabase.from('stock_history').insert({
+      const { error: histErr } = await supabase.from('stock_history').insert({
         item_sku: req.params.id,
         change_type: type,
         quantity_change: Math.abs(diff),
@@ -542,19 +543,11 @@ export const updateItem = async (
         reason: reason || (type === 'IN' ? 'PURCHASE' : 'USAGE'),
         reference: reference,
         notes: notes,
-        user_id: req.user.id
+        user_id: req.user?.id
       });
 
-
-      if (error) {
-
-
-        console.error('Database error:', error);
-
-
-        throw error;
-
-
+      if (histErr) {
+        logger.warn(`updateItem: stock_history insert failed (non-fatal): ${histErr.message}`);
       }
     }
 

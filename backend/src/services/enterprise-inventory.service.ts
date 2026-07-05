@@ -1671,6 +1671,43 @@ export async function reviewStockTakeByAccountant(input: {
     : action.includes('clarification')
       ? 'under_review'
       : 'accountant_rejected';
+
+  if (input.approved) {
+    // 1. Fetch items from stock_take_lines
+    const { data: takeLines } = await supabase
+      .from('stock_take_lines')
+      .select('item_sku, physical_quantity, system_closing_stock, system_quantity, explanation, action_taken')
+      .eq('stock_count_id', input.stockCountId);
+
+    // 2. Fetch items from stock_count_items
+    const { data: countItems } = await supabase
+      .from('stock_count_items')
+      .select('item_sku, physical_quantity, system_closing_stock, system_quantity, explanation, action_taken')
+      .eq('stock_count_id', input.stockCountId);
+
+    const itemsToCheck = (takeLines && takeLines.length > 0) ? takeLines : (countItems || []);
+
+    interface StockTakeCheckItem {
+      item_sku?: string;
+      physical_quantity?: number;
+      system_closing_stock?: number;
+      system_quantity?: number;
+      explanation?: string;
+      action_taken?: string;
+    }
+
+    const unexplained = (itemsToCheck as StockTakeCheckItem[]).filter((item: StockTakeCheckItem) => {
+      const system = Number(item.system_closing_stock ?? item.system_quantity ?? 0);
+      const physical = Number(item.physical_quantity ?? 0);
+      const variance = physical - system;
+      return variance !== 0 && (!item.explanation || !item.action_taken);
+    });
+
+    if (unexplained.length > 0) {
+      throw new AppError(`All item variances must have an explanation and an action taken before approval. Missing for: ${unexplained.map(i => i.item_sku).join(', ')}`, 400);
+    }
+  }
+
   const { data: count, error } = await supabase
     .from('stock_counts')
     .update({

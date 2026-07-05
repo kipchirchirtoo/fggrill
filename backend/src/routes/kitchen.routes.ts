@@ -46,35 +46,10 @@ import {
 } from '../controllers/kitchen/usage-wastage.controller';
 
 import {
-    getFoodControls,
-    createFoodControl,
-    updateFoodControl,
-    deleteFoodControl,
-    calculateYield
-} from '../controllers/kitchen/food-control.controller';
-
-import {
-    getVarianceReasons,
-    getDailyVariance,
-    submitVarianceReason,
-    approveVariance,
-    getPortionStock,
-    getPortionLedger
-} from '../controllers/kitchen/variance-reconciliation.controller';
-
-import {
     getYieldReport,
     getLossReport,
     getAccountabilityReport
 } from '../controllers/kitchen/reports.controller';
-
-import {
-    getExpectedPortions,
-    getExpectedPortion,
-    verifyActualPortions,
-    getVarianceSummary,
-    getPendingVerifications
-} from '../controllers/kitchen/expected-portions.controller';
 
 import {
     listProductionSessions,
@@ -82,17 +57,8 @@ import {
     getProductionSession,
     completeProductionSession,
     getRecipesWithIngredients,
-    getShiftHandover,
+    getShiftHandover
 } from '../controllers/kitchen/kitchen-production.controller';
-
-import {
-    analyzeShiftControls,
-    billStaffForShortage,
-    getDailyControlData,
-    getDailyControlSnapshot,
-    getStockLedger,
-    billDailyControlVariance
-} from '../controllers/kitchen/kitchen-controls.controller';
 
 const router = express.Router();
 
@@ -137,10 +103,6 @@ router.get('/stock', authorize([...kitchenStaff, UserRole.AUDITOR]), getKitchenS
 router.get('/stock/ledger', authorize([...kitchenStaff, UserRole.AUDITOR]), getKitchenLedger);
 router.get('/stock/:sku/history', authorize([...kitchenStaff, UserRole.AUDITOR]), getItemHistory);
 router.get('/dashboard/stats', authorize([...kitchenStaff, UserRole.AUDITOR]), getKitchenDashboardStats);
-
-// Portion Stock Routes
-router.get('/portion-stock', authorize([...kitchenStaff, UserRole.AUDITOR]), getPortionStock);
-router.get('/portion-ledger', authorize([...kitchenStaff, UserRole.AUDITOR]), getPortionLedger);
 
 // =====================================================
 // REQUISITION ROUTES
@@ -194,35 +156,11 @@ router.put('/wastage/:id/review', authorize([UserRole.BRANCH_ACCOUNTANT, UserRol
 router.put('/wastage/:id/audit', authorize([UserRole.AUDITOR, UserRole.SUPER_ADMIN]), auditWastage);
 
 // =====================================================
-// FOOD CONTROL (YIELD) ROUTES
-// =====================================================
-router.get('/food-controls', authorize(kitchenStaff), getFoodControls);
-router.post('/food-controls', authorize(kitchenManagers), createFoodControl);
-router.put('/food-controls/:id', authorize(kitchenManagers), updateFoodControl);
-router.delete('/food-controls/:id', authorize(kitchenManagers), deleteFoodControl);
-router.post('/food-controls/calculate', authorize(kitchenStaff), calculateYield);
-
-// Variance Reconciliation Routes
-router.get('/variance-reasons', authorize(kitchenStaff), getVarianceReasons);
-router.get('/variance', authorize(kitchenStaff), getDailyVariance);
-router.post('/variance/:id/reason', authorize(kitchenStaff), submitVarianceReason);
-router.post('/variance/:id/approve', authorize(kitchenManagers), approveVariance);
-
-// =====================================================
 // REPORT ROUTES
 // =====================================================
 router.get('/reports/yield', authorize(kitchenManagers), getYieldReport);
 router.get('/reports/loss', authorize(kitchenManagers), getLossReport);
 router.get('/reports/accountability', authorize(kitchenManagers), getAccountabilityReport);
-
-// =====================================================
-// EXPECTED PORTIONS (FOOD CONTROL INTEGRATION)
-// =====================================================
-router.get('/expected-portions', authorize(kitchenStaff), getExpectedPortions);
-router.get('/expected-portions/pending', authorize(kitchenStaff), getPendingVerifications);
-router.get('/expected-portions/variance/summary', authorize([...kitchenManagers, UserRole.AUDITOR]), getVarianceSummary);
-router.get('/expected-portions/:id', authorize(kitchenStaff), getExpectedPortion);
-router.put('/expected-portions/:id/verify', authorize(kitchenStaff), verifyActualPortions);
 
 // =====================================================
 // KITCHEN PRODUCTION SESSIONS (STOREKEEPER FLOW)
@@ -233,19 +171,5 @@ router.get('/production-sessions', authorize([...storekeepers, ...kitchenStaff])
 router.post('/production-sessions', authorize(storekeepers), createProductionSession);
 router.get('/production-sessions/:id', authorize([...storekeepers, ...kitchenStaff]), getProductionSession);
 router.put('/production-sessions/:id/complete', authorize(storekeepers), completeProductionSession);
-
-// =====================================================
-// DAILY CONTROLS (STOREKEEPER / ACCOUNTANT)
-// =====================================================
-router.get('/shift-controls/analyze', authorize(storekeepers), analyzeShiftControls);
-router.post('/shift-controls/bill-staff', authorize(storekeepers), billStaffForShortage);
-router.get('/daily-control', authorize([...storekeepers, UserRole.BRANCH_ACCOUNTANT]), getDailyControlData);
-router.get('/daily-control/snapshot', authorize([...storekeepers, UserRole.BRANCH_ACCOUNTANT]), getDailyControlSnapshot);
-router.get('/daily-control/stock-ledger', authorize([...storekeepers, UserRole.BRANCH_ACCOUNTANT]), getStockLedger);
-router.post(
-    '/daily-control/bill-staff',
-    authorize([UserRole.BRANCH_ACCOUNTANT, UserRole.ACCOUNTANT, UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER]),
-    billDailyControlVariance
-);
 
 export default router;

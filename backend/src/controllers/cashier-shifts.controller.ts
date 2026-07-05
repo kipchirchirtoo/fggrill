@@ -5,8 +5,6 @@ import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
 import { loadCashierVoidAudit, compileShiftVoidAudit } from '../services/cashier-void-audit.service';
-import { buildDailyControlPayload } from './kitchen/kitchen-controls.controller';
-import { processFoodControlForClosedDays } from '../services/food-control-automation.service';
 import {
     loadAssignedPosOutlets,
     canAccessPosOutlet,
@@ -250,6 +248,41 @@ function summarizeShiftTransactions(transactions: any[]): {
     });
 
     return summary;
+}
+
+type ShiftActualCollectionInput = {
+    payment_method: 'cash' | 'mpesa' | 'card';
+    system_amount: number;
+    actual_amount: number;
+    shift_id: string;
+    branch_id: number;
+    entered_by: string | null;
+    entry_reference?: string | null;
+};
+
+async function upsertShiftActualCollections(
+    rows: ShiftActualCollectionInput[]
+): Promise<void> {
+    if (!rows.length) return;
+
+    const payload = rows.map((row) => ({
+        shift_id: row.shift_id,
+        branch_id: row.branch_id,
+        payment_method: row.payment_method,
+        system_amount: row.system_amount,
+        actual_amount: row.actual_amount,
+        variance: row.actual_amount - row.system_amount,
+        entered_by: row.entered_by,
+        entered_at: new Date().toISOString(),
+        entry_reference: row.entry_reference || null,
+        entry_source: 'blind_shift_close'
+    }));
+
+    const { error } = await supabase
+        .from('shift_actual_collections')
+        .upsert(payload, { onConflict: 'shift_id,payment_method' });
+
+    if (error) throw error;
 }
 
 export async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Promise<any> {
@@ -1273,44 +1306,6 @@ export const getShiftLog = async (
 // to the same function for the still-open shift ("Live/provisional").
 // Idempotent (unique index on cashier_shift_id) and non-fatal — a failure
 // here must never block the new shift from opening.
-async function snapshotPreviousClosedCommercialDay(branchId: number): Promise<void> {
-    const { data: lastClosed } = await supabase
-        .from('cashier_shift_logs')
-        .select('id, shift_number, shift_start')
-        .eq('branch_id', branchId)
-        .eq('status', 'closed')
-        .order('shift_start', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-    if (!lastClosed) return;
-
-    const { data: existing } = await supabase
-        .from('daily_control_snapshots')
-        .select('id')
-        .eq('cashier_shift_id', lastClosed.id)
-        .maybeSingle();
-    if (existing) return;
-
-    const shiftDate = new Date(lastClosed.shift_start).toISOString().split('T')[0];
-    const payload: any = await buildDailyControlPayload(branchId, shiftDate, null);
-
-    const { error } = await supabase.from('daily_control_snapshots').insert({
-        branch_id: branchId,
-        cashier_shift_id: lastClosed.id,
-        shift_date: shiftDate,
-        shift_number: lastClosed.shift_number,
-        snapshot_data: payload,
-        total_food_revenue: payload?.summary?.total_food_revenue ?? 0,
-        actual_ingredient_cost: payload?.summary?.actual_ingredient_cost ?? 0,
-        bom_variance_cost: payload?.summary?.bom_variance_cost ?? 0,
-        food_cost_percent: payload?.summary?.food_cost_percent ?? null,
-        computed_trigger: 'cashier_shift_open'
-    });
-    if (error && error.code !== '23505') {
-        throw new AppError(error.message, 500);
-    }
-}
-
 export const startShift = async (
     req: Request,
     res: Response,
@@ -1439,16 +1434,9 @@ export const startShift = async (
         if (shiftError) throw shiftError;
 
         if (opensImmediately) {
-            try {
-                await snapshotPreviousClosedCommercialDay(targetBranchId);
-            } catch (err: any) {
-                logger.error(`[startShift] snapshotPreviousClosedCommercialDay failed for branch ${targetBranchId}:`, err);
-            }
             // Automated food-control pipeline for the just-finalized previous
             // day — same lifecycle moment as the snapshot above, fire-and-forget
             // so it never slows down opening the new shift.
-            void processFoodControlForClosedDays({ branchId: targetBranchId, triggerSource: 'event' })
-                .catch((err: any) => logger.error(`[startShift] food-control processing failed for branch ${targetBranchId}:`, err));
             if (targetCashierId !== userId) {
                 void notificationService.notifyUser(
                     targetCashierId,
@@ -1580,18 +1568,6 @@ export const approveShiftOpening = async (
 
         const { data, error } = await updateQuery.select().single();
         if (error) throw error;
-
-        if (data?.branch_id) {
-            try {
-                await snapshotPreviousClosedCommercialDay(Number(data.branch_id));
-            } catch (err: any) {
-                logger.error(`[approveShiftOpening] snapshotPreviousClosedCommercialDay failed for branch ${data.branch_id}:`, err);
-            }
-            // Automated food-control pipeline for the just-finalized previous
-            // day (fire-and-forget; see startShift for the same hook).
-            void processFoodControlForClosedDays({ branchId: Number(data.branch_id), triggerSource: 'event' })
-                .catch((err: any) => logger.error(`[approveShiftOpening] food-control processing failed for branch ${data.branch_id}:`, err));
-        }
 
         if (data?.cashier_id) {
             void notificationService.notifyUser(
@@ -1742,8 +1718,13 @@ export const closeShift = async (
             expense_details,
             // Cash management
             cash_at_hand,
+            actual_cash_counted,
+            actual_mpesa_logged,
+            actual_card_logged,
             cash_deposited,
             bank_deposit_ref,
+            mpesa_summary_ref,
+            card_batch_ref,
             // N/A flags
             pool_na,
             conference_na,
@@ -1998,12 +1979,35 @@ export const closeShift = async (
         const hasDeclaredCashAtHand = cash_at_hand !== undefined
             && cash_at_hand !== null
             && `${cash_at_hand}`.trim() !== '';
+        const hasDeclaredActualCashCounted = actual_cash_counted !== undefined
+            && actual_cash_counted !== null
+            && `${actual_cash_counted}`.trim() !== '';
+        const hasDeclaredActualMpesaLogged = actual_mpesa_logged !== undefined
+            && actual_mpesa_logged !== null
+            && `${actual_mpesa_logged}`.trim() !== '';
+        const hasDeclaredActualCardLogged = actual_card_logged !== undefined
+            && actual_card_logged !== null
+            && `${actual_card_logged}`.trim() !== '';
         const actualClosingFloat = hasDeclaredClosingFloat
             ? toNumber(closing_float)
             : hasDeclaredCashAtHand
                 ? toNumber(cash_at_hand)
                 : expectedClosingFloat;
+        const actualCashCounted = hasDeclaredActualCashCounted
+            ? toNumber(actual_cash_counted)
+            : actualClosingFloat;
+        const expectedMpesaSales = mpesa_sales_net + mpesaPaidCredits;
+        const expectedCardSales = card_sales_net + cardPaidCredits;
+        const actualMpesaLogged = hasDeclaredActualMpesaLogged
+            ? toNumber(actual_mpesa_logged)
+            : expectedMpesaSales;
+        const actualCardLogged = hasDeclaredActualCardLogged
+            ? toNumber(actual_card_logged)
+            : expectedCardSales;
         const variance = actualClosingFloat - expectedClosingFloat;
+        const cashVarianceBlind = actualCashCounted - expectedClosingFloat;
+        const mpesaVarianceBlind = actualMpesaLogged - expectedMpesaSales;
+        const cardVarianceBlind = actualCardLogged - expectedCardSales;
 
         // Compute unpaid_bills server-side from credit issued only. Paid
         // credits are separate cashier-collected evidence for the branch
@@ -2058,14 +2062,20 @@ export const closeShift = async (
                 paid_bills_details: paid_bills_details || [],
                 // Cash management
                 cash_at_hand: toNumber(cash_at_hand ?? actualClosingFloat),
+                actual_cash_counted: actualCashCounted,
+                actual_mpesa_logged: actualMpesaLogged,
+                actual_card_logged: actualCardLogged,
                 cash_deposited: cashDrops,
                 bank_deposit_ref,
+                mpesa_summary_ref: mpesa_summary_ref || null,
+                card_batch_ref: card_batch_ref || null,
                 // N/A flags
                 pool_na: pool_na || false,
                 conference_na: conference_na || false,
                 rooms_na: rooms_na || false,
                 // Status
                 status: 'closed',
+                reconciliation_status: 'pending_reconciliation',
                 notes: notes || shift.notes,
                 updated_at: new Date().toISOString()
             })
@@ -2074,6 +2084,36 @@ export const closeShift = async (
             .single();
 
         if (updateError) throw updateError;
+
+        await upsertShiftActualCollections([
+            {
+                shift_id: id,
+                branch_id: Number(shift.branch_id),
+                payment_method: 'cash',
+                system_amount: expectedClosingFloat,
+                actual_amount: actualCashCounted,
+                entered_by: userId || null,
+                entry_reference: bank_deposit_ref || null
+            },
+            {
+                shift_id: id,
+                branch_id: Number(shift.branch_id),
+                payment_method: 'mpesa',
+                system_amount: expectedMpesaSales,
+                actual_amount: actualMpesaLogged,
+                entered_by: userId || null,
+                entry_reference: mpesa_summary_ref || null
+            },
+            {
+                shift_id: id,
+                branch_id: Number(shift.branch_id),
+                payment_method: 'card',
+                system_amount: expectedCardSales,
+                actual_amount: actualCardLogged,
+                entered_by: userId || null,
+                entry_reference: card_batch_ref || null
+            }
+        ]);
 
         // Close only THIS cashier's POS station shift(s) — the POS for their
         // outlet is "open" while their cashier shift is open (getActiveShift
@@ -2184,6 +2224,23 @@ export const closeShift = async (
                 void_lines: voidAudit.lines,
                 net_sales: total_sales_net,
                 gross_sales: gross_sales,
+                blind_reconciliation: {
+                    cash: {
+                        expected: expectedClosingFloat,
+                        actual: actualCashCounted,
+                        variance: cashVarianceBlind
+                    },
+                    mpesa: {
+                        expected: expectedMpesaSales,
+                        actual: actualMpesaLogged,
+                        variance: mpesaVarianceBlind
+                    },
+                    card: {
+                        expected: expectedCardSales,
+                        actual: actualCardLogged,
+                        variance: cardVarianceBlind
+                    }
+                },
                 generated_logbook_id: generatedLogbook?.id || null,
                 automation_warnings: automationWarnings
             }
@@ -2203,17 +2260,52 @@ export const reconcileShift = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { reconciliation_notes } = req.body;
+        const { reconciliation_notes, variance_reason_code, variance_comment } = req.body;
         const userId = req.user?.id;
+        const now = new Date().toISOString();
+
+        let fetchQuery = supabase
+            .from('cashier_shift_logs')
+            .select('*')
+            .eq('id', id);
+
+        if (!isGlobalRole(req.user?.role)) {
+            fetchQuery = fetchQuery.eq('branch_id', req.user?.branch_id);
+        }
+
+        const { data: shift, error: shiftError } = await fetchQuery.maybeSingle();
+        if (shiftError) throw shiftError;
+        if (!shift) throw new AppError('Shift not found', 404);
+
+        const { data: actualCollections, error: actualCollectionsError } = await supabase
+            .from('shift_actual_collections')
+            .select('*')
+            .eq('shift_id', id);
+        if (actualCollectionsError) throw actualCollectionsError;
+
+        const hasVariance = (actualCollections || []).some((row: any) => Math.abs(toNumber(row?.variance)) > 0.009);
+        if (hasVariance) {
+            if (!String(variance_reason_code || '').trim()) {
+                throw new AppError('A variance reason code is required before hard-closing a shift with discrepancies.', 400);
+            }
+            if (!String(variance_comment || '').trim()) {
+                throw new AppError('An audit comment is required before hard-closing a shift with discrepancies.', 400);
+            }
+        }
 
         let query = supabase
             .from('cashier_shift_logs')
             .update({
                 status: 'reconciled',
+                reconciliation_status: 'hard_closed',
                 reconciled_by: userId,
-                reconciled_at: new Date().toISOString(),
+                reconciled_at: now,
                 reconciliation_notes,
-                updated_at: new Date().toISOString()
+                variance_reason_code: String(variance_reason_code || '').trim() || null,
+                variance_comment: String(variance_comment || '').trim() || null,
+                hard_closed_by: userId,
+                hard_closed_at: now,
+                updated_at: now
             })
             .eq('id', id);
             
@@ -2225,6 +2317,18 @@ export const reconcileShift = async (
         const { data, error } = await query.select().single();
 
         if (error) throw error;
+
+        const { error: logbookUpdateError } = await supabase
+            .from('cashier_logbooks')
+            .update({
+                accountant_reviewed_by: userId,
+                accountant_reviewed_at: now,
+                accountant_notes: reconciliation_notes || String(variance_comment || '').trim() || null,
+                status: 'pending_audit',
+                updated_at: now
+            })
+            .eq('cashier_shift_id', id);
+        if (logbookUpdateError) throw logbookUpdateError;
 
         res.status(200).json({
             success: true,

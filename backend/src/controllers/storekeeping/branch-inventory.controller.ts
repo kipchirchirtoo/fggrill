@@ -1004,13 +1004,8 @@ export const confirmDelivery = async (
   try {
     const { id } = req.params;
     const { received_items, items_received, delivery_notes, discrepancy_notes, notes: bodyNotes } = req.body;
-    const items = items_received || received_items;
+    const items = items_received || received_items || [];
     const notes = discrepancy_notes || delivery_notes || bodyNotes;
-
-    if (!items || items.length === 0) {
-      res.status(400).json({ success: false, message: 'Received items required' });
-      return;
-    }
 
     const result = await BranchInventoryService.confirmDelivery(
       id,

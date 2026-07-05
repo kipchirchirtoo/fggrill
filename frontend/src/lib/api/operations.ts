@@ -135,20 +135,8 @@ export const kitchenAPI = {
   getWastageRecords: (branchId?: number) => fetchAPI<KitchenWastage[]>(`/kitchen/wastage${buildQuery({ branch_id: branchId })}`),
   reviewWastage: (id: string, notes: string) => fetchAPI<any>(`/kitchen/usage/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
 
-  // Food Controls & Variances
-  getPortionStock: (params?: any) => fetchAPI<any[]>(`/kitchen/portions/stock${buildQuery(params)}`),
-  getDailyVariance: (params?: any) => fetchAPI<any[]>(`/kitchen/variance/daily${buildQuery(params)}`),
-  getVarianceReasons: () => fetchAPI<any[]>('/kitchen/variance/reasons'),
-  submitVarianceReason: (data: any) => fetchAPI<void>('/kitchen/variance/reasons', { method: 'POST', body: JSON.stringify(data) }),
-  approveVariance: (id: string, notes: string) => fetchAPI<void>(`/kitchen/variance/${id}/approve`, { method: 'POST', body: JSON.stringify({ notes }) }),
-  
   getYieldReport: (params?: any) => fetchAPI<any>(`/kitchen/reports/yield${buildQuery(params)}`),
   getLossReport: (params?: any) => fetchAPI<any>(`/kitchen/reports/loss${buildQuery(params)}`),
-  
-  getFoodControls: (params?: any) => fetchAPI<any[]>(`/kitchen/controls${buildQuery(params)}`),
-  createFoodControl: (data: any) => fetchAPI<any>('/kitchen/controls', { method: 'POST', body: JSON.stringify(data) }),
-  updateFoodControl: (id: string, data: any) => fetchAPI<any>(`/kitchen/controls/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteFoodControl: (id: string) => fetchAPI<void>(`/kitchen/controls/${id}`, { method: 'DELETE' }),
 
   // Ledger
   getStockLedger: (params?: any) => kitchenAPI.getKitchenLedger(params),

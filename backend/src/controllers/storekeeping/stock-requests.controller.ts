@@ -1084,7 +1084,7 @@ export const confirmDispatch = async (
                 vehicle_number: vehicle_number || null,
                 driver_name: driver_name || null,
                 dispatch_notes: notes || null,
-                status: 'DISPATCHED',
+                status: 'IN_TRANSIT',
                 dispatched_at: now
             })
             .select()
@@ -1106,7 +1106,10 @@ export const confirmDispatch = async (
                 }));
 
             if (dispatchItems.length > 0) {
-                await supabase.from('dispatch_items').insert(dispatchItems);
+                const { error: diError } = await supabase.from('dispatch_items').insert(dispatchItems);
+                if (diError) {
+                    logger.warn('Failed to insert dispatch_items for dispatch note', dispatchNote.id, ':', diError);
+                }
             }
         }
 

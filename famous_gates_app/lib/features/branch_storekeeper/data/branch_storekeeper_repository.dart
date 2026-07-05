@@ -1122,58 +1122,7 @@ class BranchStorekeeperRepository {
     return [];
   }
 
-  // ── Recipe / Food Control ──────────────────────────────────────────────────
-
-  /// Daily Food Control dashboard: theoretical (BOM) vs actual ingredient
-  /// consumption, kitchen production vs POS sales, and food cost % for a
-  /// single calendar date. See GET /kitchen/daily-control.
-  Future<Map<String, dynamic>> dailyControlData({
-    required String date,
-    String? shift,
-  }) async {
-    final response = await _dio.get(
-      '/kitchen/daily-control',
-      queryParameters: await _branchQuery({
-        'date': date,
-        if (shift != null) 'shift': shift,
-      }),
-      options: await _authOptions,
-    );
-    return _unwrapMap(response.data);
-  }
-
-  /// The finalized "previous closed commercial day" Daily Controls snapshot
-  /// (daily_control_snapshots) — frozen when the next cashier shift opened.
-  /// Null if this branch has no closed commercial day yet. See GET
-  /// /kitchen/daily-control/snapshot.
-  Future<Map<String, dynamic>?> getDailyControlSnapshot() async {
-    final response = await _dio.get(
-      '/kitchen/daily-control/snapshot',
-      queryParameters: await _branchQuery({}),
-      options: await _authOptions,
-    );
-    final data = response.data is Map ? response.data['data'] : null;
-    return data is Map ? Map<String, dynamic>.from(data) : null;
-  }
-
-  /// The physical stock ledger (Opening/Added/Totals/Closing/Rejects/Qty
-  /// Sold/System Sold/Shorts) — one row per branch stock item being
-  /// physically tracked in a kitchen shift, matching the storekeeper's own
-  /// paper ledger. See GET /kitchen/daily-control/stock-ledger.
-  Future<List<Map<String, dynamic>>> getStockLedger({
-    required String date,
-    String? shift,
-  }) async {
-    final response = await _dio.get(
-      '/kitchen/daily-control/stock-ledger',
-      queryParameters: await _branchQuery({
-        'date': date,
-        if (shift != null) 'shift': shift,
-      }),
-      options: await _authOptions,
-    );
-    return _unwrapList(response.data);
-  }
+  // ── Recipe ─────────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getRecipes() async {
     final response = await _dio.get(
@@ -1853,7 +1802,9 @@ class BranchStorekeeperRepository {
   // Bar stocktake — submission (Branch Storekeeper) + review (Accountant).
   // ---------------------------------------------------------------------
 
-  Future<List<Map<String, dynamic>>> barStocktakeRecords({
+  /// Returns the full response map: { data: [...], shift_id: '...' }
+  /// The provider reads both fields to update the stocktake list and active shift.
+  Future<Map<String, dynamic>> barStocktakeRecords({
     String? barLocation,
     String? status,
     String? date,
@@ -1867,7 +1818,7 @@ class BranchStorekeeperRepository {
       }),
       options: await _authOptions,
     );
-    return _unwrapList(response.data);
+    return _map(response.data);
   }
 
   Future<Map<String, dynamic>> barStocktakeSummary() async {
@@ -1973,7 +1924,9 @@ class BranchStorekeeperRepository {
   // Covers all non-bar store items (foodstuffs, stationery, non_consumables).
   // ---------------------------------------------------------------------
 
-  Future<List<Map<String, dynamic>>> storeStocktakeRecords({
+  /// Returns the full response map: { data: [...], shift_id: '...' }
+  /// The provider reads both fields to update the stocktake list and active shift.
+  Future<Map<String, dynamic>> storeStocktakeRecords({
     String? status,
     String? date,
   }) async {
@@ -1985,7 +1938,7 @@ class BranchStorekeeperRepository {
       }),
       options: await _authOptions,
     );
-    return _unwrapList(response.data);
+    return _map(response.data);
   }
 
   Future<Map<String, dynamic>> storeStocktakeSummary() async {
@@ -2001,6 +1954,7 @@ class BranchStorekeeperRepository {
   Future<Map<String, dynamic>> submitStoreStocktake({
     required List<Map<String, dynamic>> items,
     String? stocktakeDate,
+    String? shiftId,
   }) async {
     final branchId = await _branchId;
     final response = await _dio.post(
@@ -2009,6 +1963,7 @@ class BranchStorekeeperRepository {
         if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId),
         'items': items,
         if (stocktakeDate != null) 'stocktake_date': stocktakeDate,
+        if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
       },
       options: await _authOptions,
     );

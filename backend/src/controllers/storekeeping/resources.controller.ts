@@ -1237,6 +1237,8 @@ export const getEnrichedStockCountItems = async (
       selling_price: toNumber(item.selling_price ?? item.unit_price ?? item.price),
       cogs_value: toNumber(item.issued_quantity) * unitCost,
       variance_reason: item.variance_reason || item.reason || null,
+      explanation: item.explanation || null,
+      action_taken: item.action_taken || null,
       status: counted === null ? 'PENDING' : 'COUNTED',
       item: {
         id: item.item_id,
@@ -1551,10 +1553,10 @@ export const getStockTakeItems = async (req: Request, res: Response) => {
   }
 };
 
-export const updateStockTakeItem = async (req: Request, res: Response) => {
+export const updateStockTakeItem = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { id } = req.params;
-    const { physical_quantity, actual_quantity, reason, variance_reason } = req.body;
+    const { physical_quantity, actual_quantity, reason, variance_reason, explanation, action_taken } = req.body;
 
     // Support both field names for flexibility
     const newQuantity = physical_quantity !== undefined ? physical_quantity : actual_quantity;
@@ -1575,21 +1577,28 @@ export const updateStockTakeItem = async (req: Request, res: Response) => {
 
     if (parentError) throw parentError;
     const parentStatus = `${parentCount?.status || ''}`;
-    if (!editableStockCountStatuses.has(parentStatus)) {
+    const userRole = (req as any).user?.role;
+    const isAccountantOrAuditor = ['branch_accountant', 'super_admin', 'auditor'].includes(userRole);
+
+    if (!editableStockCountStatuses.has(parentStatus) && !(parentStatus === 'submitted' && isAccountantOrAuditor)) {
       return res.status(409).json({
         success: false,
         message: 'Submitted stock takes are read-only and cannot be edited.',
       });
     }
 
+    const updatePayload: any = {
+      physical_quantity: newQuantity,
+      reason: variance_reason || reason,
+      variance_reason: variance_reason || reason,
+      updated_at: new Date().toISOString()
+    };
+    if (explanation !== undefined) updatePayload.explanation = explanation;
+    if (action_taken !== undefined) updatePayload.action_taken = action_taken;
+
     const { data, error } = await supabase
       .from('stock_take_lines')
-      .update({
-        physical_quantity: newQuantity,
-        reason: variance_reason || reason,
-        variance_reason: variance_reason || reason,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
@@ -1602,7 +1611,7 @@ export const updateStockTakeItem = async (req: Request, res: Response) => {
   }
 };
 
-export const updateStockTake = async (req: Request, res: Response) => {
+export const updateStockTake = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { id } = req.params;
     const { status, notes, items } = req.body;
@@ -1635,7 +1644,11 @@ export const updateStockTake = async (req: Request, res: Response) => {
       isLegacy = true;
       count = legacyTake;
     } else {
-      if (!editableStockCountStatuses.has(`${existingCount.status}`)) {
+      const currentStatus = `${existingCount.status}`;
+      const userRole = (req as any).user?.role;
+      const isAccountantOrAuditor = ['branch_accountant', 'super_admin', 'auditor'].includes(userRole);
+
+      if (!editableStockCountStatuses.has(currentStatus) && !(currentStatus === 'submitted' && isAccountantOrAuditor)) {
         return res.status(409).json({
           success: false,
           message: 'Submitted stock takes are read-only. Request accountant/auditor action instead of editing counts.',
@@ -1688,6 +1701,8 @@ export const updateStockTake = async (req: Request, res: Response) => {
           variance_reason: reason,
           updated_at: updatedAt
         };
+        if (item.explanation !== undefined) stockCountPayload.explanation = item.explanation;
+        if (item.action_taken !== undefined) stockCountPayload.action_taken = item.action_taken;
 
         if (item.item_sku && (!item.id || String(item.id).startsWith('manual:'))) {
           const { data: existing, error: existingError } = await supabase
@@ -1718,7 +1733,9 @@ export const updateStockTake = async (req: Request, res: Response) => {
                 physical_quantity: countedQuantity,
                 unit_cost: toNumber(item.unit_cost),
                 cost_price: toNumber(item.cost_price ?? item.unit_cost),
-                variance_reason: reason
+                variance_reason: reason,
+                explanation: item.explanation || null,
+                action_taken: item.action_taken || null
               });
 
             if (insertError) throw insertError;
@@ -1745,6 +1762,8 @@ export const updateStockTake = async (req: Request, res: Response) => {
           status: hasCount ? 'COUNTED' : 'PENDING',
           updated_at: updatedAt
         };
+        if (item.explanation !== undefined) legacyPayload.explanation = item.explanation;
+        if (item.action_taken !== undefined) legacyPayload.action_taken = item.action_taken;
 
         const { error: legacyError } = await supabase
           .from('stock_take_lines')
@@ -1853,7 +1872,7 @@ export const generateWorksheet = async (req: Request, res: Response) => {
   }
 };
 
-export const completeStockTake = async (req: Request, res: Response) => {
+export const completeStockTake = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { id } = req.params;
     const user = (req as any).user;
@@ -1878,6 +1897,8 @@ export const completeStockTake = async (req: Request, res: Response) => {
       });
     }
 
+    // Variance explanation is now done by the accountant during review, bypass this validation for storekeepers.
+    /*
     const unexplained = items.filter((item: any) =>
       toNumber(item.variance) !== 0 && !(`${item.variance_reason || item.reason || ''}`.trim())
     );
@@ -1887,6 +1908,7 @@ export const completeStockTake = async (req: Request, res: Response) => {
         message: `Explain all stock variances before submitting. Missing explanations: ${unexplained.length}`,
       });
     }
+    */
 
     await recalculateStockCountTotals(id);
 

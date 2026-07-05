@@ -7,6 +7,7 @@ import {
     reviewKitchenStocktake,
     approveKitchenStocktake,
     rejectKitchenStocktake,
+    updateKitchenStocktakeItems,
 } from '../../controllers/storekeeping/kitchen-stocktake.controller';
 
 const router = express.Router();
@@ -27,6 +28,7 @@ const accountantRoles = [UserRole.SUPER_ADMIN, UserRole.BRANCH_ACCOUNTANT];
 router.get('/list', authorize(viewRoles), listKitchenStocktakes);
 router.get('/', authorize(viewRoles), getKitchenStocktake);
 router.post('/', authorize(recordRoles), saveKitchenStocktake);
+router.put('/:id/items', authorize(accountantRoles), updateKitchenStocktakeItems);
 router.patch('/:id/review', authorize(accountantRoles), reviewKitchenStocktake);
 router.patch('/:id/approve', authorize(accountantRoles), approveKitchenStocktake);
 router.patch('/:id/reject', authorize(accountantRoles), rejectKitchenStocktake);

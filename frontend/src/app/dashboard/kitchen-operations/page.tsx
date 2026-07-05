@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import {
     TrendingUp, TrendingDown, AlertTriangle,
     ShoppingCart, Trash2, RefreshCw, BookOpen,
-    ClipboardList, ChefHat, BarChart3, Package
+    ClipboardList, ChefHat, Package
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -78,21 +78,6 @@ export default function KitchenOperationsPage() {
             title: 'Usage',
             icon: ClipboardList,
             href: '/dashboard/kitchen-operations/usage'
-        },
-        {
-            title: 'Food Controls',
-            icon: BarChart3,
-            href: '/dashboard/kitchen-operations/food-controls'
-        },
-        {
-            title: 'Portion Stock',
-            icon: Package,
-            href: '/dashboard/kitchen-operations/food-controls?tab=portions'
-        },
-        {
-            title: 'Variance',
-            icon: AlertTriangle,
-            href: '/dashboard/kitchen-operations/food-controls?tab=variance'
         }
     ];
 

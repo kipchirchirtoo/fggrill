@@ -9,8 +9,6 @@ import 'widgets/superadmin_top_bar.dart';
 
 // Superadmin-specific sections
 import '../../lina/presentation/lina_screen.dart';
-import 'sections/food_control_health_section.dart';
-import 'sections/lina_daily_controls_section.dart';
 import 'sections/security_center_section.dart';
 import 'sections/system_health_section.dart';
 import 'sections/global_users_section.dart';
@@ -97,8 +95,6 @@ class SuperAdminScreen extends ConsumerWidget {
       // Command
       SuperAdminSection.adminDashboard: const OverviewSection(),
       SuperAdminSection.lina: const LinaScreen(),
-      SuperAdminSection.linaDailyControls: const LinaDailyControlsSection(),
-      SuperAdminSection.foodControlHealth: const FoodControlHealthSection(),
       SuperAdminSection.securityCenter: const SecurityCenterSection(),
       SuperAdminSection.systemHealth: const SystemHealthSection(),
       SuperAdminSection.globalSearch: const SuperAdminSearchSection(),

@@ -6688,6 +6688,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     let outletOrders: any[] = [];
     let outletPayments: any[] = [];
     let creditBillRecords: any[] = [];
+    let shiftActualCollections: any[] = [];
     let voidAudit = {
         lines: [] as any[],
         summary: {
@@ -6710,6 +6711,15 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             .maybeSingle();
         if (shiftResult.error) throw shiftResult.error;
         shift = shiftResult.data;
+
+        shiftActualCollections = await safeLogbookQuery(
+            'shift_actual_collections',
+            supabase
+                .from('shift_actual_collections')
+                .select('*')
+                .eq('shift_id', logbook.cashier_shift_id)
+                .order('payment_method', { ascending: true })
+        );
 
         shiftTransactions = await safeLogbookQuery(
             'cashier_shift_transactions',
@@ -7018,6 +7028,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             count: clearedPaymentLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
                 || nonVoidLines.filter((line) => normalizeLogbookPaymentMethod(line.payment_method) === method).length
         }));
+    const paymentBreakdownByMethod = new Map(
+        paymentBreakdown.map((row) => [normalizeLogbookPaymentMethod(row.method), logbookNumber(row.amount)])
+    );
 
     const voidLines = allLines.filter((line) => isVoidedLogbookLine(line));
     const complianceFlags = [
@@ -7046,6 +7059,35 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             detail: voidLines.length ? `${voidLines.length} void/cancelled line(s)` : 'No void lines recorded'
         }
     ];
+
+    const actualCollectionByMethod = new Map(
+        shiftActualCollections.map((row: any) => [
+            normalizeLogbookPaymentMethod(row.payment_method),
+            row
+        ])
+    );
+    const reconciliationRow = (method: 'cash' | 'mpesa' | 'card') => {
+        const row = actualCollectionByMethod.get(method) || {};
+        return {
+            system_expected: logbookNumber(row.system_amount ?? (method === 'cash'
+                ? expectedCash
+                : method === 'mpesa'
+                    ? paymentBreakdownByMethod.get('mpesa')
+                    : paymentBreakdownByMethod.get('card'))),
+            cashier_logged: logbookNumber(row.actual_amount ?? (method === 'cash'
+                ? logbookNumber(shift?.actual_cash_counted ?? closingFloat)
+                : method === 'mpesa'
+                    ? logbookNumber(shift?.actual_mpesa_logged)
+                    : logbookNumber(shift?.actual_card_logged))),
+            variance: logbookNumber(row.variance),
+            reference: logbookText(row.entry_reference)
+        };
+    };
+    const reconciliationGrid = {
+        cash: reconciliationRow('cash'),
+        mpesa: reconciliationRow('mpesa'),
+        card: reconciliationRow('card')
+    };
 
     return {
         id: logbook.id,
@@ -7097,6 +7139,15 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             actual_closing: closingFloat,
             variance
         },
+        reconciliation_status: logbookText(shift?.reconciliation_status),
+        actual_cash_counted: logbookNumber(shift?.actual_cash_counted ?? closingFloat),
+        actual_mpesa_logged: logbookNumber(shift?.actual_mpesa_logged),
+        actual_card_logged: logbookNumber(shift?.actual_card_logged),
+        mpesa_summary_ref: logbookText(shift?.mpesa_summary_ref),
+        card_batch_ref: logbookText(shift?.card_batch_ref),
+        variance_reason_code: logbookText(shift?.variance_reason_code),
+        variance_comment: logbookText(shift?.variance_comment),
+        reconciliation_grid: reconciliationGrid,
         summary: {
             total_sales: netSales,
             net_sales: netSales,

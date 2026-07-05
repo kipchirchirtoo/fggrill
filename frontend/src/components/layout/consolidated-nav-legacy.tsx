@@ -858,13 +858,6 @@ export function ConsolidatedNav() {
       />
 
       <NavItem
-        href="/dashboard/branch-accounting/food-control"
-        icon={Utensils}
-        label="Food Control"
-        active={pathname.includes('/dashboard/branch-accounting/food-control')}
-      />
-
-      <NavItem
         href="/dashboard/branch-accounting/bookings-invoices"
         icon={Calendar}
         label="Bookings & Invoices"

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { recordBarStockMovement } from '../../services/unified-bar-stock.service';
 import { logger } from '../../utils/logger';
+import { updateBranchStock } from '../../services/branch-inventory.service';
 
 // ==========================================
 // STOCK LEDGER
@@ -103,6 +104,38 @@ export const addStock = async (req: Request, res: Response, next: NextFunction):
     if (!Number.isFinite(quantity) || quantity <= 0) {
       res.status(400).json({ success: false, message: 'quantity must be a positive number' });
       return;
+    }
+
+    // Resolve central item SKU for this drink
+    const { data: drinkLink } = await supabase
+      .from('bar_drinks')
+      .select('inventory_item_id')
+      .eq('id', drinkId)
+      .maybeSingle();
+
+    let branchSku: string | null = null;
+    if (drinkLink?.inventory_item_id) {
+      const { data: invItem } = await supabase
+        .from('inventory_items')
+        .select('sku')
+        .eq('id', drinkLink.inventory_item_id)
+        .maybeSingle();
+      branchSku = invItem?.sku || null;
+    }
+
+    if (branchSku) {
+      // Deduct from branch general stock
+      await updateBranchStock(
+        branchId,
+        branchSku,
+        -quantity, // negative delta to deduct
+        'DEPT_ISSUE',
+        req.user?.id || '',
+        'BAR_RESTOCK',
+        drinkId,
+        reference || undefined,
+        reference || `Bar restock transfer`
+      );
     }
 
     // Flow through unified service so inventory_balances, bar_stock,

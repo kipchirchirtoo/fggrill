@@ -30,8 +30,6 @@ router.get('/model-router', lina.getModelRouterStatus);
 router.get('/tools', lina.getLinaTools);
 router.post('/tools/read-table', lina.readLinaTableTool);
 router.post('/tools/read-only-sql', lina.runReadOnlySqlTool);
-router.post('/tools/food-control-health', lina.foodControlHealthTool);
-router.get('/daily-food-control', lina.getDailyFoodControlBriefing);
 router.get('/executive-summary', lina.getExecutiveSummary);
 router.get('/anomaly-report', lina.getAnomalyReport);
 router.get('/incident-timeline', lina.getIncidentTimeline);

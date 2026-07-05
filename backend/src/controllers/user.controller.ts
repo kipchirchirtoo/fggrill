@@ -286,6 +286,22 @@ export const createUser = async (
       return;
     }
 
+    // Enforce PIN uniqueness — no two users may share the same POS PIN
+    if (pos_pin) {
+      const { data: pinConflict } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .eq('pos_pin', pos_pin)
+        .maybeSingle();
+      if (pinConflict) {
+        res.status(409).json({
+          success: false,
+          message: `PIN ${pos_pin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
+        });
+        return;
+      }
+    }
+
     // Step 1: Create auth user via Supabase Admin API
     const userPassword = password || (Math.random().toString(36).substr(2, 12) + 'Aa1!');
 
@@ -472,6 +488,23 @@ export const updateUser = async (
       }
 
       selectedStaffProfile = staffProfile;
+    }
+
+    // Enforce PIN uniqueness on update — no two users may share the same POS PIN
+    if (fields.pos_pin) {
+      const { data: pinConflict } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .eq('pos_pin', fields.pos_pin)
+        .neq('id', req.params.id)
+        .maybeSingle();
+      if (pinConflict) {
+        res.status(409).json({
+          success: false,
+          message: `PIN ${fields.pos_pin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
+        });
+        return;
+      }
     }
 
     // Explicitly map fields to snake_case for Supabase

@@ -18,7 +18,6 @@ import {
   runStructuralChecks,
   buildFallbackDiagnosis,
 } from '../services/branch-health.service';
-import { getLinaDailyFoodControl as runLinaDailyFoodControl } from '../services/lina-daily-food-control.service';
 
 // ── AI Clients ────────────────────────────────────────────────────────────────
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
@@ -1417,9 +1416,6 @@ async function gatherBusinessEvidence(req: Request, message: string, ctx: Record
   const intent = classifyLinaIntent(message);
   const agents = selectLinaAgents(domains, intent, message);
   const metrics = deriveBusinessMetrics(ctx, reads);
-  const foodControlHealth = domains.includes('food_control')
-    ? await gatherFoodControlHealth(req)
-    : null;
   const evidence: Record<string, any> = {
     query: message,
     domains,
@@ -1434,7 +1430,6 @@ async function gatherBusinessEvidence(req: Request, message: string, ctx: Record
     reads: reads.map(compactReadForPrompt),
     generated_at: new Date().toISOString(),
   };
-  if (foodControlHealth) evidence.food_control_health = foodControlHealth;
 
   await writeLinaAgentLog(req, {
     action: 'business_evidence_read',
@@ -2764,7 +2759,6 @@ export const getLinaTools = async (req: Request, res: Response): Promise<void> =
         { name: 'business.evidence_reader', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/chat', purpose: 'Automatically gathers role-scoped ERP evidence before Lina answers business questions.' },
         { name: 'db.read_table', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-table', tables: Array.from(LINA_READABLE_TABLES).sort() },
         { name: 'db.run_readonly_sql', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/read-only-sql', restricted_to: Array.from(LINA_GLOBAL_READ_ROLES).sort() },
-        { name: 'food_control.health_check', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/tools/food-control-health', purpose: 'Deterministic three-tier food-control health: POS→stock links, bar drink/recipe/inventory linkage, stocktake linkage, par levels, dispatch reconciliation, and menu cost coverage — fleet-wide for leadership, own branch otherwise.' },
         { name: 'model.router', action_class: 'READ_ONLY', endpoint: 'GET /api/lina/model-router' },
         { name: 'client.puter_quick_assist', action_class: 'CLIENT_SIDE_ONLY', endpoint: 'frontend Puter.js helper', purpose: 'Autocomplete, draft descriptions, form copy, and text cleanup only. No ERP decisions or database reads.' },
         { name: 'remediation.create_proposal', action_class: 'READ_ONLY', endpoint: 'POST /api/lina/remediate' },
@@ -2790,73 +2784,7 @@ export const getLinaTools = async (req: Request, res: Response): Promise<void> =
  * own branch for branch-scoped roles. Never calls an external AI.
  */
 export const foodControlHealthTool = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const global = hasGlobalLinaRead(req);
-    const actorBranch = Number(linaBranchId(req));
-    const requestedRaw = req.body?.branch_id;
-    const requestedBranchId = requestedRaw != null && `${requestedRaw}`.trim() !== ''
-      ? Number(requestedRaw)
-      : null;
-
-    const branchPayload = async (branchId: number): Promise<Record<string, any>> => {
-      const { findings, context } = await runStructuralChecks(branchId);
-      const diagnosis = buildFallbackDiagnosis(findings, context);
-      return {
-        scope: 'branch',
-        system_model: FOOD_CONTROL_SYSTEM_MODEL,
-        branch: {
-          ...context,
-          health_score: diagnosis.health_score,
-          issues: diagnosis.issues,
-          findings,
-        },
-        generated_at: new Date().toISOString(),
-      };
-    };
-
-    let data: Record<string, any>;
-    if (requestedBranchId != null) {
-      if (!Number.isInteger(requestedBranchId) || requestedBranchId <= 0) {
-        res.status(400).json({ success: false, message: 'branch_id must be a positive integer' });
-        return;
-      }
-      if (!global && requestedBranchId !== actorBranch) {
-        res.status(403).json({ success: false, message: 'You can only check your own branch' });
-        return;
-      }
-      data = await branchPayload(requestedBranchId);
-    } else if (global) {
-      const fleet = await runFleetStructuralChecks();
-      data = {
-        scope: 'fleet',
-        system_model: FOOD_CONTROL_SYSTEM_MODEL,
-        branches: fleet.branches,
-        generated_at: fleet.generated_at,
-      };
-    } else if (Number.isInteger(actorBranch) && actorBranch > 0) {
-      data = await branchPayload(actorBranch);
-    } else {
-      res.status(400).json({ success: false, message: 'branch_id is required for this role' });
-      return;
-    }
-
-    await writeLinaAgentLog(req, {
-      action: 'tool_food_control_health',
-      tool_name: 'food_control.health_check',
-      risk_classification: 'READ_ONLY',
-      input: { branch_id: requestedBranchId },
-      output: { scope: data.scope },
-      status: 'succeeded',
-    });
-    res.json({ success: true, data });
-  } catch (err: any) {
-    if (err?.name === 'BranchNotFoundError') {
-      res.status(404).json({ success: false, message: err.message });
-      return;
-    }
-    logger.error('Lina food-control health tool failed', err);
-    res.status(500).json({ success: false, message: 'Food-control health check failed' });
-  }
+  res.status(410).json({ success: false, message: 'Food-control health has been retired.' });
 };
 
 /**
@@ -2897,7 +2825,7 @@ export const getDailyFoodControlBriefing = async (req: Request, res: Response): 
     const shift = shiftRaw === 'A' || shiftRaw === 'B' ? shiftRaw : null;
     const forceRefresh = req.query.force_refresh === 'true';
 
-    const result = await runLinaDailyFoodControl(branchId, date, shift, forceRefresh);
+    const result = { is_ai_interpreted: false, briefing: { top_concerns: [] } } as any;
 
     await writeLinaAgentLog(req, {
       action: 'daily_food_control_briefing',
@@ -2908,7 +2836,7 @@ export const getDailyFoodControlBriefing = async (req: Request, res: Response): 
       status: 'succeeded',
     });
 
-    res.json({ success: true, data: result });
+    res.status(410).json({ success: false, message: 'Daily food-control briefing has been retired.' });
   } catch (err: any) {
     if (err?.name === 'BranchNotFoundError') {
       res.status(404).json({ success: false, message: err.message });

@@ -4,7 +4,6 @@ import { healthRefreshLimiter, healthRefreshLimiterIfForced } from '../middlewar
 import {
   getBranchHealthCheck,
   getFleetHealthCheck,
-  getFoodControlRunsMonitor,
   refreshBranchHealthCheck,
 } from '../controllers/branch-health.controller';
 
@@ -27,8 +26,6 @@ router.use(authorize(HEALTH_CHECK_ROLES));
 // Fleet overview must be registered before the :branchId routes so "fleet"
 // is not captured as a branch id. Deterministic only — no AI call, no limiter.
 router.get('/fleet/health-check', getFleetHealthCheck);
-router.get('/fleet/food-control-runs', getFoodControlRunsMonitor);
-
 // GET with ?force_refresh=true triggers an AI call, so it shares the same
 // per-branch rate limit as the explicit refresh endpoint.
 router.get('/:branchId/health-check', healthRefreshLimiterIfForced, getBranchHealthCheck);

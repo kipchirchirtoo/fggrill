@@ -22,7 +22,6 @@ import '../../auth/data/auth_repository.dart';
 import '../data/branch_storekeeper_repository.dart';
 import 'branch_po_create_screen.dart';
 import 'branch_stock_request_screen.dart';
-import '../daily_control/daily_control_page.dart';
 import 'pos_outlet_issue_screen.dart';
 import 'bar_stocktake_screen.dart';
 import 'kitchen_stocktake_screen.dart';
@@ -40,13 +39,13 @@ enum BranchStorekeeperSection {
   receiptVerification,
   suppliers,
   barStock,
+  foodStuffsStock,
   purchaseOrders,
   requests,
   departmentRequestLogging,
   kitchenRequisitions,
   kitchenUsage,
   stockOut,
-  dailyControls,
   kitchenProduction,
   storeStocktake,
   barStocktake,
@@ -967,12 +966,6 @@ class _BranchStorekeeperDashboardState
           icon: PhosphorIcons.package(),
           group: 'Inventory',
         ),
-        const MasterNavItem(
-          section: BranchStorekeeperSection.inventoryControl,
-          label: 'POS Outlet Issue',
-          icon: Icons.restaurant_menu_outlined,
-          group: 'Inventory',
-        ),
         MasterNavItem(
           section: BranchStorekeeperSection.inventoryLedger,
           label: 'Inventory Ledger',
@@ -983,6 +976,12 @@ class _BranchStorekeeperDashboardState
           section: BranchStorekeeperSection.barStock,
           label: 'Bar Stock',
           icon: PhosphorIcons.wine(),
+          group: 'Inventory',
+        ),
+        MasterNavItem(
+          section: BranchStorekeeperSection.foodStuffsStock,
+          label: 'Food Stuffs Stock',
+          icon: Icons.food_bank_outlined,
           group: 'Inventory',
         ),
         MasterNavItem(
@@ -1040,36 +1039,11 @@ class _BranchStorekeeperDashboardState
           group: 'Requisitions',
         ),
         MasterNavItem(
-          section: BranchStorekeeperSection.kitchenRequisitions,
-          label: 'Kitchen Requisitions',
-          icon: PhosphorIcons.cookingPot(),
-          group: 'Requisitions',
-        ),
-        MasterNavItem(
-          section: BranchStorekeeperSection.departmentRequestLogging,
-          label: 'Department Requests',
-          icon: PhosphorIcons.clipboardText(),
-          group: 'Requisitions',
-        ),
-        MasterNavItem(
-          section: BranchStorekeeperSection.kitchenUsage,
-          label: 'Kitchen Usage',
-          icon: PhosphorIcons.forkKnife(),
-          group: 'Usage',
-        ),
-        MasterNavItem(
           section: BranchStorekeeperSection.stockOut,
-          label: 'Stock Out',
+          label: 'Stock Out & Requisitions',
           icon: PhosphorIcons.trendDown(),
           group: 'Usage',
         ),
-        const MasterNavItem(
-          section: BranchStorekeeperSection.dailyControls,
-          label: 'Daily Controls',
-          icon: Icons.analytics_outlined,
-          group: 'Usage',
-        ),
-        
         const MasterNavItem(
           section: BranchStorekeeperSection.kitchenProduction,
           label: 'Kitchen Sessions',
@@ -1104,20 +1078,7 @@ class _BranchStorekeeperDashboardState
       case BranchStorekeeperSection.stock:
         return _stockPage();
       case BranchStorekeeperSection.inventoryControl:
-        return PosOutletIssueScreen(
-          outlets: _posOutletOptions,
-          selectedOutletId: _selectedOutletId,
-          onSelectOutlet: _selectOutlet,
-          branchStock: _stockOptions,
-          movements: _inventoryTruthMovements,
-          outletItemsLoading: _outletItemsLoading,
-          search: _search,
-          onSearchChanged: (value) => setState(() => _search = value),
-          onRefresh: _loadAll,
-          onViewDetail: _showJsonDetail,
-          stockForOutlet: _stockForOutlet,
-          outletDisplayName: _outletDisplayName,
-        );
+        return _consolidatedStockOutPage(1);
       case BranchStorekeeperSection.inventoryLedger:
         return _inventoryLedgerPage();
       case BranchStorekeeperSection.receive:
@@ -1128,21 +1089,20 @@ class _BranchStorekeeperDashboardState
         return _suppliersPage();
       case BranchStorekeeperSection.barStock:
         return const _BarStockSection();
+      case BranchStorekeeperSection.foodStuffsStock:
+        return const _FoodStuffsStockSection();
       case BranchStorekeeperSection.purchaseOrders:
         return _purchaseOrdersPage();
       case BranchStorekeeperSection.requests:
         return _selectedRequestId == null ? _requestsPage() : _requestDetail();
       case BranchStorekeeperSection.departmentRequestLogging:
-        return _departmentRequestLoggingPage();
+        return _consolidatedStockOutPage(3);
       case BranchStorekeeperSection.kitchenRequisitions:
-        return _kitchenRequisitionsPage();
+        return _consolidatedStockOutPage(2);
       case BranchStorekeeperSection.kitchenUsage:
-        return _kitchenUsagePage();
+        return _consolidatedStockOutPage(4);
       case BranchStorekeeperSection.stockOut:
-        return _stockOutPage();
-      case BranchStorekeeperSection.dailyControls:
-        return const DailyControlPage();
-      
+        return _consolidatedStockOutPage(0);
       case BranchStorekeeperSection.kitchenProduction:
         return _KitchenProductionSection(stock: _stock);
       case BranchStorekeeperSection.storeStocktake:
@@ -1160,6 +1120,89 @@ class _BranchStorekeeperDashboardState
       case BranchStorekeeperSection.notifications:
         return _notificationsPage();
     }
+  }
+
+  Widget _consolidatedStockOutPage(int initialTab) {
+    return DefaultTabController(
+      length: 5,
+      initialIndex: initialTab,
+      child: _Page(
+        title: 'Stock Out & Requisitions',
+        subtitle: 'Manage and track all stock issues, kitchen usage, and department requests.',
+        actions: const [],
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.kPrimary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const TabBar(
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white60,
+              indicatorColor: Colors.white,
+              indicatorSize: TabBarIndicatorSize.tab,
+              isScrollable: true,
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.outbox_outlined, size: 18),
+                  text: 'Direct Issue',
+                ),
+                Tab(
+                  icon: Icon(Icons.restaurant_menu_outlined, size: 18),
+                  text: 'POS Outlet Issue',
+                ),
+                Tab(
+                  icon: Icon(Icons.soup_kitchen_outlined, size: 18),
+                  text: 'Kitchen Requisitions',
+                ),
+                Tab(
+                  icon: Icon(Icons.assignment_outlined, size: 18),
+                  text: 'Department Requests',
+                ),
+                Tab(
+                  icon: Icon(Icons.kitchen_outlined, size: 18),
+                  text: 'Kitchen Usage',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 980,
+            child: TabBarView(
+              children: [
+                SingleChildScrollView(
+                  child: _stockOutPage(isTab: true),
+                ),
+                PosOutletIssueScreen(
+                  outlets: _posOutletOptions,
+                  selectedOutletId: _selectedOutletId,
+                  onSelectOutlet: _selectOutlet,
+                  branchStock: _stockOptions,
+                  movements: _inventoryTruthMovements,
+                  outletItemsLoading: _outletItemsLoading,
+                  search: _search,
+                  onSearchChanged: (value) => setState(() => _search = value),
+                  onRefresh: _loadAll,
+                  onViewDetail: _showJsonDetail,
+                  stockForOutlet: _stockForOutlet,
+                  outletDisplayName: _outletDisplayName,
+                ),
+                SingleChildScrollView(
+                  child: _kitchenRequisitionsPage(isTab: true),
+                ),
+                SingleChildScrollView(
+                  child: _departmentRequestLoggingPage(isTab: true),
+                ),
+                SingleChildScrollView(
+                  child: _kitchenUsagePage(isTab: true),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _overview() {
@@ -1240,8 +1283,6 @@ class _BranchStorekeeperDashboardState
                   () => _go(BranchStorekeeperSection.kitchenUsage)),
               _QuickAction('Stock out', PhosphorIcons.trendDown(),
                   () => _go(BranchStorekeeperSection.stockOut)),
-              _QuickAction('Daily Food Control', PhosphorIcons.chartLine(),
-                  _openDailyControlScreen),
             ],
           ),
         ),
@@ -1323,7 +1364,6 @@ class _BranchStorekeeperDashboardState
                   qty: _qty,
                   toNum: _num,
                   onRequest: _quickRequestStock,
-                  onAddStock: _openQuickAddStockDialog,
                 ),
                 _CentralCatalogTab(
                   catalog: _catalog,
@@ -1386,11 +1426,14 @@ class _BranchStorekeeperDashboardState
 
   Widget _receivePage() {
     final incoming = _incomingDispatches
-        .where((d) => '${d['status']}'.toUpperCase() == 'IN_TRANSIT')
+        .where((d) {
+          final s = '${d['status']}'.toUpperCase();
+          return s == 'IN_TRANSIT' || s == 'DISPATCHED';
+        })
         .length;
     final pendingDispatches = _incomingDispatches.where((d) {
       final s = '${d['status']}'.toUpperCase();
-      return s == 'IN_TRANSIT' || s == 'READY' || s == 'DELIVERED';
+      return s == 'IN_TRANSIT' || s == 'DISPATCHED' || s == 'READY' || s == 'DELIVERED';
     }).length;
     return _Page(
       title: 'Receive Goods',
@@ -1433,7 +1476,7 @@ class _BranchStorekeeperDashboardState
                         status.toUpperCase() == 'RECEIVED' ||
                         status.toUpperCase() == 'VERIFIED'),
                 actions: [
-                  if (['IN_TRANSIT', 'READY', 'DELIVERED']
+                  if (['IN_TRANSIT', 'DISPATCHED', 'READY', 'DELIVERED']
                       .contains(status.toUpperCase()))
                     TextButton(
                       onPressed: () => _showConfirmDispatch(dispatch),
@@ -2245,7 +2288,7 @@ class _BranchStorekeeperDashboardState
     );
   }
 
-  Widget _kitchenRequisitionsPage() {
+  Widget _kitchenRequisitionsPage({bool isTab = false}) {
     final pending = _kitchenRequisitions
         .where((r) =>
             '${r['status']}'.toUpperCase() == 'PENDING' ||
@@ -2256,14 +2299,8 @@ class _BranchStorekeeperDashboardState
             '${r['status']}'.toUpperCase() == 'FULFILLED' ||
             '${r['status']}'.toUpperCase() == 'REJECTED')
         .toList();
-    return _Page(
-      title: 'Kitchen Requisitions',
-      subtitle:
-          'Review, fulfill, and track kitchen item requisitions from the branch.',
-      actions: [
-        _RefreshButton(onPressed: _loadAll),
-      ],
-      children: [
+
+    final content = [
         _StatGrid(cards: [
           _StatCardData('Pending', '${pending.length}', PhosphorIcons.clock(),
               AppColors.kWarning),
@@ -2346,11 +2383,36 @@ class _BranchStorekeeperDashboardState
               }).toList(),
             ),
           ),
+    ];
+
+    if (isTab) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _RefreshButton(onPressed: _loadAll),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...content,
+        ],
+      );
+    }
+
+    return _Page(
+      title: 'Kitchen Requisitions',
+      subtitle:
+          'Review, fulfill, and track kitchen item requisitions from the branch.',
+      actions: [
+        _RefreshButton(onPressed: _loadAll),
       ],
+      children: content,
     );
   }
 
-  Widget _kitchenUsagePage() {
+  Widget _kitchenUsagePage({bool isTab = false}) {
     final records = _kitchenUsage.where((record) {
       if (_search.trim().isEmpty) return true;
       final haystack = [
@@ -2392,19 +2454,8 @@ class _BranchStorekeeperDashboardState
         return sum + itemWaste * _num(r['unit_cost']);
       },
     );
-    return _Page(
-      title: 'Kitchen Usage Tracking',
-      subtitle:
-          'Issue items to kitchen, track consumption, spoilage, losses, and closure.',
-      actions: [
-        _RefreshButton(onPressed: _loadAll),
-        FilledButton.icon(
-          onPressed: _showKitchenIssueForm,
-          icon: Icon(PhosphorIcons.plus()),
-          label: const Text('Issue to Kitchen'),
-        ),
-      ],
-      children: [
+
+    final content = [
         _StatGrid(cards: [
           _StatCardData('Active Tracking', '${active.length}',
               PhosphorIcons.forkKnife(), AppColors.kPrimary),
@@ -2515,34 +2566,51 @@ class _BranchStorekeeperDashboardState
             }).toList(),
           ),
         ),
+    ];
+
+    if (isTab) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _RefreshButton(onPressed: _loadAll),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _showKitchenIssueForm,
+                icon: Icon(PhosphorIcons.plus()),
+                label: const Text('Issue to Kitchen'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...content,
+        ],
+      );
+    }
+
+    return _Page(
+      title: 'Kitchen Usage Tracking',
+      subtitle:
+          'Issue items to kitchen, track consumption, spoilage, losses, and closure.',
+      actions: [
+        _RefreshButton(onPressed: _loadAll),
+        FilledButton.icon(
+          onPressed: _showKitchenIssueForm,
+          icon: Icon(PhosphorIcons.plus()),
+          label: const Text('Issue to Kitchen'),
+        ),
       ],
+      children: content,
     );
   }
 
-  Widget _stockOutPage() {
+  Widget _stockOutPage({bool isTab = false}) {
     final outs = _departmentIssueJournals;
     final hasPreload = _stockOutPreloadLines != null;
-    return _Page(
-      title: 'Stock Out',
-      subtitle: 'Issue branch stock to departments with availability checks.',
-      actions: [
-        _RefreshButton(onPressed: _loadAll),
-        OutlinedButton.icon(
-          onPressed: _exportStockOut,
-          icon: Icon(PhosphorIcons.download()),
-          label: const Text('Export Ledger'),
-        ),
-        FilledButton.icon(
-          onPressed: () => _showStockOutForm(
-            preloadLines: _stockOutPreloadLines,
-            preloadDeptCode: _stockOutPreloadDeptCode,
-            preloadRef: _stockOutPreloadRef,
-          ),
-          icon: Icon(PhosphorIcons.plus()),
-          label: const Text('Issue Stock'),
-        ),
-      ],
-      children: [
+
+    final content = [
         if (hasPreload)
           Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -2688,16 +2756,76 @@ class _BranchStorekeeperDashboardState
             }).toList(),
           ),
         ),
+    ];
+
+    if (isTab) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _RefreshButton(onPressed: _loadAll),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _exportStockOut,
+                icon: Icon(PhosphorIcons.download()),
+                label: const Text('Export Ledger'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () => _showStockOutForm(
+                  preloadLines: _stockOutPreloadLines,
+                  preloadDeptCode: _stockOutPreloadDeptCode,
+                  preloadRef: _stockOutPreloadRef,
+                ),
+                icon: Icon(PhosphorIcons.plus()),
+                label: const Text('Issue Stock'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...content,
+        ],
+      );
+    }
+
+    return _Page(
+      title: 'Stock Out',
+      subtitle: 'Issue branch stock to departments with availability checks.',
+      actions: [
+        _RefreshButton(onPressed: _loadAll),
+        OutlinedButton.icon(
+          onPressed: _exportStockOut,
+          icon: Icon(PhosphorIcons.download()),
+          label: const Text('Export Ledger'),
+        ),
+        FilledButton.icon(
+          onPressed: () => _showStockOutForm(
+            preloadLines: _stockOutPreloadLines,
+            preloadDeptCode: _stockOutPreloadDeptCode,
+            preloadRef: _stockOutPreloadRef,
+          ),
+          icon: Icon(PhosphorIcons.plus()),
+          label: const Text('Issue Stock'),
+        ),
       ],
+      children: content,
     );
   }
 
   Widget _receiptVerificationPage() {
     final pending = _incomingDispatches
-        .where((row) => '${row['status']}'.toUpperCase() == 'IN_TRANSIT')
+        .where((row) {
+          final s = '${row['status']}'.toUpperCase();
+          return s == 'IN_TRANSIT' || s == 'DISPATCHED' || s == 'READY';
+        })
         .toList();
     final verified = _incomingDispatches
-        .where((row) => '${row['status']}'.toUpperCase() != 'IN_TRANSIT')
+        .where((row) {
+          final s = '${row['status']}'.toUpperCase();
+          return s != 'IN_TRANSIT' && s != 'DISPATCHED' && s != 'READY';
+        })
         .toList();
     return _Page(
       title: 'Receipt Verification',
@@ -2761,7 +2889,7 @@ class _BranchStorekeeperDashboardState
     );
   }
 
-  Widget _departmentRequestLoggingPage() {
+  Widget _departmentRequestLoggingPage({bool isTab = false}) {
     final pendingReqs = _deptRequestLogs
         .where((r) => '${r['status']}'.contains('pending'))
         .length;
@@ -2770,24 +2898,8 @@ class _BranchStorekeeperDashboardState
             '${r['status']}' == 'issued' ||
             '${r['status']}' == 'partially_issued')
         .length;
-    return _Page(
-      title: 'Department Request Logging',
-      subtitle:
-          'Log stock requests from departments for auditing. Issue directly or cross-link to the Stock Out ledger.',
-      actions: [
-        _RefreshButton(onPressed: _loadAll),
-        OutlinedButton.icon(
-          onPressed: () => _showLogRequestDialog(issueAfter: false),
-          icon: Icon(PhosphorIcons.clipboardText()),
-          label: const Text('Log Request'),
-        ),
-        FilledButton.icon(
-          onPressed: () => _showLogRequestDialog(issueAfter: true),
-          icon: Icon(PhosphorIcons.caretRight()),
-          label: const Text('Log & Issue'),
-        ),
-      ],
-      children: [
+
+    final content = [
         _StatGrid(cards: [
           _StatCardData('Total Logged', '${_deptRequestLogs.length}',
               PhosphorIcons.clipboardText(), AppColors.kPrimary),
@@ -2843,7 +2955,54 @@ class _BranchStorekeeperDashboardState
             }).toList(),
           ),
         ),
+    ];
+
+    if (isTab) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _RefreshButton(onPressed: _loadAll),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => _showLogRequestDialog(issueAfter: false),
+                icon: Icon(PhosphorIcons.clipboardText()),
+                label: const Text('Log Request'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () => _showLogRequestDialog(issueAfter: true),
+                icon: Icon(PhosphorIcons.caretRight()),
+                label: const Text('Log & Issue'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...content,
+        ],
+      );
+    }
+
+    return _Page(
+      title: 'Department Request Logging',
+      subtitle:
+          'Log stock requests from departments for auditing. Issue directly or cross-link to the Stock Out ledger.',
+      actions: [
+        _RefreshButton(onPressed: _loadAll),
+        OutlinedButton.icon(
+          onPressed: () => _showLogRequestDialog(issueAfter: false),
+          icon: Icon(PhosphorIcons.clipboardText()),
+          label: const Text('Log Request'),
+        ),
+        FilledButton.icon(
+          onPressed: () => _showLogRequestDialog(issueAfter: true),
+          icon: Icon(PhosphorIcons.caretRight()),
+          label: const Text('Log & Issue'),
+        ),
       ],
+      children: content,
     );
   }
 
@@ -3133,7 +3292,10 @@ class _BranchStorekeeperDashboardState
             .contains('${r['status']}'.toLowerCase()))
         .length;
     final inTransit = _incomingDispatches
-        .where((r) => '${r['status']}'.toUpperCase() == 'IN_TRANSIT')
+        .where((r) {
+          final s = '${r['status']}'.toUpperCase();
+          return s == 'IN_TRANSIT' || s == 'DISPATCHED';
+        })
         .length;
 
     // ── build unified timeline ────────────────────────────────────────────────
@@ -4038,6 +4200,14 @@ class _BranchStorekeeperDashboardState
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (items.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        'No item details available for this dispatch. Confirming will mark it as received.',
+                        style: TextStyle(color: Colors.orange),
+                      ),
+                    ),
                   ...items.map((item) {
                     final id = '${item['id']}';
                     return Padding(
@@ -4085,23 +4255,24 @@ class _BranchStorekeeperDashboardState
               onPressed: () async {
                 Navigator.pop(context);
                 try {
+                  final itemsReceived = items
+                      .where((item) => item['id'] != null)
+                      .map((item) => {
+                            'item_id': item['id'],
+                            'quantity': quantities['${item['id']}'] ?? 0,
+                            'damaged': 0,
+                            'missing': 0,
+                            'note': '',
+                          })
+                      .toList();
                   await _repo.confirmDispatch('${dispatch['id']}', {
-                    'items_received': items
-                        .where((item) => item['id'] != null)
-                        .map((item) => {
-                              'item_id': item['id'],
-                              'quantity': quantities['${item['id']}'] ?? 0,
-                              'damaged': 0,
-                              'missing': 0,
-                              'note': '',
-                            })
-                        .toList(),
+                    'items_received': itemsReceived,
                     'notes': notesController.text,
                   });
                   await _loadAll();
-                  _showSnack('Dispatch received');
+                  _showSnack('Dispatch received successfully');
                 } catch (error) {
-                  _showSnack('Receive failed: $error', error: true);
+                  _showSnack(_errorText(error), error: true);
                 }
               },
               child: const Text('Confirm Receipt'),
@@ -4279,12 +4450,6 @@ class _BranchStorekeeperDashboardState
       MaterialPageRoute(builder: (_) => const BranchStockRequestScreen()),
     );
     if (created == true) await _loadAll();
-  }
-
-  void _openDailyControlScreen() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => const DailyControlPage()),
-    );
   }
 
   // ignore: unused_element
@@ -8181,7 +8346,6 @@ class _BranchInventoryTab extends StatefulWidget {
     required this.qty,
     required this.toNum,
     required this.onRequest,
-    required this.onAddStock,
   });
 
   final List<Map<String, dynamic>> stock;
@@ -8191,9 +8355,6 @@ class _BranchInventoryTab extends StatefulWidget {
   final String Function(Map<String, dynamic>) qty;
   final num Function(dynamic) toNum;
   final void Function(Map<String, dynamic>) onRequest;
-  /// Opens the quick-receive dialog for adding stock directly to branch inventory
-  /// (local purchases, direct deliveries not coming from central store).
-  final Future<void> Function(Map<String, dynamic>) onAddStock;
 
   @override
   State<_BranchInventoryTab> createState() => _BranchInventoryTabState();
@@ -8555,24 +8716,9 @@ class _BranchInventoryTabState extends State<_BranchInventoryTab> {
                                     onSelected: (action) {
                                       if (action == 'request') {
                                         widget.onRequest(item);
-                                      } else if (action == 'add') {
-                                        widget.onAddStock(item);
                                       }
                                     },
                                     itemBuilder: (_) => const [
-                                      PopupMenuItem(
-                                        value: 'add',
-                                        child: Row(children: [
-                                          Icon(Icons.add_box_outlined,
-                                              size: 16, color: Colors.teal),
-                                          SizedBox(width: 8),
-                                          Text('Add Stock',
-                                              style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.teal)),
-                                        ]),
-                                      ),
                                       PopupMenuItem(
                                         value: 'request',
                                         child: Row(children: [
@@ -13540,6 +13686,407 @@ class _BarStockSectionState extends ConsumerState<_BarStockSection> {
               }).toList(),
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _FoodStuffsStockSection extends ConsumerStatefulWidget {
+  const _FoodStuffsStockSection();
+
+  @override
+  ConsumerState<_FoodStuffsStockSection> createState() =>
+      _FoodStuffsStockSectionState();
+}
+
+class _FoodStuffsStockSectionState
+    extends ConsumerState<_FoodStuffsStockSection> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String _search = '';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final data = await repo.branchStock(search: _search);
+      final filtered = data.where((item) {
+        final storeType =
+            '${item['store_type'] ?? item['item']?['store_type'] ?? ''}'
+                .toLowerCase();
+        return storeType == 'foodstuffs';
+      }).toList();
+      if (mounted) setState(() => _items = filtered);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  double _num(dynamic v) => v == null ? 0 : (double.tryParse('$v') ?? 0);
+
+  String _itemName(Map<String, dynamic> item) {
+    final nested = item['item'];
+    if (nested is Map) {
+      final nestedName =
+          nested['item_name'] ?? nested['name'] ?? nested['description'];
+      if (nestedName != null && '$nestedName'.trim().isNotEmpty) {
+        return '$nestedName';
+      }
+    }
+    return '${item['item_name'] ?? item['name'] ?? item['description'] ?? item['item_sku'] ?? item['sku'] ?? ''}';
+  }
+
+  String _unit(Map<String, dynamic> item) =>
+      '${item['unit_of_measure'] ?? item['unit'] ?? item['item']?['unit_of_measure'] ?? item['item']?['unit'] ?? 'units'}';
+
+  String _qty(Map<String, dynamic> item) {
+    final quantity = _num(item['quantity'] ?? item['available_quantity']);
+    return '${quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 2)} ${_unit(item)}';
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_search.isEmpty) return _items;
+    final q = _search.toLowerCase();
+    return _items.where((item) {
+      return _itemName(item).toLowerCase().contains(q) ||
+          '${item['item_sku'] ?? item['sku'] ?? ''}'.toLowerCase().contains(q) ||
+          '${item['category'] ?? item['item']?['category'] ?? ''}'
+              .toLowerCase()
+              .contains(q);
+    }).toList();
+  }
+
+  void _showSnack(String message, {bool error = false}) {
+    if (!mounted) return;
+    AppNotifier.showSnackBar(
+      context,
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? AppColors.kError : AppColors.kPrimary,
+      ),
+    );
+  }
+
+  Future<void> _openAddStockDialog(Map<String, dynamic> item) async {
+    final saved = await showDialog<_QuickAddStockResult?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _QuickAddStockDialog(item: item),
+    );
+    if (saved == null) return;
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      await repo.adjustBranchStock({
+        'item_sku': '${item['item_sku'] ?? item['sku']}',
+        'quantity_change': saved.quantity,
+        'adjustment_type': 'STOCK_IN',
+        if (saved.supplierName.isNotEmpty) 'supplier_name': saved.supplierName,
+        if (saved.invoiceRef.isNotEmpty) 'reference': saved.invoiceRef,
+        'notes': saved.notes.isNotEmpty
+            ? saved.notes
+            : 'Direct foodstuffs receipt — ${_itemName(item)}',
+      });
+      await _load();
+      _showSnack('Added ${saved.quantity} ${_unit(item)} of ${_itemName(item)}');
+    } catch (e) {
+      _showSnack('Failed to add stock: $e', error: true);
+    }
+  }
+
+  Future<void> _openRequestStockDialog(Map<String, dynamic> item) async {
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (_) => _RequestFoodStockDialog(item: item),
+    );
+    if (submitted == true && mounted) {
+      _showSnack('Foodstuffs restock request sent to central store');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const _LoadingPage();
+
+    final lowStock = _filtered.where((item) {
+      final qty = _num(item['quantity']);
+      final min = _num(item['reorder_level'] ?? item['min_quantity']);
+      return qty <= min;
+    }).length;
+
+    return _Page(
+      title: 'Food Stuffs Stock',
+      subtitle:
+          'Track kitchen raw materials and branch foodstuffs stock with direct stock-in and central restock requests.',
+      actions: [
+        _RefreshButton(onPressed: _load),
+      ],
+      children: [
+        TextField(
+          decoration: const InputDecoration(
+            hintText: 'Search by item name, SKU or category',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (v) => setState(() => _search = v),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child:
+                Text(_error!, style: const TextStyle(color: AppColors.kError)),
+          ),
+        if (lowStock > 0)
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(children: [
+              const Icon(Icons.warning_amber_outlined,
+                  color: Colors.orange, size: 18),
+              const SizedBox(width: 8),
+              Text('$lowStock food item(s) at or below reorder level',
+                  style: const TextStyle(
+                      color: Colors.orange, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        const SizedBox(height: 16),
+        if (_filtered.isEmpty)
+          const _EmptyState('No foodstuffs stock found.')
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Item')),
+                DataColumn(label: Text('SKU')),
+                DataColumn(label: Text('Category')),
+                DataColumn(label: Text('Unit')),
+                DataColumn(label: Text('Balance'), numeric: true),
+                DataColumn(label: Text('Reorder'), numeric: true),
+                DataColumn(label: Text('Status')),
+                DataColumn(label: Text('')),
+              ],
+              rows: _filtered.map((item) {
+                final qty = _num(item['quantity']);
+                final reorder =
+                    _num(item['reorder_level'] ?? item['min_quantity']);
+                final isLow = qty <= reorder;
+                final isZero = qty <= 0;
+                return DataRow(cells: [
+                  DataCell(Text(_itemName(item))),
+                  DataCell(Text('${item['item_sku'] ?? item['sku'] ?? '—'}')),
+                  DataCell(
+                      Text('${item['category'] ?? item['item']?['category'] ?? '—'}')),
+                  DataCell(Text(_unit(item))),
+                  DataCell(Text(
+                    qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2),
+                    style: TextStyle(
+                      color: isZero
+                          ? Colors.red
+                          : isLow
+                              ? Colors.orange
+                              : AppColors.kPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )),
+                  DataCell(Text(reorder.toStringAsFixed(
+                      reorder % 1 == 0 ? 0 : 2))),
+                  DataCell(Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isZero
+                          ? Colors.red.shade100
+                          : isLow
+                              ? Colors.orange.shade100
+                              : Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      isZero
+                          ? 'ZERO'
+                          : isLow
+                              ? 'LOW'
+                              : 'OK',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isZero
+                            ? Colors.red.shade700
+                            : isLow
+                                ? Colors.orange.shade700
+                                : Colors.green.shade700,
+                      ),
+                    ),
+                  )),
+                  DataCell(
+                    PopupMenuButton<String>(
+                      onSelected: (action) {
+                        if (action == 'request') {
+                          _openRequestStockDialog(item);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'request',
+                          child: Text('Request from Central'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]);
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _RequestFoodStockDialog extends ConsumerStatefulWidget {
+  const _RequestFoodStockDialog({required this.item});
+  final Map<String, dynamic> item;
+
+  @override
+  ConsumerState<_RequestFoodStockDialog> createState() =>
+      _RequestFoodStockDialogState();
+}
+
+class _RequestFoodStockDialogState
+    extends ConsumerState<_RequestFoodStockDialog> {
+  final _quantityCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _quantityCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  String get _itemName =>
+      '${widget.item['item_name'] ?? widget.item['name'] ?? widget.item['description'] ?? widget.item['item_sku'] ?? widget.item['sku'] ?? 'Food item'}';
+
+  String get _unit =>
+      '${widget.item['unit_of_measure'] ?? widget.item['unit'] ?? widget.item['item']?['unit_of_measure'] ?? widget.item['item']?['unit'] ?? 'units'}';
+
+  String get _sku =>
+      '${widget.item['item_sku'] ?? widget.item['sku'] ?? widget.item['id'] ?? ''}';
+
+  Future<void> _submit() async {
+    final quantity = double.tryParse(_quantityCtrl.text.trim()) ?? 0;
+    if (quantity <= 0) {
+      setState(() => _error = 'Quantity must be greater than zero');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(branchStorekeeperRepositoryProvider);
+      final notes = _notesCtrl.text.trim();
+      await repo.createStockRequest({
+        'request_type': 'ROUTINE',
+        'priority':
+            (double.tryParse('${widget.item['quantity'] ?? 0}') ?? 0) <= 0
+                ? 'URGENT'
+                : 'NORMAL',
+        'reason': 'FOODSTUFFS RESTOCK REQUEST — $_itemName',
+        'items': [
+          {
+            'item_sku': _sku,
+            'requested_quantity': quantity,
+            'reason':
+                'Food item: $_itemName ($_unit)${notes.isNotEmpty ? ' — $notes' : ''}',
+          },
+        ],
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentStock = '${widget.item['quantity'] ?? 0} $_unit';
+    return AlertDialog(
+      title: Text('Request Stock — $_itemName'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Current branch stock: $currentStock',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _quantityCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Quantity to request ($_unit)',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notesCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes for central store',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!,
+                    style: const TextStyle(color: AppColors.kError)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Submit Request'),
+        ),
       ],
     );
   }

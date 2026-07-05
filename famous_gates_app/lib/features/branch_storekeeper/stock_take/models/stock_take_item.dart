@@ -8,6 +8,8 @@ class StockTakeItem {
   final int sdds;
   final int? physicalCount;
   final String? reason;
+  final String? explanation;
+  final String? actionTaken;
   final String category;
 
   const StockTakeItem({
@@ -20,6 +22,8 @@ class StockTakeItem {
     required this.sdds,
     this.physicalCount,
     this.reason,
+    this.explanation,
+    this.actionTaken,
     required this.category,
   });
 
@@ -36,6 +40,8 @@ class StockTakeItem {
     int? sdds,
     int? physicalCount,
     String? reason,
+    String? explanation,
+    String? actionTaken,
     String? category,
   }) {
     return StockTakeItem(
@@ -48,6 +54,8 @@ class StockTakeItem {
       sdds: sdds ?? this.sdds,
       physicalCount: physicalCount ?? this.physicalCount,
       reason: reason ?? this.reason,
+      explanation: explanation ?? this.explanation,
+      actionTaken: actionTaken ?? this.actionTaken,
       category: category ?? this.category,
     );
   }

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 import { KITCHEN_STOCKTAKE_ITEMS } from './kitchen-stocktake.controller';
+import { recordBarStockMovement } from '../../services/unified-bar-stock.service';
 
 // Branch Spoilage Log — storekeeper records spoiled/damaged/expired stock for
 // any of the three branch stocktake areas (bar, kitchen, store). Entries sit
@@ -202,19 +203,21 @@ export const recordSpoilage = async (req: Request, res: Response, next: NextFunc
             itemName = String(item_id);
             resolvedItemId = null;
         } else if (area === 'bar') {
-            // restaurant_bar_inventory — same Bar Stock catalog the bar
-            // stocktake screen reads from. No sku/cost columns there.
+            // Find by bar_drinks.id or bar_drinks.inventory_item_id
             const { data: item, error } = await supabase
-                .from('restaurant_bar_inventory')
-                .select('id, item_name')
-                .eq('id', item_id)
+                .from('bar_drinks')
+                .select('id, name, cost_price')
+                .or(`id.eq.${item_id},inventory_item_id.eq.${item_id}`)
+                .eq('branch_id', branchId)
                 .maybeSingle();
             if (error) throw error;
             if (!item) {
                 res.status(404).json({ success: false, message: 'Bar item not found' });
                 return;
             }
-            itemName = item.item_name;
+            itemName = item.name;
+            unitCost = num(item.cost_price);
+            resolvedItemId = item.id; // store the bar_drinks.id
         } else {
             const { data: item, error } = await supabase
                 .from('inventory_items')
@@ -288,16 +291,15 @@ export const approveSpoilage = async (req: Request, res: Response, next: NextFun
         }
 
         if (existing.area === 'bar') {
-            // bar-stocktake.controller.ts reads system quantity live from
-            // restaurant_bar_inventory — decrement it directly so the next
-            // stocktake reflects the approved spoilage.
-            const { data: invRow, error: invErr } = await supabase
-                .from('restaurant_bar_inventory')
-                .select('current_bottles, current_stock')
-                .eq('id', existing.item_id)
+            // Fetch live current stock from bar_stock
+            const { data: barStock, error: barErr } = await supabase
+                .from('bar_stock')
+                .select('current_stock')
+                .eq('branch_id', existing.branch_id)
+                .eq('drink_id', existing.item_id)
                 .maybeSingle();
-            if (invErr) throw invErr;
-            const currentQty = num(invRow?.current_bottles ?? invRow?.current_stock);
+            if (barErr) throw barErr;
+            const currentQty = num(barStock?.current_stock);
             if (currentQty < num(existing.quantity)) {
                 res.status(400).json({
                     success: false,
@@ -305,14 +307,24 @@ export const approveSpoilage = async (req: Request, res: Response, next: NextFun
                 });
                 return;
             }
-            const { error: updateErr } = await supabase
-                .from('restaurant_bar_inventory')
-                .update({
-                    current_bottles: currentQty - num(existing.quantity),
-                    current_stock: currentQty - num(existing.quantity),
-                })
-                .eq('id', existing.item_id);
-            if (updateErr) throw updateErr;
+
+            // Resolve POS outlet for the bar location to post stock movement correctly
+            const { data: outlet } = await supabase
+                .from('pos_outlets')
+                .select('id')
+                .eq('branch_id', existing.branch_id)
+                .eq('outlet_type', existing.bar_location || 'main_bar')
+                .maybeSingle();
+
+            await recordBarStockMovement({
+                branchId: existing.branch_id,
+                outletId: outlet?.id || null,
+                drinkId: existing.item_id,
+                quantityDelta: -num(existing.quantity),
+                movementType: 'waste',
+                notes: `Approved spoilage: ${existing.reason || 'unspecified'}. Request ID: ${existing.id}`,
+                performedBy: req.user?.id || null
+            });
         } else if (existing.area === 'store') {
             const { data: stockRow, error: stockErr } = await supabase
                 .from('branch_stock')

@@ -98,11 +98,6 @@ import adminLogsRoutes from './admin-logs.routes';
 import adminAiRoutes from './admin-ai.route';
 import searchRoutes from './search.routes';
 import branchAnalyticsRoutes from './branch-analytics.routes';
-import buffetRoutes from './buffet.routes';
-import cateringFoodControlRoutes from './catering.routes';
-import foodControlRoutes from './foodControl.routes';
-import shiftPnLRoutes from './shiftPnL.routes';
-import branchFoodControlConfigRoutes from './branchFoodControlConfig.routes';
 import securityRoutes from './security.routes';
 import communicationsRoutes from './communications.routes';
 import superadminRoutes from './superadmin.routes';
@@ -115,7 +110,6 @@ import restaurantBillsRoutes from './restaurant-bills.routes';
 import kitchenWastageRoutes from './kitchen-wastage.routes';
 import powerSyncRoutes from './powersync.routes';
 import branchHealthRoutes from './branch-health.routes';
-import foodControlReportRoutes from './food-control-report.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
@@ -247,18 +241,7 @@ router.use('/menu-pricing', menuPricingRoutes);
 router.use('/branch-search', branchSearchRoutes);
 router.use('/branch-payments', branchPaymentRoutes);
 router.use('/powersync', powerSyncRoutes);
-// Report routes must mount BEFORE branchHealthRoutes: that router applies
-// protect+authorize via router.use to everything under /branches, which
-// would reject storekeeper roles before the report routes could match.
-router.use('/branches', foodControlReportRoutes);
 router.use('/branches', branchHealthRoutes);
-
-// Food Control System routes
-router.use('/buffet', buffetRoutes);
-router.use('/catering-food-control', cateringFoodControlRoutes);
-router.use('/food-control', foodControlRoutes);
-router.use('/finance/shift-pnl', shiftPnLRoutes);
-router.use('/branch-food-control-config', branchFoodControlConfigRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

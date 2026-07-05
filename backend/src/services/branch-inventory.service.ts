@@ -687,7 +687,7 @@ export async function updateBranchStock(
  * Shared by Kitchen Shift production and Outlet Production posting so both
  * paths credit POS stock identically instead of each reimplementing it.
  */
-export async function creditOutletItemStock(outletItemId: string, qty: number): Promise<void> {
+export async function creditOutletItemStock(outletItemId: string, qty: number, shiftId?: string | null): Promise<void> {
   const { data: oi } = await supabase
     .from('pos_outlet_items')
     .select('current_stock,stock_pool_item_id,pool_fraction,outlet_id,source_table,source_item_id,sku')
@@ -713,8 +713,10 @@ export async function creditOutletItemStock(outletItemId: string, qty: number): 
           sku: oi.sku || undefined,
           quantityDelta: qty,
           movementType: 'production',
-          notes: 'Kitchen production added to bar POS'
+          notes: 'POS Outlet Restock Transfer',
+          shiftId: shiftId || undefined
         });
+        return; // Return early to prevent double-updating pos_outlet_items!
       }
     } catch (syncErr: any) {
       logger.warn('Unified bar stock sync failed for kitchen production (non-critical):', syncErr.message);
@@ -1871,6 +1873,30 @@ export async function confirmDelivery(
         dispatch.dispatch_number ?? dispatch.id
       );
 
+      // Sync bar stock if this is a bar drink — updates bar_stock, pos_outlet_items, bar_stock_ledger
+      try {
+        const { data: barDrink } = await supabase
+          .from('bar_drinks')
+          .select('id')
+          .eq('sku', dispatchItem.item_sku)
+          .maybeSingle();
+        if (barDrink?.id) {
+          await recordBarStockMovement({
+            branchId,
+            drinkId: barDrink.id,
+            sku: dispatchItem.item_sku,
+            quantityDelta: acceptedQty,
+            movementType: 'dispatch_receive',
+            referenceId: dispatchId,
+            referenceNumber: dispatch.dispatch_number ?? dispatchId,
+            performedBy: receiverId,
+            notes: `Received from dispatch ${dispatch.dispatch_number ?? dispatchId}`
+          });
+        }
+      } catch (barSyncErr: any) {
+        logger.warn(`Bar stock sync failed for ${dispatchItem.item_sku} on dispatch ${dispatchId}:`, barSyncErr?.message || barSyncErr);
+      }
+
       const { data: simpleItem } = await supabase
         .from('simple_items')
         .select('item_name, description')
@@ -1999,7 +2025,7 @@ export async function getIncomingDispatches(branchId: number) {
     .from('dispatch_notes')
     .select('*')
     .eq('to_branch_id', branchId)
-    .in('status', ['IN_TRANSIT', 'DELIVERED', 'CONFIRMED', 'READY'])
+    .in('status', ['IN_TRANSIT', 'DISPATCHED', 'DELIVERED', 'CONFIRMED', 'READY'])
     .order('dispatched_at', { ascending: false, nullsFirst: false });
 
   if (error) throw error;

@@ -8,6 +8,7 @@ class SummaryCard extends StatelessWidget {
   final int expectedClosing;
   final int physicalCount;
   final int totalVariance;
+  final bool isStorekeeper;
 
   const SummaryCard({
     super.key,
@@ -17,6 +18,7 @@ class SummaryCard extends StatelessWidget {
     required this.expectedClosing,
     required this.physicalCount,
     required this.totalVariance,
+    this.isStorekeeper = false,
   });
 
   @override
@@ -36,23 +38,28 @@ class SummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
-        children: [
-          _Stat('Opening',  '$totalOpening',  Colors.white70, Colors.white),
-          _divider(),
-          _Stat('Sales',    '-$totalSales',   Colors.white70,
-              totalSales > 0 ? const Color(0xFFFFCDD2) : Colors.white),
-          _divider(),
-          _Stat('Adds',     '+$totalSdds',    Colors.white70,
-              totalSdds > 0 ? const Color(0xFFC8E6C9) : Colors.white),
-          _divider(),
-          _Stat('Closing',  '$expectedClosing', Colors.white70, Colors.white),
-          _divider(),
-          _Stat('Counted',  '$physicalCount', Colors.white70,
-              const Color(0xFFB3E5FC)),
-          _divider(),
-          _Stat('Variance', varText, Colors.white70, varColor,
-              bold: true),
-        ],
+        children: isStorekeeper
+            ? [
+                _Stat('Counted Items Total', '$physicalCount', Colors.white70,
+                    const Color(0xFFB3E5FC)),
+              ]
+            : [
+                _Stat('Opening',  '$totalOpening',  Colors.white70, Colors.white),
+                _divider(),
+                _Stat('Sales',    '-$totalSales',   Colors.white70,
+                    totalSales > 0 ? const Color(0xFFFFCDD2) : Colors.white),
+                _divider(),
+                _Stat('Adds',     '+$totalSdds',    Colors.white70,
+                    totalSdds > 0 ? const Color(0xFFC8E6C9) : Colors.white),
+                _divider(),
+                _Stat('Closing',  '$expectedClosing', Colors.white70, Colors.white),
+                _divider(),
+                _Stat('Counted',  '$physicalCount', Colors.white70,
+                    const Color(0xFFB3E5FC)),
+                _divider(),
+                _Stat('Variance', varText, Colors.white70, varColor,
+                    bold: true),
+              ],
       ),
     );
   }

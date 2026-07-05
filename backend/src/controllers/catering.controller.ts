@@ -8,12 +8,46 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
-import { computeVariance } from '../services/foodControlService';
-import {
-  CreateCateringEventInput,
-  AllocateStockInput,
-  RecordActualInput
-} from '../types/foodControl';
+
+type CreateCateringEventInput = {
+  clientName: string;
+  clientPhone?: string | null;
+  clientEmail?: string | null;
+  eventName?: string | null;
+  eventDate: string;
+  eventTime?: string | null;
+  location: string;
+  expectedGuests: number;
+  agreedPrice: number;
+  depositPaid?: number | null;
+  leadChef?: string | null;
+  cateringManager?: string | null;
+  notes?: string | null;
+  menuItems?: Array<{
+    menuItemId?: string | null;
+    menuItemName: string;
+    quantityExpected: number;
+    recipeId?: number | null;
+  }>;
+};
+
+type AllocateStockInput = {
+  allocations: Array<{
+    itemSku: string;
+    itemName: string;
+    quantityAllocated: number;
+    unitCost?: number | null;
+  }>;
+};
+
+type RecordActualInput = {
+  actualGuests: number;
+  notes?: string | null;
+  returns?: Array<{
+    allocationId: string;
+    quantityReturned: number;
+  }>;
+};
 
 /**
  * @desc    Get all catering events
@@ -409,7 +443,7 @@ export const recordActual = async (
 };
 
 /**
- * @desc    Complete catering event and trigger P&L calculation
+ * @desc    Complete catering event
  * @route   POST /api/v1/catering/events/:id/complete
  * @access  Private (Manager)
  */
@@ -434,17 +468,6 @@ export const completeEvent = async (
       .single();
 
     if (updateError) throw updateError;
-
-    // Trigger variance calculation if shift_id exists
-    if (event.shift_id) {
-      try {
-        await computeVariance(event.shift_id, 'CATERING', id, branchId);
-        logger.info(`Variance calculated for catering event ${id}, shift ${event.shift_id}`);
-      } catch (varianceError) {
-        logger.error('Error calculating catering variance:', varianceError);
-        // Don't fail the complete operation if variance calculation fails
-      }
-    }
 
     logger.info(`Catering event completed: ${id}`);
 

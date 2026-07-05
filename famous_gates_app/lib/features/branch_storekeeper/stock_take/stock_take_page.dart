@@ -69,6 +69,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
 
     final user = ref.watch(authNotifierProvider).valueOrNull;
     final branchName = user?.branchName ?? 'Famous Gates';
+    final isStorekeeper = user?.role == 'branch_storekeeper';
 
     // Categories list for filter bar
     final categories = state.items.map((i) => itemCategoryName(i)).toSet().toList()..sort();
@@ -147,12 +148,23 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Daily Stock Take',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            Text(
+              widget.stockTakeType == StockTakeType.bar
+                  ? 'Bar Stock Take'
+                  : 'Store Stock Take',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             Text(
-              '$branchName · ${state.dateFilter}',
+              () {
+                final shift = state.currentShift;
+                final num = shift?['shift_number'];
+                final cashier = shift?['cashier_name'];
+                if (num != null) {
+                  final c = cashier != null ? ' · $cashier' : '';
+                  return '$branchName · Shift #$num$c';
+                }
+                return '$branchName · ${state.dateFilter}';
+              }(),
               style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
             ),
           ],
@@ -184,6 +196,9 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
       ),
       body: Column(
         children: [
+          // Shift info banner — shows which cashier shift this stocktake is for
+          if (state.currentShift != null || (!state.isLoading && state.items.isEmpty))
+            _buildShiftBanner(context, state),
           // Filter Bar
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -221,6 +236,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
                   : StockTable(
                       items: sortedItems,
                       isReadOnly: state.isSubmitted,
+                      isStorekeeper: isStorekeeper,
                       onPhysicalCountChanged: (id, val) {
                         notifier.updatePhysicalCount(id, val);
                       },
@@ -241,6 +257,7 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
               expectedClosing: expectedClosing,
               physicalCount: physicalCount,
               totalVariance: totalVariance,
+              isStorekeeper: isStorekeeper,
             ),
           ),
 
@@ -366,4 +383,79 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
       ),
     );
   }
+
+  Widget _buildShiftBanner(BuildContext context, StockTakeState state) {
+    final shift = state.currentShift;
+    final bool hasShift = shift != null && shift['shift_id'] != null;
+
+    if (!hasShift) {
+      return Container(
+        width: double.infinity,
+        color: const Color(0xFFFFF3E0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'No closed cashier shift found for ${state.dateFilter}. '
+                'Stocktake will be saved without a shift link.',
+                style: const TextStyle(color: Color(0xFFE65100), fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final shiftNum = shift['shift_number'];
+    final cashierName = shift['cashier_name'];
+    final openedAt = shift['shift_opened_at'];
+    final closedAt = shift['shift_closed_at'];
+
+    String timeRange = '';
+    if (openedAt != null) {
+      try {
+        final open = DateTime.parse(openedAt.toString()).toLocal();
+        final fmt = '${open.hour.toString().padLeft(2, '0')}:${open.minute.toString().padLeft(2, '0')}';
+        timeRange = 'Opened $fmt';
+        if (closedAt != null) {
+          final close = DateTime.parse(closedAt.toString()).toLocal();
+          final fmtC = '${close.hour.toString().padLeft(2, '0')}:${close.minute.toString().padLeft(2, '0')}';
+          timeRange += ' \u2013 $fmtC';
+        }
+      } catch (_) {}
+    }
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFE8F5E9),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.schedule_rounded, color: Color(0xFF2E7D32), size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Color(0xFF1B5E20), fontSize: 12),
+                children: [
+                  TextSpan(
+                    text: 'Shift #${shiftNum ?? '—'}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (cashierName != null)
+                    TextSpan(text: '  \u00b7  Cashier: $cashierName'),
+                  if (timeRange.isNotEmpty)
+                    TextSpan(text: '  \u00b7  $timeRange'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

@@ -1105,6 +1105,15 @@ export const posLogin = async (
         message: `Failed PIN attempt: ${pin[0]}****`,
         authMethod: 'pos_pin'
       });
+
+      void supabase.from('pos_login_logs').insert({
+        pin_prefix: pin[0],
+        success: false,
+        failure_reason: 'invalid_pin',
+        ip_address: req.ip || null,
+        user_agent: req.get('user-agent') || null,
+        created_at: new Date().toISOString()
+      });
       return;
     }
 
@@ -1377,6 +1386,19 @@ export const posLogin = async (
       req,
       authMethod: 'pos_pin',
       message: `POS PIN Success: ${maskedPin}`
+    });
+
+    void supabase.from('pos_login_logs').insert({
+      user_id: user.id,
+      branch_id: user.branch_id || null,
+      outlet_id: outlet?.id || null,
+      outlet_type: resolvedOutletType || null,
+      pin_prefix: prefix,
+      success: true,
+      session_id: sessionId,
+      ip_address: req.ip || null,
+      user_agent: req.get('user-agent') || null,
+      created_at: new Date().toISOString()
     });
   } catch (error) {
     next(error);

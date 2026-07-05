@@ -717,7 +717,8 @@ const updateStockForItems = async (
   shiftId: string,
   outletId: string,
   items: Array<Record<string, any>>,
-  direction: 1 | -1
+  direction: 1 | -1,
+  returnedToStock = true
 ): Promise<void> => {
   // Fetch branch_id once for unified bar stock updates
   const { data: shift } = await supabase
@@ -757,13 +758,15 @@ const updateStockForItems = async (
     // Chicken sharing the Full Chicken pool) have no independent stock of
     // their own — deduct the pool-equivalent quantity from the pool item.
     if (outletItem.stock_pool_item_id) {
-      const fraction = numberValue(outletItem.pool_fraction) || 1;
-      const { error: poolRpcError } = await supabase.rpc('decrement_pos_outlet_item_stock', {
-        p_item_id: outletItem.stock_pool_item_id,
-        p_outlet_id: null,
-        p_quantity_delta: direction * quantity * fraction
-      });
-      if (poolRpcError) throw poolRpcError;
+      if (direction === 1 || (direction === -1 && returnedToStock)) {
+        const fraction = numberValue(outletItem.pool_fraction) || 1;
+        const { error: poolRpcError } = await supabase.rpc('decrement_pos_outlet_item_stock', {
+          p_item_id: outletItem.stock_pool_item_id,
+          p_outlet_id: null,
+          p_quantity_delta: direction * quantity * fraction
+        });
+        if (poolRpcError) throw poolRpcError;
+      }
       continue;
     }
 
@@ -774,12 +777,14 @@ const updateStockForItems = async (
     // the same row for every single sale (confirmed live: bar_stock matched the
     // real sale exactly while pos_outlet_items had drifted to double that).
     if (!isBarSourced) {
-      const { error: itemRpcError } = await supabase.rpc('decrement_pos_outlet_item_stock', {
-        p_item_id: outletItemId,
-        p_outlet_id: outletItem.outlet_id || outletId,
-        p_quantity_delta: direction * quantity
-      });
-      if (itemRpcError) throw itemRpcError;
+      if (direction === 1 || (direction === -1 && returnedToStock)) {
+        const { error: itemRpcError } = await supabase.rpc('decrement_pos_outlet_item_stock', {
+          p_item_id: outletItemId,
+          p_outlet_id: outletItem.outlet_id || outletId,
+          p_quantity_delta: direction * quantity
+        });
+        if (itemRpcError) throw itemRpcError;
+      }
     }
 
     // ── Unified bar stock sync ──────────────────────────────────────
@@ -787,16 +792,21 @@ const updateStockForItems = async (
     // the pos_outlet_items update for this row (see isBarSourced above).
     if (branchId && isBarSourced) {
       try {
+        const qtyDelta = direction === 1 ? -quantity : (returnedToStock ? quantity : 0);
+        const movType = direction === 1 ? 'sale' : (returnedToStock ? 'sale_reversal' : 'waste');
+        const noteText = direction === 1 ? 'POS bar sale' : (returnedToStock ? 'POS bar sale reversal' : 'POS bar void wasted');
+
         await recordBarStockMovement({
           branchId,
           outletId: outletItem.outlet_id || outletId,
           drinkId: outletItem.source_item_id,
           sku: outletItem.sku || undefined,
-          quantityDelta: direction * quantity * -1, // POS sale = negative delta on stock
-          movementType: direction === 1 ? 'sale' : 'sale_reversal',
+          quantityDelta: qtyDelta,
+          movementType: movType,
           referenceId: shiftId,
           shiftId,
-          notes: direction === 1 ? 'POS bar sale' : 'POS bar sale reversal'
+          notes: noteText,
+          auditQuantity: direction === -1 && !returnedToStock ? quantity : undefined
         });
       } catch (syncErr: any) {
         logger.warn(
@@ -804,13 +814,14 @@ const updateStockForItems = async (
           syncErr?.message || syncErr,
           syncErr?.details || ''
         );
-        // Fall back to a direct decrement so the POS counter still reflects
-        // the sale even if the unified sync failed for some other reason.
-        await supabase.rpc('decrement_pos_outlet_item_stock', {
-          p_item_id: outletItemId,
-          p_outlet_id: outletItem.outlet_id || outletId,
-          p_quantity_delta: direction * quantity
-        });
+        // Fall back to a direct decrement if returning to stock
+        if (direction === 1 || (direction === -1 && returnedToStock)) {
+          await supabase.rpc('decrement_pos_outlet_item_stock', {
+            p_item_id: outletItemId,
+            p_outlet_id: outletItem.outlet_id || outletId,
+            p_quantity_delta: direction * quantity
+          });
+        }
       }
     }
   }
@@ -2977,6 +2988,8 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
       throw new AppError('A pending void request already exists for this bill', 409);
     }
 
+    const returnedToStock = req.body.returned_to_stock !== false;
+
     const { data: requestRow, error } = await supabase
       .from('pos_void_requests')
       .insert({
@@ -2987,7 +3000,8 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
         branch_id: shift.branch_id,
         requested_by: req.user.id,
         reason,
-        status: 'pending'
+        status: 'pending',
+        returned_to_stock: returnedToStock
       })
       .select('*')
       .single();
@@ -3378,7 +3392,7 @@ export const cashierAcknowledgeVoidRequest = async (req: Request, res: Response,
       .single();
     if (updateRequestError || !updatedReqRow) throw updateRequestError || new AppError('Void request already processed', 409);
 
-    await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+    await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, Array.isArray(order.items) ? order.items : [], -1, requestRow.returned_to_stock !== false);
     await reverseKitchenConsumptionForOrder(requestRow.order_id).catch((consumptionError) =>
       logger.warn('cashierAcknowledgeVoidRequest: reverseKitchenConsumptionForOrder failed', consumptionError as any));
     if (order.inventory_posted_at && !order.inventory_reversed_at) {
@@ -3812,6 +3826,8 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       );
     }
 
+    const returnedToStock = req.body.returned_to_stock !== false;
+
     const unitPrice = numberValue(item.unit_price ?? item.price);
     const { data: requestRow, error } = await supabase
       .from('pos_item_void_requests')
@@ -3830,7 +3846,8 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
         reason_category: reasonCategory,
         note,
         requested_by: req.user.id,
-        status: 'pending'
+        status: 'pending',
+        returned_to_stock: returnedToStock
       })
       .select('*')
       .single();
@@ -4012,7 +4029,7 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
     const qtyBeforeVoid = qtyAfterVoid + qtyVoided;
 
     // Update stock levels: reverse the sales decrement for the voided quantity
-    await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, [{ ...item, qty: qtyVoided }], -1);
+    await updateStockForItems(requestRow.shift_id, requestRow.outlet_id, [{ ...item, qty: qtyVoided }], -1, requestRow.returned_to_stock !== false);
 
     const { error: logError } = await supabase.from('pos_item_void_log').insert({
       void_request_id: requestRow.id,
@@ -4032,7 +4049,8 @@ export const approveItemVoidRequest = async (req: Request, res: Response, next: 
       branch_id: requestRow.branch_id,
       outlet_type: outletRow?.outlet_type || null,
       bill_code: orderData.short_code || null,
-      voided_at: now
+      voided_at: now,
+      returned_to_stock: requestRow.returned_to_stock !== false
     });
     if (logError) throw logError;
 

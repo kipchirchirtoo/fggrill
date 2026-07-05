@@ -5,28 +5,40 @@
 ;   powershell -ExecutionPolicy Bypass -File packaging/windows/prepare-redists.ps1
 ; Compile this script with Inno Setup 6.
 
-#define MyAppName "FamousGate Hotels System"
+#define MyAppName      "FamousGate Hotels System"
 #define MyAppPublisher "Famous Gates Hotels"
-#define MyAppExeName "famousgate_hotels_system.exe"
-#define MyAppVersion "3.9.9"
-#define BuildDir "..\..\build\windows\x64\runner\Release"
-#define RedistDir "redist"
+#define MyAppExeName   "famousgate_hotels_system.exe"
+#define MyAppVersion   "3.9.9"
+#define BuildDir       "..\..\build\windows\x64\runner\Release"
+#define RedistDir      "redist"
 
 [Setup]
 AppId={{D7D18239-C4AC-4E49-9176-DAF3397B830F}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\FamousGate Hotels System
+
+; ── Install location ──────────────────────────────────────────────────────────
+; Per-user install in %LocalAppData%\Programs\Famous Gates\
+; No admin rights needed. Matches what hotel PCs expect.
+DefaultDirName={localappdata}\Programs\Famous Gates
 DefaultGroupName={#MyAppName}
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+
+; ── Output ────────────────────────────────────────────────────────────────────
 OutputDir=output
 OutputBaseFilename=FamousGate-Hotels-System-Setup-{#MyAppVersion}-x64
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=admin
+
+; ── Platform ──────────────────────────────────────────────────────────────────
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0
+
+; ── Misc ──────────────────────────────────────────────────────────────────────
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupLogging=yes
@@ -35,49 +47,50 @@ SetupLogging=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
+Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
 
 [Files]
+; ── Main application bundle (all files from flutter release build) ─────────────
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; ── Windows system DLLs needed by Flutter passkeys / WebAuthn plugin ──────────
+; Copy webauthn.dll from the host's System32 into the app folder so it is
+; found on machines where it may be an older version or missing from search path.
+Source: "{sys}\webauthn.dll"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: FileExists(ExpandConstant('{sys}\webauthn.dll'))
+
+; ── Visual C++ runtimes ───────────────────────────────────────────────────────
 Source: "{#RedistDir}\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "{#RedistDir}\VC_redist.x86.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
+; Start Menu shortcut  →  %AppData%\Microsoft\Windows\Start Menu\Programs\FamousGate Hotels System.lnk
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; Desktop shortcut (optional – user can uncheck)
+Name: "{autodesktop}\{#MyAppName}";   Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ Runtime (x64)..."; Flags: waituntilterminated
-Filename: "{tmp}\VC_redist.x86.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ Runtime (x86 for legacy drivers/peripherals)..."; Flags: waituntilterminated
+; Install VC++ runtime silently
+Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ Runtime..."; Flags: waituntilterminated
+
+; Optionally launch the app after install
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Remove any leftover files/folders not tracked by the installer
+Type: filesandordirs; Name: "{app}"
 
 [Code]
 function InitializeSetup(): Boolean;
-var
-  Version: TWindowsVersion;
-  Message: String;
 begin
   Result := True;
 
   if not IsWin64 then
   begin
     MsgBox(
-      '{#MyAppName} is currently packaged as a 64-bit Flutter Windows app.' + #13#10#13#10 +
-      'This installer cannot run the app on 32-bit Windows. Use a 64-bit Windows machine, or produce a separate 32-bit app build if the framework/toolchain supports it.',
+      '{#MyAppName} is a 64-bit Windows application.' + #13#10#13#10 +
+      'This installer requires a 64-bit version of Windows 10 or newer.',
       mbCriticalError,
       MB_OK
     );
     Result := False;
-    Exit;
-  end;
-
-  GetWindowsVersionEx(Version);
-  if Version.Major < 10 then
-  begin
-    Message :=
-      '{#MyAppName} is tested for Windows 10 and newer.' + #13#10#13#10 +
-      'This machine appears to be running an older Windows version. The installer will add the Visual C++ runtimes required by Flutter apps, but Microsoft no longer fully supports some legacy Windows builds.' + #13#10#13#10 +
-      'Continue installation?';
-    Result := SuppressibleMsgBox(Message, mbConfirmation, MB_YESNO, IDYES) = IDYES;
   end;
 end;

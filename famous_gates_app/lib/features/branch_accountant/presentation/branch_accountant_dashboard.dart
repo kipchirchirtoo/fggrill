@@ -11,7 +11,6 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:famous_gates_app/core/utils/api_error_message.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
-import 'package:famous_gates_app/core/widgets/branch_sales_payments_view.dart';
 import 'package:famous_gates_app/core/widgets/payment_method_breakdown_widget.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -22,9 +21,6 @@ import '../../../core/utils/readable_record.dart';
 import '../../../core/utils/screen_size.dart';
 import '../../../core/widgets/record_detail_screen.dart';
 import '../../auth/domain/auth_notifier.dart';
-import '../../branch_health/presentation/branch_health_screen.dart';
-import '../../lina_daily_controls/presentation/daily_controls_lina_page.dart';
-import '../../branch_storekeeper/presentation/widgets/food_control_section.dart';
 import '../../branch_search/presentation/branch_search_screen.dart';
 import '../data/repository.dart';
 import '../domain/providers.dart';
@@ -40,7 +36,6 @@ import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
 import 'waiter_audit_screen.dart';
 import '../../pos/data/outlet_pos_repository.dart';
-import '../shift_reconciliation/screens/shift_reconciliation_screen.dart';
 import '../../../core/services/user_service.dart';
 
 enum BranchAccountantSection {
@@ -48,19 +43,16 @@ enum BranchAccountantSection {
   search,
   cashierClearance,
   analytics,
-  salesPayments,
   financialClose,
   branchPayroll,
   payrollPolicies,
   payrollAdjustments,
   discrepancies,
   profitLoss,
-  revenueOversight,
   soldItems,
   staffAudit,
   waiterAudit,
   shiftOpenings,
-  shiftReview,
   cashierLogbooks,
   voidApprovals,
   voidAudit,
@@ -70,14 +62,9 @@ enum BranchAccountantSection {
   outboundPayments,
   creditBills,
   staffPosAccounting,
-  foodVariance,
-  shiftPnl,
   bookingsInvoices,
-  stockTake,
   inventoryJournals,
   supplierFinance,
-  buffet,
-  catering,
   budgets,
   kitchenVariance,
   barStocktakeReview,
@@ -90,9 +77,6 @@ enum BranchAccountantSection {
   branchRestaurantMenu,
   posStockLink,
   restaurantStockLink,
-  dataHealth,
-  linaDailyControls,
-  foodControl,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -178,8 +162,6 @@ class _BranchAccountantDashboardState
         return const _CashierClearanceSection();
       case BranchAccountantSection.analytics:
         return const _AnalyticsSection();
-      case BranchAccountantSection.salesPayments:
-        return const BranchSalesPaymentsView();
       case BranchAccountantSection.financialClose:
         return const DailyCloseScreen();
       case BranchAccountantSection.branchPayroll:
@@ -192,8 +174,6 @@ class _BranchAccountantDashboardState
         return const _DiscrepanciesSection();
       case BranchAccountantSection.profitLoss:
         return const _ProfitLossSection();
-      case BranchAccountantSection.revenueOversight:
-        return const _RevenueOversightSection();
       case BranchAccountantSection.soldItems:
         return const _SoldItemsSection();
       case BranchAccountantSection.staffAudit:
@@ -202,8 +182,6 @@ class _BranchAccountantDashboardState
         return const WaiterAuditScreen();
       case BranchAccountantSection.shiftOpenings:
         return const _ShiftOpeningApprovalsSection();
-      case BranchAccountantSection.shiftReview:
-        return const _ShiftReviewSection();
       case BranchAccountantSection.cashierLogbooks:
         return const _CashierLogbooksSection();
       case BranchAccountantSection.voidApprovals:
@@ -225,22 +203,12 @@ class _BranchAccountantDashboardState
         return const _CreditBillsSection();
       case BranchAccountantSection.staffPosAccounting:
         return const StaffPosAccountingScreen();
-      case BranchAccountantSection.foodVariance:
-        return const _FoodVarianceSection();
-      case BranchAccountantSection.shiftPnl:
-        return const _ShiftPnlSection();
       case BranchAccountantSection.bookingsInvoices:
         return const _BookingsInvoicesSection();
-      case BranchAccountantSection.stockTake:
-        return const _StockTakeSection();
       case BranchAccountantSection.inventoryJournals:
         return const _InventoryJournalsSection();
       case BranchAccountantSection.supplierFinance:
         return _PurchasesSection(onPay: _navigateToOutbound);
-      case BranchAccountantSection.buffet:
-        return const _BuffetSection();
-      case BranchAccountantSection.catering:
-        return const _CateringSection();
       case BranchAccountantSection.budgets:
         return const _BudgetsSection();
       case BranchAccountantSection.kitchenVariance:
@@ -265,12 +233,6 @@ class _BranchAccountantDashboardState
         return const _PosStockLinkSection();
       case BranchAccountantSection.restaurantStockLink:
         return const _RestaurantStockLinkSection();
-      case BranchAccountantSection.dataHealth:
-        return const BranchHealthView();
-      case BranchAccountantSection.linaDailyControls:
-        return const DailyControlsLinaPage();
-      case BranchAccountantSection.foodControl:
-        return const FoodControlSection();
     }
   }
 
@@ -301,12 +263,10 @@ const _navItems = [
   _NavItem(BranchAccountantSection.overview, 'Overview', Icons.dashboard),
   _NavItem(BranchAccountantSection.search, 'Branch Search', Icons.search),
   // ── Daily cashier, shift & bill operations (most accessed) ──
-  _NavItem(BranchAccountantSection.shiftReview, 'Shift Reconciliation',
-      Icons.schedule),
   _NavItem(
       BranchAccountantSection.shiftOpenings, 'Shift Openings', Icons.lock_open),
   _NavItem(
-      BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
+      BranchAccountantSection.cashierLogbooks, 'Shift Reconciliation', Icons.book),
   _NavItem(
       BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
   _NavItem(BranchAccountantSection.staffPosAccounting, 'Staff POS Accounting',
@@ -317,8 +277,6 @@ const _navItems = [
       Icons.request_quote),
   _NavItem(BranchAccountantSection.outboundPayments, 'Outbound Payments',
       Icons.payments),
-  _NavItem(BranchAccountantSection.salesPayments, 'Sales & Payments',
-      Icons.point_of_sale),
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
   _NavItem(BranchAccountantSection.waiterAudit, 'Waiter Audit', Icons.restaurant),
   _NavItem(
@@ -340,13 +298,10 @@ const _navItems = [
       Icons.adjust),
   _NavItem(
       BranchAccountantSection.analytics, 'Branch Analytics', Icons.analytics),
-  _NavItem(BranchAccountantSection.revenueOversight, 'Revenue Oversight',
-      Icons.trending_up),
   _NavItem(
       BranchAccountantSection.profitLoss, 'Profit & Loss', Icons.bar_chart),
   // ── Inventory & operations ──
   _NavItem(BranchAccountantSection.soldItems, 'Sold Items', Icons.inventory_2),
-  _NavItem(BranchAccountantSection.stockTake, 'Stock Takes', Icons.inventory),
   _NavItem(BranchAccountantSection.inventoryJournals, 'Inventory Journals',
       Icons.account_tree),
   _NavItem(BranchAccountantSection.supplierFinance, 'Supplier Finance',
@@ -370,12 +325,6 @@ const _navItems = [
   _NavItem(BranchAccountantSection.branchRestaurantMenu, 'Restaurant Menu',
       Icons.restaurant_menu),
   _NavItem(BranchAccountantSection.posStockLink, 'POS Stock Link', Icons.link),
-  _NavItem(BranchAccountantSection.dataHealth, 'Data Health',
-      Icons.monitor_heart_outlined),
-  _NavItem(BranchAccountantSection.linaDailyControls, 'Daily Controls (Lina)',
-      Icons.auto_awesome),
-  _NavItem(BranchAccountantSection.foodControl, 'Food Control',
-      Icons.restaurant_outlined),
   _NavItem(BranchAccountantSection.restaurantStockLink, 'Restaurant Stock Link',
       Icons.restaurant_outlined),
 ];
@@ -628,7 +577,6 @@ class _BranchAccountantBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     const items = [
       BranchAccountantSection.overview,
-      BranchAccountantSection.shiftReview,
       BranchAccountantSection.cashierLogbooks,
       BranchAccountantSection.creditBills,
       BranchAccountantSection.discrepancies,
@@ -933,11 +881,6 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = <(String, IconData, BranchAccountantSection)>[
       (
-        'Shift Reconciliation',
-        Icons.schedule,
-        BranchAccountantSection.shiftReview
-      ),
-      (
         'Shift Openings',
         Icons.lock_open,
         BranchAccountantSection.shiftOpenings
@@ -954,7 +897,6 @@ class _QuickActions extends StatelessWidget {
         Icons.account_balance_wallet,
         BranchAccountantSection.supplierFinance
       ),
-      ('Stock Takes', Icons.inventory, BranchAccountantSection.stockTake),
       ('Profit & Loss', Icons.bar_chart, BranchAccountantSection.profitLoss),
     ];
     return _SectionCard(
@@ -1526,7 +1468,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                             .toList(),
                       ),
                       const SizedBox(height: 16),
-                      const Text('Cashier Logbooks',
+                      const Text('Shift Reconciliation',
                           style: TextStyle(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 6),
                       _SimpleTable(
@@ -2900,198 +2842,6 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
   }
 }
 
-class _RevenueOversightSection extends ConsumerStatefulWidget {
-  const _RevenueOversightSection();
-
-  @override
-  ConsumerState<_RevenueOversightSection> createState() =>
-      _RevenueOversightSectionState();
-}
-
-class _RevenueOversightSectionState
-    extends ConsumerState<_RevenueOversightSection> {
-  int _period = 30;
-  bool _isCustom = false;
-  String _customFrom = _date(DateTime.now().subtract(const Duration(days: 30)));
-  String _customTo = _today();
-  late Future<List<Map<String, dynamic>>> _future = _load();
-
-  String get _effectiveFrom => _isCustom
-      ? _customFrom
-      : _date(DateTime.now().subtract(Duration(days: _period)));
-  String get _effectiveTo => _isCustom ? _customTo : _today();
-
-  Future<List<Map<String, dynamic>>> _load() {
-    final repo = ref.read(branchAccountantRepositoryProvider);
-    return Future.wait([
-      repo.getRevenueOversight(
-          startDate: _effectiveFrom, endDate: _effectiveTo),
-      repo.getBranchProfitLoss(
-          startDate: _effectiveFrom, endDate: _effectiveTo),
-    ]);
-  }
-
-  void _refresh() => setState(() {
-        _future = _load();
-      });
-
-  void _selectQuickRange(int days) {
-    setState(() {
-      _isCustom = false;
-      _period = days;
-      _future = _load();
-    });
-  }
-
-  void _selectCustom() {
-    setState(() {
-      _isCustom = true;
-      _future = _load();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (results) {
-          final data = results[0];
-          final pl = results[1];
-          final summary = _map(data['summary']);
-          final categories = _list(data['category_breakdown']);
-          final trend = _list(data['daily_trend']);
-          final byMethod = _map(pl['system_revenue_by_method']);
-          return _Page(
-            title: 'Revenue Oversight',
-            subtitle:
-                'Targets, achievement, category performance, and daily trend.',
-            actions: [
-              _RefreshButton(onPressed: _refresh),
-            ],
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Last 7 Days'),
-                    selected: !_isCustom && _period == 7,
-                    onSelected: (_) => _selectQuickRange(7),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Last 30 Days'),
-                    selected: !_isCustom && _period == 30,
-                    onSelected: (_) => _selectQuickRange(30),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Last 90 Days'),
-                    selected: !_isCustom && _period == 90,
-                    onSelected: (_) => _selectQuickRange(90),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Custom'),
-                    selected: _isCustom,
-                    onSelected: (_) => _selectCustom(),
-                  ),
-                ],
-              ),
-              if (_isCustom) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _DateField(
-                      value: _customFrom,
-                      onChanged: (v) => setState(() => _customFrom = v),
-                    ),
-                    _DateField(
-                      value: _customTo,
-                      onChanged: (v) => setState(() => _customTo = v),
-                    ),
-                    _RefreshButton(onPressed: _refresh),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 12),
-              if (byMethod.isNotEmpty)
-                PaymentMethodBreakdownWidget(
-                  title: 'Payment Method Breakdown',
-                  mpesa: _num(byMethod['mpesa']),
-                  cash: _num(byMethod['cash']),
-                  card: _num(byMethod['card']),
-                  credit: _num(byMethod['credit']),
-                ),
-              const SizedBox(height: 12),
-              _ResponsiveGrid(children: [
-                _MetricCard(
-                    'Total Revenue',
-                    _money(_num(summary['total_revenue'])),
-                    Icons.payments,
-                    Colors.green),
-                _MetricCard('Target', _money(_num(summary['target_revenue'])),
-                    Icons.track_changes, Colors.blue),
-                _MetricCard(
-                    'Variance',
-                    _money(_num(summary['variance'])),
-                    Icons.compare_arrows,
-                    _num(summary['variance']) >= 0 ? Colors.green : Colors.red),
-                _MetricCard(
-                    'Achievement',
-                    '${_num(summary['achievement_rate']).toStringAsFixed(1)}%',
-                    Icons.emoji_events,
-                    Colors.purple),
-                _MetricCard(
-                    'Growth',
-                    '${_num(summary['growth_rate']).toStringAsFixed(1)}%',
-                    Icons.show_chart,
-                    Colors.teal),
-                _MetricCard(
-                    'Days Tracked',
-                    '${_num(summary['days_count'] ?? summary['period_days'] ?? _period)}',
-                    Icons.calendar_month,
-                    Colors.indigo),
-              ]),
-              _AchievementBar(
-                achievement: _num(summary['achievement_rate']).toDouble(),
-                categories: categories,
-              ),
-              _SectionCard(
-                title: 'Daily Revenue Trend',
-                child: _SimpleTable(
-                  columns: const [
-                    'Date',
-                    'Rooms',
-                    'Restaurant',
-                    'Bar',
-                    'Conference',
-                    'Total'
-                  ],
-                  rows: trend
-                      .take(20)
-                      .map((e) => [
-                            _text(e, ['date']),
-                            _money(_num(e['rooms'])),
-                            _money(_num(e['restaurant'])),
-                            _money(_num(e['bar'])),
-                            _money(_num(e['conference'])),
-                            _money(_num(e['total'])),
-                          ])
-                      .toList(),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
 class _SoldItemsSection extends ConsumerStatefulWidget {
   const _SoldItemsSection();
 
@@ -3258,22 +3008,6 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 values: shiftOptions,
                 labels: shiftLabels,
                 onChanged: (v) => setState(() => _shiftFilter = v),
-              ),
-              _SoldItemsDropdown(
-                value: _movementMetric,
-                values: const ['quantity', 'revenue', 'gross_profit'],
-                labels: const {
-                  'quantity': 'Rank by Qty',
-                  'revenue': 'Rank by Revenue',
-                  'gross_profit': 'Rank by Profit',
-                },
-                onChanged: (v) => setState(() => _movementMetric = v),
-              ),
-              _SoldItemsDropdown(
-                value: '$_topLimit',
-                values: const ['10', '20', '50'],
-                labels: const {'10': 'Top 10', '20': 'Top 20', '50': 'Top 50'},
-                onChanged: (v) => setState(() => _topLimit = int.parse(v)),
               ),
               SizedBox(
                 width: 220,
@@ -5384,491 +5118,6 @@ class _ShiftOpeningRequestRow extends StatelessWidget {
   }
 }
 
-class _ShiftReviewSection extends ConsumerStatefulWidget {
-  const _ShiftReviewSection();
-
-  @override
-  ConsumerState<_ShiftReviewSection> createState() =>
-      _ShiftReviewSectionState();
-}
-
-class _ShiftReviewSectionState extends ConsumerState<_ShiftReviewSection> {
-  final TextEditingController _notesController = TextEditingController();
-  String? _selectedShiftId;
-  Map<String, dynamic>? _selectedShift;
-  Map<String, dynamic>? _selectedDetail;
-  bool _loadingDetail = false;
-
-  late Future<List<Map<String, dynamic>>> _future = _load();
-
-  Future<List<Map<String, dynamic>>> _load() async {
-    final repo = ref.read(branchAccountantRepositoryProvider);
-    final results = await Future.wait([
-      repo.getShiftLogs(status: 'pending_open'),
-      repo.getPendingCashierLogbooks(),
-      repo.getShiftLogs(status: 'closed'),
-    ]);
-    final pendingOpenings = results[0]
-        .map((shift) => {...shift, '_shift_record_type': 'opening'})
-        .toList();
-    final pendingLogbooks = results[1]
-        .map((logbook) => {...logbook, '_shift_record_type': 'logbook_review'})
-        .toList();
-    final linkedShiftIds = pendingLogbooks
-        .expand((logbook) => [
-              '${logbook['cashier_shift_id'] ?? ''}',
-              '${logbook['outlet_shift_id'] ?? ''}',
-            ])
-        .where((id) => id.trim().isNotEmpty)
-        .toSet();
-    final closedShifts = results[2]
-        .where((shift) => !linkedShiftIds.contains('${shift['id'] ?? ''}'))
-        .map((shift) => {...shift, '_shift_record_type': 'closed_shift'})
-        .toList();
-    return [
-      ...pendingOpenings,
-      ...pendingLogbooks,
-      ...closedShifts,
-    ];
-  }
-
-  @override
-  void dispose() {
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  void _refresh() => setState(() {
-        _future = _load();
-      });
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) {
-          if (items.isNotEmpty && _selectedShiftId == null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _selectedShiftId == null) {
-                _selectShift(items.first, clearNotes: false);
-              }
-            });
-          }
-
-          final selected = _currentSelected(items);
-
-          return _Page(
-            title: 'Shift Reconciliation',
-            subtitle:
-                'Approve cashier shift openings and reconcile closed shifts',
-            actions: [
-              _RefreshButton(onPressed: _refresh),
-            ],
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final shiftList = _ShiftReconciliationList(
-                    shifts: items,
-                    selectedId: _selectedShiftId,
-                    onSelect: _selectShift,
-                  );
-                  final detailPanel = _ShiftReconciliationPanel(
-                    shift: selected,
-                    loading: _loadingDetail,
-                    notesController: _notesController,
-                    onApproveOpening: selected == null
-                        ? null
-                        : () => _approveOpening(selected),
-                    onRejectOpening: selected == null
-                        ? null
-                        : () => _rejectOpening(selected),
-                    onReconcile: selected == null
-                        ? null
-                        : () => _reconcileSelected(selected),
-                  );
-
-                  if (constraints.maxWidth < 980) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        shiftList,
-                        const SizedBox(height: 18),
-                        detailPanel,
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: shiftList),
-                      const SizedBox(width: 24),
-                      Expanded(child: detailPanel),
-                    ],
-                  );
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Map<String, dynamic>? _currentSelected(List<Map<String, dynamic>> items) {
-    if (_selectedDetail != null) return _selectedDetail;
-    if (_selectedShift != null) return _selectedShift;
-    if (items.isEmpty) return null;
-    if (_selectedShiftId == null) return items.first;
-    return items.firstWhere(
-      (shift) => '${shift['id']}' == _selectedShiftId,
-      orElse: () => items.first,
-    );
-  }
-
-  void _selectShift(
-    Map<String, dynamic> shift, {
-    bool clearNotes = true,
-  }) {
-    final id = '${shift['id'] ?? ''}'.trim();
-    setState(() {
-      _selectedShiftId = id.isEmpty ? null : id;
-      _selectedShift = shift;
-      _selectedDetail = null;
-      _loadingDetail = id.isNotEmpty;
-      if (clearNotes) _notesController.clear();
-    });
-
-    if (id.isEmpty) return;
-
-    final detailRequest = _isShiftLogbookReview(shift)
-        ? ref
-            .read(branchAccountantRepositoryProvider)
-            .getCashierLogbookDetail(id)
-        : ref.read(branchAccountantRepositoryProvider).getShiftLog(id);
-
-    detailRequest.then((detail) {
-      if (!mounted) return;
-      if (_selectedShiftId != id) return;
-      setState(() {
-        _selectedDetail = {
-          ...shift,
-          ...detail,
-          '_shift_record_type': shift['_shift_record_type'],
-          '_queue_id': id,
-        };
-        _loadingDetail = false;
-      });
-    }).catchError((_) {
-      if (!mounted) return;
-      if (_selectedShiftId != id) return;
-      setState(() => _loadingDetail = false);
-      _notify(context,
-          'Could not load full shift details. Showing available shift summary.');
-    });
-  }
-
-  Future<void> _reconcileSelected(Map<String, dynamic> shift) async {
-    final repo = ref.read(branchAccountantRepositoryProvider);
-    if (_isShiftLogbookReview(shift)) {
-      await repo.auditCashierLogbook(
-        '${shift['_queue_id'] ?? shift['id']}',
-        approve: true,
-        notes: _notesController.text.trim(),
-      );
-      _toast('Lina shift logbook approved');
-      _notesController.clear();
-      _selectedShiftId = null;
-      _selectedShift = null;
-      _selectedDetail = null;
-      _refresh();
-    } else {
-      final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => BranchAccountantShiftReconciliationScreen(
-            shiftId: '${shift['id']}',
-            cashierId: '${shift['cashier_id']}',
-          ),
-        ),
-      );
-      _notesController.clear();
-      _selectedShiftId = null;
-      _selectedShift = null;
-      _selectedDetail = null;
-      _refresh();
-    }
-  }
-
-  Future<void> _approveOpening(Map<String, dynamic> shift) async {
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .approveShiftOpening('${shift['id']}', notes: _notesController.text);
-    _toast('Cashier shift opened');
-    _notesController.clear();
-    _selectedShiftId = null;
-    _selectedShift = null;
-    _selectedDetail = null;
-    _refresh();
-  }
-
-  Future<void> _rejectOpening(Map<String, dynamic> shift) async {
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .rejectShiftOpening('${shift['id']}', notes: _notesController.text);
-    _toast('Shift opening request rejected');
-    _notesController.clear();
-    _selectedShiftId = null;
-    _selectedShift = null;
-    _selectedDetail = null;
-    _refresh();
-  }
-}
-
-class _ShiftReconciliationList extends StatelessWidget {
-  const _ShiftReconciliationList({
-    required this.shifts,
-    required this.selectedId,
-    required this.onSelect,
-  });
-
-  final List<Map<String, dynamic>> shifts;
-  final String? selectedId;
-  final ValueChanged<Map<String, dynamic>> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Shift Opening & Reconciliation Queue',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 14),
-        if (shifts.isEmpty)
-          const _SectionCard(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 34),
-              child: Column(
-                children: [
-                  Icon(Icons.check_circle_outline,
-                      color: Colors.green, size: 48),
-                  SizedBox(height: 10),
-                  Text(
-                    'All shifts processed',
-                    style: TextStyle(color: AppColors.kTextSecondary),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          ...shifts.map(
-            (shift) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _ShiftReconciliationCard(
-                shift: shift,
-                selected: '${shift['id']}' == selectedId,
-                onTap: () => onSelect(shift),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _ShiftReconciliationCard extends StatelessWidget {
-  const _ShiftReconciliationCard({
-    required this.shift,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final Map<String, dynamic> shift;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final variance = _shiftVariance(shift);
-    final status = _firstTextFrom(shift, ['status']).toLowerCase();
-    final isOpeningRequest = status == 'pending_open';
-    final isLogbook = _isShiftLogbookReview(shift);
-    final varianceColor = variance == 0
-        ? Colors.green.shade700
-        : variance.abs() < 100
-            ? Colors.orange.shade700
-            : Colors.red.shade700;
-    final module = _firstTextFrom(shift, ['module'], fallback: 'standard');
-    // Lina logbook entries have no shift_number — falling back to the raw
-    // id UUID isn't a useful title for a human reviewer, so show the
-    // cashier's name instead.
-    final cardTitle = isLogbook
-        ? (_shiftCashierName(shift).isEmpty
-            ? 'Lina Shift Logbook'
-            : _shiftCashierName(shift))
-        : _firstTextFrom(shift, ['shift_number'], fallback: 'Shift');
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? Colors.orange : AppColors.kDivider,
-            width: selected ? 2 : 1,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        cardTitle,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w900),
-                      ),
-                      _MiniBadge(
-                        isOpeningRequest
-                            ? 'PENDING OPEN'
-                            : isLogbook
-                                ? 'LINA LOGBOOK'
-                                : module.toLowerCase() == 'kyogong'
-                                    ? 'KYOGONG'
-                                    : 'FAMOUS GATE',
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  _shortDate(_firstTextFrom(
-                      shift, ['shift_start', 'created_at', 'opened_at'])),
-                  style: const TextStyle(color: AppColors.kTextSecondary),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final narrow = constraints.maxWidth < 420;
-                final children = [
-                  _ShiftCardField(
-                    label: 'Cashier',
-                    value: _firstTextFrom(
-                      shift,
-                      ['cashier_name', 'cashier', 'user_name'],
-                      fallback: _shiftCashierName(shift),
-                    ),
-                  ),
-                  _ShiftCardField(
-                    label: isOpeningRequest ? 'Opening Float' : 'Sales',
-                    value: _money(isOpeningRequest
-                        ? _firstNumFrom(shift, ['opening_float'])
-                        : _shiftTotalSales(shift)),
-                    valueColor: isOpeningRequest
-                        ? Colors.orange.shade700
-                        : Colors.green.shade700,
-                  ),
-                  _ShiftCardField(
-                    label: isOpeningRequest ? 'Requested' : 'Variance',
-                    value: isOpeningRequest
-                        ? _shortDate(_firstTextFrom(
-                            shift, ['requested_at', 'created_at']))
-                        : variance > 0
-                            ? '+${_money(variance)}'
-                            : _money(variance),
-                    valueColor: isOpeningRequest
-                        ? AppColors.kTextPrimary
-                        : varianceColor,
-                  ),
-                ];
-
-                if (narrow) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: children
-                        .map((child) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: child,
-                            ))
-                        .toList(),
-                  );
-                }
-
-                return Row(
-                  children: children
-                      .map((child) => Expanded(child: child))
-                      .toList(growable: false),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ShiftCardField extends StatelessWidget {
-  const _ShiftCardField({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.kTextSecondary,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          value,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: valueColor ?? AppColors.kTextPrimary,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _MiniBadge extends StatelessWidget {
   const _MiniBadge(this.label);
 
@@ -7605,8 +6854,8 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
     }
 
     return _Page(
-      title: 'Cashier Logbooks',
-      subtitle: 'Audit submitted daily cashier logbooks and bill line entries.',
+      title: 'Shift Reconciliation',
+      subtitle: 'Review cashier shift closures, blind entries, and approve hard-close reconciliation.',
       actions: [
         _RefreshButton(
           onPressed: () {
@@ -7642,7 +6891,7 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
         builder: (items) => ListView(
           children: [
             _SectionCard(
-              title: 'Pending Audit',
+              title: 'Pending Shift Reconciliation',
               child: _CashierLogbooksTable(
                 items: items,
                 onView: _openDetail,
@@ -7819,6 +7068,49 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
       minLines: 4,
     );
     if (notes == null) return;
+
+    if (approve) {
+      final detail = await ref
+          .read(branchAccountantRepositoryProvider)
+          .getCashierLogbookDetail('${logbook['id']}');
+      final shift = _map(detail['shift']);
+      final reconciliationGrid = _map(detail['reconciliation_grid']);
+      final shiftId = _text(shift, ['id']);
+      final hasVariance = ['cash', 'mpesa', 'card'].any((method) {
+        final row = _map(reconciliationGrid[method]);
+        return _num(row['variance']).abs() > 0.009;
+      });
+      String? varianceReasonCode;
+      String? varianceComment;
+      if (hasVariance) {
+        varianceReasonCode = await _textDialog(
+          context,
+          'Variance Reason Code',
+          hint: 'Examples: mpesa_delay, shortage, unrecorded_void',
+        );
+        if (varianceReasonCode == null || varianceReasonCode.trim().isEmpty) {
+          return;
+        }
+        varianceComment = await _textDialog(
+          context,
+          'Variance Audit Comment',
+          hint: 'Explain the discrepancy before hard-closing this shift',
+          minLines: 4,
+        );
+        if (varianceComment == null || varianceComment.trim().isEmpty) {
+          return;
+        }
+      }
+      if (shiftId.isNotEmpty) {
+        await ref.read(branchAccountantRepositoryProvider).reconcileShift(
+              shiftId,
+              notes,
+              varianceReasonCode: varianceReasonCode,
+              varianceComment: varianceComment,
+            );
+      }
+    }
+
     await ref.read(branchAccountantRepositoryProvider).auditCashierLogbook(
           '${logbook['id']}',
           approve: approve,
@@ -8094,6 +7386,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
           final shift = _map(detail['shift']);
           final summary = _map(detail['summary']);
           final reconciliation = _map(detail['cash_reconciliation']);
+          final blindGrid = _map(detail['reconciliation_grid']);
           final payments = _list(detail['payment_breakdown']);
           final revenue = _list(detail['revenue_breakdown']);
           final flags = _list(detail['compliance_flags']);
@@ -8110,7 +7403,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
           ].where((value) => value.isNotEmpty).join(' • ');
 
           return _Page(
-            title: 'Cashier Shift Logbook',
+            title: 'Shift Reconciliation Detail',
             subtitle: subtitleParts.isEmpty
                 ? 'Automated shift compliance and sales evidence'
                 : subtitleParts,
@@ -8297,6 +7590,59 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (blindGrid.isNotEmpty)
+                _SectionCard(
+                  title: 'Blind Reconciliation Grid',
+                  child: Column(
+                    children: ['cash', 'mpesa', 'card'].map((method) {
+                      final row = _map(blindGrid[method]);
+                      final variance = _num(row['variance']);
+                      final varianceColor = variance.abs() < 0.01
+                          ? Colors.green
+                          : variance > 0
+                              ? Colors.orange
+                              : Colors.red;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 110,
+                              child: Text(
+                                _title(method),
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text('System ${_money(_num(row['system_expected']))}'),
+                            ),
+                            Expanded(
+                              child: Text('Cashier ${_money(_num(row['cashier_logged']))}'),
+                            ),
+                            Expanded(
+                              child: Text(
+                                'Variance ${_money(variance)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: varianceColor,
+                                ),
+                              ),
+                            ),
+                            if (_text(row, ['reference']).isNotEmpty)
+                              Expanded(
+                                child: Text(
+                                  'Ref ${_text(row, ['reference'])}',
+                                  style: const TextStyle(
+                                    color: AppColors.kTextSecondary,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
               Builder(builder: (context) {
                 final total = creditBills.isNotEmpty
                     ? (_num(detail['credit_bills_total']) > 0
@@ -11663,214 +11009,6 @@ class _CustomerCreditBillDialogState
   }
 }
 
-class _FoodVarianceSection extends ConsumerStatefulWidget {
-  const _FoodVarianceSection();
-
-  @override
-  ConsumerState<_FoodVarianceSection> createState() =>
-      _FoodVarianceSectionState();
-}
-
-class _FoodVarianceSectionState extends ConsumerState<_FoodVarianceSection> {
-  late Future<List<Map<String, dynamic>>> _future =
-      ref.read(branchAccountantRepositoryProvider).getPendingFoodVariances();
-
-  void _refresh() {
-    final nextFuture =
-        ref.read(branchAccountantRepositoryProvider).getPendingFoodVariances();
-    setState(() {
-      _future = nextFuture;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Food Control Variance',
-          subtitle:
-              'Review variance explanations from kitchen, buffet, and catering food control.',
-          actions: [_RefreshButton(onPressed: _refresh)],
-          children: [
-            _SectionCard(
-              title: 'Pending Variances',
-              child: _SimpleTable(
-                columns: const [
-                  'Item',
-                  'Expected',
-                  'Actual',
-                  'Variance',
-                  'Reason',
-                  'Status',
-                  'Actions'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e, ['item_name', 'name']),
-                          _num(e['expected_quantity']).toStringAsFixed(2),
-                          _num(e['actual_quantity']).toStringAsFixed(2),
-                          _num(e['variance_quantity'] ?? e['variance'])
-                              .toStringAsFixed(2),
-                          _text(e, ['variance_reason', 'reason']),
-                          _StatusPill(_text(e, ['status'])),
-                          Wrap(spacing: 8, children: [
-                            TextButton(
-                                onPressed: () => _showRecord(context, e),
-                                child: const Text('View')),
-                            FilledButton.tonal(
-                                onPressed: () => _approve(e),
-                                child: const Text('Approve')),
-                            OutlinedButton(
-                                onPressed: () => _flag(e),
-                                child: const Text('Flag')),
-                          ]),
-                        ])
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _approve(Map<String, dynamic> item) async {
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .approveFoodVariance('${item['id']}');
-    _toast('Variance approved');
-    _refresh();
-  }
-
-  Future<void> _flag(Map<String, dynamic> item) async {
-    final notes = await _textDialog(context, 'Flag Variance', hint: 'Notes');
-    if (notes == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .flagFoodVariance('${item['id']}', notes);
-    _toast('Variance flagged');
-    _refresh();
-  }
-}
-
-class _ShiftPnlSection extends ConsumerStatefulWidget {
-  const _ShiftPnlSection();
-
-  @override
-  ConsumerState<_ShiftPnlSection> createState() => _ShiftPnlSectionState();
-}
-
-class _ShiftPnlSectionState extends ConsumerState<_ShiftPnlSection> {
-  String _status = 'all';
-  late Future<Map<String, dynamic>> _future = _load();
-
-  Future<Map<String, dynamic>> _load() async {
-    final repo = ref.read(branchAccountantRepositoryProvider);
-    final results = await Future.wait([
-      repo.getShiftPnLs(status: _status),
-      repo.getShiftPnLSummary(),
-    ]);
-    return {'items': results[0], 'summary': results[1]};
-  }
-
-  void _refresh() => setState(() {
-        _future = _load();
-      });
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (data) {
-          final items = _list(data['items']);
-          final summary = _map(data['summary']);
-          return _Page(
-            title: 'Shift Profit & Loss',
-            subtitle:
-                'Review shift sales, food cost, COGS, gross profit, and margin.',
-            actions: [
-              _Dropdown(
-                value: _status,
-                values: const ['all', 'draft', 'submitted', 'reviewed'],
-                onChanged: (v) => setState(() {
-                  _status = v;
-                  _future = _load();
-                }),
-              ),
-              _RefreshButton(onPressed: _refresh),
-            ],
-            children: [
-              _ResponsiveGrid(children: [
-                _MetricCard(
-                    'Shifts', '${items.length}', Icons.schedule, Colors.blue),
-                _MetricCard('Sales', _money(_num(summary['total_sales'])),
-                    Icons.payments, Colors.green),
-                _MetricCard('COGS', _money(_num(summary['total_cogs'])),
-                    Icons.inventory, Colors.orange),
-                _MetricCard(
-                    'Gross Profit',
-                    _money(_num(summary['gross_profit'])),
-                    Icons.insights,
-                    Colors.purple),
-              ]),
-              _SectionCard(
-                title: 'Shift P&L Records',
-                child: _SimpleTable(
-                  columns: const [
-                    'Shift',
-                    'Sales',
-                    'COGS',
-                    'Gross Profit',
-                    'Margin',
-                    'Status',
-                    'Actions'
-                  ],
-                  rows: items
-                      .map((e) => [
-                            _text(e, ['shift_number', 'shift_id', 'id']),
-                            _money(_num(e['total_sales'])),
-                            _money(_num(e['total_cogs'])),
-                            _money(_num(e['gross_profit'])),
-                            '${_num(e['profit_margin']).toStringAsFixed(1)}%',
-                            _StatusPill(_text(e, ['status'])),
-                            Wrap(spacing: 8, children: [
-                              TextButton(
-                                  onPressed: () => _showRecord(context, e),
-                                  child: const Text('View')),
-                              FilledButton.tonal(
-                                  onPressed: () => _review(e),
-                                  child: const Text('Review')),
-                            ]),
-                          ])
-                      .toList(),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _review(Map<String, dynamic> pnl) async {
-    final notes =
-        await _textDialog(context, 'Review Shift P&L', hint: 'Review notes');
-    if (notes == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .reviewShiftPnL('${pnl['shift_id'] ?? pnl['id']}', notes);
-    _toast('Shift P&L reviewed');
-    _refresh();
-  }
-}
-
 class _BookingsInvoicesSection extends ConsumerStatefulWidget {
   const _BookingsInvoicesSection();
 
@@ -12071,248 +11209,6 @@ class _BookingsInvoicesSectionState
   }
 }
 
-class _StockTakeSection extends ConsumerStatefulWidget {
-  const _StockTakeSection();
-
-  @override
-  ConsumerState<_StockTakeSection> createState() => _StockTakeSectionState();
-}
-
-class _StockTakeSectionState extends ConsumerState<_StockTakeSection> {
-  late Future<List<Map<String, dynamic>>> _future =
-      ref.read(branchAccountantRepositoryProvider).getStockTakes();
-
-  void _refresh() {
-    final nextFuture =
-        ref.read(branchAccountantRepositoryProvider).getStockTakes();
-    setState(() {
-      _future = nextFuture;
-    });
-  }
-
-  Future<void> _downloadWorksheet() async {
-    try {
-      if (mounted) _notify(context, 'Preparing worksheet…');
-      final file = await ref
-          .read(branchAccountantRepositoryProvider)
-          .downloadStockTakeWorksheet();
-      if (mounted) _notify(context, 'Worksheet saved to ${file.path}');
-    } catch (e) {
-      if (mounted) {
-        _notify(context,
-            'Failed to download worksheet: ${e is DioException ? (e.message ?? 'network error') : e}');
-      }
-    }
-  }
-
-  Future<void> _downloadStockTakeReport(Map<String, dynamic> record) async {
-    final id = '${record['id'] ?? ''}';
-    if (id.isEmpty) return;
-    try {
-      if (mounted) _notify(context, 'Preparing stock take report…');
-      final file = await ref
-          .read(branchAccountantRepositoryProvider)
-          .downloadStockTakeReviewReport(id);
-      if (mounted) _notify(context, 'Report saved to ${file.path}');
-    } catch (e) {
-      if (mounted) {
-        _notify(context,
-            'Failed to download report: ${e is DioException ? (e.message ?? 'network error') : e}');
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Stock Take Review',
-          subtitle:
-              'Review storekeeper-submitted counts, variance explanations, missing stock takes, and approval history.',
-          actions: [
-            OutlinedButton.icon(
-              onPressed: _downloadWorksheet,
-              icon: const Icon(Icons.download, size: 16),
-              label: const Text('Download Worksheet'),
-            ),
-            _RefreshButton(onPressed: _refresh),
-          ],
-          children: [
-            _ResponsiveGrid(children: [
-              _MetricCard(
-                  'Sessions', '${items.length}', Icons.inventory, Colors.blue),
-              _MetricCard(
-                  'Pending Review',
-                  '${items.where((e) => _text(e, ['status']).toLowerCase() == 'submitted' || _text(e, [
-                            'status'
-                          ]).toLowerCase() == 'submitted_to_accountant').length}',
-                  Icons.rate_review,
-                  Colors.orange),
-              _MetricCard(
-                  'Accountant Approved',
-                  '${items.where((e) => _text(e, [
-                            'status'
-                          ]).toLowerCase() == 'accountant_approved').length}',
-                  Icons.verified,
-                  Colors.green),
-              _MetricCard(
-                  'Rejected / Clarification',
-                  '${items.where((e) {
-                    final status = _text(e, ['status']).toLowerCase();
-                    return status == 'accountant_rejected' ||
-                        status == 'under_review';
-                  }).length}',
-                  Icons.report_problem,
-                  Colors.red),
-            ]),
-            _SectionCard(
-              title: 'Review Queue and Approval History',
-              child: _SimpleTable(
-                columns: const [
-                  'Date',
-                  'Type',
-                  'Store',
-                  'Branch',
-                  'Status',
-                  'Items',
-                  'Actions'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e, ['count_date', 'created_at']),
-                          _text(e, ['count_type', 'take_type']),
-                          _text(e, ['store_type', 'outlet_code']),
-                          _text(_map(e['branch']), ['name']),
-                          _StatusPill(_text(e, ['status'])),
-                          '${e['total_items_counted'] ?? e['items_count'] ?? e['item_count'] ?? '—'}',
-                          Row(mainAxisSize: MainAxisSize.min, children: [
-                            TextButton(
-                                onPressed: () => _showStockTakeReview(context, e),
-                                child: const Text('Review')),
-                            TextButton(
-                                onPressed: () => _downloadStockTakeReport(e),
-                                child: const Text('Report')),
-                            if (_isApprovableStockTake(e))
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                    visualDensity: VisualDensity.compact),
-                                onPressed: () => _approveStockTake(e),
-                                child: const Text('Approve'),
-                              ),
-                            if (_isApprovableStockTake(e))
-                              OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                    visualDensity: VisualDensity.compact),
-                                onPressed: () => _requestClarification(e),
-                                child: const Text('Clarify'),
-                              ),
-                            if (_isApprovableStockTake(e))
-                              TextButton(
-                                onPressed: () => _rejectStockTake(e),
-                                child: const Text('Reject'),
-                              ),
-                          ]),
-                        ])
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _isApprovableStockTake(Map<String, dynamic> e) {
-    final status = _text(e, ['status']).toLowerCase();
-    return status == 'submitted' || status == 'submitted_to_accountant';
-  }
-
-  Future<void> _approveStockTake(Map<String, dynamic> e) async {
-    final notes =
-        await _textDialog(context, 'Approve Stock Take', hint: 'Review notes');
-    if (notes == null) return;
-    if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Approve Stock Take'),
-        content: const Text(
-            'This approves the storekeeper count and sends it to auditor final review. Stock is not rolled forward until auditor approval.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Approve')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      final res = await ref
-          .read(branchAccountantRepositoryProvider)
-          .approveStockTake('${e['id']}', notes: notes);
-      final summary = _map(_map(res['data'])['posting_summary']);
-      if (mounted) {
-        _notify(
-            context,
-            summary.isEmpty
-                ? 'Stock take approved and submitted to auditor'
-                : 'Submitted to auditor: ${summary['adjustments'] ?? 0} adjustment(s), '
-                    '${summary['write_offs'] ?? 0} write-off(s)');
-      }
-      _refresh();
-    } catch (err) {
-      if (mounted) {
-        _notify(context,
-            'Approve failed: ${err is DioException ? (err.response?.data is Map ? (err.response?.data['message'] ?? err.message) : err.message) : err}');
-      }
-    }
-  }
-
-  Future<void> _rejectStockTake(Map<String, dynamic> e) async {
-    final notes = await _textDialog(context, 'Reject Stock Take',
-        hint: 'Reason required');
-    if (notes == null || notes.trim().isEmpty) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .rejectStockTake('${e['id']}', notes);
-    _toast('Stock take rejected');
-    _refresh();
-  }
-
-  Future<void> _requestClarification(Map<String, dynamic> e) async {
-    final notes = await _textDialog(context, 'Request Clarification',
-        hint: 'Clarification required');
-    if (notes == null || notes.trim().isEmpty) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .requestStockTakeClarification('${e['id']}', notes);
-    _toast('Clarification requested');
-    _refresh();
-  }
-
-  void _showStockTakeReview(BuildContext context, Map<String, dynamic> stockTake) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => _StockTakeReviewDialog(
-        stockTake: stockTake,
-        isApprovable: _isApprovableStockTake(stockTake),
-        onApprove: () { Navigator.pop(context); _approveStockTake(stockTake); },
-        onClarify: () { Navigator.pop(context); _requestClarification(stockTake); },
-        onReject: () { Navigator.pop(context); _rejectStockTake(stockTake); },
-        onReport: () => _downloadStockTakeReport(stockTake),
-        repo: ref.read(branchAccountantRepositoryProvider),
-      ),
-    );
-  }
-}
 
 class _InventoryJournalsSection extends ConsumerStatefulWidget {
   const _InventoryJournalsSection();
@@ -15838,196 +14734,6 @@ class _SupplierInvoiceDialogState
   }
 }
 
-class _BuffetSection extends ConsumerStatefulWidget {
-  const _BuffetSection();
-
-  @override
-  ConsumerState<_BuffetSection> createState() => _BuffetSectionState();
-}
-
-class _BuffetSectionState extends ConsumerState<_BuffetSection> {
-  late Future<List<Map<String, dynamic>>> _future =
-      ref.read(branchAccountantRepositoryProvider).getBuffets();
-
-  void _refresh() {
-    final nextFuture =
-        ref.read(branchAccountantRepositoryProvider).getBuffets();
-    setState(() {
-      _future = nextFuture;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Buffet Control',
-          subtitle:
-              'Review buffet food-control status, opening, closing, and variance risk.',
-          actions: [_RefreshButton(onPressed: _refresh)],
-          children: [
-            _SectionCard(
-              title: 'Buffets',
-              child: _SimpleTable(
-                columns: const [
-                  'Buffet',
-                  'Date',
-                  'Expected',
-                  'Actual',
-                  'Status',
-                  'Actions'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e, ['name', 'buffet_name', 'id']),
-                          _text(e, ['service_date', 'date']),
-                          _money(_num(e['expected_revenue'])),
-                          _money(_num(e['actual_revenue'])),
-                          _StatusPill(_text(e, ['status'])),
-                          Wrap(spacing: 8, children: [
-                            TextButton(
-                                onPressed: () => _showRecord(context, e),
-                                child: const Text('View')),
-                            if (_text(e, ['status']).toLowerCase() == 'draft')
-                              FilledButton.tonal(
-                                  onPressed: () => _open(e),
-                                  child: const Text('Open')),
-                            OutlinedButton(
-                                onPressed: () => _close(e),
-                                child: const Text('Close')),
-                          ]),
-                        ])
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _open(Map<String, dynamic> buffet) async {
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .openBuffet('${buffet['id']}');
-    _toast('Buffet opened');
-    _refresh();
-  }
-
-  Future<void> _close(Map<String, dynamic> buffet) async {
-    final data = await _formDialog(context, 'Close Buffet', const [
-      'actual_revenue',
-      'actual_guests',
-      'notes',
-    ]);
-    if (data == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .closeBuffet('${buffet['id']}', data);
-    _toast('Buffet closed');
-    _refresh();
-  }
-}
-
-class _CateringSection extends ConsumerStatefulWidget {
-  const _CateringSection();
-
-  @override
-  ConsumerState<_CateringSection> createState() => _CateringSectionState();
-}
-
-class _CateringSectionState extends ConsumerState<_CateringSection> {
-  late Future<List<Map<String, dynamic>>> _future =
-      ref.read(branchAccountantRepositoryProvider).getCateringEvents();
-
-  void _refresh() {
-    final nextFuture =
-        ref.read(branchAccountantRepositoryProvider).getCateringEvents();
-    setState(() {
-      _future = nextFuture;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _future,
-      builder: (context, snap) => _FuturePage(
-        snapshot: snap,
-        onRefresh: _refresh,
-        builder: (items) => _Page(
-          title: 'Catering Control',
-          subtitle:
-              'Catering event food-control ledger, actuals, and completion review.',
-          actions: [_RefreshButton(onPressed: _refresh)],
-          children: [
-            _SectionCard(
-              title: 'Catering Events',
-              child: _SimpleTable(
-                columns: const [
-                  'Event',
-                  'Date',
-                  'Customer',
-                  'Expected',
-                  'Actual',
-                  'Status',
-                  'Actions'
-                ],
-                rows: items
-                    .map((e) => [
-                          _text(e, ['event_name', 'name', 'id']),
-                          _text(e, ['event_date', 'date']),
-                          _text(e, ['customer_name', 'client_name']),
-                          _money(_num(e['expected_revenue'])),
-                          _money(_num(e['actual_revenue'])),
-                          _StatusPill(_text(e, ['status'])),
-                          Wrap(spacing: 8, children: [
-                            TextButton(
-                                onPressed: () => _showRecord(context, e),
-                                child: const Text('View')),
-                            FilledButton.tonal(
-                                onPressed: () => _complete(e),
-                                child: const Text('Complete')),
-                            OutlinedButton(
-                                onPressed: () => _cancel(e),
-                                child: const Text('Cancel')),
-                          ]),
-                        ])
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _complete(Map<String, dynamic> event) async {
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .completeCateringEvent('${event['id']}');
-    _toast('Catering event completed');
-    _refresh();
-  }
-
-  Future<void> _cancel(Map<String, dynamic> event) async {
-    final reason =
-        await _textDialog(context, 'Cancel Catering Event', hint: 'Reason');
-    if (reason == null) return;
-    await ref
-        .read(branchAccountantRepositoryProvider)
-        .cancelCateringEvent('${event['id']}', reason);
-    _toast('Catering event cancelled');
-    _refresh();
-  }
-}
-
-// ── Kitchen Variance / Credit Bill Approval ──────────────────────────────────
-
 class _KitchenVarianceSection extends ConsumerStatefulWidget {
   const _KitchenVarianceSection();
 
@@ -16062,7 +14768,6 @@ class _KitchenVarianceSectionState
                 'Daily Control variance from real sales (always available), plus formal kitchen shifts confirmed by the chef and awaiting your liability decision.',
             actions: [_RefreshButton(onPressed: _refresh)],
             children: [
-              const _DailyControlVarianceCard(),
               _ResponsiveGrid(children: [
                 _MetricCard('Pending Formal Review', '${shifts.length}',
                     Icons.pending_actions, Colors.orange),
@@ -16502,550 +15207,6 @@ class _KitchenVarianceReviewDialogState
 /// [_KitchenVarianceSection] above requires. In practice almost no shift
 /// completes that lifecycle, so this is the variance data that actually
 /// exists day to day.
-class _DailyControlVarianceCard extends ConsumerStatefulWidget {
-  const _DailyControlVarianceCard();
-
-  @override
-  ConsumerState<_DailyControlVarianceCard> createState() =>
-      _DailyControlVarianceCardState();
-}
-
-class _DailyControlVarianceCardState
-    extends ConsumerState<_DailyControlVarianceCard> {
-  DateTime _date = DateTime.now();
-  String? _shift;
-  late Future<Map<String, dynamic>> _future = _load();
-
-  String get _dateStr => DateFormat('yyyy-MM-dd').format(_date);
-
-  Future<Map<String, dynamic>> _load() => ref
-      .read(branchAccountantRepositoryProvider)
-      .getDailyControlVariance(date: _dateStr, shift: _shift);
-
-  void _refresh() => setState(() => _future = _load());
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2023, 1, 1),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() {
-        _date = picked;
-        _future = _load();
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionCard(
-      title: 'Daily Control Variance',
-      child: FutureBuilder<Map<String, dynamic>>(
-        future: _future,
-        builder: (context, snap) {
-          final filterBar = Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(_dateStr),
-                ),
-                DropdownButton<String?>(
-                  value: _shift,
-                  hint: const Text('Full day'),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Full day')),
-                    DropdownMenuItem(value: 'A', child: Text('Shift A')),
-                    DropdownMenuItem(value: 'B', child: Text('Shift B')),
-                  ],
-                  onChanged: (v) => setState(() {
-                    _shift = v;
-                    _future = _load();
-                  }),
-                ),
-                _RefreshButton(onPressed: _refresh),
-              ],
-            ),
-          );
-
-          if (snap.connectionState == ConnectionState.waiting) {
-            return Column(children: [
-              filterBar,
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            ]);
-          }
-          if (snap.hasError) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                filterBar,
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('Failed to load: ${snap.error}',
-                      style: const TextStyle(color: Colors.red)),
-                ),
-              ],
-            );
-          }
-
-          final data = snap.data ?? {};
-          final bomControl = ((data['bom_control'] as List?) ?? [])
-              .cast<Map<String, dynamic>>();
-          final shiftTeam = ((data['shift_team'] as List?) ?? [])
-              .cast<Map<String, dynamic>>();
-          final hasShiftRecord = data['has_kitchen_shift_record'] == true;
-          final flagged =
-              bomControl.where((row) => '${row['flag']}' != 'green').toList();
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              filterBar,
-              if (shiftTeam.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Team: ${shiftTeam.map((s) => '${s['name']} (${s['role']})').join(', ')}',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.kTextSecondary),
-                  ),
-                )
-              else if (!hasShiftRecord)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'No kitchen shift record for this date/shift — billing will use the full branch staff list instead.',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.orange.shade800),
-                  ),
-                ),
-              if (flagged.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(children: [
-                    Icon(Icons.check_circle_outline,
-                        color: Colors.green.shade400, size: 28),
-                    const SizedBox(width: 10),
-                    const Text(
-                        'No flagged ingredient variance for this date/shift.'),
-                  ]),
-                )
-              else
-                _SimpleTable(
-                  columns: const [
-                    'Ingredient',
-                    'Theoretical',
-                    'Actual',
-                    'Variance',
-                    'Cost Impact',
-                    'Flag',
-                    'Actions'
-                  ],
-                  rows: flagged.map((row) {
-                    final varianceQty = _num(row['variance_qty']);
-                    return [
-                      _text(row, ['item_name']),
-                      '${_num(row['theoretical_qty']).toStringAsFixed(2)} ${row['unit'] ?? ''}',
-                      '${_num(row['actual_qty']).toStringAsFixed(2)} ${row['unit'] ?? ''}',
-                      '${varianceQty >= 0 ? '+' : ''}${varianceQty.toStringAsFixed(2)}',
-                      _money(_num(row['variance_cost']).abs()),
-                      _StatusPill('${row['flag']}'),
-                      FilledButton.tonal(
-                        onPressed: () => _bill(row, shiftTeam),
-                        child: const Text('Bill Staff'),
-                      ),
-                    ];
-                  }).toList(),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _bill(
-      Map<String, dynamic> row, List<Map<String, dynamic>> shiftTeam) async {
-    var staffOptions = shiftTeam;
-    if (staffOptions.isEmpty) {
-      try {
-        final branchStaff =
-            await ref.read(branchAccountantRepositoryProvider).getBranchStaff();
-        staffOptions = branchStaff
-            .map((s) => {
-                  'user_id': s['id'],
-                  'name': '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
-                      .trim(),
-                  'role': s['role'] ?? s['position'] ?? '',
-                })
-            .toList();
-      } catch (_) {
-        // Leave staffOptions empty — the dialog shows "no staff available".
-      }
-    }
-    if (!mounted) return;
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _DailyControlBillStaffDialog(
-        date: _dateStr,
-        shift: _shift,
-        row: row,
-        staff: staffOptions,
-      ),
-    );
-    if (result == true) _refresh();
-  }
-}
-
-class _DailyControlBillStaffDialog extends ConsumerStatefulWidget {
-  const _DailyControlBillStaffDialog({
-    required this.date,
-    required this.shift,
-    required this.row,
-    required this.staff,
-  });
-
-  final String date;
-  final String? shift;
-  final Map<String, dynamic> row;
-  final List<Map<String, dynamic>> staff;
-
-  @override
-  ConsumerState<_DailyControlBillStaffDialog> createState() =>
-      _DailyControlBillStaffDialogState();
-}
-
-class _DailyControlBillStaffDialogState
-    extends ConsumerState<_DailyControlBillStaffDialog> {
-  String _liabilityAction = 'single_staff';
-  String? _selectedUserId;
-  final Map<String, TextEditingController> _splitCtrls = {};
-  final _writeOffReasonCtrl = TextEditingController();
-  final _notesCtrl = TextEditingController();
-  bool _posting = false;
-
-  num get _varianceCost => _num(widget.row['variance_cost']).abs();
-
-  @override
-  void initState() {
-    super.initState();
-    for (final st in widget.staff) {
-      _splitCtrls['${st['user_id']}'] = TextEditingController();
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final c in _splitCtrls.values) {
-      c.dispose();
-    }
-    _writeOffReasonCtrl.dispose();
-    _notesCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 640),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Bill Staff — ${widget.row['item_name']}',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w700)),
-              Text(
-                '${widget.date}${widget.shift != null ? '  •  Shift ${widget.shift}' : ''}  •  Variance cost ${_money(_varianceCost)}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _liabilityRadio(
-                          'single_staff', 'Charge a single staff member'),
-                      if (_liabilityAction == 'single_staff')
-                        _singleStaffPicker(),
-                      _liabilityRadio(
-                          'custom_split', 'Split liability (custom amounts)'),
-                      if (_liabilityAction == 'custom_split')
-                        _customSplitInputs(),
-                      _liabilityRadio(
-                          'split_shift', 'Split equally across the team'),
-                      if (_liabilityAction == 'split_shift')
-                        _splitShiftPreview(),
-                      _liabilityRadio('write_off', 'Write off (no recovery)'),
-                      if (_liabilityAction == 'write_off')
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 32, top: 4, bottom: 8),
-                          child: TextField(
-                            controller: _writeOffReasonCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Write-off reason (required)',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            maxLines: 2,
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _notesCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Notes (optional)',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        maxLines: 2,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _posting ? null : _submit,
-                      icon: _posting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.check),
-                      label: Text(_posting ? 'Submitting...' : 'Submit'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _liabilityRadio(String value, String label) {
-    return RadioListTile<String>(
-      value: value,
-      groupValue: _liabilityAction,
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(label, style: const TextStyle(fontSize: 13)),
-      onChanged: (v) =>
-          setState(() => _liabilityAction = v ?? _liabilityAction),
-    );
-  }
-
-  Widget _singleStaffPicker() {
-    if (widget.staff.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(left: 32, bottom: 8),
-        child: Text('No staff available to bill.',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(left: 32, bottom: 8),
-      child: DropdownButtonFormField<String>(
-        initialValue: _selectedUserId,
-        isExpanded: true,
-        decoration: const InputDecoration(
-            labelText: 'Staff member', isDense: true, border: OutlineInputBorder()),
-        items: widget.staff
-            .map((st) => DropdownMenuItem(
-                  value: '${st['user_id']}',
-                  child: Text('${st['name']} (${st['role'] ?? ''})',
-                      overflow: TextOverflow.ellipsis),
-                ))
-            .toList(),
-        onChanged: (v) => setState(() => _selectedUserId = v),
-      ),
-    );
-  }
-
-  Widget _customSplitInputs() {
-    if (widget.staff.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(left: 32, bottom: 8),
-        child: Text('No staff available to split liability across.',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(left: 32, bottom: 8),
-      child: Column(
-        children: widget.staff.map((st) {
-          final id = '${st['user_id']}';
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                Expanded(
-                    child: Text('${st['name']} (${st['role'] ?? ''})',
-                        style: const TextStyle(fontSize: 13))),
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    controller: _splitCtrls[id],
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                        prefixText: 'KES ', isDense: true, border: OutlineInputBorder()),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _splitShiftPreview() {
-    if (widget.staff.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(left: 32, bottom: 8),
-        child: Text('No staff available to split liability across.',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
-      );
-    }
-    final each = _varianceCost / widget.staff.length;
-    return Padding(
-      padding: const EdgeInsets.only(left: 32, bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: widget.staff
-            .map((st) => Text(
-                '${st['name']} (${st['role'] ?? ''}) — ${_money(each)}',
-                style: const TextStyle(fontSize: 13)))
-            .toList(),
-      ),
-    );
-  }
-
-  Future<void> _submit() async {
-    List<Map<String, dynamic>> allocations = [];
-    String? writeOffReason;
-
-    switch (_liabilityAction) {
-      case 'single_staff':
-        if (_selectedUserId == null) {
-          _showError('Select a staff member to charge.');
-          return;
-        }
-        allocations = [
-          {
-            'user_id': _selectedUserId,
-            'amount': _varianceCost,
-            'description':
-                'Kitchen variance — ${widget.row['item_name']} (${widget.date})',
-          }
-        ];
-        break;
-      case 'custom_split':
-        allocations = widget.staff
-            .map((st) {
-              final id = '${st['user_id']}';
-              final amount =
-                  double.tryParse(_splitCtrls[id]?.text.trim() ?? '') ?? 0;
-              return {
-                'user_id': id,
-                'amount': amount,
-                'description':
-                    'Kitchen variance split — ${widget.row['item_name']}',
-              };
-            })
-            .where((a) => (a['amount'] as double) > 0)
-            .toList();
-        if (allocations.isEmpty) {
-          _showError('Enter at least one staff amount to split.');
-          return;
-        }
-        break;
-      case 'split_shift':
-        if (widget.staff.isEmpty) {
-          _showError('No staff available to split liability across.');
-          return;
-        }
-        final each = _varianceCost / widget.staff.length;
-        allocations = widget.staff
-            .map((st) => {
-                  'user_id': '${st['user_id']}',
-                  'amount': each,
-                  'description':
-                      'Kitchen variance — equal split — ${widget.row['item_name']}',
-                })
-            .toList();
-        break;
-      case 'write_off':
-        writeOffReason = _writeOffReasonCtrl.text.trim();
-        if (writeOffReason.isEmpty) {
-          _showError('A write-off reason is required.');
-          return;
-        }
-        break;
-    }
-
-    setState(() => _posting = true);
-    try {
-      await ref
-          .read(branchAccountantRepositoryProvider)
-          .billDailyControlVariance(
-            date: widget.date,
-            shift: widget.shift,
-            itemName: '${widget.row['item_name']}',
-            itemSku: widget.row['item_sku']?.toString(),
-            varianceCost: _varianceCost,
-            liabilityAction: _liabilityAction,
-            allocations: allocations,
-            notes: _notesCtrl.text.trim().isEmpty
-                ? null
-                : _notesCtrl.text.trim(),
-            writeOffReason: writeOffReason,
-          );
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      _showError('Failed to submit: $e');
-    } finally {
-      if (mounted) setState(() => _posting = false);
-    }
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-}
-
 class _BudgetsSection extends ConsumerStatefulWidget {
   const _BudgetsSection();
 
@@ -20231,444 +18392,6 @@ Future<bool> _confirm(BuildContext context, String message) async {
       false;
 }
 
-// ─────────────────── STOCK TAKE REVIEW DIALOG ────────────────────────────────
-
-class _StockTakeReviewDialog extends StatefulWidget {
-  const _StockTakeReviewDialog({
-    required this.stockTake,
-    required this.isApprovable,
-    required this.onApprove,
-    required this.onClarify,
-    required this.onReject,
-    required this.onReport,
-    required this.repo,
-  });
-  final Map<String, dynamic> stockTake;
-  final bool isApprovable;
-  final VoidCallback onApprove;
-  final VoidCallback onClarify;
-  final VoidCallback onReject;
-  final VoidCallback onReport;
-  final dynamic repo;
-
-  @override
-  State<_StockTakeReviewDialog> createState() => _StockTakeReviewDialogState();
-}
-
-class _StockTakeReviewDialogState extends State<_StockTakeReviewDialog> {
-  late Future<List<Map<String, dynamic>>> _itemsFuture;
-  String _search = '';
-
-  @override
-  void initState() {
-    super.initState();
-    final id = '${widget.stockTake['id'] ?? ''}';
-    _itemsFuture = id.isNotEmpty
-        ? widget.repo.getStockTakeItems(id) as Future<List<Map<String, dynamic>>>
-        : Future.value(<Map<String, dynamic>>[]);
-  }
-
-  Color _varianceColor(num v) {
-    if (v == 0) return Colors.green.shade700;
-    if (v < 0) return Colors.red.shade700;
-    return Colors.orange.shade700;
-  }
-
-  String _fmt(dynamic v) {
-    if (v == null) return '—';
-    final n = num.tryParse('$v');
-    if (n == null) return '$v';
-    return n == n.truncate() ? n.toInt().toString() : n.toStringAsFixed(2);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final st = widget.stockTake;
-    final status = '${st['status'] ?? ''}';
-    final date = '${st['count_date'] ?? st['created_at'] ?? ''}';
-    final storeType = '${st['store_type'] ?? ''}';
-    final branchName = _text(_map(st['branch']), ['name']);
-    final countType = '${st['count_type'] ?? st['take_type'] ?? 'daily'}';
-
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: SizedBox(
-        width: 1100,
-        height: MediaQuery.of(context).size.height * 0.88,
-        child: Column(
-          children: [
-            // ── Header bar ──
-            Container(
-              padding: const EdgeInsets.fromLTRB(24, 20, 16, 20),
-              decoration: BoxDecoration(
-                color: Colors.indigo.shade700,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.inventory_2, color: Colors.white, size: 22),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Stock Take Review',
-                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-                        Text('$branchName  •  $date  •  ${countType.toUpperCase()}  •  ${storeType.toUpperCase()}',
-                            style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _statusColor(status).withAlpha(60),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: _statusColor(status)),
-                    ),
-                    child: Text(
-                      status.toUpperCase().replaceAll('_', ' '),
-                      style: TextStyle(color: _statusColor(status), fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Summary chips ──
-            FutureBuilder<List<Map<String, dynamic>>>(
-              future: _itemsFuture,
-              builder: (_, snap) {
-                final loaded = snap.data ?? [];
-                final total = loaded.length;
-                final counted = loaded.where((i) => i['physical_quantity'] != null).length;
-                final withVariance = loaded.where((i) {
-                  final v = num.tryParse('${i['variance'] ?? ''}') ?? 0;
-                  return v != 0;
-                }).length;
-                final totalVariance = loaded.fold<num>(0, (s, i) {
-                  return s + (num.tryParse('${i['variance_value'] ?? i['variance'] ?? ''}') ?? 0);
-                });
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                  color: Colors.indigo.shade50,
-                  child: Row(
-                    children: [
-                      _ReviewStat('Total Items', '$total', Icons.list_alt, Colors.indigo),
-                      const SizedBox(width: 16),
-                      _ReviewStat('Counted', '$counted', Icons.check_circle_outline, Colors.teal),
-                      const SizedBox(width: 16),
-                      _ReviewStat('With Variance', '$withVariance', Icons.swap_vert, Colors.orange),
-                      const SizedBox(width: 16),
-                      _ReviewStat('Variance Value', 'KES ${totalVariance.toStringAsFixed(0)}',
-                          Icons.trending_down, totalVariance < 0 ? Colors.red : Colors.green),
-                      const Spacer(),
-                      SizedBox(
-                        width: 220,
-                        height: 36,
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search items…',
-                            prefixIcon: const Icon(Icons.search, size: 18),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            isDense: true,
-                          ),
-                          onChanged: (v) => setState(() => _search = v.toLowerCase()),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-
-            // ── Items table ──
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _itemsFuture,
-                builder: (_, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snap.hasError) {
-                    return Center(child: Text('Error loading items: ${snap.error}',
-                        style: const TextStyle(color: Colors.red)));
-                  }
-                  final all = snap.data ?? [];
-                  final filtered = _search.isEmpty
-                      ? all
-                      : all.where((i) {
-                          final name = '${i['item_name'] ?? i['name'] ?? i['item_sku'] ?? ''}'.toLowerCase();
-                          final sku = '${i['item_sku'] ?? ''}'.toLowerCase();
-                          return name.contains(_search) || sku.contains(_search);
-                        }).toList();
-
-                  if (filtered.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.inbox, size: 48, color: Colors.grey.shade300),
-                          const SizedBox(height: 8),
-                          Text(all.isEmpty ? 'No items in this stock take.' : 'No items match search.',
-                              style: TextStyle(color: Colors.grey.shade500)),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        // Table header
-                        Container(
-                          color: Colors.grey.shade100,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Row(
-                            children: const [
-                              Expanded(flex: 3, child: Text('Item', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                              SizedBox(width: 130, child: Text('SKU', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                              SizedBox(width: 80, child: Text('Unit', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                              SizedBox(width: 90, child: Text('System Qty', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                              SizedBox(width: 90, child: Text('Counted', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                              SizedBox(width: 80, child: Text('Variance', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                              Expanded(flex: 2, child: Text('Reason / Notes', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-                            ],
-                          ),
-                        ),
-                        const Divider(height: 1),
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
-                          itemBuilder: (_, i) {
-                            final item = filtered[i];
-                            final systemQty = num.tryParse('${item['system_quantity'] ?? item['system_closing_stock'] ?? ''}') ?? 0;
-                            final countedQty = item['physical_quantity'] ?? item['counted_quantity'];
-                            final variance = num.tryParse('${item['variance'] ?? ''}');
-                            final varianceCalc = countedQty != null
-                                ? (num.tryParse('$countedQty') ?? 0) - systemQty
-                                : null;
-                            final effectiveVariance = variance ?? varianceCalc;
-                            final reason = '${item['variance_reason'] ?? item['reason'] ?? item['notes'] ?? ''}';
-
-                            final isMissing = countedQty == null;
-                            final isVariance = effectiveVariance != null && effectiveVariance != 0;
-
-                            return Container(
-                              color: isMissing
-                                  ? Colors.grey.shade50
-                                  : isVariance
-                                      ? (effectiveVariance < 0 ? Colors.red.shade50 : Colors.orange.shade50)
-                                      : (i.isEven ? Colors.white : Colors.grey.shade50),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '${item['item_name'] ?? item['name'] ?? item['item_sku'] ?? ''}',
-                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                        ),
-                                        if ((item['category'] ?? '').toString().isNotEmpty)
-                                          Text('${item['category']}',
-                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: 130,
-                                    child: Text('${item['item_sku'] ?? ''}',
-                                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                  ),
-                                  SizedBox(
-                                    width: 80,
-                                    child: Text(
-                                        '${item['unit_of_measure'] ?? item['unit'] ?? ''}',
-                                        style: const TextStyle(fontSize: 12)),
-                                  ),
-                                  SizedBox(
-                                    width: 90,
-                                    child: Text(_fmt(systemQty),
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                                  ),
-                                  SizedBox(
-                                    width: 90,
-                                    child: isMissing
-                                        ? Center(
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                  color: Colors.grey.shade200,
-                                                  borderRadius: BorderRadius.circular(4)),
-                                              child: const Text('NOT YET',
-                                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey)),
-                                            ),
-                                          )
-                                        : Text(_fmt(countedQty),
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                                  ),
-                                  SizedBox(
-                                    width: 80,
-                                    child: effectiveVariance == null
-                                        ? const SizedBox.shrink()
-                                        : Center(
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: effectiveVariance == 0
-                                                    ? Colors.green.shade50
-                                                    : effectiveVariance < 0
-                                                        ? Colors.red.shade100
-                                                        : Colors.orange.shade100,
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                effectiveVariance == 0
-                                                    ? '✓ 0'
-                                                    : '${effectiveVariance > 0 ? '+' : ''}${_fmt(effectiveVariance)}',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _varianceColor(effectiveVariance),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: reason.isNotEmpty
-                                        ? Text(reason,
-                                            style: const TextStyle(fontSize: 12, color: Colors.black87),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis)
-                                        : (isVariance
-                                            ? Text('No reason provided',
-                                                style: TextStyle(fontSize: 11, color: Colors.red.shade400, fontStyle: FontStyle.italic))
-                                            : const SizedBox.shrink()),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // ── Action bar ──
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                color: Colors.grey.shade50,
-              ),
-              child: Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: widget.onReport,
-                    icon: const Icon(Icons.download, size: 16),
-                    label: const Text('Download Report'),
-                  ),
-                  const Spacer(),
-                  if (widget.isApprovable) ...[
-                    TextButton(
-                      onPressed: widget.onReject,
-                      style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
-                      child: const Text('Reject'),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: widget.onClarify,
-                      child: const Text('Request Clarification'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: widget.onApprove,
-                      icon: const Icon(Icons.verified, size: 16),
-                      label: const Text('Approve & Forward to Auditor'),
-                      style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
-                    ),
-                  ] else
-                    Text(
-                      status.toLowerCase() == 'accountant_approved'
-                          ? 'Approved — awaiting auditor final review'
-                          : status.toLowerCase() == 'draft'
-                              ? 'Draft — storekeeper has not yet submitted'
-                              : 'No actions available for status: ${status.replaceAll('_', ' ')}',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'submitted':
-      case 'submitted_to_accountant':
-        return Colors.orange;
-      case 'accountant_approved':
-        return Colors.green;
-      case 'accountant_rejected':
-        return Colors.red;
-      case 'draft':
-        return Colors.grey;
-      default:
-        return Colors.blue;
-    }
-  }
-}
-
-class _ReviewStat extends StatelessWidget {
-  const _ReviewStat(this.label, this.value, this.icon, this.color);
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-            Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 void _showRecord(BuildContext context, Map<String, dynamic> record,
     {String title = 'Record Details'}) {
   openRecordDetailScreen(
@@ -20855,18 +18578,12 @@ String _shortLabel(BranchAccountantSection section) {
       return 'Flags';
     case BranchAccountantSection.shiftOpenings:
       return 'Openings';
-    case BranchAccountantSection.shiftReview:
-      return 'Shifts';
     case BranchAccountantSection.cashierLogbooks:
       return 'Logs';
     case BranchAccountantSection.voidApprovals:
       return 'Voids';
     case BranchAccountantSection.creditBills:
       return 'Credit';
-    case BranchAccountantSection.foodVariance:
-      return 'Variance';
-    case BranchAccountantSection.shiftPnl:
-      return 'P&L';
     case BranchAccountantSection.inventoryJournals:
       return 'Journals';
     case BranchAccountantSection.supplierFinance:
