@@ -1916,6 +1916,47 @@ const seedShiftStockCounts = async (shiftId: string, outletId: string): Promise<
   }
 };
 
+/**
+ * Bridge driver lookup: the open cashier shift (cashier_shift_logs) whose
+ * cashier's role serves this outlet's station type, plus every open cashier
+ * shift grouped by cashier so callers can tell whether a POS shift's own
+ * cashier is still mid-session. One branch query serves both answers.
+ */
+const findBridgeCashierShift = async (
+  outlet: Record<string, any>
+): Promise<{ match: Record<string, any> | null; openByCashier: Map<string, Array<Record<string, any>>> }> => {
+  const { data: branchShifts } = await supabase
+    .from('cashier_shift_logs')
+    .select('id, cashier_id, shift_start')
+    .eq('branch_id', outlet.branch_id)
+    .eq('status', 'open');
+  const rows = (branchShifts || []) as Array<Record<string, any>>;
+
+  const openByCashier = new Map<string, Array<Record<string, any>>>();
+  for (const row of rows) {
+    const key = String(row.cashier_id || '');
+    if (!key) continue;
+    const list = openByCashier.get(key) || [];
+    list.push(row);
+    openByCashier.set(key, list);
+  }
+
+  let match: Record<string, any> | null = null;
+  const cashierIds = Array.from(openByCashier.keys());
+  if (cashierIds.length) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, role')
+      .in('id', cashierIds);
+    const roleById = new Map((users || []).map((u: any) => [u.id, u.role]));
+    const outletType = String(outlet.outlet_type || '').toLowerCase();
+    match = rows.find((s: any) =>
+      stationTypesForCashierRole(roleById.get(s.cashier_id)).includes(outletType)) || null;
+  }
+
+  return { match, openByCashier };
+};
+
 const loadOpenShiftForOutlet = async (
   req: Request,
   outlet: Record<string, any>
@@ -1930,40 +1971,67 @@ const loadOpenShiftForOutlet = async (
     .maybeSingle();
   if (error) throw error;
 
-  if (!data) {
-    const { data: branchShifts } = await supabase
-      .from('cashier_shift_logs')
-      .select('id, cashier_id')
-      .eq('branch_id', outlet.branch_id)
-      .eq('status', 'open');
-    const cashierIds = (branchShifts || [])
-      .map((s: any) => s.cashier_id)
-      .filter(Boolean);
-    if (cashierIds.length) {
-      const { data: users } = await supabase
-        .from('users')
-        .select('id, role')
-        .in('id', cashierIds);
-      const roleById = new Map((users || []).map((u: any) => [u.id, u.role]));
-      const outletType = String(outlet.outlet_type || '').toLowerCase();
-      const match = (branchShifts || []).find((s: any) =>
-        stationTypesForCashierRole(roleById.get(s.cashier_id)).includes(outletType));
-      if (match) {
-        const { data: created, error: createErr } = await supabase
-          .from('pos_outlet_shifts')
-          .insert({
-            outlet_id: outlet.id,
-            branch_id: outlet.branch_id,
-            cashier_id: match.cashier_id,
-            opening_float: 0,
-            status: 'open',
-          })
-          .select('*')
-          .single();
-        if (createErr) throw createErr;
-        data = created;
-        await seedShiftStockCounts(created.id, outlet.id);
-      }
+  const { match, openByCashier } = await findBridgeCashierShift(outlet);
+
+  // A POS station shift must never outlive the cashier session it was
+  // bridged from: waiters' "Recent orders" are scoped to the open POS shift,
+  // so a row that survives into the next cashier session keeps showing the
+  // previous session's already-cleared bills. If the station's current open
+  // cashier shift started AFTER this POS shift opened, and the POS shift's
+  // own cashier is no longer mid-session (they have no open cashier shift
+  // from before the POS shift opened), the row is a leftover the
+  // cashier-close sweep missed — retire it and bridge a fresh one below.
+  if (data && match) {
+    const posOpenedAt = new Date(data.opened_at).getTime();
+    const matchStartedAt = new Date(match.shift_start).getTime();
+    const ownerShifts = openByCashier.get(String(data.cashier_id || '')) || [];
+    const ownerStillOnDuty = ownerShifts.some(
+      (s) => new Date(s.shift_start).getTime() <= posOpenedAt
+    );
+    if (Number.isFinite(matchStartedAt) && matchStartedAt > posOpenedAt && !ownerStillOnDuty) {
+      const now = new Date().toISOString();
+      const { data: closedRows, error: closeErr } = await supabase
+        .from('pos_outlet_shifts')
+        .update({ status: 'closed', closed_at: now, updated_at: now })
+        .eq('id', data.id)
+        .eq('status', 'open')
+        .select('id');
+      if (closeErr) throw closeErr;
+      logger.info(
+        `Rotated stale POS shift ${data.id} on outlet ${outlet.id}: cashier shift ${match.id} started ${match.shift_start} after it opened${closedRows?.length ? '' : ' (already rotated concurrently)'}`
+      );
+      data = null;
+    }
+  }
+
+  if (!data && match) {
+    // Re-check before inserting — bootstrap polls run concurrently and the
+    // rotation above may have raced another request that already re-opened.
+    const { data: fresh } = await supabase
+      .from('pos_outlet_shifts')
+      .select('*')
+      .eq('outlet_id', outlet.id)
+      .eq('status', 'open')
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (fresh) {
+      data = fresh;
+    } else {
+      const { data: created, error: createErr } = await supabase
+        .from('pos_outlet_shifts')
+        .insert({
+          outlet_id: outlet.id,
+          branch_id: outlet.branch_id,
+          cashier_id: match.cashier_id,
+          opening_float: 0,
+          status: 'open',
+        })
+        .select('*')
+        .single();
+      if (createErr) throw createErr;
+      data = created;
+      await seedShiftStockCounts(created.id, outlet.id);
     }
   }
 
@@ -2229,62 +2297,15 @@ export const getActiveShift = async (req: Request, res: Response, next: NextFunc
     if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
     await ensureCashierOutletAccess(req, outlet);
 
-    let { data, error } = await supabase
-      .from('pos_outlet_shifts')
-      .select('*')
-      .eq('outlet_id', outletId)
-      .eq('status', 'open')
-      .order('opened_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-
     // Bridge (per-station): this station's POS is "open" only when a cashier
     // whose role serves THIS station type (e.g. main_bar_cashier → main_bar)
     // has an open shift (cashier_shift_logs). When they do, open the station's
     // POS shift so waiters can order against it. No matching cashier shift →
     // stays closed (waiters can't order, and can't open a shift themselves).
-    if (!data) {
-      const { data: branchShifts } = await supabase
-        .from('cashier_shift_logs')
-        .select('id, cashier_id')
-        .eq('branch_id', outlet.branch_id)
-        .eq('status', 'open');
-      const cashierIds = (branchShifts || [])
-        .map((s: any) => s.cashier_id)
-        .filter(Boolean);
-      if (cashierIds.length) {
-        const { data: users } = await supabase
-          .from('users')
-          .select('id, role')
-          .in('id', cashierIds);
-        const roleById = new Map((users || []).map((u: any) => [u.id, u.role]));
-        const outletType = String(outlet.outlet_type || '').toLowerCase();
-        const match = (branchShifts || []).find((s: any) =>
-          stationTypesForCashierRole(roleById.get(s.cashier_id)).includes(outletType));
-        if (match) {
-          const { data: created, error: createErr } = await supabase
-            .from('pos_outlet_shifts')
-            .insert({
-              outlet_id: outletId,
-              branch_id: outlet.branch_id,
-              cashier_id: match.cashier_id,
-              opening_float: 0,
-              status: 'open',
-            })
-            .select('*')
-            .single();
-          if (createErr) throw createErr;
-          data = created;
-          await seedShiftStockCounts(created.id, String(outletId));
-        }
-      }
-    }
-
-    const responseData = data && data.summary
-      ? { ...data, summary: sanitizeSummary(data.summary, canViewProfit(req)) }
-      : data;
-    res.json({ success: true, data: responseData });
+    // Stale POS shifts left over from a previous cashier session are rotated
+    // out inside loadOpenShiftForOutlet.
+    const data = await loadOpenShiftForOutlet(req, outlet);
+    res.json({ success: true, data });
   } catch (error) {
     next(error);
   }
