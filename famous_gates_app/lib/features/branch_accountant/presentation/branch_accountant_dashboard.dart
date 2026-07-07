@@ -266,7 +266,7 @@ const _navItems = [
   _NavItem(
       BranchAccountantSection.shiftOpenings, 'Shift Openings', Icons.lock_open),
   _NavItem(
-      BranchAccountantSection.cashierLogbooks, 'Shift Reconciliation', Icons.book),
+      BranchAccountantSection.cashierLogbooks, 'Cashier Logbooks', Icons.book),
   _NavItem(
       BranchAccountantSection.creditBills, 'Credit Bills', Icons.credit_card),
   _NavItem(BranchAccountantSection.staffPosAccounting, 'Staff POS Accounting',
@@ -1468,7 +1468,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                             .toList(),
                       ),
                       const SizedBox(height: 16),
-                      const Text('Shift Reconciliation',
+                      const Text('Cashier Logbooks',
                           style: TextStyle(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 6),
                       _SimpleTable(
@@ -6854,7 +6854,7 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
     }
 
     return _Page(
-      title: 'Shift Reconciliation',
+      title: 'Cashier Shift Logbooks',
       subtitle: 'Review cashier shift closures, blind entries, and approve hard-close reconciliation.',
       actions: [
         _RefreshButton(
@@ -6891,7 +6891,7 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
         builder: (items) => ListView(
           children: [
             _SectionCard(
-              title: 'Pending Shift Reconciliation',
+              title: 'Pending Cashier Logbooks',
               child: _CashierLogbooksTable(
                 items: items,
                 onView: _openDetail,

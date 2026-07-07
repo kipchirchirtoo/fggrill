@@ -6448,12 +6448,25 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
             }
         }
 
-        const decoratedLogbooks = (logbooks || []).map((logbook: any) => ({
-            ...logbook,
-            lines: linesByLogbookId.get(String(logbook.id || '')) || [],
-            cashier: usersById.get(String(logbook.cashier_id || '')) || null,
-            branch: branchById.get(String(logbook.branch_id || '')) || null
-        }));
+        const decoratedLogbooks = (logbooks || []).map((logbook: any) => {
+            // cashier_logbooks has no variance/expected-closing columns — the
+            // true figures are written into sales_breakdown at shift close.
+            // Surface them top-level because clients render logbook.variance
+            // directly (the accountant's logbook table showed KES 0 for every
+            // shift otherwise).
+            const breakdown = logbook.sales_breakdown && typeof logbook.sales_breakdown === 'object'
+                ? logbook.sales_breakdown
+                : {};
+            return {
+                ...logbook,
+                variance: logbookNumber(breakdown.variance),
+                expected_closing_float: logbookNumber(breakdown.expected_closing_float),
+                total_sales: logbookNumber(logbook.total_sales) || logbookNumber(breakdown.total_sales),
+                lines: linesByLogbookId.get(String(logbook.id || '')) || [],
+                cashier: usersById.get(String(logbook.cashier_id || '')) || null,
+                branch: branchById.get(String(logbook.branch_id || '')) || null
+            };
+        });
 
         res.json({
             success: true,
