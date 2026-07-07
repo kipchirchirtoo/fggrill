@@ -855,6 +855,27 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
       .maybeSingle();
     if (shiftErr) throw shiftErr;
 
+    // Fetch thresholds
+    let largePct = 3.0;
+    let extremePct = 10.0;
+    try {
+      const { data: settings } = await supabase
+        .from('branch_settings')
+        .select('stocktake_variance_large_pct, stocktake_variance_extreme_pct')
+        .eq('branch_id', branchId)
+        .maybeSingle();
+      if (settings) {
+        if (settings.stocktake_variance_large_pct != null) {
+          largePct = parseFloat(settings.stocktake_variance_large_pct);
+        }
+        if (settings.stocktake_variance_extreme_pct != null) {
+          extremePct = parseFloat(settings.stocktake_variance_extreme_pct);
+        }
+      }
+    } catch (err) {
+      logger.warn('Failed to fetch branch settings thresholds in getKitchenStocktake:', err);
+    }
+
     const kitchenItemMap = await ensureKitchenInventoryItems();
     const invIds = Array.from(kitchenItemMap.values());
 
@@ -888,6 +909,8 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
         closing_qty: num(existing?.closing_qty),
         spoilage_qty: spoilageQty,
         variance: 0,
+        explanation: existing?.explanation ?? null,
+        action_taken: existing?.action_taken ?? null,
       };
     };
 
@@ -903,7 +926,12 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
       });
       res.status(200).json({
         success: true,
-        data: { ...shiftRow, items },
+        data: {
+          ...shiftRow,
+          items,
+          stocktake_variance_large_pct: largePct,
+          stocktake_variance_extreme_pct: extremePct,
+        },
       });
       return;
     }
@@ -919,13 +947,15 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
         confirmation_name: null,
         status: 'draft',
         items: KITCHEN_STOCKTAKE_ITEMS.map((name) => buildItem(name)),
+        stocktake_variance_large_pct: largePct,
+        stocktake_variance_extreme_pct: extremePct,
       },
     });
   } catch (error) {
     logger.error('getKitchenStocktake failed:', error);
     next(error);
   }
-};
+}
 
 /**
  * @desc    Save (and optionally submit) a kitchen stocktake for a branch/date/shift.
@@ -1014,6 +1044,8 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
         opening_qty: opening,
         added_qty: added,
         closing_qty: closing,
+        explanation: submitted?.explanation || null,
+        action_taken: submitted?.action_taken || null,
         updated_at: new Date().toISOString(),
       };
     });

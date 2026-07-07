@@ -138,6 +138,22 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
         if (!branch_id) { res.status(400).json({ success: false, message: 'branch_id is required' }); return; }
         const branchId = Number(branch_id);
         if (!Number.isInteger(branchId)) { res.status(400).json({ success: false, message: 'branch_id must be an integer' }); return; }
+
+        let largePct = 3.0;
+        let extremePct = 10.0;
+        const { data: settings } = await supabase
+            .from('branch_settings')
+            .select('stocktake_variance_large_pct, stocktake_variance_extreme_pct')
+            .eq('branch_id', branchId)
+            .maybeSingle();
+        if (settings) {
+            if (settings.stocktake_variance_large_pct !== null && settings.stocktake_variance_large_pct !== undefined) {
+                largePct = Number(settings.stocktake_variance_large_pct);
+            }
+            if (settings.stocktake_variance_extreme_pct !== null && settings.stocktake_variance_extreme_pct !== undefined) {
+                extremePct = Number(settings.stocktake_variance_extreme_pct);
+            }
+        }
         const shiftIdFilter = req.query.shift_id as string | undefined;
 
         if ((status || history === 'true') && !date && !stocktake_date) {
@@ -152,7 +168,7 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
             if (historyErr) throw historyErr;
             const rawResult = (historyRecords || []).map((r: any) => ({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || r.category || null }));
             const result = await enrichWithShiftInfo(rawResult);
-            res.status(200).json({ success: true, data: result });
+            res.status(200).json({ success: true, data: result, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
         }
 
@@ -173,14 +189,14 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
         if (existingRecords && existingRecords.length > 0) {
             const rawResult = existingRecords.map((r: any) => ({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || null }));
             const result = await enrichWithShiftInfo(rawResult);
-            res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId });
+            res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
         }
 
         const { data: branchStockRows, error: bsErr } = await supabase.from('branch_stock').select('item_sku, quantity').eq('branch_id', branchId);
         if (bsErr) throw bsErr;
         const stockRows = (branchStockRows || []) as Array<{ item_sku: string; quantity: number }>;
-        if (stockRows.length === 0) { res.status(200).json({ success: true, data: [], shift_id: shiftWindow.shiftId }); return; }
+        if (stockRows.length === 0) { res.status(200).json({ success: true, data: [], shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct }); return; }
 
         const allSkus = stockRows.map((r) => r.item_sku).filter(Boolean);
         const stockBySkuMap = new Map(stockRows.map((r) => [r.item_sku, num(r.quantity)]));
@@ -223,7 +239,7 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
             return { item_id: inv.id, id: inv.id, sku, item_name: inv.item_name || sku, name: inv.item_name || sku, unit: inv.unit || 'unit', category: inv.category || 'GENERAL', store_type: inv.store_type, opening_stock: opening, sales, additions, sdds: -additions, system_quantity: currentStock, quantity: currentStock, physical_quantity: null };
         }).filter(Boolean);
 
-        res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId });
+        res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
     } catch (error) {
         logger.error('listStoreStocktakes failed:', error);
         next(error);
@@ -257,7 +273,24 @@ export const recordStoreStocktake = async (req: Request, res: Response, next: Ne
             const itemId = String(it.item_id);
             const sku = skuById.get(itemId);
             if (!sku) { logger.warn(`recordStoreStocktake: no inventory_items mapping for ${itemId}`); return null; }
-            return { branch_id: branchId, stocktake_date: stocktakeDate, shift_id: resolvedShiftId, item_id: itemId, system_quantity: stockBySku[sku] ?? 0, physical_quantity: num(it.physical_quantity), recorded_by: req.user?.id || null, recorded_at: now, status: 'pending' };
+            const sysQty = stockBySku[sku] ?? 0;
+            const physQty = num(it.physical_quantity);
+            const variance = physQty - sysQty;
+            const hasVariance = Math.abs(variance) > 0.0001;
+            return {
+                branch_id: branchId,
+                stocktake_date: stocktakeDate,
+                shift_id: resolvedShiftId,
+                item_id: itemId,
+                system_quantity: sysQty,
+                physical_quantity: physQty,
+                notes: hasVariance && it.reason_for_variance ? String(it.reason_for_variance).trim() : null,
+                explanation: hasVariance && it.explanation ? String(it.explanation).trim() : null,
+                action_taken: hasVariance && it.action_taken ? String(it.action_taken).trim() : null,
+                recorded_by: req.user?.id || null,
+                recorded_at: now,
+                status: 'pending'
+            };
         }).filter(Boolean);
 
         if (rows.length === 0) { res.status(400).json({ success: false, message: 'Could not resolve any items for stocktake' }); return; }

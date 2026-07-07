@@ -18,11 +18,19 @@ const viewRoles = [
     UserRole.SUPER_ADMIN,
     UserRole.CENTRAL_STOREKEEPER,
     UserRole.BRANCH_STOREKEEPER,
+    UserRole.STOREKEEPER,
+    UserRole.KITCHEN_OPERATIONS,
     UserRole.BRANCH_MANAGER,
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.AUDITOR,
 ];
-const recordRoles = [UserRole.SUPER_ADMIN, UserRole.CENTRAL_STOREKEEPER, UserRole.BRANCH_STOREKEEPER];
+
+const recordRoles = [
+    UserRole.BRANCH_STOREKEEPER,
+    UserRole.STOREKEEPER,
+    UserRole.KITCHEN_OPERATIONS
+];
+
 const accountantRoles = [UserRole.SUPER_ADMIN, UserRole.BRANCH_ACCOUNTANT];
 
 router.get('/list', authorize(viewRoles), listKitchenStocktakes);

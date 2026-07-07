@@ -22,6 +22,8 @@ class StockTakeState {
   /// Populated from the backend response's `shift_id` field and
   /// joined shift_number / cashier_name. Null until first load completes.
   final Map<String, dynamic>? currentShift;
+  final double largePct;
+  final double extremePct;
 
   StockTakeState({
     required this.items,
@@ -35,6 +37,8 @@ class StockTakeState {
     required this.isSubmitting,
     required this.hasExecutiveBar,
     this.currentShift,
+    this.largePct = 3.0,
+    this.extremePct = 10.0,
   });
 
   StockTakeState copyWith({
@@ -50,6 +54,8 @@ class StockTakeState {
     bool? hasExecutiveBar,
     Map<String, dynamic>? currentShift,
     bool clearShift = false,
+    double? largePct,
+    double? extremePct,
   }) {
     return StockTakeState(
       items: items ?? this.items,
@@ -63,6 +69,8 @@ class StockTakeState {
       isSubmitting: isSubmitting ?? this.isSubmitting,
       hasExecutiveBar: hasExecutiveBar ?? this.hasExecutiveBar,
       currentShift: clearShift ? null : (currentShift ?? this.currentShift),
+      largePct: largePct ?? this.largePct,
+      extremePct: extremePct ?? this.extremePct,
     );
   }
 }
@@ -82,6 +90,8 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
           dateFilter: DateTime.now().toIso8601String().split('T')[0],
           isSubmitting: false,
           hasExecutiveBar: false,
+          largePct: 3.0,
+          extremePct: 10.0,
         ));
 
   String get _draftKey =>
@@ -105,12 +115,16 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       final repo = _ref.read(branchStorekeeperRepositoryProvider);
       List<StockTakeItem> loadedItems = [];
       bool submitted = false;
+      double largeVal = 3.0;
+      double extremeVal = 10.0;
 
       if (_type == StockTakeType.bar) {
         final response = await repo.barStocktakeRecords(
           barLocation: targetLoc,
           date: targetDate,
         );
+        largeVal = double.tryParse((response['stocktake_variance_large_pct'] ?? '').toString()) ?? 3.0;
+        extremeVal = double.tryParse((response['stocktake_variance_extreme_pct'] ?? '').toString()) ?? 10.0;
         final records = _unwrapResponseList(response);
         final responseShiftId = response['shift_id'] as String?;
 
@@ -171,6 +185,8 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         final response = await repo.storeStocktakeRecords(
           date: targetDate,
         );
+        largeVal = double.tryParse((response['stocktake_variance_large_pct'] ?? '').toString()) ?? 3.0;
+        extremeVal = double.tryParse((response['stocktake_variance_extreme_pct'] ?? '').toString()) ?? 10.0;
         final records = _unwrapResponseList(response);
         final responseShiftId = response['shift_id'] as String?;
 
@@ -261,6 +277,8 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         isLoading: false,
         isSubmitted: submitted,
         hasExecutiveBar: hasExec,
+        largePct: largeVal,
+        extremePct: extremeVal,
       );
     } catch (e) {
       state = state.copyWith(

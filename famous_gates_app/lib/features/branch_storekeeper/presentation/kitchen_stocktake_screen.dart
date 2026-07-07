@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_notifier.dart';
+import '../../../core/network/dio_client.dart';
 import '../data/branch_storekeeper_repository.dart';
 import 'record_spoilage_screen.dart';
 
@@ -133,6 +135,17 @@ class _KitchenShiftStocktakeState
   final TextEditingController _confirmationCtrl = TextEditingController();
   bool _saving = false;
 
+  double _largePct = 3.0;
+  double _extremePct = 10.0;
+  final Map<String, TextEditingController> _explanationCtrl = {};
+  final Map<String, TextEditingController> _actionTakenCtrl = {};
+
+  TextEditingController _explanationCtrlFor(String name) =>
+      _explanationCtrl.putIfAbsent(name, () => TextEditingController());
+
+  TextEditingController _actionTakenCtrlFor(String name) =>
+      _actionTakenCtrl.putIfAbsent(name, () => TextEditingController());
+
   Future<Map<String, dynamic>> _load() async {
     final repo = ref.read(branchStorekeeperRepositoryProvider);
     final data = await repo.kitchenStocktake(date: widget.date, shift: widget.shift);
@@ -143,6 +156,9 @@ class _KitchenShiftStocktakeState
     for (var i = 0; i < _chepsCtrl.length; i++) {
       _chepsCtrl[i].text = i < cheps.length ? '${cheps[i]}' : '';
     }
+
+    _largePct = double.tryParse((data['stocktake_variance_large_pct'] ?? '').toString()) ?? 3.0;
+    _extremePct = double.tryParse((data['stocktake_variance_extreme_pct'] ?? '').toString()) ?? 10.0;
 
     final items = (data['items'] as List?) ?? const [];
     for (final raw in items) {
@@ -155,6 +171,8 @@ class _KitchenShiftStocktakeState
       _spoilage[name] = _num(item['spoilage_qty']);
       _ctrlFor(name).text = _fmt(item['closing_qty']);
       _addedCtrlFor(name).text = _fmt(item['added_qty']);
+      _explanationCtrlFor(name).text = item['explanation']?.toString() ?? '';
+      _actionTakenCtrlFor(name).text = item['action_taken']?.toString() ?? '';
     }
     return data;
   }
@@ -172,7 +190,13 @@ class _KitchenShiftStocktakeState
 
   @override
   void dispose() {
-    for (final c in [..._closingCtrl.values, ..._addedCtrl.values, ..._chepsCtrl]) {
+    for (final c in [
+      ..._closingCtrl.values,
+      ..._addedCtrl.values,
+      ..._chepsCtrl,
+      ..._explanationCtrl.values,
+      ..._actionTakenCtrl.values
+    ]) {
       c.dispose();
     }
     _dispenserCtrl.dispose();
@@ -180,16 +204,312 @@ class _KitchenShiftStocktakeState
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final items = KitchenStocktakeItems.kFixedItems.map((name) {
-      return {
-        'item_id': _itemIdByName[name],
-        'item_name': name,
-        'added_qty': double.tryParse(_addedCtrlFor(name).text.trim()) ?? 0,
-        'closing_qty': double.tryParse(_ctrlFor(name).text.trim()) ?? 0,
-      };
-    }).toList();
+  bool _isSupervisorOrManager(String role) {
+    const supervisorRoles = {
+      'super_admin',
+      'director',
+      'general_manager',
+      'branch_manager',
+      'branch_operations_manager',
+      'central_operations_manager',
+      'facilities_manager',
+      'bar_manager',
+      'head_chef',
+      'purchasing_manager',
+      'hr_manager',
+      'branch_accountant',
+      'auditor',
+      'central_storekeeper',
+    };
+    return supervisorRoles.contains(role);
+  }
 
+  void _showLargeVarianceValidationDialog(BuildContext context, List<Map<String, dynamic>> items) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Color(0xFFD32F2F)),
+            const SizedBox(width: 8),
+            const Text('Validation Error'),
+          ],
+        ),
+        content: Text(
+          'All items with a large variance must have an explanation reason selected before you can submit.\n\n'
+          'Please enter explanations for:\n' +
+          items.map((i) => '• ${i['name']}').join('\n'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRecountConfirmationDialog(
+    BuildContext context,
+    List<Map<String, dynamic>> largeVariances,
+    List<Map<String, dynamic>> itemsPayload,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFF9A825)),
+            const SizedBox(width: 8),
+            const Text('Recount Confirmation Required'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'The following items have large variances:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...largeVariances.map((item) => Text('• ${item['name']}')),
+            const SizedBox(height: 16),
+            const Text(
+              'Please confirm that you have recounted these items and verified that the physical counts are correct.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF9A825),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _executeSubmit(itemsPayload);
+            },
+            child: const Text('Confirm & Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSupervisorOverrideDialog(
+    BuildContext context,
+    List<Map<String, dynamic>> extremeVariances,
+    List<Map<String, dynamic>> itemsPayload,
+  ) {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool isLoading = false;
+    String? errorMsg;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.security, color: Color(0xFFD32F2F)),
+                const SizedBox(width: 8),
+                const Text('Supervisor Override Required'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'The following items have extreme variances:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  ...extremeVariances.map((item) {
+                    final expected = item['expected'];
+                    final actual = item['closing'];
+                    final variance = item['variance'];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('• ${item['name']}: Expected $expected, Actual $actual (Var: $variance)'),
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                  const Text('Please have a Supervisor or Manager authorize this submission by entering their credentials below.'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Supervisor Email',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passwordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Supervisor Password',
+                      border: OutlineInputBorder(),
+                    ),
+                    obscureText: true,
+                  ),
+                  if (errorMsg != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorMsg!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD32F2F),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        setState(() {
+                          isLoading = true;
+                          errorMsg = null;
+                        });
+
+                        try {
+                          final email = emailController.text.trim();
+                          final password = passwordController.text;
+
+                          if (email.isEmpty || password.isEmpty) {
+                            throw Exception('Please enter email and password.');
+                          }
+
+                          final dio = ref.read(dioProvider);
+                          final response = await dio.post('/auth/login', data: {
+                            'email': email,
+                            'password': password,
+                          });
+                          final body = response.data;
+                          final payload = body is Map && body['data'] is Map ? body['data'] : body;
+                          final user = payload is Map ? payload['user'] : null;
+
+                          if (user is Map) {
+                            final role = user['role']?.toString() ?? '';
+                            final name = user['name']?.toString() ?? 'Supervisor';
+
+                            if (_isSupervisorOrManager(role)) {
+                              for (final item in itemsPayload) {
+                                final isExtreme = extremeVariances.any((ev) => ev['name'] == item['item_name']);
+                                if (isExtreme) {
+                                  final currentReason = item['explanation']?.toString() ?? '';
+                                  final signature = '[OVERRIDE: Approved by $name ($role)]';
+                                  item['explanation'] = currentReason.contains(signature)
+                                      ? currentReason
+                                      : '$signature ${currentReason.trim()}'.trim();
+                                }
+                              }
+
+                              Navigator.pop(dialogContext);
+
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                final largeVariances = itemsPayload.where((item) {
+                                  final name = item['item_name'];
+                                  final opening = _opening[name] ?? 0;
+                                  final added = item['added_qty'] as double;
+                                  final sold = _sold[name] ?? 0;
+                                  final spoilage = _spoilage[name] ?? 0;
+                                  final expected = opening + added - sold - spoilage;
+                                  final closing = item['closing_qty'] as double;
+                                  final variance = closing - expected;
+                                  final absVariance = variance.abs();
+
+                                  double variancePercentage = 0;
+                                  if (expected > 0) {
+                                    variancePercentage = (absVariance / expected) * 100;
+                                  } else if (absVariance > 0) {
+                                    variancePercentage = 100.0;
+                                  }
+
+                                  String severity = 'NORMAL';
+                                  if (expected >= 1.0) {
+                                    if (variancePercentage >= _extremePct) {
+                                      severity = 'EXTREME';
+                                    } else if (variancePercentage >= _largePct) {
+                                      severity = 'LARGE';
+                                    }
+                                  } else {
+                                    if (absVariance >= 1.0) {
+                                      severity = 'EXTREME';
+                                    } else if (absVariance >= 0.1) {
+                                      severity = 'LARGE';
+                                    }
+                                  }
+                                  return severity == 'LARGE';
+                                }).toList();
+
+                                if (largeVariances.isNotEmpty) {
+                                  _showRecountConfirmationDialog(context, largeVariances, itemsPayload);
+                                } else {
+                                  _executeSubmit(itemsPayload);
+                                }
+                              });
+                              return;
+                            }
+                          }
+                          throw Exception('User is not authorized as a supervisor/manager.');
+                        } catch (e) {
+                          String errMsg = 'Authorization failed';
+                          if (e is DioException) {
+                            final data = e.response?.data;
+                            if (data is Map && data['message'] != null) {
+                              errMsg = data['message'].toString();
+                            } else {
+                              errMsg = e.message ?? errMsg;
+                            }
+                          } else if (e is Exception) {
+                            errMsg = e.toString().replaceFirst('Exception: ', '');
+                          }
+                          setState(() {
+                            isLoading = false;
+                            errorMsg = errMsg;
+                          });
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Authorize & Submit'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _executeSubmit(List<Map<String, dynamic>> items) async {
     setState(() => _saving = true);
     try {
       await ref.read(branchStorekeeperRepositoryProvider).saveKitchenStocktake(
@@ -212,6 +532,93 @@ class _KitchenShiftStocktakeState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _submit() async {
+    final List<Map<String, dynamic>> itemsPayload = [];
+    final List<Map<String, dynamic>> largeVariances = [];
+    final List<Map<String, dynamic>> extremeVariances = [];
+
+    for (final name in KitchenStocktakeItems.kFixedItems) {
+      final opening = _opening[name] ?? 0;
+      final added = double.tryParse(_addedCtrlFor(name).text.trim()) ?? 0;
+      final sold = _sold[name] ?? 0;
+      final spoilage = _spoilage[name] ?? 0;
+      final expected = opening + added - sold - spoilage;
+      final closing = double.tryParse(_ctrlFor(name).text.trim()) ?? 0;
+      final variance = closing - expected;
+      final absVariance = variance.abs();
+
+      double variancePercentage = 0;
+      if (expected > 0) {
+        variancePercentage = (absVariance / expected) * 100;
+      } else if (absVariance > 0) {
+        variancePercentage = 100.0;
+      }
+
+      String severity = 'NORMAL';
+      if (expected >= 1.0) {
+        if (variancePercentage >= _extremePct) {
+          severity = 'EXTREME';
+        } else if (variancePercentage >= _largePct) {
+          severity = 'LARGE';
+        }
+      } else {
+        if (absVariance >= 1.0) {
+          severity = 'EXTREME';
+        } else if (absVariance >= 0.1) {
+          severity = 'LARGE';
+        }
+      }
+
+      final explanation = _explanationCtrlFor(name).text.trim();
+      final actionTaken = _actionTakenCtrlFor(name).text.trim();
+
+      itemsPayload.add({
+        'item_id': _itemIdByName[name],
+        'item_name': name,
+        'added_qty': added,
+        'closing_qty': closing,
+        'explanation': explanation,
+        'action_taken': actionTaken,
+      });
+
+      if (severity == 'EXTREME') {
+        extremeVariances.add({
+          'name': name,
+          'expected': expected,
+          'closing': closing,
+          'variance': variance,
+        });
+      } else if (severity == 'LARGE') {
+        largeVariances.add({
+          'name': name,
+          'expected': expected,
+          'closing': closing,
+          'variance': variance,
+          'explanation': explanation,
+          'action_taken': actionTaken,
+        });
+      }
+    }
+
+    final largeWithoutReason = largeVariances.where((v) => (v['explanation'] as String).isEmpty).toList();
+    if (largeWithoutReason.isNotEmpty) {
+      _showLargeVarianceValidationDialog(context, largeWithoutReason);
+      return;
+    }
+
+    if (extremeVariances.isNotEmpty) {
+      _showSupervisorOverrideDialog(context, extremeVariances, itemsPayload);
+      return;
+    }
+
+    if (largeVariances.isNotEmpty) {
+      _showRecountConfirmationDialog(context, largeVariances, itemsPayload);
+      return;
+    }
+
+    _executeSubmit(itemsPayload);
   }
 
   @override
@@ -315,12 +722,101 @@ class _KitchenShiftStocktakeState
 
   Widget _itemRow(String name) {
     final closing = _ctrlFor(name);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
+    final opening = _opening[name] ?? 0;
+    final added = double.tryParse(_addedCtrlFor(name).text.trim()) ?? 0;
+    final sold = _sold[name] ?? 0;
+    final spoilage = _spoilage[name] ?? 0;
+    final expected = opening + added - sold - spoilage;
+    final closingVal = double.tryParse(closing.text.trim()) ?? 0;
+    final variance = closingVal - expected;
+    final hasVariance = variance != 0;
+
+    final absVariance = variance.abs();
+    double variancePercentage = 0;
+    if (expected > 0) {
+      variancePercentage = (absVariance / expected) * 100;
+    } else if (absVariance > 0) {
+      variancePercentage = 100.0;
+    }
+
+    String severity = 'NORMAL';
+    if (expected >= 1.0) {
+      if (variancePercentage >= _extremePct) {
+        severity = 'EXTREME';
+      } else if (variancePercentage >= _largePct) {
+        severity = 'LARGE';
+      }
+    } else {
+      if (absVariance >= 1.0) {
+        severity = 'EXTREME';
+      } else if (absVariance >= 0.1) {
+        severity = 'LARGE';
+      }
+    }
+
+    Color? rowBgColor;
+    if (severity == 'EXTREME') {
+      rowBgColor = Colors.red.shade50;
+    } else if (severity == 'LARGE') {
+      rowBgColor = Colors.orange.shade50;
+    }
+
+    return Container(
+      color: rowBgColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 3, child: Text(name, style: const TextStyle(fontSize: 13))),
-          Expanded(flex: 2, child: _qtyField(closing)),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name, style: const TextStyle(fontSize: 13)),
+                      if (hasVariance)
+                        Text(
+                          'Expected: $expected | Var: ${variance > 0 ? "+$variance" : variance}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: severity == 'EXTREME'
+                                ? Colors.red.shade900
+                                : severity == 'LARGE'
+                                    ? Colors.orange.shade900
+                                    : Colors.grey,
+                            fontWeight: severity != 'NORMAL' ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(flex: 2, child: _qtyField(closing)),
+              ],
+            ),
+          ),
+          if (hasVariance)
+            Padding(
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _explanationCtrlFor(name),
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for variance',
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const Divider(height: 1),
         ],
       ),
     );

@@ -5,6 +5,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../auth/data/auth_repository.dart';
 import '../domain/models.dart';
+import '../domain/session_models.dart';
 
 final kitchenRepositoryProvider = Provider<KitchenRepository>((ref) {
   return KitchenRepository(ref.read(dioProvider), ref);
@@ -220,6 +221,170 @@ class KitchenRepository {
       });
     } on DioException catch (e) {
       throw StateError(_errorMessage(e));
+    }
+  }
+
+  // ── Kitchen Sessions Endpoints ───────────────────────────────────────────
+
+  Future<KitchenShift?> getActiveShift() async {
+    try {
+      final branchId = await _branchId;
+      final response = await _dio.get('/kitchen/shifts', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
+        'status': 'open',
+      });
+      final list = _parseMapList(response.data);
+      if (list.isEmpty) return null;
+      return KitchenShift.fromJson(list.first);
+    } catch (e) {
+      debugPrint('KitchenRepository.getActiveShift error: $e');
+      return null;
+    }
+  }
+
+  Future<KitchenShiftConfig> getActiveShiftConfig() async {
+    try {
+      final branchId = await _branchId;
+      final response = await _dio.get('/kitchen/shifts/shift-mode', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
+      });
+      final data = response.data;
+      if (data is Map && data['data'] is Map) {
+        return KitchenShiftConfig.fromJson(Map<String, dynamic>.from(data['data']));
+      }
+      return KitchenShiftConfig(enabled: false, reason: 'INVALID_RESPONSE');
+    } catch (e) {
+      debugPrint('KitchenRepository.getActiveShiftConfig error: $e');
+      return KitchenShiftConfig(enabled: false, reason: e.toString());
+    }
+  }
+
+  Future<KitchenShift> openShift({
+    required String shiftType,
+    required List<String> assignedChefIds,
+    String? subShiftType,
+    String? department,
+  }) async {
+    try {
+      final branchId = await _branchId;
+      if (branchId == null) throw Exception('No branch ID associated with user.');
+      
+      final response = await _dio.post('/kitchen/shifts', data: {
+        'branch_id': branchId,
+        'shift_type': shiftType,
+        'assigned_chef_ids': assignedChefIds,
+        if (subShiftType != null) 'sub_shift_type': subShiftType,
+        'department': department ?? 'KITCHEN',
+        'opening_items': [], // Backend will resolve morning stocktake / handover
+      });
+      final data = response.data;
+      if (data is Map && data['data'] != null) {
+        return KitchenShift.fromJson(Map<String, dynamic>.from(data['data']));
+      }
+      throw Exception('Invalid response format');
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> getShiftDetails(String shiftId) async {
+    try {
+      final response = await _dio.get('/kitchen/shifts/$shiftId');
+      final data = response.data;
+      if (data is Map && data['data'] != null) {
+        return Map<String, dynamic>.from(data['data']);
+      }
+      throw Exception('Invalid response format');
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<List<KitchenProductionRecipe>> getRecipesList() async {
+    try {
+      final response = await _dio.get('/kitchen/shifts/recipes/list');
+      final list = response.data is List
+          ? response.data
+          : (response.data is Map ? (response.data['data'] ?? []) : []);
+      return (list as List)
+          .whereType<Map>()
+          .map((json) => KitchenProductionRecipe.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
+    } catch (e) {
+      debugPrint('KitchenRepository.getRecipesList error: $e');
+      return [];
+    }
+  }
+
+  Future<void> logProductionEvent(Map<String, dynamic> payload) async {
+    try {
+      await _dio.post('/kitchen/shifts/production/log', data: payload);
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<List<KitchenShiftAddition>> getShiftAdditions(String shiftId) async {
+    try {
+      final response = await _dio.get('/kitchen/shifts/$shiftId/additions');
+      final list = response.data is List
+          ? response.data
+          : (response.data is Map ? (response.data['data'] ?? []) : []);
+      return (list as List)
+          .whereType<Map>()
+          .map((json) => KitchenShiftAddition.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
+    } catch (e) {
+      debugPrint('KitchenRepository.getShiftAdditions error: $e');
+      return [];
+    }
+  }
+
+  Future<void> retrySync(String shiftId) async {
+    try {
+      await _dio.post('/kitchen/shifts/$shiftId/sync/retry');
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getStaffProfiles() async {
+    try {
+      final branchId = await _branchId;
+      final response = await _dio.get('/staff', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
+      });
+      return _parseMapList(response.data);
+    } catch (e) {
+      debugPrint('KitchenRepository.getStaffProfiles error: $e');
+      return [];
+    }
+  }
+
+  Future<void> addStock(String shiftId, List<Map<String, dynamic>> items) async {
+    try {
+      await _dio.post('/kitchen/shifts/$shiftId/stock', data: {'items': items});
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<void> closeShift({
+    required String shiftId,
+    required List<Map<String, dynamic>> physicalCounts,
+    required List<String> outgoingWitnessIds,
+    required List<String> incomingWitnessIds,
+    String? closingNotes,
+  }) async {
+    try {
+      await _dio.post('/kitchen/shifts/$shiftId/close', data: {
+        'physical_counts': physicalCounts,
+        'outgoing_witness_ids': outgoingWitnessIds,
+        'incoming_witness_ids': incomingWitnessIds,
+        'closing_notes': closingNotes,
+      });
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
     }
   }
 }

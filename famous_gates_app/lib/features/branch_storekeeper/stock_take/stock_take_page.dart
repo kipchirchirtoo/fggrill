@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
+import '../../../core/network/dio_client.dart';
 import '../../../core/widgets/safe_avatar.dart';
 import '../../auth/domain/auth_notifier.dart';
 import 'models/stock_take_item.dart';
@@ -287,39 +289,310 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
     return item.category;
   }
 
-  void _confirmSubmit(BuildContext context, StockTakeState state, StockTakeNotifier notifier) {
-    // Check if there are any variances without reasons
-    final unexplained = state.items.where(
-      (item) => item.physicalCount != null && item.variance != 0 && (item.reason == null || item.reason!.isEmpty),
-    );
+  bool _isSupervisorOrManager(String role) {
+    const supervisorRoles = {
+      'super_admin',
+      'director',
+      'general_manager',
+      'branch_manager',
+      'branch_operations_manager',
+      'central_operations_manager',
+      'facilities_manager',
+      'bar_manager',
+      'head_chef',
+      'purchasing_manager',
+      'hr_manager',
+      'branch_accountant',
+      'auditor',
+      'central_storekeeper',
+    };
+    return supervisorRoles.contains(role);
+  }
 
-    if (unexplained.isNotEmpty) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Color(0xFFD32F2F)),
-              const SizedBox(width: 8),
-              const Text('Validation Error'),
+  void _proceedSubmitAfterOverride(BuildContext context, StockTakeNotifier notifier) {
+    final provider = widget.stockTakeType == StockTakeType.bar
+        ? barStockTakeProvider
+        : storeStockTakeProvider;
+    final currentState = ref.read(provider);
+
+    // Recheck large variances
+    final largePct = currentState.largePct;
+    final extremePct = currentState.extremePct;
+    final List<StockTakeItem> largeVariances = [];
+
+    for (final item in currentState.items) {
+      if (item.physicalCount == null) continue;
+      final expectedQty = item.closingStock.toDouble();
+      final actualQty = item.physicalCount!.toDouble();
+      final variance = actualQty - expectedQty;
+      final absVariance = variance.abs();
+      double variancePercentage = 0;
+
+      if (expectedQty > 0) {
+        variancePercentage = (absVariance / expectedQty) * 100;
+      } else if (absVariance > 0) {
+        variancePercentage = 100.0;
+      }
+
+      String severity = 'NORMAL';
+      if (expectedQty >= 1.0) {
+        if (variancePercentage >= extremePct) {
+          severity = 'EXTREME';
+        } else if (variancePercentage >= largePct) {
+          severity = 'LARGE';
+        }
+      } else {
+        if (absVariance >= 1.0) {
+          severity = 'EXTREME';
+        } else if (absVariance >= 0.1) {
+          severity = 'LARGE';
+        }
+      }
+
+      if (severity == 'LARGE') {
+        largeVariances.add(item);
+      }
+    }
+
+    if (largeVariances.isNotEmpty) {
+      _showRecountConfirmationDialog(context, largeVariances, notifier);
+    } else {
+      _executeSubmit(context, notifier);
+    }
+  }
+
+  void _showSupervisorOverrideDialog(
+    BuildContext context,
+    List<StockTakeItem> extremeVariances,
+    StockTakeNotifier notifier,
+    StockTakeState state,
+  ) {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool isLoading = false;
+    String? errorMsg;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.security, color: Color(0xFFD32F2F)),
+                const SizedBox(width: 8),
+                const Text('Supervisor Override Required'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'The following items have extreme variances:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  ...extremeVariances.map((item) {
+                    final expected = item.closingStock;
+                    final actual = item.physicalCount ?? 0;
+                    final variance = actual - expected;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('• ${item.productName}: Expected $expected, Actual $actual (Var: $variance)'),
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                  const Text('Please have a Supervisor or Manager authorize this submission by entering their credentials below.'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Supervisor Email',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passwordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Supervisor Password',
+                      border: OutlineInputBorder(),
+                    ),
+                    obscureText: true,
+                  ),
+                  if (errorMsg != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorMsg!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD32F2F),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        setState(() {
+                          isLoading = true;
+                          errorMsg = null;
+                        });
+
+                        try {
+                          final email = emailController.text.trim();
+                          final password = passwordController.text;
+
+                          if (email.isEmpty || password.isEmpty) {
+                            throw Exception('Please enter email and password.');
+                          }
+
+                          final dio = ref.read(dioProvider);
+                          final response = await dio.post('/auth/login', data: {
+                            'email': email,
+                            'password': password,
+                          });
+                          final body = response.data;
+                          final payload = body is Map && body['data'] is Map ? body['data'] : body;
+                          final user = payload is Map ? payload['user'] : null;
+
+                          if (user is Map) {
+                            final role = user['role']?.toString() ?? '';
+                            final name = user['name']?.toString() ?? 'Supervisor';
+
+                            if (_isSupervisorOrManager(role)) {
+                              for (final item in extremeVariances) {
+                                final currentReason = item.reason ?? '';
+                                final signature = '[OVERRIDE: Approved by $name ($role)]';
+                                final newReason = currentReason.contains(signature)
+                                    ? currentReason
+                                    : '$signature ${currentReason.trim()}'.trim();
+                                notifier.updateReason(item.id, newReason);
+                              }
+
+                              Navigator.pop(dialogContext);
+
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _proceedSubmitAfterOverride(context, notifier);
+                              });
+                              return;
+                            }
+                          }
+                          throw Exception('User is not authorized as a supervisor/manager.');
+                        } catch (e) {
+                          String errMsg = 'Authorization failed';
+                          if (e is DioException) {
+                            final data = e.response?.data;
+                            if (data is Map && data['message'] != null) {
+                              errMsg = data['message'].toString();
+                            } else {
+                              errMsg = e.message ?? errMsg;
+                            }
+                          } else if (e is Exception) {
+                            errMsg = e.toString().replaceFirst('Exception: ', '');
+                          }
+                          setState(() {
+                            isLoading = false;
+                            errorMsg = errMsg;
+                          });
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Authorize & Submit'),
+              ),
             ],
-          ),
-          content: Text(
-            'All items with a variance must have an explanation reason selected before you can submit.\n\n'
-            'Please select reasons for:\n' +
-            unexplained.map((i) => '• ${i.productName}').join('\n'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showRecountConfirmationDialog(
+    BuildContext context,
+    List<StockTakeItem> largeVariances,
+    StockTakeNotifier notifier,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFF9A825)),
+            const SizedBox(width: 8),
+            const Text('Recount Confirmation Required'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'The following items have large variances:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...largeVariances.map((item) => Text('• ${item.productName}')),
+            const SizedBox(height: 16),
+            const Text(
+              'Please confirm that you have recounted these items and verified that the physical counts are correct.',
             ),
           ],
         ),
-      );
-      return;
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF9A825),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _executeSubmit(context, notifier);
+            },
+            child: const Text('Confirm & Submit'),
+          ),
+        ],
+      ),
+    );
+  }
 
+  void _executeSubmit(BuildContext context, StockTakeNotifier notifier) async {
+    final success = await notifier.submitStockTake();
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stock take submitted successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  void _confirmSubmit(BuildContext context, StockTakeState state, StockTakeNotifier notifier) {
     final missingCounts = state.items.where((item) => item.physicalCount == null);
     if (missingCounts.isNotEmpty) {
       showDialog(
@@ -348,6 +621,91 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
       return;
     }
 
+    final largePct = state.largePct;
+    final extremePct = state.extremePct;
+
+    final List<StockTakeItem> largeVariancesWithoutReason = [];
+    final List<StockTakeItem> largeVariancesWithReason = [];
+    final List<StockTakeItem> extremeVariances = [];
+
+    for (final item in state.items) {
+      if (item.physicalCount == null) continue;
+
+      final expectedQty = item.closingStock.toDouble();
+      final actualQty = item.physicalCount!.toDouble();
+      final variance = actualQty - expectedQty;
+      final absVariance = variance.abs();
+      double variancePercentage = 0;
+
+      if (expectedQty > 0) {
+        variancePercentage = (absVariance / expectedQty) * 100;
+      } else if (absVariance > 0) {
+        variancePercentage = 100.0;
+      }
+
+      String severity = 'NORMAL';
+      if (expectedQty >= 1.0) {
+        if (variancePercentage >= extremePct) {
+          severity = 'EXTREME';
+        } else if (variancePercentage >= largePct) {
+          severity = 'LARGE';
+        }
+      } else {
+        if (absVariance >= 1.0) {
+          severity = 'EXTREME';
+        } else if (absVariance >= 0.1) {
+          severity = 'LARGE';
+        }
+      }
+
+      if (severity == 'EXTREME') {
+        extremeVariances.add(item);
+      } else if (severity == 'LARGE') {
+        if (item.reason == null || item.reason!.trim().isEmpty) {
+          largeVariancesWithoutReason.add(item);
+        } else {
+          largeVariancesWithReason.add(item);
+        }
+      }
+    }
+
+    if (largeVariancesWithoutReason.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Color(0xFFD32F2F)),
+              const SizedBox(width: 8),
+              const Text('Validation Error'),
+            ],
+          ),
+          content: Text(
+            'All items with a large variance must have an explanation reason selected before you can submit.\n\n'
+            'Please select reasons for:\n' +
+            largeVariancesWithoutReason.map((i) => '• ${i.productName}').join('\n'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (extremeVariances.isNotEmpty) {
+      _showSupervisorOverrideDialog(context, extremeVariances, notifier, state);
+      return;
+    }
+
+    if (largeVariancesWithReason.isNotEmpty) {
+      _showRecountConfirmationDialog(context, largeVariancesWithReason, notifier);
+      return;
+    }
+
     // Confirmation dialog
     showDialog(
       context: context,
@@ -362,17 +720,9 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(context);
-              final success = await notifier.submitStockTake();
-              if (success && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Stock take submitted successfully!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
+              _executeSubmit(context, notifier);
             },
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF1565C0),

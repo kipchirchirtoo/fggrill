@@ -281,6 +281,22 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             return;
         }
 
+        let largePct = 3.0;
+        let extremePct = 10.0;
+        const { data: settings } = await supabase
+            .from('branch_settings')
+            .select('stocktake_variance_large_pct, stocktake_variance_extreme_pct')
+            .eq('branch_id', branchId)
+            .maybeSingle();
+        if (settings) {
+            if (settings.stocktake_variance_large_pct !== null && settings.stocktake_variance_large_pct !== undefined) {
+                largePct = Number(settings.stocktake_variance_large_pct);
+            }
+            if (settings.stocktake_variance_extreme_pct !== null && settings.stocktake_variance_extreme_pct !== undefined) {
+                extremePct = Number(settings.stocktake_variance_extreme_pct);
+            }
+        }
+
         // A status filter or history=true with no explicit bar_location/date means
         // the caller wants real submitted records across every location/date,
         // not a single day's count sheet. Answer it directly from
@@ -308,7 +324,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 item_name: r.item?.item_name || r.item_name || null,
             }));
             const result = await enrichWithShiftInfo(rawResult);
-            res.status(200).json({ success: true, data: result });
+            res.status(200).json({ success: true, data: result, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
         }
 
@@ -382,7 +398,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 item_name: r.item?.item_name || r.item_name || null,
             }));
             const result = await enrichWithShiftInfo(rawResult);
-            res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId });
+            res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
         }
 
@@ -431,7 +447,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             };
         }).filter(Boolean);
 
-        res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId });
+        res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
     } catch (error) {
         logger.error('listBarStocktakes failed:', error);
         next(error);
@@ -593,6 +609,8 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                 physical_quantity: physQty,
                 // variance is a GENERATED column — do NOT include it
                 reason_for_variance: hasVariance && it.reason_for_variance ? String(it.reason_for_variance).trim() : null,
+                explanation: hasVariance && it.explanation ? String(it.explanation).trim() : null,
+                action_taken: hasVariance && it.action_taken ? String(it.action_taken).trim() : null,
                 recorded_by: req.user?.id || null,
                 recorded_at: now,
                 status: 'pending'
