@@ -265,13 +265,14 @@ async function upsertShiftActualCollections(
 ): Promise<void> {
     if (!rows.length) return;
 
+    // variance is GENERATED ALWAYS AS (actual_amount - system_amount) in the
+    // live table — supplying it makes Postgres reject the whole insert (428C9).
     const payload = rows.map((row) => ({
         shift_id: row.shift_id,
         branch_id: row.branch_id,
         payment_method: row.payment_method,
         system_amount: row.system_amount,
         actual_amount: row.actual_amount,
-        variance: row.actual_amount - row.system_amount,
         entered_by: row.entered_by,
         entered_at: new Date().toISOString(),
         entry_reference: row.entry_reference || null,
@@ -2085,35 +2086,45 @@ export const closeShift = async (
 
         if (updateError) throw updateError;
 
-        await upsertShiftActualCollections([
-            {
-                shift_id: id,
-                branch_id: Number(shift.branch_id),
-                payment_method: 'cash',
-                system_amount: expectedClosingFloat,
-                actual_amount: actualCashCounted,
-                entered_by: userId || null,
-                entry_reference: bank_deposit_ref || null
-            },
-            {
-                shift_id: id,
-                branch_id: Number(shift.branch_id),
-                payment_method: 'mpesa',
-                system_amount: expectedMpesaSales,
-                actual_amount: actualMpesaLogged,
-                entered_by: userId || null,
-                entry_reference: mpesa_summary_ref || null
-            },
-            {
-                shift_id: id,
-                branch_id: Number(shift.branch_id),
-                payment_method: 'card',
-                system_amount: expectedCardSales,
-                actual_amount: actualCardLogged,
-                entered_by: userId || null,
-                entry_reference: card_batch_ref || null
-            }
-        ]);
+        // The shift row above is already closed — from here on every step must
+        // degrade to a warning. An unguarded throw here previously 500'd the
+        // whole close AFTER the status flip, silently skipping the POS station
+        // close sweep, credit-bill sync, and logbook generation (the shift then
+        // never appeared in the accountant's Shift Reconciliation queue).
+        try {
+            await upsertShiftActualCollections([
+                {
+                    shift_id: id,
+                    branch_id: Number(shift.branch_id),
+                    payment_method: 'cash',
+                    system_amount: expectedClosingFloat,
+                    actual_amount: actualCashCounted,
+                    entered_by: userId || null,
+                    entry_reference: bank_deposit_ref || null
+                },
+                {
+                    shift_id: id,
+                    branch_id: Number(shift.branch_id),
+                    payment_method: 'mpesa',
+                    system_amount: expectedMpesaSales,
+                    actual_amount: actualMpesaLogged,
+                    entered_by: userId || null,
+                    entry_reference: mpesa_summary_ref || null
+                },
+                {
+                    shift_id: id,
+                    branch_id: Number(shift.branch_id),
+                    payment_method: 'card',
+                    system_amount: expectedCardSales,
+                    actual_amount: actualCardLogged,
+                    entered_by: userId || null,
+                    entry_reference: card_batch_ref || null
+                }
+            ]);
+        } catch (blindEntryError) {
+            logger.error(`Failed to record blind collection entries for shift ${id}`, blindEntryError);
+            automationWarnings.push('Shift closed, but blind collection entries could not be recorded. Capture them from Shift Reconciliation.');
+        }
 
         // Close only THIS cashier's POS station shift(s) — the POS for their
         // outlet is "open" while their cashier shift is open (getActiveShift
