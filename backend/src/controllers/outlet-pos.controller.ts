@@ -3757,15 +3757,21 @@ const scopeQueryToCashierStation = async (
     return query;
   }
 
-  // 1. Try active open shifts first
+  // 1. Try active open shifts first — but scope by the STATION (outlet), not
+  //    the shift id: a request raised during a previous shift on this station
+  //    must stay visible after that shift closes/rotates, or it can never be
+  //    acknowledged while still blocking every cashier shift close in the
+  //    branch (the close guard counts kitchen_acknowledged requests).
   const { data: myShifts } = await supabase
     .from('pos_outlet_shifts')
-    .select('id')
+    .select('id, outlet_id')
     .eq('cashier_id', req.user.id)
     .eq('status', 'open');
-  const myShiftIds = (myShifts || []).map((s: any) => s.id);
-  if (myShiftIds.length > 0) {
-    return query.in('shift_id', myShiftIds);
+  const myOutletIds = Array.from(new Set(
+    (myShifts || []).map((s: any) => String(s.outlet_id || '')).filter(Boolean)
+  ));
+  if (myOutletIds.length > 0) {
+    return query.in('outlet_id', myOutletIds);
   }
 
   // 2. Fall back to active_outlet_id

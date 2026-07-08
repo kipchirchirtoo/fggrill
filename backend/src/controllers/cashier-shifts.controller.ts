@@ -1865,14 +1865,19 @@ export const closeShift = async (
         // cashier's own queue ('kitchen_acknowledged' — kitchen has signed
         // off, cashier has not yet acknowledged or declined). Requests still
         // at 'pending' haven't reached the cashier yet (kitchen's queue, not
-        // theirs) so they don't block this close. The cashier shift spans
-        // all POS outlet stations in the branch, so we scope by branch_id
-        // rather than shift_id.
-        const { data: pendingItemVoids, error: pendingItemVoidsError } = await supabase
+        // theirs) so they don't block this close. Scope to the stations THIS
+        // cashier runs (same outlets their close sweeps): the Void Requests
+        // tab is station-scoped, so counting another station's requests here
+        // deadlocks the close against a queue this cashier can't even see.
+        let pendingItemVoidsQuery = supabase
             .from('pos_item_void_requests')
             .select('id, order_number, item_name, qty_to_void, requested_by')
             .eq('branch_id', shift.branch_id)
             .eq('status', 'kitchen_acknowledged');
+        if (allowedOutletIds.length) {
+            pendingItemVoidsQuery = pendingItemVoidsQuery.in('outlet_id', allowedOutletIds);
+        }
+        const { data: pendingItemVoids, error: pendingItemVoidsError } = await pendingItemVoidsQuery;
         if (pendingItemVoidsError) throw pendingItemVoidsError;
         if (pendingItemVoids && pendingItemVoids.length > 0) {
             const voidList = pendingItemVoids
