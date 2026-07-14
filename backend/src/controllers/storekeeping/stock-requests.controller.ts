@@ -452,6 +452,19 @@ export const reviewStockRequest = async (
                 .eq('id', id)
                 .single();
 
+            // Resolve reviewer's name dynamically from user ID
+            let reviewerName = 'the branch accountant';
+            if (userId) {
+                const { data: revProfile } = await supabase
+                    .from('users')
+                    .select('first_name, last_name')
+                    .eq('id', userId)
+                    .maybeSingle();
+                if (revProfile && (revProfile.first_name || revProfile.last_name)) {
+                    reviewerName = `Branch Accountant ${revProfile.first_name || ''} ${revProfile.last_name || ''}`.trim().replace(/\s+/g, ' ');
+                }
+            }
+
             res.status(200).json({
                 success: true,
                 message: 'Stock request approved successfully',
@@ -463,7 +476,7 @@ export const reviewStockRequest = async (
                 notificationService.notifyUser(
                     request.requested_by,
                     'Stock Request Approved',
-                    `Your stock request ${request.request_number} has been approved by the branch accountant. It is now queued for packing and dispatch from central store.`,
+                    `${reviewerName} has approved your stock request ${request.request_number}. It is now queued for packing and dispatch from central store.`,
                     {
                         type: 'success',
                         category: 'stock_request',
@@ -606,6 +619,19 @@ export const approveStockRequest = async (
             .eq('id', id)
             .single();
 
+        // Resolve reviewer's name dynamically from user ID
+        let reviewerName = 'the branch accountant';
+        if (userId) {
+            const { data: revProfile } = await supabase
+                .from('users')
+                .select('first_name, last_name')
+                .eq('id', userId)
+                .maybeSingle();
+            if (revProfile && (revProfile.first_name || revProfile.last_name)) {
+                reviewerName = `Branch Accountant ${revProfile.first_name || ''} ${revProfile.last_name || ''}`.trim().replace(/\s+/g, ' ');
+            }
+        }
+
         res.status(200).json({
             success: true,
             message: 'Stock request approved successfully',
@@ -617,7 +643,7 @@ export const approveStockRequest = async (
             notificationService.notifyUser(
                 request.requested_by,
                 'Stock Request Approved',
-                `Your stock request ${request.request_number} has been approved by the branch accountant. It is now queued for packing and dispatch from central store.`,
+                `${reviewerName} has approved your stock request ${request.request_number}. It is now queued for packing and dispatch from central store.`,
                 {
                     type: 'success',
                     category: 'stock_request',
@@ -715,6 +741,19 @@ export const bulkApproveStockRequests = async (
                     .eq('id', requestId)
                     .single();
 
+                // Resolve reviewer's name dynamically from user ID
+                let reviewerName = 'The branch accountant';
+                if (userId) {
+                    const { data: revProfile } = await supabase
+                        .from('users')
+                        .select('first_name, last_name')
+                        .eq('id', userId)
+                        .maybeSingle();
+                    if (revProfile && (revProfile.first_name || revProfile.last_name)) {
+                        reviewerName = `Branch Accountant ${revProfile.first_name || ''} ${revProfile.last_name || ''}`.trim().replace(/\s+/g, ' ');
+                    }
+                }
+
                 results.push({ requestId, success: true, request_number: request?.request_number });
                 console.log(`✅ [Bulk Approve] Request ${requestId} (${request?.request_number}) approved successfully`);
 
@@ -723,7 +762,7 @@ export const bulkApproveStockRequests = async (
                     notificationService.notifyUser(
                         request.requested_by,
                         'Stock Request Approved',
-                        `Your stock request ${request.request_number} has been approved.`,
+                        `${reviewerName} has approved your stock request ${request.request_number}.`,
                         {
                             type: 'success',
                             category: 'stock_request',
@@ -1163,15 +1202,41 @@ export const getApprovedRequests = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const { data: requests, error } = await supabase
+        const queryBranchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
+        let branchId = queryBranchId;
+
+        // Use standard global role check
+        const isCentralRole = isGlobalRole(req.user?.role);
+
+        // Strict branch isolation: override any query parameter if not a central role
+        if (!isCentralRole) {
+            branchId = req.user?.branch_id || null;
+            if (!branchId) {
+                res.status(400).json({ 
+                    success: false, 
+                    message: 'Branch ID required. Your user profile does not have a branch assigned. Please contact your administrator.',
+                    error: 'MISSING_BRANCH_ID',
+                    user_role: req.user?.role,
+                    user_id: req.user?.id
+                });
+                return;
+            }
+        }
+
+        let query = supabase
             .from('stock_requests')
             .select(`
                 *,
                 requested_by_user:users!requested_by(id, first_name, last_name, email),
                 reviewed_by_user:users!reviewed_by(id, first_name, last_name, email)
             `)
-            .in('status', ['APPROVED', 'PARTIALLY_APPROVED'])
-            .order('created_at', { ascending: false });
+            .in('status', ['APPROVED', 'PARTIALLY_APPROVED']);
+
+        if (branchId) {
+            query = query.eq('requesting_branch_id', branchId);
+        }
+
+        const { data: requests, error } = await query.order('created_at', { ascending: false });
 
         if (error) throw error;
 

@@ -993,6 +993,21 @@ export const getBillDetails = async (
         if (shouldTryOutletPosLookup) {
             const outletPosOrder = await findOutletPosOrderByReference(outletPosLookupReference, req);
             if (outletPosOrder) {
+                const userRole = (req.user as any)?.role?.toLowerCase() || '';
+                if (!isGlobalRole(userRole)) {
+                    const { shift } = outletPosOrder;
+                    const outletRaw = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
+                    const outletObj = {
+                        id: shift?.outlet_id,
+                        outlet_type: outletRaw?.outlet_type,
+                        branch_id: shift?.branch_id,
+                        name: outletRaw?.name
+                    };
+                    const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+                    if (!canAccessPosOutlet(userRole, outletObj, assignedOutlets)) {
+                        throw new AppError('Forbidden: you do not have access to this POS station', 403);
+                    }
+                }
                 const responseData = buildOutletPosBillResponse(outletPosOrder);
                 billCache.set(cacheKey, responseData);
                 timer.end(true);
@@ -1177,6 +1192,40 @@ export const getBillDetails = async (
                 throw new AppError('Restaurant order not found', 404);
             }
 
+            const userRole = (req.user as any)?.role?.toLowerCase() || '';
+            if (!isGlobalRole(userRole)) {
+                const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+                const assignedIds = assignedOutletIds(assignedOutlets);
+
+                let outlet: any = null;
+                if (order.outlet_id) {
+                    const { data: outletData } = await supabase
+                        .from('pos_outlets')
+                        .select('id, name, outlet_type, branch_id')
+                        .eq('id', order.outlet_id)
+                        .maybeSingle();
+                    outlet = outletData;
+                }
+
+                if (outlet) {
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                        throw new AppError('Forbidden: you do not have access to this restaurant POS station', 403);
+                    }
+                } else {
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    if (stationRestricted) {
+                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const allowedTypes = new Set([
+                            ...roleOutletTypes,
+                            ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
+                        ]);
+                        if (!allowedTypes.has('restaurant')) {
+                            throw new AppError('Forbidden: you do not have access to restaurant bills', 403);
+                        }
+                    }
+                }
+            }
+
             res.json({
                 success: true,
                 data: {
@@ -1227,6 +1276,41 @@ export const getBillDetails = async (
 
             if (orderError || !order) {
                 throw new AppError('Bar order not found', 404);
+            }
+
+            const userRole = (req.user as any)?.role?.toLowerCase() || '';
+            if (!isGlobalRole(userRole)) {
+                const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+                const assignedIds = assignedOutletIds(assignedOutlets);
+
+                let outlet: any = null;
+                if (order.outlet_id) {
+                    const { data: outletData } = await supabase
+                        .from('pos_outlets')
+                        .select('id, name, outlet_type, branch_id')
+                        .eq('id', order.outlet_id)
+                        .maybeSingle();
+                    outlet = outletData;
+                }
+
+                if (outlet) {
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                        throw new AppError('Forbidden: you do not have access to this bar POS station', 403);
+                    }
+                } else {
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    if (stationRestricted) {
+                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const allowedTypes = new Set([
+                            ...roleOutletTypes,
+                            ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
+                        ]);
+                        const hasBarAccess = Array.from(allowedTypes).some(isBarStationType);
+                        if (!hasBarAccess) {
+                            throw new AppError('Forbidden: you do not have access to bar bills', 403);
+                        }
+                    }
+                }
             }
 
             // Fetch payments for bar order
@@ -2477,13 +2561,50 @@ export const processCashierPayment = async (
             // 1. Fetch the order ID (UUID) from order number
             let orderQuery = supabase
                 .from('restaurant_orders')
-                .select('id, total_amount')
+                .select('id, total_amount, outlet_id')
                 .eq('order_number', bookingId);
             orderQuery = applyBranchFilter(orderQuery, req);
             const { data: order, error: orderError } = await orderQuery.single();
 
             if (orderError || !order) {
                 throw new AppError('Restaurant order not found', 404);
+            }
+
+            const userRole = (req.user as any)?.role?.toLowerCase() || '';
+            if (!isGlobalRole(userRole)) {
+                const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+                const assignedIds = assignedOutletIds(assignedOutlets);
+
+                let outlet: any = null;
+                if (order.outlet_id) {
+                    const { data: outletData } = await supabase
+                        .from('pos_outlets')
+                        .select('id, name, outlet_type, branch_id')
+                        .eq('id', order.outlet_id)
+                        .maybeSingle();
+                    outlet = outletData;
+                }
+
+                if (outlet) {
+                    if (Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
+                        throw new AppError('Forbidden: order belongs to another branch', 403);
+                    }
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                        throw new AppError('Forbidden: this cashier cannot clear orders for this restaurant POS station', 403);
+                    }
+                } else {
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    if (stationRestricted) {
+                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const allowedTypes = new Set([
+                            ...roleOutletTypes,
+                            ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
+                        ]);
+                        if (!allowedTypes.has('restaurant')) {
+                            throw new AppError('Forbidden: this cashier is not authorized to clear restaurant bills', 403);
+                        }
+                    }
+                }
             }
 
             // 2. Record Payment in Database
@@ -2581,13 +2702,51 @@ export const processCashierPayment = async (
             // 1. Fetch the order ID (UUID) from order number
             let orderQuery = supabase
                 .from('bar_orders')
-                .select('id, total')
+                .select('id, total, outlet_id')
                 .eq('order_number', bookingId);
             orderQuery = applyBranchFilter(orderQuery, req);
             const { data: order, error: orderError } = await orderQuery.single();
 
             if (orderError || !order) {
                 throw new AppError('Bar order not found', 404);
+            }
+
+            const userRole = (req.user as any)?.role?.toLowerCase() || '';
+            if (!isGlobalRole(userRole)) {
+                const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+                const assignedIds = assignedOutletIds(assignedOutlets);
+
+                let outlet: any = null;
+                if (order.outlet_id) {
+                    const { data: outletData } = await supabase
+                        .from('pos_outlets')
+                        .select('id, name, outlet_type, branch_id')
+                        .eq('id', order.outlet_id)
+                        .maybeSingle();
+                    outlet = outletData;
+                }
+
+                if (outlet) {
+                    if (Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
+                        throw new AppError('Forbidden: order belongs to another branch', 403);
+                    }
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                        throw new AppError('Forbidden: this cashier cannot clear orders for this bar POS station', 403);
+                    }
+                } else {
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    if (stationRestricted) {
+                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const allowedTypes = new Set([
+                            ...roleOutletTypes,
+                            ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
+                        ]);
+                        const hasBarAccess = Array.from(allowedTypes).some(isBarStationType);
+                        if (!hasBarAccess) {
+                            throw new AppError('Forbidden: this cashier is not authorized to clear bar bills', 403);
+                        }
+                    }
+                }
             }
 
             // 2. Record Payment in Database
@@ -2758,6 +2917,23 @@ export const processCashierPayment = async (
             if (!outletPosPaymentOrder) throw new AppError('POS order not found', 404);
 
             const { shift } = outletPosPaymentOrder;
+            const userRole = (req.user as any)?.role?.toLowerCase() || '';
+            if (!isGlobalRole(userRole)) {
+                const outletRaw = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+                const outletObj = {
+                    id: shift.outlet_id,
+                    outlet_type: outletRaw?.outlet_type,
+                    branch_id: shift.branch_id,
+                    name: outletRaw?.name
+                };
+                if (Number(outletObj.branch_id) !== Number((req.user as any)?.branch_id)) {
+                    throw new AppError('Forbidden: order belongs to another branch', 403);
+                }
+                const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
+                if (!canAccessPosOutlet(userRole, outletObj, assignedOutlets)) {
+                    throw new AppError('Forbidden: this cashier cannot clear orders for this POS station', 403);
+                }
+            }
             const order = await reconcileSettledOutletPosOrder(outletPosPaymentOrder.order);
             const normalizedMethod = String(method || 'cash').toLowerCase().replace(/[\s_-]/g, '_');
             const paymentMethod = normalizedMethod.includes('mpesa')
@@ -6527,7 +6703,13 @@ function revenueBucketKey(value: unknown): 'restaurant' | 'bar' | 'rooms' | 'con
     const normalized = String(value || '').toLowerCase().replace(/[\s-]/g, '_');
     if (!normalized) return null;
     if (normalized.includes('restaurant') || normalized.includes('food')) return 'restaurant';
-    if (normalized.includes('bar')) return 'bar';
+    if (
+        normalized.includes('bar')
+        || normalized.includes('beverage')
+        || normalized.includes('drink')
+        || normalized.includes('pos_sale')
+        || normalized.includes('pos')
+    ) return 'bar';
     if (
         normalized.includes('room')
         || normalized.includes('accommodation')
@@ -6547,8 +6729,7 @@ function revenueBucketKey(value: unknown): 'restaurant' | 'bar' | 'rooms' | 'con
         || normalized.includes('spa')
     ) return 'pool';
     if (
-        normalized.includes('pos')
-        || normalized.includes('invoice')
+        normalized.includes('invoice')
         || normalized.includes('credit')
         || normalized.includes('other')
     ) return 'other';
@@ -6624,7 +6805,11 @@ function normalizeLogbookLine(line: any, fallbackSection = 'transaction'): any {
         reference_type: line?.reference_type || null,
         revenue_type: line?.revenue_type || null,
         outlet_type: line?.outlet_type || null,
-        revenue_bucket: inferRevenueBucket(line)
+        revenue_bucket: inferRevenueBucket(line),
+        void_type: line?.void_type || null,
+        void_reason: line?.void_reason || null,
+        voided_by: line?.voided_by || null,
+        voided_by_name: line?.voided_by_name || null
     };
 }
 
@@ -6809,31 +6994,53 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         }
     }
 
+    let outletShiftIds: string[] = [];
     if (logbook.outlet_shift_id) {
-        const outletShiftResult = await supabase
+        outletShiftIds.push(logbook.outlet_shift_id);
+    } else if (shift && shift.cashier_id && shift.shift_start) {
+        const startedAt = shift.shift_start;
+        const endedAt = shift.shift_end || new Date().toISOString();
+        const { data: matchedShifts } = await supabase
+            .from('pos_outlet_shifts')
+            .select('id')
+            .eq('cashier_id', shift.cashier_id)
+            .gte('opened_at', startedAt)
+            .lte('opened_at', endedAt);
+        if (matchedShifts && matchedShifts.length > 0) {
+            outletShiftIds = matchedShifts.map((s: any) => s.id);
+        }
+    }
+
+    if (outletShiftIds.length > 0) {
+        const outletShiftsResult = await supabase
             .from('pos_outlet_shifts')
             .select('*, outlet:pos_outlets(id, name, outlet_type, branch_id)')
-            .eq('id', logbook.outlet_shift_id)
-            .maybeSingle();
-        if (outletShiftResult.error) throw outletShiftResult.error;
-        outletShift = outletShiftResult.data;
+            .in('id', outletShiftIds);
+        if (outletShiftsResult.error) throw outletShiftsResult.error;
+        const outletShifts = outletShiftsResult.data || [];
+        if (outletShifts.length > 0) {
+            outletShift = outletShifts[0];
+        }
 
-        outletOrders = await safeLogbookQuery(
+        const additionalOrders = await safeLogbookQuery(
             'pos_shift_orders',
             supabase
                 .from('pos_shift_orders')
                 .select('*')
-                .eq('shift_id', logbook.outlet_shift_id)
+                .in('shift_id', outletShiftIds)
                 .order('created_at', { ascending: true })
         );
-        outletPayments = await safeLogbookQuery(
+        outletOrders = [...outletOrders, ...additionalOrders];
+
+        const additionalPayments = await safeLogbookQuery(
             'pos_shift_payments',
             supabase
                 .from('pos_shift_payments')
                 .select('*')
-                .eq('shift_id', logbook.outlet_shift_id)
+                .in('shift_id', outletShiftIds)
                 .order('created_at', { ascending: true })
         );
+        outletPayments = [...outletPayments, ...additionalPayments];
     }
 
     const storedLines = storedRawLines.map((line: any) => normalizeLogbookLine(line, 'logbook_line'));
@@ -6867,6 +7074,13 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             customer_name: line.reference || line.payment_method,
             outlet_type: line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type,
             revenue_type: line.revenue_type || line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type
+        })),
+        ...creditBillRecords.map((line) => normalizeLogbookLine({
+            ...line,
+            amount: line.total_amount ?? line.amount,
+            section: 'credit_bill',
+            payment_method: 'credit_bill',
+            customer_name: line.staff_name || line.customer_name || line.employee_name || 'Credit Customer'
         })),
         ...voidAudit.lines.map((line) => normalizeLogbookLine(line, 'voided_transaction'))
     ];
@@ -6909,8 +7123,11 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const creditBillsTotal = creditBills.reduce((sum, b) => sum + logbookNumber(b.amount), 0);
 
     const allLinePaymentTotals: Record<string, number> = {};
+    const saleSections = ['restaurant_sale', 'bar_sale', 'outlet_order'];
     nonVoidLines.forEach((line) => {
-        if (logbookNumber(line.amount) > 0) addAmount(allLinePaymentTotals, line.payment_method, line.amount);
+        if (!saleSections.includes(line.section) && logbookNumber(line.amount) > 0) {
+            addAmount(allLinePaymentTotals, line.payment_method, line.amount);
+        }
     });
     const outletOrderPaymentTotals: Record<string, number> = {};
     outletOrders.forEach((line: any) => {
@@ -6962,8 +7179,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const closingFloat = logbookNumber(logbook.closing_float ?? shift?.closing_float ?? shift?.cash_at_hand);
     const cashDrops = logbookNumber(breakdown.cash_drops ?? shift?.cash_deposited);
     const payouts = logbookNumber(breakdown.payouts ?? breakdown.paid_outs);
+    const expenseTotal = logbookNumber(breakdown.expense_total ?? shift?.expense_total);
     const creditPaymentsReceived = logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value);
-    const expectedCash = openingFloat + totalCash + creditPaymentsReceived - cashDrops - payouts;
+    const expectedCash = openingFloat + totalCash + creditPaymentsReceived - cashDrops - payouts - expenseTotal;
     const variance = closingFloat - expectedCash;
 
     const revenueEvidence: Record<string, number> = {
@@ -6974,20 +7192,25 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         pool: 0,
         other: 0
     };
-    outletOrders.forEach((line: any) => {
-        const bucket = revenueBucketKey(
-            line.order_type
-            || line.outlet_type
-            || outletShift?.outlet?.outlet_type
-            || logbook.type
-        ) || 'other';
-        revenueEvidence[bucket] = logbookNumber(revenueEvidence[bucket]) + logbookNumber(line.total_amount ?? line.amount_paid ?? line.amount);
-    });
-    [...clearedPaymentLines, ...outletOrders, ...outletPayments].forEach((line: any) => {
+
+    // Aggregate from cashier transactions (cleared payment lines)
+    clearedPaymentLines.forEach((line: any) => {
         const bucket = inferRevenueBucket(line);
-        if (!bucket || bucket === 'restaurant' || bucket === 'bar') return;
-        revenueEvidence[bucket] = logbookNumber(revenueEvidence[bucket]) + logbookNumber(line.amount ?? line.total_amount ?? line.total);
+        if (bucket) {
+            revenueEvidence[bucket] = logbookNumber(revenueEvidence[bucket]) + logbookNumber(line.amount);
+        }
     });
+
+    // Aggregate from POS outlet shift payments or orders (preventing double counting)
+    const posLines = outletPayments.length > 0 ? outletPayments : outletOrders;
+    posLines.forEach((line: any) => {
+        const bucket = inferRevenueBucket(line);
+        if (bucket) {
+            revenueEvidence[bucket] = logbookNumber(revenueEvidence[bucket]) + logbookNumber(line.amount ?? line.total_amount ?? line.total);
+        }
+    });
+
+    // Include other types of payments / credit bills
     revenueEvidence.other += creditPaymentsReceived;
 
     const revenueBreakdown = [
@@ -7135,6 +7358,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             credit_payments_received: creditPaymentsReceived,
             cash_drops: cashDrops,
             payouts,
+            expense_total: expenseTotal,
             expected_closing: expectedCash,
             actual_closing: closingFloat,
             variance
@@ -8146,6 +8370,14 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const canSeeLegacyRestaurant = includeLegacyWaiterOrders && (!stationRestricted || allowedOutletTypes.has('restaurant'));
         const canSeeLegacyBar = includeLegacyWaiterOrders && (!stationRestricted || Array.from(allowedOutletTypes).some(isBarStationType));
 
+        // Fetch all POS outlets for the branch (or globally if no branchId) to resolve outlet_type
+        let outletsQuery = supabase.from('pos_outlets').select('id, name, outlet_type, branch_id');
+        if (effectiveBranchId) {
+            outletsQuery = outletsQuery.eq('branch_id', effectiveBranchId);
+        }
+        const { data: branchOutlets } = await outletsQuery;
+        const outletMap = new Map((branchOutlets || []).map((o: any) => [String(o.id), o]));
+
         // Fetch pending restaurant orders
         let restaurantOrders: any[] = [];
         if (!wantsVoidedOrders && canSeeLegacyRestaurant && (!requestedOutletType || requestedOutletType === 'restaurant')) {
@@ -8155,6 +8387,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     id, order_number, short_code, status, payment_status,
                     table_number, room_number, guest_name,
                     total_amount, amount_paid, balance_amount, created_at, branch_id, created_by,
+                    outlet_id,
                     items:restaurant_order_items(
                         id, quantity, unit_price, total_price,
                         menu_item:restaurant_menu_items(name)
@@ -8175,6 +8408,16 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             const { data, error: rErr } = await restaurantQuery;
             if (rErr && rErr.code !== '42703') throw rErr;
             restaurantOrders = data || [];
+
+            if (!isGlobal) {
+                restaurantOrders = restaurantOrders.filter((o: any) => {
+                    if (o.outlet_id) {
+                        const outlet = outletMap.get(String(o.outlet_id));
+                        return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+                    }
+                    return allowedOutletTypes.has('restaurant');
+                });
+            }
         }
 
         // Fetch pending bar orders
@@ -8186,6 +8429,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     id, order_number, short_code, status, payment_status,
                     seat_number, room_number, guest_name,
                     total, amount_paid, balance_amount, created_at, branch_id, created_by,
+                    outlet_id,
                     items:bar_order_items(id, drink_name, quantity, unit_price, total_price)
                 `)
                 .neq('payment_status', 'paid')
@@ -8203,6 +8447,16 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             const { data, error: bErr } = await barQuery;
             if (bErr && bErr.code !== '42703') throw bErr;
             barOrders = data || [];
+
+            if (!isGlobal) {
+                barOrders = barOrders.filter((o: any) => {
+                    if (o.outlet_id) {
+                        const outlet = outletMap.get(String(o.outlet_id));
+                        return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+                    }
+                    return Array.from(allowedOutletTypes).some(isBarStationType);
+                });
+            }
         }
 
         let posOrders: any[] = [];
@@ -8647,7 +8901,7 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
 
         const { data: order, error: fetchErr } = await (supabase
             .from(table)
-            .select(`id, status, payment_status, ${amountField}, amount_paid, balance_amount, order_number, short_code, created_by${waiterSelect}, ${customerField}${isPosCaptainOrder ? ', shift_id, outlet_id, staff_credit_bill_id, void_request_status' : ', branch_id'}`)
+            .select(`id, status, payment_status, ${amountField}, amount_paid, balance_amount, order_number, short_code, created_by${waiterSelect}, ${customerField}${isPosCaptainOrder ? ', shift_id, outlet_id, staff_credit_bill_id, void_request_status' : ', branch_id, outlet_id'}`)
             .eq('id', id)
             .single() as any);
 
@@ -8686,20 +8940,55 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
             orderBranchId = shift?.branch_id;
         }
 
-        if (isPosCaptainOrder) {
-            const { data: outlet, error: outletError } = await supabase
-                .from('pos_outlets')
-                .select('id, name, outlet_type, branch_id')
-                .eq('id', (order as any).outlet_id)
-                .maybeSingle();
-            if (outletError) throw outletError;
-            if (!outlet) throw new AppError('POS station not found for this captain order', 404);
-            if (!isGlobal && Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
-                throw new AppError('Forbidden: captain order belongs to another branch', 403);
-            }
+        if (!isGlobal) {
             const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
-            if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
-                throw new AppError('Forbidden: this cashier cannot clear orders for this POS station', 403);
+            const assignedIds = assignedOutletIds(assignedOutlets);
+
+            let targetOutletId = (order as any).outlet_id;
+            let outlet: any = null;
+
+            if (targetOutletId) {
+                const { data: outletData, error: outletError } = await supabase
+                    .from('pos_outlets')
+                    .select('id, name, outlet_type, branch_id')
+                    .eq('id', targetOutletId)
+                    .maybeSingle();
+                if (outletError) throw outletError;
+                outlet = outletData;
+            }
+
+            if (outlet) {
+                if (Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
+                    throw new AppError('Forbidden: order belongs to another branch', 403);
+                }
+                if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                    throw new AppError('Forbidden: this cashier cannot clear orders for this POS station', 403);
+                }
+            } else {
+                // Fallback check based on role & assigned outlet types if outlet_id is not assigned
+                const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                if (stationRestricted) {
+                    const roleOutletTypes = stationTypesForCashierRole(userRole);
+                    const allowedTypes = new Set([
+                        ...roleOutletTypes,
+                        ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
+                    ]);
+                    
+                    if (isRestaurantOrder) {
+                        if (!allowedTypes.has('restaurant')) {
+                            throw new AppError('Forbidden: this cashier is not authorized to clear restaurant bills', 403);
+                        }
+                    } else if (isPosCaptainOrder) {
+                        if (allowedTypes.size === 0) {
+                            throw new AppError('Forbidden: this cashier is not authorized to clear captain bills', 403);
+                        }
+                    } else { // bar order
+                        const hasBarAccess = Array.from(allowedTypes).some(isBarStationType);
+                        if (!hasBarAccess) {
+                            throw new AppError('Forbidden: this cashier is not authorized to clear bar bills', 403);
+                        }
+                    }
+                }
             }
         }
 

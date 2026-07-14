@@ -3517,22 +3517,33 @@ class BrandedPDFGenerator:
         # Items Table
         elements.append(Paragraph("<b>SHIPMENT CONTENTS</b>", self.styles['SectionHeader']))
         
-        headers = ['SKU', 'Item Name', 'Quantity', 'Unit', 'Remarks']
+        headers = ['SKU', 'Item Name', 'Requested', 'Approved', 'Dispatched', 'Unit', 'Remarks']
         item_data = [headers]
         
         for item in data.get('items', []):
+            req_qty = item.get('requested_quantity')
+            app_qty = item.get('approved_quantity')
+            disp_qty = item.get('quantity') or item.get('dispatched_quantity', 0)
+            
+            # Format numbers to look clean
+            req_str = str(int(req_qty)) if req_qty is not None and float(req_qty).is_integer() else str(req_qty if req_qty is not None else '-')
+            app_str = str(int(app_qty)) if app_qty is not None and float(app_qty).is_integer() else str(app_qty if app_qty is not None else '-')
+            disp_str = str(int(disp_qty)) if disp_qty is not None and float(disp_qty).is_integer() else str(disp_qty)
+            
             item_data.append([
                 item.get('item_sku') or item.get('sku', 'N/A'),
                 item.get('item_name') or item.get('name', 'N/A'),
-                str(item.get('quantity') or item.get('dispatched_quantity', 0)),
+                req_str,
+                app_str,
+                disp_str,
                 item.get('unit', 'pcs'),
-                '' # Remarks column
+                item.get('remarks') or ''
             ])
             
         if not item_data[1:]:
-             item_data.append(['No items listed', '-', '-', '-', '-'])
+             item_data.append(['No items listed', '-', '-', '-', '-', '-', '-'])
              
-        item_table = Table(item_data, colWidths=[1.2*inch, 2.5*inch, 1*inch, 1*inch, 1.5*inch])
+        item_table = Table(item_data, colWidths=[1.0*inch, 2.2*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.6*inch, 1.3*inch])
         item_table.setStyle(self._get_table_style())
         elements.append(item_table)
         elements.append(Spacer(1, 0.5*inch))

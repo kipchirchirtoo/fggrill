@@ -209,7 +209,7 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
                 const qty = Math.abs(num(mv.quantity));
                 const t = (mv.movement_type || '').toUpperCase();
                 if (['SALE','KITCHEN_USE','HOUSEKEEPING_USE','DAMAGE','LOSS','TRANSFER_OUT','ADJUSTMENT_OUT','DISPATCH_OUT','ISSUE'].includes(t)) salesBySku[sku] = (salesBySku[sku] ?? 0) + qty;
-                else if (['DISPATCH_RECEIVE','PURCHASE','ADJUSTMENT_IN','TRANSFER_IN','RETURN','RESTOCK'].includes(t)) additionsBySku[sku] = (additionsBySku[sku] ?? 0) + qty;
+                else if (['DISPATCH_RECEIVE','PURCHASE','ADJUSTMENT_IN','TRANSFER_IN','RETURN','RESTOCK','SUPPLIER_RECEIPT','DISPATCH','DISPATCH_IN'].includes(t)) additionsBySku[sku] = (additionsBySku[sku] ?? 0) + qty;
             }
         }
 

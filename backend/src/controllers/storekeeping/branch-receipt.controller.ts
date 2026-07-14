@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
-import { updateBranchStock } from '../../services/branch-inventory.service';
+import { updateBranchStock, postGrnFoundationMovements } from '../../services/branch-inventory.service';
 import { recordBarStockMovement } from '../../services/unified-bar-stock.service';
 
 const toNumber = (value: any): number => {
@@ -574,70 +574,72 @@ export const receiveFromSupplier = async (
             throw itemError;
         }
 
-        const stockResults = [];
-        // item_id on a GRN line is the inventory_items UUID, NOT a sku code —
-        // bar_drinks links to it via inventory_item_id. Matching against
-        // bar_drinks.sku here always missed (a UUID never equals a sku like
-        // "FGB-BER-0013"), so every bar item received via GRN silently never
-        // synced into bar_stock/bar_stock_ledger, which is why stocktakes kept
-        // showing "NOT REFLECTED IN SYSTEM" surplus variances for delivered items.
-        const receivedItemIds = (savedItems || grnItems).map((it: any) => String(it.item_id)).filter(Boolean);
-        const { data: barDrinksForItems } = receivedItemIds.length
-            ? await supabase.from('bar_drinks').select('id, inventory_item_id').eq('branch_id', branchId).in('inventory_item_id', receivedItemIds)
-            : { data: [] };
-        const barDrinkIdByInvId = new Map((barDrinksForItems || []).map((d: any) => [String(d.inventory_item_id), String(d.id)]));
+        // Resolve primary store location for this branch
+        const { data: storeLocation } = await supabase
+            .from('inventory_locations')
+            .select('id')
+            .eq('branch_id', branchId)
+            .eq('location_type', 'store')
+            .maybeSingle();
+        let locationId = storeLocation?.id || null;
 
-        // branch_stock is keyed by inventory_items.sku (e.g. FG-190), not the
-        // inventory UUID — passing item.item_id straight through created
-        // orphan branch_stock rows keyed by UUID that no sale/dispatch flow
-        // ever matched. Resolve the sku first; fall back to the UUID only if
-        // the item row is somehow missing.
-        const { data: invItemsForSku } = receivedItemIds.length
-            ? await supabase.from('inventory_items').select('id, sku').in('id', receivedItemIds)
-            : { data: [] };
-        const skuByInvItemId = new Map((invItemsForSku || []).map((i: any) => [String(i.id), String(i.sku)]));
+        if (!locationId) {
+            // Fallback: get any location for this branch
+            const { data: anyLocation } = await supabase
+                .from('inventory_locations')
+                .select('id')
+                .eq('branch_id', branchId)
+                .limit(1)
+                .maybeSingle();
+            locationId = anyLocation?.id || null;
+        }
 
-        for (const item of savedItems || grnItems) {
-            const qty = toNumber(item.quantity_accepted || item.quantity_received);
-            if (qty <= 0) continue;
-            const stockUpdate = await updateBranchStock(
-                branchId,
-                skuByInvItemId.get(String(item.item_id)) || item.item_id,
-                qty,
-                'SUPPLIER_RECEIPT',
-                userId,
-                'GRN',
-                grn.id,
-                grnNumber,
-                `Goods received from ${supplier.name} via GRN ${grnNumber}. ${remarks || ''}`
-            );
-            stockResults.push({
-                item_sku: skuByInvItemId.get(String(item.item_id)) || item.item_id,
-                quantity: qty,
-                previous_stock: stockUpdate.previousStock,
-                new_stock: stockUpdate.newStock
+        // Prepare items array for the bulk stored procedure
+        const bulkItems = (savedItems || grnItems).map((item: any) => ({
+            item_id: item.item_id,
+            sku: item.sku,
+            qty: Number(item.quantity_accepted || item.quantity_received),
+            unit_price: Number(item.unit_price || 0)
+        }));
+
+        logger.info(`Executing bulk branch stock updates for GRN ${grnNumber} via database RPC...`);
+        const { data: rpcResult, error: bulkStockError } = await supabase
+            .rpc('bulk_post_grn_stock_update', {
+                p_branch_id: branchId,
+                p_location_id: locationId,
+                p_items: bulkItems,
+                p_user_id: userId || null,
+                p_reference_id: grn.id,
+                p_reference_number: grnNumber,
+                p_remarks: remarks || ''
             });
 
-            // If this is a bar item, also sync bar_stock + pos_outlet_items
-            const barDrinkId = barDrinkIdByInvId.get(String(item.item_id));
-            if (barDrinkId) {
-                try {
-                    await recordBarStockMovement({
-                        branchId,
-                        drinkId: barDrinkId,
-                        quantityDelta: qty,
-                        movementType: 'restock',
-                        referenceNumber: grnNumber,
-                        referenceId: grn.id,
-                        performedBy: userId || undefined,
-                        notes: `Supplier receipt from ${supplier.name} — GRN ${grnNumber}`,
-                        costPerUnit: toNumber(item.unit_price) || undefined,
-                    });
-                } catch (barSyncErr: any) {
-                    logger.warn(`Bar stock sync failed for ${item.item_id} on GRN ${grnNumber}:`, barSyncErr?.message);
-                }
-            }
+        if (bulkStockError) {
+            logger.error('Branch bulk stock update RPC failed:', bulkStockError);
+            throw bulkStockError;
         }
+
+        // Log each item into the Foundation Service inventory_movements audit
+        // trail (best-effort — never blocks the GRN response if this fails).
+        postGrnFoundationMovements({
+            branchId: branchId || 0,
+            actorId: userId || '',
+            grnNumber,
+            grnId: grn.id,
+            items: bulkItems.map((it: any) => ({
+                sku: it.sku,
+                item_name: it.sku,
+                qty: it.qty,
+                unit_price: it.unit_price
+            }))
+        }).catch((err: any) => logger.warn('postGrnFoundationMovements (branch) failed:', err?.message));
+
+        const stockResults = (rpcResult || []).map((r: any) => ({
+            item_sku: r.sku,
+            quantity: r.quantity,
+            previous_stock: Number(r.prev_qty || 0),
+            new_stock: Number(r.new_qty || 0)
+        }));
 
         const purchaseOrder = await updatePurchaseOrderReceipt(po_id, savedItems || grnItems, userId);
 

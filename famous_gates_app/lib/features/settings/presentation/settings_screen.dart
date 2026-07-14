@@ -11,6 +11,7 @@ import '../../../core/widgets/safe_avatar.dart';
 import '../../../core/config/user_roles.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../auth/domain/models.dart';
+import '../../auth/data/auth_repository.dart';
 
 const _storage = FlutterSecureStorage();
 const _appVersion = 'v3.9.9.20 (Famous Gates)';
@@ -931,14 +932,14 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   }
 }
 
-class _ChangePinDialog extends StatefulWidget {
+class _ChangePinDialog extends ConsumerStatefulWidget {
   const _ChangePinDialog();
 
   @override
-  State<_ChangePinDialog> createState() => _ChangePinDialogState();
+  ConsumerState<_ChangePinDialog> createState() => _ChangePinDialogState();
 }
 
-class _ChangePinDialogState extends State<_ChangePinDialog> {
+class _ChangePinDialogState extends ConsumerState<_ChangePinDialog> {
   final _currentPinCtrl = TextEditingController();
   final _newPinCtrl = TextEditingController();
   final _confirmPinCtrl = TextEditingController();
@@ -961,17 +962,20 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
       _errorMsg = null;
     });
     try {
-      // The screen-lock PIN is a local device feature stored in secure storage
-      // (key: fg_lock_pin). It is separate from the POS till PIN (pos_pin in
-      // the database, which includes a type prefix like "C2040"). Comparing
-      // the 4-digit input against the prefixed DB value always fails, so the
-      // check runs against local storage only.
       final stored = await _storage.read(key: 'fg_lock_pin') ?? '';
-      if (stored.isNotEmpty && stored != _currentPinCtrl.text) {
+      final currentPinNormalized = _currentPinCtrl.text.trim().toUpperCase();
+      final newPinNormalized = _newPinCtrl.text.trim().toUpperCase();
+
+      if (stored.isNotEmpty && stored.trim().toUpperCase() != currentPinNormalized) {
         if (mounted) setState(() => _errorMsg = 'Current PIN is incorrect');
         return;
       }
-      await _storage.write(key: 'fg_lock_pin', value: _newPinCtrl.text);
+      
+      // Update PIN on backend
+      await ref.read(authRepositoryProvider).updatePosPin(currentPinNormalized, newPinNormalized);
+      
+      // Update locally
+      await _storage.write(key: 'fg_lock_pin', value: newPinNormalized);
       if (mounted) {
         Navigator.of(context).pop();
         AppNotifier.showSnackBar(
@@ -1016,16 +1020,18 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
             TextFormField(
               controller: _currentPinCtrl,
               obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: TextInputType.text,
+              maxLength: 5,
               decoration: const InputDecoration(
-                labelText: 'Current PIN (4 digits)',
+                labelText: 'Current PIN *',
                 counterText: '',
               ),
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Required';
-                if (v.length != 4) return 'Must be 4 digits';
+                final upper = v.trim().toUpperCase();
+                if (upper.length != 5 || !RegExp(r'^[RMNCE]\d{4}$').hasMatch(upper)) {
+                  return 'Must start with R, M, N, C, or E followed by 4 digits';
+                }
                 return null;
               },
             ),
@@ -1033,16 +1039,18 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
             TextFormField(
               controller: _newPinCtrl,
               obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: TextInputType.text,
+              maxLength: 5,
               decoration: const InputDecoration(
-                labelText: 'New PIN (4 digits)',
+                labelText: 'New PIN *',
                 counterText: '',
               ),
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Required';
-                if (v.length != 4) return 'Must be exactly 4 digits';
+                final upper = v.trim().toUpperCase();
+                if (upper.length != 5 || !RegExp(r'^[RMNCE]\d{4}$').hasMatch(upper)) {
+                  return 'Must start with R, M, N, C, or E followed by 4 digits';
+                }
                 return null;
               },
             ),
@@ -1050,16 +1058,17 @@ class _ChangePinDialogState extends State<_ChangePinDialog> {
             TextFormField(
               controller: _confirmPinCtrl,
               obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: TextInputType.text,
+              maxLength: 5,
               decoration: const InputDecoration(
-                labelText: 'Confirm New PIN',
+                labelText: 'Confirm New PIN *',
                 counterText: '',
               ),
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Required';
-                if (v != _newPinCtrl.text) return 'PINs do not match';
+                if (v.trim().toUpperCase() != _newPinCtrl.text.trim().toUpperCase()) {
+                  return 'PINs do not match';
+                }
                 return null;
               },
             ),

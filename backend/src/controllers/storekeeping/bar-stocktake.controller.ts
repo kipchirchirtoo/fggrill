@@ -46,15 +46,15 @@ const getSinceLastApprovalWindow = async (
     const dayEnd = new Date(new Date(`${stocktakeDate}T00:00:00.000Z`).getTime() + 86400000).toISOString();
     const { data: lastApproved } = await supabase
         .from('bar_stocktake_records')
-        .select('reviewed_at')
+        .select('recorded_at')
         .eq('branch_id', branchId)
         .eq('bar_location', barLocation)
         .eq('status', 'approved')
-        .lt('reviewed_at', dayEnd)
-        .order('reviewed_at', { ascending: false })
+        .lt('stocktake_date', stocktakeDate)
+        .order('stocktake_date', { ascending: false })
         .limit(1)
         .maybeSingle();
-    const from = lastApproved?.reviewed_at || `${stocktakeDate}T00:00:00.000Z`;
+    const from = lastApproved?.recorded_at || '1970-01-01T00:00:00.000Z';
     return { from, to: dayEnd };
 };
 
@@ -361,6 +361,40 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             .filter(Boolean) as string[];
 
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, locationFilter, rawDate);
+        const sumWindow = await getSinceLastApprovalWindow(branchId, locationFilter, rawDate);
+
+        // Build map of drink_id -> inventory_item_id
+        const invIdByDrinkId = new Map<string, string>();
+        for (const d of drinkRows) {
+            const invId = d.inventory_item_id || fallbackInvIdByDrinkId.get(String(d.id));
+            if (invId) {
+                invIdByDrinkId.set(String(d.id), String(invId));
+            }
+        }
+
+        const drinkIds = drinkRows.map((d: any) => String(d.id)).filter(Boolean);
+        const additionsByInvId = new Map<string, number>();
+        const salesByInvId = new Map<string, number>();
+        if (drinkIds.length > 0) {
+            const { data: ledgerRows } = await supabase
+                .from('bar_stock_ledger')
+                .select('drink_id, transaction_type, quantity')
+                .eq('branch_id', branchId)
+                .in('drink_id', drinkIds)
+                .gte('created_at', sumWindow.from)
+                .lt('created_at', sumWindow.to);
+            for (const row of (ledgerRows || [])) {
+                const did = String(row.drink_id);
+                const invId = invIdByDrinkId.get(did);
+                if (!invId) continue;
+                const tType = (row.transaction_type || '').toLowerCase();
+                if (tType === 'restock') {
+                    additionsByInvId.set(invId, (additionsByInvId.get(invId) ?? 0) + num(row.quantity));
+                } else if (tType === 'sale') {
+                    salesByInvId.set(invId, (salesByInvId.get(invId) ?? 0) + num(row.quantity));
+                }
+            }
+        }
 
         // 2. Check for existing bar_stocktake_records for this branch/date/location
         let recordsQuery = supabase
@@ -377,35 +411,23 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
 
         // If stocktake records exist, return them (submitted view) enriched with shift metadata
         if (existingRecords && existingRecords.length > 0) {
-            const rawResult = existingRecords.map((r: any) => ({
-                ...r,
-                item_name: r.item?.item_name || r.item_name || null,
-            }));
+            const rawResult = existingRecords.map((r: any) => {
+                const invId = String(r.item_id);
+                const additions = additionsByInvId.get(invId) ?? 0;
+                const sales = salesByInvId.get(invId) ?? 0;
+                const sysQty = num(r.system_quantity);
+                const opening = Math.max(0, sysQty - additions + sales);
+                return {
+                    ...r,
+                    item_name: r.item?.item_name || r.item_name || null,
+                    additions,
+                    sales,
+                    opening_stock: opening,
+                };
+            });
             const result = await enrichWithShiftInfo(rawResult);
             res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId });
             return;
-        }
-
-        const drinkIds = drinkRows.map((d: any) => String(d.id)).filter(Boolean);
-        const additionsByDrinkId = new Map<string, number>();
-        const salesByDrinkId = new Map<string, number>();
-        const sumWindow = await getSinceLastApprovalWindow(branchId, locationFilter, rawDate);
-        if (drinkIds.length > 0) {
-            const { data: ledgerRows } = await supabase
-                .from('bar_stock_ledger')
-                .select('drink_id, transaction_type, quantity')
-                .eq('branch_id', branchId)
-                .in('drink_id', drinkIds)
-                .gte('created_at', sumWindow.from)
-                .lt('created_at', sumWindow.to);
-            for (const row of (ledgerRows || [])) {
-                const did = String(row.drink_id);
-                if (row.transaction_type === 'restock') {
-                    additionsByDrinkId.set(did, (additionsByDrinkId.get(did) ?? 0) + num(row.quantity));
-                } else if (row.transaction_type === 'sale') {
-                    salesByDrinkId.set(did, (salesByDrinkId.get(did) ?? 0) + num(row.quantity));
-                }
-            }
         }
 
         const candidates = drinkRows.map((d: any) => {
@@ -413,8 +435,8 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             if (!invId) return null;
             const did = String(d.id);
             const currentStock = stockByDrinkId.get(did) ?? 0;
-            const additions = additionsByDrinkId.get(did) ?? 0;
-            const sales = salesByDrinkId.get(did) ?? 0;
+            const additions = additionsByInvId.get(invId) ?? 0;
+            const sales = salesByInvId.get(invId) ?? 0;
             const opening = Math.max(0, currentStock - additions + sales);
             const system = currentStock;
             return {
@@ -545,9 +567,10 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             // find which invId this drink maps to
             const invId = Array.from(drinkIdByInvId.entries()).find(([, d]) => d === did)?.[0];
             if (!invId) continue;
-            if (row.transaction_type === 'restock') {
+            const tType = (row.transaction_type || '').toLowerCase();
+            if (tType === 'restock') {
                 additionsByInvId.set(invId, (additionsByInvId.get(invId) ?? 0) + num(row.quantity));
-            } else if (row.transaction_type === 'sale') {
+            } else if (tType === 'sale') {
                 salesByInvId.set(invId, (salesByInvId.get(invId) ?? 0) + num(row.quantity));
             }
         }

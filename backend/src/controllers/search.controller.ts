@@ -267,7 +267,8 @@ const configs: SearchConfig[] = [
  */
 export const globalSearch = async (req: Request, res: Response) => {
   try {
-    const { q, modules } = req.query;
+    const { q, modules, branch_id, branchId } = req.query;
+    const branch = (branch_id ?? branchId) as string | undefined;
 
     if (!q || typeof q !== 'string') {
       return res.status(400).json({ success: false, message: 'Search query is required' });
@@ -298,11 +299,17 @@ export const globalSearch = async (req: Request, res: Response) => {
           .map((k) => `${k}.ilike.%${searchQuery}%`)
           .join(',');
 
-        const { data, error } = await supabase
+        let dbQuery = supabase
           .from(config.table)
           .select('*')
-          .or(orFilter)
-          .limit(15);
+          .or(orFilter);
+
+        const globalTables = ['branches', 'store_items', 'store_suppliers', 'departments'];
+        if (branch && branch !== '0' && !globalTables.includes(config.table)) {
+          dbQuery = dbQuery.eq('branch_id', branch);
+        }
+
+        const { data, error } = await dbQuery.limit(15);
 
         if (error || !data || data.length === 0) return [];
 

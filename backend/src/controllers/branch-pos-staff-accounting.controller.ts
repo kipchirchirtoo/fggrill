@@ -248,11 +248,32 @@ export const getStaffPosAccountingSummary = async (
     const range = dateRangeFrom(req);
     const roleFilter = String(req.query.role || '').trim().toLowerCase();
 
+    // 1. Fetch all active users for this branch
+    const { data: branchUsers, error: branchUsersError } = await supabase
+      .from('users')
+      .select('id, first_name, last_name, email, role, employee_id')
+      .eq('branch_id', branchId)
+      .eq('status', 'active');
+
+    if (branchUsersError) throw branchUsersError;
+
+    // Filter for waiter/bartender/restaurant/cashier roles
+    const waiterKeywords = ['waiter', 'waitress', 'bartender', 'barman', 'barmaid', 'server', 'bar_', 'restaurant', 'cashier'];
+    const activeStaff = (branchUsers || []).filter(user => {
+      const role = String(user.role || '').toLowerCase();
+      return waiterKeywords.some(keyword => role.includes(keyword));
+    });
+
+    const activeStaffIds = activeStaff.map(u => u.id);
+
     const outletIds = await resolveOutletIdsForBranch(branchId);
     const orders = await fetchOrdersForBranch(outletIds, range);
 
-    const waiterIds = Array.from(new Set(orders.map((o) => String(o.waiter_id)).filter(Boolean)));
-    const { usersById, profilesByUserId } = await fetchStaffDirectory(waiterIds);
+    // Merge active staff IDs and any waiter IDs found in the orders
+    const orderWaiterIds = Array.from(new Set(orders.map((o) => String(o.waiter_id)).filter(Boolean)));
+    const allWaiterIds = Array.from(new Set([...activeStaffIds, ...orderWaiterIds]));
+
+    const { usersById, profilesByUserId } = await fetchStaffDirectory(allWaiterIds);
 
     const creditBillIds = Array.from(
       new Set(orders.map((o) => o.staff_credit_bill_id).filter((id): id is string => Boolean(id)))
@@ -261,8 +282,34 @@ export const getStaffPosAccountingSummary = async (
 
     const summaryByWaiter = new Map<string, Record<string, any>>();
 
+    // Initialize all active filtered staff with 0 stats
+    for (const user of activeStaff) {
+      const waiterId = String(user.id);
+      const profile = profilesByUserId.get(waiterId);
+      const name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+      const role = String(user.role || '').toLowerCase();
+      if (roleFilter && role !== roleFilter) continue;
+
+      summaryByWaiter.set(waiterId, {
+        waiter_id: waiterId,
+        name: name || 'Unknown',
+        role: user.role || null,
+        employee_number: profile?.employee_number || user.employee_id || null,
+        department: profile?.department || null,
+        profile_photo: profile?.profile_photo || null,
+        total_orders: 0,
+        total_sales: 0,
+        total_cleared: 0,
+        total_outstanding: 0,
+        outstanding_order_count: 0,
+      });
+    }
+
+    // Process orders and aggregate sales
     for (const order of orders) {
       const waiterId = String(order.waiter_id);
+      if (!waiterId || waiterId === 'null') continue;
+
       const user = usersById.get(waiterId);
       const role = String(user?.role || '').toLowerCase();
       if (roleFilter && role !== roleFilter) continue;

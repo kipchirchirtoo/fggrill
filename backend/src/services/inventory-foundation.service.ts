@@ -79,7 +79,10 @@ async function ensureLocation(
 
   const locationCode = requiredText(input.locationCode || defaultLocationCode(input), 'Location code');
   const locationName = requiredText(input.locationName || locationCode.replace(/-/g, ' '), 'Location name');
-  const locationType = input.locationType || 'external';
+  let locationType: string = input.locationType || 'external';
+  if (locationType === 'transit') {
+    locationType = 'in_transit';
+  }
 
   const result = await client.query(
     `

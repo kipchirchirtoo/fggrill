@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import { recordAuditTrail } from '../../utils/audit';
 import { generateGRNPDF } from '../../services/native-pdf-reports.service';
 import { ensureInventoryLocation } from './items.controller';
+import { postGrnFoundationMovements } from '../../services/branch-inventory.service';
 
 const generateGRNNumber = async (): Promise<string> => {
     const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, '');
@@ -784,33 +785,62 @@ export const createGRN = async (
             logger.warn(`Could not resolve inventory location for branch ${branchId}: ${locErr.message}`);
         }
 
-        for (const item of (savedGrnItems || grnItems)) {
-            const itemUuid = item.item_id;
-            const qty = Number(item.quantity_accepted || item.quantity_received);
-            if (qty <= 0 || !locationId) continue;
+        // Prepare items array for the bulk stored procedure
+        const bulkItems = (savedGrnItems || grnItems).map((item: any) => ({
+            item_id: item.item_id,
+            sku: item.sku,
+            qty: Number(item.quantity_accepted || item.quantity_received),
+            unit_price: Number(item.unit_price || 0)
+        }));
 
-            const { data: existing } = await supabase
-                .from('inventory_balances')
-                .select('id, current_quantity')
-                .eq('item_id', itemUuid)
-                .eq('location_id', locationId)
-                .is('batch_id', null)
-                .maybeSingle();
+        logger.info(`Executing bulk stock updates for GRN ${grn_number} via database RPC...`);
+        const { error: bulkStockError } = await supabase
+            .rpc('bulk_post_grn_stock_update', {
+                p_branch_id: branchId || null,
+                p_location_id: locationId,
+                p_items: bulkItems,
+                p_user_id: userId || null,
+                p_reference_id: newGRN.id,
+                p_reference_number: grn_number,
+                p_remarks: remarks || ''
+            });
 
-            if (existing) {
-                const newQty = Number(existing.current_quantity) + qty;
-                await supabase
-                    .from('inventory_balances')
-                    .update({ current_quantity: newQty, unit_cost: item.unit_price || 0 })
-                    .eq('id', existing.id);
-                logger.info(`Stock updated: ${item.sku || itemUuid} +${qty} → ${newQty}`);
-            } else {
-                await supabase
-                    .from('inventory_balances')
-                    .insert({ item_id: itemUuid, location_id: locationId, current_quantity: qty, unit_cost: item.unit_price || 0 });
-                logger.info(`Stock created: ${item.sku || itemUuid} qty=${qty}`);
+        if (bulkStockError) {
+            logger.error('Bulk stock update RPC failed:', bulkStockError);
+            throw bulkStockError;
+        }
+
+        // Update master item catalog default cost price
+        for (const it of bulkItems) {
+            if (it.item_id && it.unit_price > 0) {
+                try {
+                    const { error: syncCostError } = await supabase
+                        .from('inventory_items')
+                        .update({ default_unit_cost: it.unit_price, updated_at: new Date().toISOString() })
+                        .eq('id', it.item_id);
+                    if (syncCostError) {
+                        logger.warn(`Failed to update standard catalog price for item ${it.sku}: ${syncCostError.message}`);
+                    }
+                } catch (err: any) {
+                    logger.warn(`Failed to update standard catalog price for item ${it.sku}: ${err?.message}`);
+                }
             }
         }
+
+        // Log each item into the Foundation Service inventory_movements audit
+        // trail (best-effort — never blocks the GRN response if this fails).
+        postGrnFoundationMovements({
+            branchId: branchId || 0,
+            actorId: userId || '',
+            grnNumber: grn_number,
+            grnId: newGRN.id,
+            items: bulkItems.map((it: any) => ({
+                sku: it.sku,
+                item_name: (itemDetails instanceof Map ? itemDetails.get(it.sku)?.item_name : (itemDetails as any)?.[it.sku]?.item_name) || it.sku,
+                qty: it.qty,
+                unit_price: it.unit_price
+            }))
+        }).catch((err: any) => logger.warn('postGrnFoundationMovements failed:', err?.message));
 
         const updatedPurchaseOrder = await updatePurchaseOrderReceipt(po_id, (savedGrnItems || grnItems), userId);
         

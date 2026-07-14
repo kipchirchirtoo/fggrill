@@ -44,10 +44,24 @@ class _StaffPosAccountingScreenState
   List<Map<String, dynamic>> _orders = [];
   bool _ordersBusy = false;
 
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text;
+      });
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -241,58 +255,85 @@ class _StaffPosAccountingScreenState
   Widget _buildFilters() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: _role,
-              decoration: const InputDecoration(
-                isDense: true,
-                labelText: 'Role',
-                border: OutlineInputBorder(),
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search waiter or bartender...',
+              prefixIcon: Icon(PhosphorIcons.magnifyingGlass(), size: 20),
+              isDense: true,
+              border: const OutlineInputBorder(),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: Colors.orange),
               ),
-              items: _roleOptions.entries
-                  .map((e) =>
-                      DropdownMenuItem(value: e.key, child: Text(e.value)))
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() => _role = v);
-                _load();
-              },
             ),
           ),
-          const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: _pickRange,
-            icon: Icon(PhosphorIcons.calendarBlank(), size: 18),
-            label: Text(_range == null
-                ? 'All dates'
-                : '${DateFormat('MMM d').format(_range!.start)} - ${DateFormat('MMM d').format(_range!.end)}'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _role,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    labelText: 'Role',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _roleOptions.entries
+                      .map((e) =>
+                          DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _role = v);
+                    _load();
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _pickRange,
+                icon: Icon(PhosphorIcons.calendarBlank(), size: 18),
+                label: Text(_range == null
+                    ? 'All dates'
+                    : '${DateFormat('MMM d').format(_range!.start)} - ${DateFormat('MMM d').format(_range!.end)}'),
+              ),
+              if (_range != null)
+                IconButton(
+                  onPressed: () {
+                    setState(() => _range = null);
+                    _load();
+                  },
+                  icon: Icon(PhosphorIcons.x(), size: 18),
+                  tooltip: 'Clear date range',
+                ),
+            ],
           ),
-          if (_range != null)
-            IconButton(
-              onPressed: () {
-                setState(() => _range = null);
-                _load();
-              },
-              icon: Icon(PhosphorIcons.x(), size: 18),
-              tooltip: 'Clear date range',
-            ),
         ],
       ),
     );
   }
 
   Widget _buildStaffList() {
-    if (_staff.isEmpty) {
-      return const Center(child: Text('No POS orders found for this branch.'));
+    final query = _searchQuery.trim().toLowerCase();
+    final filtered = _staff.where((s) {
+      if (query.isEmpty) return true;
+      final name = '${s['name'] ?? ''} ${s['employee_number'] ?? ''} ${s['department'] ?? ''} ${s['role'] ?? ''}'.toLowerCase();
+      return name.contains(query);
+    }).toList();
+
+    if (filtered.isEmpty) {
+      if (_staff.isEmpty) {
+        return const Center(child: Text('No POS orders found for this branch.'));
+      }
+      return const Center(child: Text('No staff matching your search.'));
     }
     return ListView.separated(
-      itemCount: _staff.length,
+      itemCount: filtered.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final staff = _staff[index];
+        final staff = filtered[index];
         final outstanding = _d(staff['total_outstanding']);
         final cleared = _d(staff['total_cleared']);
         final selected = _selectedWaiterId != null &&

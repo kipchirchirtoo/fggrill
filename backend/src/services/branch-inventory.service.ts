@@ -313,7 +313,7 @@ async function seedFoundationBalanceIfNeeded(input: {
 }
 
 async function recordFoundationMovementBestEffort(input: {
-  movementType: 'branch_requisition_dispatch' | 'transfer';
+  movementType: 'branch_requisition_dispatch' | 'transfer' | 'grn_posting';
   sku: string;
   itemName?: string | null;
   quantity: number;
@@ -361,6 +361,43 @@ async function recordFoundationMovementBestEffort(input: {
     logger.warn(`Inventory foundation movement bridge failed for ${input.sku}: ${(error as Error).message}`);
   }
 }
+
+/**
+ * Records GRN supplier receipt movements in the Foundation Service audit trail
+ * (inventory_movements table). Call this after a successful bulk_post_grn_stock_update
+ * RPC so that supplier receipts are visible in the unified movement history.
+ * Best-effort: failures are logged but do not block the response.
+ */
+export async function postGrnFoundationMovements(params: {
+  branchId: number;
+  actorId: string;
+  grnNumber: string;
+  grnId: string;
+  items: Array<{ sku: string; item_name?: string | null; qty: number; unit_price?: number }>;
+}): Promise<void> {
+  const { branchId, actorId, grnNumber, grnId, items } = params;
+
+  const destLocation = branchStoreLocation(branchId, 'Branch Store');
+
+  for (const item of items) {
+    if (!item.sku || !(item.qty > 0)) continue;
+    await recordFoundationMovementBestEffort({
+      movementType: 'grn_posting',
+      sku: item.sku,
+      itemName: item.item_name || null,
+      quantity: item.qty,
+      sourceBranchId: branchId,
+      sourceLocation: destLocation,   // source == destination for receipts (stock entering)
+      destinationLocation: destLocation,
+      actorId,
+      documentType: 'goods_receipt',
+      documentReference: grnNumber,
+      reason: `Supplier GRN stock receipt: ${grnNumber}`,
+      metadata: { grn_id: grnId, grn_number: grnNumber, unit_price: item.unit_price || 0 }
+    });
+  }
+}
+
 
 // ============================================================
 // BRANCH STOCK MANAGEMENT
@@ -1150,7 +1187,45 @@ export async function approveStockRequest(
     reviewerRole?: string;
   }
 ) {
-  const reviewerRole = options?.reviewerRole || 'Auditor';
+  let reviewerDisplayName = 'Branch Accountant';
+  let dynamicReviewerRole = options?.reviewerRole || 'Auditor';
+
+  try {
+    const { data: reviewerUser } = await supabase
+      .from('users')
+      .select('first_name, last_name, role')
+      .eq('id', reviewerId)
+      .maybeSingle();
+
+    if (reviewerUser) {
+      const fullName = [reviewerUser.first_name, reviewerUser.last_name].filter(Boolean).join(' ');
+      if (fullName) {
+        reviewerDisplayName = fullName;
+      } else {
+        if (reviewerUser.role === 'branch_accountant') {
+          reviewerDisplayName = 'Branch Accountant';
+        } else if (reviewerUser.role === 'auditor') {
+          reviewerDisplayName = 'Auditor';
+        } else if (reviewerUser.role === 'general_manager') {
+          reviewerDisplayName = 'General Manager';
+        } else {
+          reviewerDisplayName = 'Branch Accountant';
+        }
+      }
+
+      if (reviewerUser.role === 'branch_accountant') {
+        dynamicReviewerRole = 'Branch Accountant';
+      } else if (reviewerUser.role === 'auditor') {
+        dynamicReviewerRole = 'Auditor';
+      } else if (reviewerUser.role === 'general_manager') {
+        dynamicReviewerRole = 'General Manager';
+      }
+    }
+  } catch (err) {
+    logger.warn('Failed to fetch reviewer user details:', err);
+  }
+
+  const reviewerRole = dynamicReviewerRole;
 
   // Update request
   const allApproved = approvedItems.every(i => i.status === 'APPROVED');
@@ -1225,7 +1300,7 @@ export async function approveStockRequest(
         await notificationService.notifyRole(
           'general_manager',
           'Stock Request Approved',
-          `Stock Request ${requestDetails.request_number} approved by ${reviewerRole}. Ready for fulfillment.`,
+          `Stock Request ${requestDetails.request_number} approved by ${reviewerDisplayName}. Ready for fulfillment.`,
           {
             type: 'info',
             category: 'stock',
@@ -1239,7 +1314,7 @@ export async function approveStockRequest(
         await notificationService.notifyRole(
           'BRANCH_STOREKEEPER',
           `Stock Request ${newStatus}`,
-          `Your stock request ${requestDetails.request_number} has been ${newStatus.toLowerCase()} by the ${reviewerRole}.`,
+          `Your stock request ${requestDetails.request_number} has been ${newStatus.toLowerCase()} by ${reviewerDisplayName}.`,
           {
             type: 'success',
             category: 'stock',
@@ -1533,36 +1608,33 @@ export async function dispatchItems(
       );
     }
 
-    // Deduct from central warehouse stock
+    // Deduct from central warehouse stock and add to in-transit in bulk
+    const bulkItems = dispatch.items.map((item: any) => ({
+      sku: item.item_sku,
+      qty: Number(item.dispatched_quantity || 0)
+    }));
+
+    logger.info(`Executing bulk dispatch stock deduction for dispatch ${dispatch.dispatch_number} via RPC...`);
+    const { error: bulkStockError } = await supabase
+      .rpc('bulk_dispatch_stock_out', {
+        p_dispatch_id: dispatchId,
+        p_dispatcher_id: dispatcherId || null,
+        p_items: bulkItems
+      });
+
+    if (bulkStockError) {
+      logger.error('Bulk dispatch stock out RPC failed:', bulkStockError);
+      throw bulkStockError;
+    }
+
+    // Best-effort foundation analytics logging
     for (const item of dispatch.items) {
       try {
-        await updateBranchStock(
-          dispatch.from_branch_id,
-          item.item_sku,
-          -item.dispatched_quantity,
-          'DISPATCH_OUT',
-          dispatcherId,
-          'DISPATCH',
-          dispatchId,
-          dispatch.dispatch_number
-        );
-
-        // Also deduct from simple_items.quantity (the central store master stock display)
         const { data: simpleItem } = await supabase
           .from('simple_items')
-          .select('quantity, item_name, description')
+          .select('item_name, description, quantity')
           .eq('sku', item.item_sku)
           .maybeSingle();
-        if (simpleItem !== null) {
-          const currentQty = simpleItem?.quantity ?? 0;
-          await supabase
-            .from('simple_items')
-            .update({
-              quantity: Math.max(0, currentQty - item.dispatched_quantity),
-              updated_at: new Date().toISOString()
-            })
-            .eq('sku', item.item_sku);
-        }
 
         await recordFoundationMovementBestEffort({
           movementType: 'branch_requisition_dispatch',
@@ -1584,30 +1656,8 @@ export async function dispatchItems(
             to_branch_id: dispatch.to_branch_id
           }
         });
-
-        // Add to in-transit
-        const { error: transitError } = await supabase
-          .from('in_transit_stock')
-          .insert({
-            dispatch_id: dispatchId,
-            item_sku: item.item_sku,
-            quantity: item.dispatched_quantity
-          });
-
-        if (transitError) {
-          // Check if it's a duplicate entry (already in transit)
-          if (transitError.code === '23505') { // PostgreSQL unique violation
-            logger.warn(`Item ${item.item_sku} already in transit for dispatch ${dispatchId}`);
-            // Continue - item is already in transit, which is fine
-          } else {
-            console.error('Database error:', transitError);
-            logger.error(`Error adding item ${item.item_sku} to in-transit:`, transitError);
-            throw transitError;
-          }
-        }
       } catch (itemError: any) {
-        logger.error(`Error processing item ${item.item_sku}:`, itemError);
-        throw new Error(`Error processing item ${item.item_sku}: ${itemError.message}`);
+        logger.warn(`Foundation logging failed for item ${item.item_sku}:`, itemError?.message);
       }
     }
 
@@ -1757,12 +1807,8 @@ export async function confirmDelivery(
   receivedItems: { id: string; received_quantity: number; damaged_quantity?: number; missing_quantity?: number; discrepancy_reason?: string }[],
   deliveryNotes?: string
 ) {
-  // Get dispatch details (try dispatch_notes first, then dispatches)
-  let dispatch: any = null;
-  let items: any[] = [];
-  let tableName: 'dispatch_notes' | 'dispatches' = 'dispatch_notes';
-
-  const { data: noteDispatch, error: noteError } = await supabase
+  // Get dispatch details
+  const { data: dispatch, error: noteError } = await supabase
     .from('dispatch_notes')
     .select('*')
     .eq('id', dispatchId)
@@ -1770,46 +1816,57 @@ export async function confirmDelivery(
 
   if (noteError && noteError.code !== 'PGRST116') throw noteError;
 
-  if (noteDispatch) {
-    if (['CONFIRMED', 'DISPUTED', 'DELIVERED', 'COMPLETED'].includes(noteDispatch.status)) {
-      throw new AppError(`Dispatch ${noteDispatch.dispatch_number} has already been confirmed`, 400);
-    }
-    dispatch = noteDispatch;
-    const { data: noteItems, error: noteItemsError } = await supabase
-      .from('dispatch_items')
-      .select('*')
-      .eq('dispatch_id', dispatchId);
-    if (noteItemsError) throw noteItemsError;
-    items = noteItems || [];
-  } else {
-    // Fallback to dispatches table
-    const { data: disp, error: dispError } = await supabase
-      .from('dispatches')
-      .select('*')
-      .eq('id', dispatchId)
-      .maybeSingle();
-    if (dispError && dispError.code !== 'PGRST116') throw dispError;
-    if (!disp) {
-      throw new Error('Dispatch not found');
-    }
-    dispatch = disp;
-    tableName = 'dispatches';
-    const { data: lineItems, error: lineError } = await supabase
-      .from('dispatch_lines')
-      .select('*')
-      .eq('dispatch_id', dispatchId);
-    if (lineError) throw lineError;
-    items = (lineItems || []).map((l: any) => ({
-      ...l,
-      item_sku: l.item_sku,
-      dispatched_quantity: l.packed_quantity,
-      received_quantity: l.received_quantity ?? 0,
-    }));
+  if (!dispatch) {
+    throw new AppError('Dispatch not found', 404);
   }
 
-  dispatch.items = items;
+  if (['CONFIRMED', 'DISPUTED', 'DELIVERED', 'COMPLETED'].includes(dispatch.status)) {
+    throw new AppError(`Dispatch ${dispatch.dispatch_number} has already been confirmed`, 400);
+  }
 
-  // Update each item and add to branch stock
+  const { data: noteItems, error: noteItemsError } = await supabase
+    .from('dispatch_items')
+    .select('*')
+    .eq('dispatch_id', dispatchId);
+  if (noteItemsError) throw noteItemsError;
+  dispatch.items = noteItems || [];
+
+  // Map receivedItems to the format expected by the database RPC
+  const bulkItems = receivedItems.map((item: any) => {
+    const itemId = item.id || item.item_id;
+    const dispatchItem = dispatch.items.find((i: any) => i.id === itemId);
+    if (!dispatchItem) return null;
+
+    const receivedQty = Math.max(0, Math.round(
+      Number(item.received_quantity ?? item.quantity ?? 0)
+    ));
+    const damagedQty = Math.max(0, Number(item.damaged_quantity ?? item.damaged ?? 0)) || 0;
+    const missingQty = Math.max(0, Number(item.missing_quantity ?? item.missing ?? 0)) || 0;
+    const reason = item.discrepancy_reason || item.note || '';
+
+    return {
+      id: itemId,
+      received_qty: receivedQty,
+      damaged_qty: damagedQty,
+      missing_qty: missingQty,
+      reason
+    };
+  }).filter(Boolean);
+
+  logger.info(`Executing bulk confirm delivery for dispatch ${dispatch.dispatch_number} via RPC...`);
+  const { error: bulkConfirmError } = await supabase
+    .rpc('bulk_confirm_delivery', {
+      p_dispatch_id: dispatchId,
+      p_receiver_id: receiverId || null,
+      p_items: bulkItems
+    });
+
+  if (bulkConfirmError) {
+    logger.error('Bulk confirm delivery RPC failed:', bulkConfirmError);
+    throw bulkConfirmError;
+  }
+
+  // Best-effort foundation analytics logging
   for (const receivedItem of receivedItems) {
     const itemId = receivedItem.id || (receivedItem as any).item_id;
     if (!itemId) continue;
@@ -1817,17 +1874,12 @@ export async function confirmDelivery(
     const dispatchItem = dispatch.items.find((i: any) => i.id === itemId);
     if (!dispatchItem) continue;
 
-    // Normalize quantity - support both field naming conventions from frontend
     const receivedQty = Math.max(0, Math.round(
       Number((receivedItem as any).received_quantity ?? (receivedItem as any).quantity ?? 0)
     ));
-    if (isNaN(receivedQty)) {
-      logger.warn(`Invalid quantity for item ${itemId}, skipping stock update`);
-      continue;
-    }
     const damagedQty = Math.max(0, Number((receivedItem as any).damaged_quantity ?? (receivedItem as any).damaged ?? 0)) || 0;
-    const missingQty = Math.max(0, Number((receivedItem as any).missing_quantity ?? (receivedItem as any).missing ?? 0)) || 0;
     const acceptedQty = Math.max(0, receivedQty - damagedQty);
+    const missingQty = Math.max(0, Number((receivedItem as any).missing_quantity ?? (receivedItem as any).missing ?? 0)) || 0;
     const receiptStatus =
       damagedQty > 0 ? 'damaged'
         : missingQty > 0 ? 'missing'
@@ -1835,96 +1887,39 @@ export async function confirmDelivery(
             : receivedQty > 0 ? 'partially_matched'
               : 'rejected';
 
-    // Update dispatch item (correct table)
-    if (tableName === 'dispatch_notes') {
-      await supabase
-        .from('dispatch_items')
-        .update({
-          received_quantity: receivedQty,
-          accepted_quantity: acceptedQty,
-          damaged_quantity: damagedQty,
-          missing_quantity: missingQty,
-          discrepancy_reason: (receivedItem as any).discrepancy_reason || (receivedItem as any).note,
-          receipt_status: receiptStatus,
-          status: receivedQty === dispatchItem.dispatched_quantity ? 'RECEIVED' : 'PARTIAL'
-        })
-        .eq('id', itemId);
-    } else {
-      await supabase
-        .from('dispatch_lines')
-        .update({
-          received_quantity: receivedQty,
-          receipt_status: receiptStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', itemId);
-    }
-
     if (acceptedQty > 0) {
-      const branchId = dispatch.to_branch_id ?? dispatch.destination_branch_id;
-      await updateBranchStock(
-        branchId,
-        dispatchItem.item_sku,
-        acceptedQty,
-        'DISPATCH_RECEIVE',
-        receiverId,
-        'DISPATCH',
-        dispatchId,
-        dispatch.dispatch_number ?? dispatch.id
-      );
-
-      // Sync bar stock if this is a bar drink — updates bar_stock, pos_outlet_items, bar_stock_ledger
       try {
-        const { data: barDrink } = await supabase
-          .from('bar_drinks')
-          .select('id')
+        const { data: simpleItem } = await supabase
+          .from('simple_items')
+          .select('item_name, description')
           .eq('sku', dispatchItem.item_sku)
           .maybeSingle();
-        if (barDrink?.id) {
-          await recordBarStockMovement({
-            branchId,
-            drinkId: barDrink.id,
-            sku: dispatchItem.item_sku,
-            quantityDelta: acceptedQty,
-            movementType: 'dispatch_receive',
-            referenceId: dispatchId,
-            referenceNumber: dispatch.dispatch_number ?? dispatchId,
-            performedBy: receiverId,
-            notes: `Received from dispatch ${dispatch.dispatch_number ?? dispatchId}`
-          });
-        }
-      } catch (barSyncErr: any) {
-        logger.warn(`Bar stock sync failed for ${dispatchItem.item_sku} on dispatch ${dispatchId}:`, barSyncErr?.message || barSyncErr);
+
+        await recordFoundationMovementBestEffort({
+          movementType: 'transfer',
+          sku: dispatchItem.item_sku,
+          itemName: simpleItem?.item_name || simpleItem?.description || dispatchItem.item_sku,
+          quantity: acceptedQty,
+          sourceBranchId: dispatch.to_branch_id,
+          destinationBranchId: dispatch.to_branch_id,
+          sourceLocation: transitLocation(dispatchId, dispatch.dispatch_number, dispatch.to_branch_id),
+          destinationLocation: branchStoreLocation(dispatch.to_branch_id),
+          actorId: receiverId,
+          documentType: 'receipt_verification',
+          documentReference: dispatch.dispatch_number,
+          reason: `Branch receipt confirmation for ${dispatch.dispatch_number}`,
+          knownSourceLegacyQuantity: acceptedQty,
+          metadata: {
+            dispatch_id: dispatchId,
+            stock_request_id: dispatch.stock_request_id,
+            damaged_quantity: damagedQty,
+            missing_quantity: missingQty,
+            receipt_status: receiptStatus
+          }
+        });
+      } catch (itemError: any) {
+        logger.warn(`Foundation logging failed for item ${dispatchItem.item_sku}:`, itemError?.message);
       }
-
-      const { data: simpleItem } = await supabase
-        .from('simple_items')
-        .select('item_name, description')
-        .eq('sku', dispatchItem.item_sku)
-        .maybeSingle();
-
-      await recordFoundationMovementBestEffort({
-        movementType: 'transfer',
-        sku: dispatchItem.item_sku,
-        itemName: simpleItem?.item_name || simpleItem?.description || dispatchItem.item_sku,
-        quantity: acceptedQty,
-        sourceBranchId: dispatch.to_branch_id,
-        destinationBranchId: dispatch.to_branch_id,
-        sourceLocation: transitLocation(dispatchId, dispatch.dispatch_number, dispatch.to_branch_id),
-        destinationLocation: branchStoreLocation(dispatch.to_branch_id),
-        actorId: receiverId,
-        documentType: 'receipt_verification',
-        documentReference: dispatch.dispatch_number,
-        reason: `Branch receipt confirmation for ${dispatch.dispatch_number}`,
-        knownSourceLegacyQuantity: acceptedQty,
-        metadata: {
-          dispatch_id: dispatchId,
-          stock_request_id: dispatch.stock_request_id,
-          damaged_quantity: damagedQty,
-          missing_quantity: missingQty,
-          receipt_status: receiptStatus
-        }
-      });
     }
   }
 
@@ -1941,45 +1936,26 @@ export async function confirmDelivery(
   const receiptStatus = hasDiscrepancies ? 'partially_matched' : 'matched';
 
   // Update dispatch status (correct table)
-  if (tableName === 'dispatch_notes') {
-    const { error: updateError } = await supabase
-      .from('dispatch_notes')
-      .update({
-        status: hasDiscrepancies ? 'DISPUTED' : 'CONFIRMED',
-        workflow_status: 'received',
-        receipt_status: receiptStatus,
-        receiver_id: receiverId,
-        delivered_at: new Date().toISOString(),
-        confirmed_at: new Date().toISOString(),
-        receipt_verified_at: new Date().toISOString(),
-        delivery_notes: deliveryNotes,
-        receipt_notes: deliveryNotes,
-        discrepancy_notes: hasDiscrepancies ? 'Discrepancies reported' : null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', dispatchId);
-    if (updateError) throw updateError;
-  } else {
-    const { error: updateError } = await supabase
-      .from('dispatches')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', dispatchId);
-    if (updateError) throw updateError;
-    // Log to dispatch_audit_log
-    await supabase.from('dispatch_audit_log').insert({
-      dispatch_id: dispatchId,
-      action: 'branch_receipt_confirmed',
-      performed_by: receiverId,
-      notes: `Branch confirmed receipt${deliveryNotes ? ': ' + deliveryNotes : ''}`
-    });
-  }
+  const { error: updateError } = await supabase
+    .from('dispatch_notes')
+    .update({
+      status: hasDiscrepancies ? 'DISPUTED' : 'CONFIRMED',
+      workflow_status: 'received',
+      receipt_status: receiptStatus,
+      receiver_id: receiverId,
+      delivered_at: new Date().toISOString(),
+      confirmed_at: new Date().toISOString(),
+      receipt_verified_at: new Date().toISOString(),
+      delivery_notes: deliveryNotes,
+      receipt_notes: deliveryNotes,
+      discrepancy_notes: hasDiscrepancies ? 'Discrepancies reported' : null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', dispatchId);
+  if (updateError) throw updateError;
 
   // Update original request (only for dispatch_notes flow)
-  if (tableName === 'dispatch_notes' && dispatch.stock_request_id) {
+  if (dispatch.stock_request_id) {
     await supabase
       .from('stock_requests')
       .update({
@@ -2013,7 +1989,7 @@ export async function confirmDelivery(
 
   logger.info(`Dispatch ${dispatch.dispatch_number ?? dispatchId} confirmed at branch`);
 
-  return { status: tableName === 'dispatch_notes' ? (hasDiscrepancies ? 'DISPUTED' : 'CONFIRMED') : 'COMPLETED' };
+  return { status: hasDiscrepancies ? 'DISPUTED' : 'CONFIRMED' };
 }
 
 /**

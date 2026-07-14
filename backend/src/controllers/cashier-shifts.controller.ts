@@ -338,6 +338,7 @@ export async function generateCashierShiftLogbook(shift: any, reviewerId?: strin
             variance: toNumber(shift.variance),
             cash_drops: toNumber(shift.cash_deposited),
             payouts: toNumber(shift.payouts ?? shift.paid_outs),
+            expense_total: toNumber(shift.expense_total),
             transaction_count: toNumber(shift.transaction_count),
             restaurant_revenue: toNumber(shift.restaurant_revenue),
             bar_revenue: toNumber(shift.bar_revenue),
@@ -1919,8 +1920,8 @@ export const closeShift = async (
         const other_sales = hasTransactionEvidence ? transactionSummary.total_other : toNumber(other_revenue);
         const total_sales = hasTransactionEvidence ? transactionSummary.total_sales : toNumber(summary?.total_sales);
         const transaction_count = hasTransactionEvidence ? transactionSummary.transaction_count : toNumber(summary?.transaction_count);
-        const cashDrops = toNumber(cash_deposited);
-        const payouts = toNumber(req.body.payouts ?? req.body.paid_outs);
+        const cashDrops = cash_deposited !== undefined ? toNumber(cash_deposited) : toNumber(shift.cash_deposited);
+        const payouts = toNumber(req.body.payouts ?? req.body.paid_outs ?? req.body.expense_total);
 
         // Paid credits recorded this shift (a customer settling an OLD credit
         // bill) are real cash/mpesa/card landing in the cashier's hands this
@@ -1970,9 +1971,8 @@ export const closeShift = async (
         });
         const gross_sales = total_sales_net + toNumber(voidAudit.summary.total_void_amount);
 
-        // Strict accounting formula: Expected = Opening Float + Cash Sales (incl.
-        // cash paid credits) - Cash Drops/Payouts. Only cash-affecting items count.
-        const expectedClosingFloat = toNumber(shift.opening_float) + total_cash_sales_final - cashDrops - payouts;
+        // Strict accounting formula: Expected = Opening Float + Raw Cash Sales + Cash Paid Credits - Cash Drops - Cash Expenses. Only cash-affecting items count.
+        const expectedClosingFloat = toNumber(shift.opening_float) + cash_sales + cashPaidCredits - cashDrops - cashExpenses;
         const hasDeclaredClosingFloat = closing_float !== undefined
             && closing_float !== null
             && `${closing_float}`.trim() !== '';

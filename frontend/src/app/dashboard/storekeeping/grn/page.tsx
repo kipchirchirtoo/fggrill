@@ -39,8 +39,10 @@ interface GRN {
 
 interface GRNItem {
   id?: string;
-  item_id: number;
-  item?: { id: number; name: string; sku: string };
+  item_id: string | number;
+  item?: { id: string | number; name: string; sku: string };
+  sku?: string;
+  item_name?: string;
   ordered_quantity: number;
   received_quantity: number;
   unit_price: number;
@@ -603,7 +605,14 @@ export default function GRNPage() {
                       <tbody className="divide-y">
                         {(selectedGRN.items || []).map((item, idx) => (
                           <tr key={idx}>
-                            <td className="px-3 py-2">{item.item?.name || `Item #${item.item_id}`}</td>
+                            <td className="px-3 py-2">
+                              <div>{item.item_name || item.item?.name || `Item #${item.item_id}`}</div>
+                              {(item.sku || item.item?.sku) && (
+                                <div className="text-xs text-gray-500 font-mono mt-0.5">
+                                  SKU: {item.sku || item.item?.sku}
+                                </div>
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-center">{item.ordered_quantity}</td>
                             <td className="px-3 py-2 text-center font-medium">{item.received_quantity}</td>
                             <td className="px-3 py-2">

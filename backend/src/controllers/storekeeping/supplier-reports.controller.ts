@@ -406,8 +406,8 @@ export const getGRNIReport = async (
             `)
             .order('created_at', { ascending: false });
 
-        if (status) query = query.eq('status', status);
-        else query = query.eq('status', 'open');
+        if (status) query = query.eq('cleared', status === 'cleared');
+        else query = query.eq('cleared', false);
 
         const { data: grni, error } = await query;
 

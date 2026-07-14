@@ -279,7 +279,7 @@ export const createInvoice = async (
                 .from('store_grni_control_account')
                 .select('id')
                 .eq('grn_id', grn_id)
-                .eq('status', 'open')
+                .eq('cleared', false)
                 .single();
 
             if (grni) {

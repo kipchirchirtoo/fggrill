@@ -13,6 +13,7 @@ import 'daily_close_review_screen.dart';
 import '../../lina/presentation/lina_screen.dart';
 import '../../shared/widgets/inventory_control_center_screen.dart';
 import '../../../core/widgets/branch_sales_payments_view.dart';
+import 'auditor_search_tab.dart';
 
 class AuditorDashboard extends ConsumerStatefulWidget {
   const AuditorDashboard({super.key});
@@ -38,7 +39,11 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
             label: 'Audit Control',
             icon: PhosphorIcons.shieldCheck(),
             content: _AuditorOverviewTab(
-                onGoToApprovals: () => setState(() => _tab = 2))),
+                onGoToApprovals: () => setState(() => _tab = 4))),
+        DashboardTab(
+            label: 'Universal Search',
+            icon: PhosphorIcons.magnifyingGlass(),
+            content: const AuditorSearchSection()),
         DashboardTab(
             label: 'Daily Close Review',
             icon: PhosphorIcons.clipboardText(),
@@ -80,10 +85,7 @@ class _AuditorDashboardState extends ConsumerState<AuditorDashboard> {
             label: 'Credit Bills',
             icon: PhosphorIcons.creditCard(),
             content: const AuditorCreditBillsSection()),
-        DashboardTab(
-            label: 'Cashier Logbooks',
-            icon: PhosphorIcons.notebook(),
-            content: const AuditorCashierLogbooksSection()),
+
         DashboardTab(
             label: 'Void Bills',
             icon: PhosphorIcons.prohibit(),

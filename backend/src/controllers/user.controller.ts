@@ -286,20 +286,35 @@ export const createUser = async (
       return;
     }
 
-    // Enforce PIN uniqueness — no two users may share the same POS PIN
-    if (pos_pin) {
-      const { data: pinConflict } = await supabase
-        .from('users')
-        .select('id, first_name, last_name')
-        .eq('pos_pin', pos_pin)
-        .maybeSingle();
-      if (pinConflict) {
-        res.status(409).json({
-          success: false,
-          message: `PIN ${pos_pin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
-        });
-        return;
-      }
+    // Validate POS PIN format and uniqueness
+    if (pos_pin === undefined || pos_pin === null || String(pos_pin).trim() === '') {
+      res.status(400).json({
+        success: false,
+        message: 'POS PIN is required when creating a login account.'
+      });
+      return;
+    }
+
+    const normalizedPin = String(pos_pin).trim().toUpperCase();
+    if (!/^[RMNCE]\d{4}$/.test(normalizedPin)) {
+      res.status(400).json({
+        success: false,
+        message: 'POS PIN must strictly start with R, M, N, C, or E followed by exactly 4 digits (e.g., R1234).'
+      });
+      return;
+    }
+
+    const { data: pinConflict } = await supabase
+      .from('users')
+      .select('id, first_name, last_name')
+      .eq('pos_pin', normalizedPin)
+      .maybeSingle();
+    if (pinConflict) {
+      res.status(409).json({
+        success: false,
+        message: `PIN ${normalizedPin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
+      });
+      return;
     }
 
     // Step 1: Create auth user via Supabase Admin API
@@ -342,7 +357,7 @@ export const createUser = async (
       department: dept || null,
       address: address || null,
       status: status || 'active',
-      pos_pin: pos_pin || null,
+      pos_pin: normalizedPin,
       password_hash: passwordHash,
       updated_at: new Date().toISOString()
     };
@@ -490,20 +505,34 @@ export const updateUser = async (
       selectedStaffProfile = staffProfile;
     }
 
-    // Enforce PIN uniqueness on update — no two users may share the same POS PIN
-    if (fields.pos_pin) {
-      const { data: pinConflict } = await supabase
-        .from('users')
-        .select('id, first_name, last_name')
-        .eq('pos_pin', fields.pos_pin)
-        .neq('id', req.params.id)
-        .maybeSingle();
-      if (pinConflict) {
-        res.status(409).json({
-          success: false,
-          message: `PIN ${fields.pos_pin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
-        });
-        return;
+    // Validate POS PIN format and uniqueness on update
+    let normalizedPin: string | null | undefined = undefined;
+    if (fields.pos_pin !== undefined) {
+      if (fields.pos_pin === null || String(fields.pos_pin).trim() === '') {
+        normalizedPin = null;
+      } else {
+        normalizedPin = String(fields.pos_pin).trim().toUpperCase();
+        if (!/^[RMNCE]\d{4}$/.test(normalizedPin)) {
+          res.status(400).json({
+            success: false,
+            message: 'POS PIN must strictly start with R, M, N, C, or E followed by exactly 4 digits (e.g., R1234).'
+          });
+          return;
+        }
+
+        const { data: pinConflict } = await supabase
+          .from('users')
+          .select('id, first_name, last_name')
+          .eq('pos_pin', normalizedPin)
+          .neq('id', req.params.id)
+          .maybeSingle();
+        if (pinConflict) {
+          res.status(409).json({
+            success: false,
+            message: `PIN ${normalizedPin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
+          });
+          return;
+        }
       }
     }
 
@@ -519,7 +548,7 @@ export const updateUser = async (
       employee_id: fields.employee_id || fields.employeeId,
       department: fields.department,
       address: fields.address,
-      pos_pin: fields.pos_pin,
+      pos_pin: normalizedPin,
       updated_at: new Date().toISOString()
     };
 

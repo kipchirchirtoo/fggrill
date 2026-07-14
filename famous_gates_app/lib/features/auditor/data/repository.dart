@@ -63,10 +63,23 @@ class AuditorRepository {
   Future<AuditOverview> getAuditOverview() async {
     final branchId = await _branchId;
     final response =
-        await _dio.get('/payments-verification/stats', queryParameters: {
+        await _dio.get('/auditor/dashboard', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
     });
     return AuditOverview.fromJson(_unwrap(response.data));
+  }
+
+  Future<List<Map<String, dynamic>>> globalSearch(
+    String query, {
+    String? branchId,
+    List<String>? modules,
+  }) async {
+    final response = await _dio.get('/search', queryParameters: {
+      'q': query,
+      if (branchId != null && branchId.isNotEmpty) 'branch_id': branchId,
+      if (modules != null && modules.isNotEmpty) 'modules': modules.join(','),
+    });
+    return _unwrapList(response.data);
   }
 
   Future<List<AuditLogEntry>> getAuditLogs(

@@ -12,9 +12,6 @@ import '../domain/providers.dart';
 // ─── Status selection filter ─────────────────────────────────────────────────
 final _statusFilterProvider = StateProvider<String?>((ref) => null);
 
-// ─── Selected IDs for bulk actions ───────────────────────────────────────────
-final _selectedRequestsProvider = StateProvider<Set<String>>((ref) => const {});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Main tab
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,7 +24,6 @@ class BranchOrdersTab extends ConsumerWidget {
     final filters = ref.watch(branchOrdersFiltersProvider);
     final dataAsync = ref.watch(branchOrdersProvider(filters));
     final statusFilter = ref.watch(_statusFilterProvider);
-    final selected = ref.watch(_selectedRequestsProvider);
 
     return Padding(
       padding: ScreenSize.p(context),
@@ -82,17 +78,6 @@ class BranchOrdersTab extends ConsumerWidget {
 
           const SizedBox(height: 12),
 
-          // ── Bulk approve bar (shown when items selected) ───────────────
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            child: selected.isEmpty
-                ? const SizedBox.shrink()
-                : _BulkActionBar(
-                    selectedIds: selected,
-                    filters: filters,
-                  ),
-          ),
-
           // ── Requests list ──────────────────────────────────────────────
           Expanded(
             child: dataAsync.when(
@@ -116,18 +101,7 @@ class BranchOrdersTab extends ConsumerWidget {
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) => _RequestCard(
                     request: requests[i],
-                    isSelected: selected.contains(requests[i].id),
                     filters: filters,
-                    onToggleSelect: (id) {
-                      final cur = ref.read(_selectedRequestsProvider);
-                      final next = Set<String>.from(cur);
-                      if (next.contains(id)) {
-                        next.remove(id);
-                      } else {
-                        next.add(id);
-                      }
-                      ref.read(_selectedRequestsProvider.notifier).state = next;
-                    },
                   ),
                 );
               },
@@ -184,7 +158,6 @@ class _DateRangeButton extends ConsumerWidget {
             'start_date': _fmt(picked.start),
             'end_date': _fmt(picked.end),
           };
-          ref.read(_selectedRequestsProvider.notifier).state = const {};
         }
       },
       icon: const Icon(Icons.date_range_rounded, size: 16),
@@ -411,7 +384,6 @@ class _StatusFilterRow extends ConsumerWidget {
               selected: isActive,
               onSelected: (_) {
                 ref.read(_statusFilterProvider.notifier).state = f.$1;
-                ref.read(_selectedRequestsProvider.notifier).state = const {};
               },
               labelStyle: TextStyle(
                 fontSize: 12,
@@ -435,115 +407,17 @@ class _StatusFilterRow extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bulk action bar
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _BulkActionBar extends ConsumerWidget {
-  const _BulkActionBar({
-    required this.selectedIds,
-    required this.filters,
-  });
-
-  final Set<String> selectedIds;
-  final Map<String, String?> filters;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.kPrimary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.kPrimary.withValues(alpha: 0.20)),
-      ),
-      child: Row(
-        children: [
-          Icon(PhosphorIcons.listChecks(), color: AppColors.kPrimary, size: 18),
-          const SizedBox(width: 8),
-          Text('${selectedIds.length} selected',
-              style:
-                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          const Spacer(),
-          TextButton(
-            onPressed: () =>
-                ref.read(_selectedRequestsProvider.notifier).state = const {},
-            child: const Text('Clear'),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: () => _bulkApprove(context, ref, selectedIds.toList()),
-            icon: const Icon(Icons.done_all_rounded, size: 16),
-            label: Text('Approve All (${selectedIds.length})'),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.kSuccess,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _bulkApprove(
-      BuildContext context, WidgetRef ref, List<String> ids) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Bulk Approve'),
-        content: Text(
-            'Approve ${ids.length} pending requisition(s)? All items will be approved at the requested quantities.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style:
-                  ElevatedButton.styleFrom(backgroundColor: AppColors.kSuccess),
-              child: const Text('Approve All')),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    try {
-      await ref.read(auditorRepositoryProvider).bulkApproveStockRequests(ids);
-      ref.read(_selectedRequestsProvider.notifier).state = const {};
-      ref.invalidate(branchOrdersProvider(filters));
-      if (context.mounted) {
-        AppNotifier.showSnackBar(
-          context,
-          SnackBar(
-              content: Text('${ids.length} requisitions approved successfully'),
-              backgroundColor: AppColors.kSuccess),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Request card
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RequestCard extends ConsumerStatefulWidget {
   const _RequestCard({
     required this.request,
-    required this.isSelected,
     required this.filters,
-    required this.onToggleSelect,
   });
 
   final StockRequest request;
-  final bool isSelected;
   final Map<String, String?> filters;
-  final ValueChanged<String> onToggleSelect;
 
   @override
   ConsumerState<_RequestCard> createState() => _RequestCardState();
@@ -551,7 +425,6 @@ class _RequestCard extends ConsumerStatefulWidget {
 
 class _RequestCardState extends ConsumerState<_RequestCard> {
   bool _expanded = false;
-  bool _loading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -560,19 +433,15 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
     final statusLabel = _statusLabel(r.status);
     final isUrgent = r.priority.toLowerCase() == 'urgent' ||
         r.priority.toLowerCase() == 'high';
-    // Branch stock requests are now approved by the branch accountant, not the auditor.
-    final canAct = false;
 
     return Card(
       margin: EdgeInsets.zero,
-      elevation: widget.isSelected ? 2 : 0,
+      elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: widget.isSelected
-              ? AppColors.kPrimary.withValues(alpha: 0.45)
-              : statusColor.withValues(alpha: 0.18),
-          width: widget.isSelected ? 1.5 : 1,
+          color: statusColor.withValues(alpha: 0.18),
+          width: 1,
         ),
       ),
       child: Column(
@@ -585,16 +454,6 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
               padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
               child: Row(
                 children: [
-                  // Select checkbox (only for pending)
-                  if (canAct)
-                    Checkbox(
-                      value: widget.isSelected,
-                      onChanged: (_) => widget.onToggleSelect(r.id),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  if (canAct) const SizedBox(width: 4),
-
                   // Status circle
                   Container(
                     width: 10,
@@ -696,82 +555,9 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
             child: _expanded
                 ? _ExpandedBody(
                     request: r,
-                    loading: _loading,
                     filters: widget.filters,
-                    onApprove: canAct ? () => _review('APPROVE') : null,
-                    onReject: canAct ? () => _showRejectDialog() : null,
                   )
                 : const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _review(String action, {String? notes}) async {
-    setState(() => _loading = true);
-    try {
-      await ref
-          .read(auditorRepositoryProvider)
-          .reviewStockRequest(widget.request.id, action, notes: notes);
-      ref.invalidate(branchOrdersProvider(widget.filters));
-      if (mounted) {
-        AppNotifier.showSnackBar(
-          context,
-          SnackBar(
-            content: Text(action == 'APPROVE'
-                ? 'Requisition approved successfully'
-                : 'Requisition rejected'),
-            backgroundColor:
-                action == 'APPROVE' ? AppColors.kSuccess : AppColors.kError,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _showRejectDialog() {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Requisition'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Rejecting: ${widget.request.requestNumber}',
-                style:
-                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Rejection Reason',
-                hintText: 'Provide reason for rejection…',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _review('REJECT', notes: controller.text.trim());
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.kError,
-                foregroundColor: Colors.white),
-            child: const Text('Reject'),
           ),
         ],
       ),
@@ -964,17 +750,11 @@ class _FlowProgress extends StatelessWidget {
 class _ExpandedBody extends StatelessWidget {
   const _ExpandedBody({
     required this.request,
-    required this.loading,
     required this.filters,
-    required this.onApprove,
-    required this.onReject,
   });
 
   final StockRequest request;
-  final bool loading;
   final Map<String, String?> filters;
-  final VoidCallback? onApprove;
-  final VoidCallback? onReject;
 
   @override
   Widget build(BuildContext context) {
@@ -1049,43 +829,6 @@ class _ExpandedBody extends StatelessWidget {
             ],
           ),
 
-          // Action buttons
-          if (onApprove != null || onReject != null) ...[
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (onReject != null)
-                  OutlinedButton.icon(
-                    onPressed: loading ? null : onReject,
-                    icon: const Icon(Icons.close_rounded, size: 16),
-                    label: const Text('Reject'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.kError,
-                      side: BorderSide(
-                          color: AppColors.kError.withValues(alpha: 0.5)),
-                    ),
-                  ),
-                const SizedBox(width: 10),
-                if (onApprove != null)
-                  ElevatedButton.icon(
-                    onPressed: loading ? null : onApprove,
-                    icon: loading
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 1.8, color: Colors.white))
-                        : const Icon(Icons.check_rounded, size: 16),
-                    label: const Text('Approve All Items'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.kSuccess,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-              ],
-            ),
-          ],
         ],
       ),
     );

@@ -774,6 +774,25 @@ export const getBookingInvoiceQueue = async (
       }
     };
 
+    const loadBookings = async () => {
+      let select = '*, guest:guests!guest_id(*), room:rooms!room_id(id, room_number, room_type, branch_id, status)';
+      let query = supabase
+        .from('bookings')
+        .select(select)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('room', row.id);
+        sources.push(normalizeSourceRow('room', {
+          ...row,
+          reservation_number: row.booking_number
+        }, invoiceByReference.get(ref)));
+      }
+    };
+
     const loadConference = async () => {
       let query = supabase
         .from('conference_hall_bookings')
@@ -786,6 +805,28 @@ export const getBookingInvoiceQueue = async (
       for (const row of ((data || []) as any[])) {
         const ref = sourceReference('conference', row.id);
         sources.push(normalizeSourceRow('conference', row, invoiceByReference.get(ref)));
+      }
+    };
+
+    const loadConferenceBookings = async () => {
+      let query = supabase
+        .from('conference_bookings')
+        .select('*, hall:conference_halls(*)')
+        .order('event_date', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('conference', row.id);
+        sources.push(normalizeSourceRow('conference', {
+          ...row,
+          booking_number: row.booking_number,
+          client_name: row.customer_name,
+          start_date: row.event_date,
+          end_date: row.event_date,
+          booking_status: row.status
+        }, invoiceByReference.get(ref)));
       }
     };
 
@@ -805,8 +846,14 @@ export const getBookingInvoiceQueue = async (
     };
 
     const loaders: Array<[string, () => Promise<void>]> = [
-      ['room', loadRooms],
-      ['conference', loadConference],
+      ['room', async () => {
+        await loadRooms();
+        await loadBookings();
+      }],
+      ['conference', async () => {
+        await loadConference();
+        await loadConferenceBookings();
+      }],
       ['outside_catering', loadCatering],
     ];
     for (const [key, loader] of loaders) {

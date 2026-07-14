@@ -694,7 +694,7 @@ export const receivePurchaseOrder = async (
         .from("branch_stock")
         .select("quantity")
         .eq("branch_id", targetBranchId)
-        .eq("item_sku", item.item_id)
+        .eq("item_sku", item.sku)
         .maybeSingle();
 
       const currentQty =
@@ -706,7 +706,7 @@ export const receivePurchaseOrder = async (
       await supabase.from("branch_stock").upsert(
         {
           branch_id: targetBranchId,
-          item_sku: item.item_id,
+          item_sku: item.sku,
           quantity: newQty,
           last_stock_in: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -717,7 +717,7 @@ export const receivePurchaseOrder = async (
       // Log stock movement
       await supabase.from("branch_stock_movements").insert({
         branch_id: targetBranchId,
-        item_sku: item.item_id,
+        item_sku: item.sku,
         movement_type: "PO_RECEIVE",
         quantity: qty,
         reference_type: "PURCHASE_ORDER",

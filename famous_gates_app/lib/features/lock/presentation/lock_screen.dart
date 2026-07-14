@@ -25,12 +25,13 @@ class LockScreen extends ConsumerWidget {
   void _onDigit(
       WidgetRef ref, String digit, BuildContext context, String correctPin) {
     final current = ref.read(_pinProvider);
-    if (current.length >= 4) return;
-    ref.read(_pinProvider.notifier).state = current + digit;
+    if (current.length >= 5) return;
+    final nextPin = current + digit;
+    ref.read(_pinProvider.notifier).state = nextPin;
     ref.read(_errorProvider.notifier).state = null;
-    if (current.length == 3) {
-      final pin = current + digit;
-      if (pin == correctPin) {
+    if (nextPin.length == 5) {
+      if (nextPin.toUpperCase() == correctPin.toUpperCase()) {
+        ref.read(_pinProvider.notifier).state = '';
         context.pop();
       } else {
         ref.read(_pinProvider.notifier).state = '';
@@ -92,7 +93,7 @@ class LockScreen extends ConsumerWidget {
                 ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(4, (i) {
+                children: List.generate(5, (i) {
                   final filled = i < pin.length;
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -117,6 +118,20 @@ class LockScreen extends ConsumerWidget {
   Widget _buildKeypad(BuildContext context, WidgetRef ref, String correctPin) {
     return Column(
       children: [
+        // Prefix Letter Row (Restaurant, Main Bar, Executive Bar, Non Consumables, Cashier)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: ['R', 'M', 'N', 'C', 'E'].map((letter) {
+              return _KeyButton(
+                label: letter,
+                onTap: () => _onDigit(ref, letter, context, correctPin),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
         for (var row = 0; row < 3; row++)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),

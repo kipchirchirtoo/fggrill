@@ -95,6 +95,12 @@ export type CashierVoidAuditLine = {
   outlet_type?: string | null;
   void_type: 'whole_bill' | 'item_void' | 'payment_void';
   void_reason?: string | null;
+  voided_by?: string | null;
+  voided_by_name?: string | null;
+  requested_by?: string | null;
+  requested_by_name?: string | null;
+  actioned_by?: string | null;
+  actioned_by_name?: string | null;
 };
 
 export type CashierVoidAuditSummary = {
@@ -198,13 +204,13 @@ export async function loadCashierVoidAudit(
     posShiftIds.length
       ? supabase
           .from('pos_shift_orders')
-          .select('id, order_number, short_code, customer_name, total_amount, payment_status, status, void_request_status, void_reason, voided_at, created_at, payment_method')
+          .select('id, order_number, short_code, customer_name, total_amount, payment_status, status, void_request_status, void_reason, voided_at, created_at, payment_method, voided_by')
           .in('shift_id', posShiftIds)
       : Promise.resolve({ data: [], error: null }),
     posShiftIds.length
       ? supabase
           .from('pos_item_void_requests')
-          .select('id, shift_id, order_id, order_number, item_name, qty_to_void, unit_price, status, reason, reason_category, actioned_at, created_at')
+          .select('id, shift_id, order_id, order_number, item_name, qty_to_void, unit_price, status, reason, reason_category, actioned_at, created_at, requested_by, actioned_by')
           .in('shift_id', posShiftIds)
           .eq('status', 'approved')
       : Promise.resolve({ data: [], error: null }),
@@ -215,6 +221,27 @@ export async function loadCashierVoidAudit(
   if (paymentVoidResult.error) throw paymentVoidResult.error;
   if (posOrderResult.error) throw posOrderResult.error;
   if (posItemVoidResult.error) throw posItemVoidResult.error;
+
+  // Resolve user names for auditing who authorized/requested the voids
+  const userIds = new Set<string>();
+  (restaurantResult.data || []).forEach((row: any) => { if (row.voided_by) userIds.add(row.voided_by); });
+  (barResult.data || []).forEach((row: any) => { if (row.voided_by) userIds.add(row.voided_by); });
+  (posOrderResult.data || []).forEach((row: any) => { if (row.voided_by) userIds.add(row.voided_by); });
+  (posItemVoidResult.data || []).forEach((row: any) => {
+    if (row.requested_by) userIds.add(row.requested_by);
+    if (row.actioned_by) userIds.add(row.actioned_by);
+  });
+
+  const userMap = new Map<string, string>();
+  if (userIds.size > 0) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, first_name, last_name')
+      .in('id', Array.from(userIds));
+    (users || []).forEach((u: any) => {
+      userMap.set(String(u.id), `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Staff');
+    });
+  }
 
   const lines: CashierVoidAuditLine[] = [];
 
@@ -235,6 +262,9 @@ export async function loadCashierVoidAudit(
       revenue_type: 'restaurant',
       outlet_type: 'restaurant',
       void_type: 'whole_bill',
+      voided_by: row.voided_by || null,
+      voided_by_name: row.voided_by ? userMap.get(String(row.voided_by)) || null : null,
+      void_reason: row.void_reason || null,
     });
   }
 
@@ -255,6 +285,9 @@ export async function loadCashierVoidAudit(
       revenue_type: 'bar',
       outlet_type: 'bar',
       void_type: 'whole_bill',
+      voided_by: row.voided_by || null,
+      voided_by_name: row.voided_by ? userMap.get(String(row.voided_by)) || null : null,
+      void_reason: row.void_reason || null,
     });
   }
 
@@ -272,6 +305,8 @@ export async function loadCashierVoidAudit(
       source_table: 'cashier_shift_transactions',
       source_id: row.id || null,
       void_type: 'payment_void',
+      voided_by: row.voided_by || null,
+      voided_by_name: row.voided_by ? userMap.get(String(row.voided_by)) || null : null,
     });
   }
 
@@ -292,6 +327,8 @@ export async function loadCashierVoidAudit(
       outlet_type: 'pos',
       void_type: 'whole_bill',
       void_reason: text(row.void_reason, ''),
+      voided_by: row.voided_by || null,
+      voided_by_name: row.voided_by ? userMap.get(String(row.voided_by)) || null : null,
     });
   }
 
@@ -311,6 +348,10 @@ export async function loadCashierVoidAudit(
       outlet_type: 'pos',
       void_type: 'item_void',
       void_reason: text(row.reason || row.reason_category, ''),
+      requested_by: row.requested_by || null,
+      requested_by_name: row.requested_by ? userMap.get(String(row.requested_by)) || null : null,
+      actioned_by: row.actioned_by || null,
+      actioned_by_name: row.actioned_by ? userMap.get(String(row.actioned_by)) || null : null,
     });
   }
 

@@ -123,6 +123,17 @@ class AuthRepository {
     }
   }
 
+  Future<void> updatePosPin(String currentPin, String newPin) async {
+    try {
+      await _dio.put('/auth/update-pin', data: {
+        'currentPin': currentPin,
+        'newPin': newPin,
+      });
+    } on DioException catch (error) {
+      throw Exception(_messageFromDio(error));
+    }
+  }
+
   Map<String, dynamic> _authDataFromResponse(Object? responseData) {
     if (responseData is! Map) {
       throw Exception('Invalid auth response');

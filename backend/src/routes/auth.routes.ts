@@ -81,36 +81,48 @@ router.put('/update-pin', protect, async (req, res, next) => {
       return;
     }
     const { currentPin, newPin } = req.body;
-    if (!newPin || !/^\d{4}$/.test(String(newPin))) {
-      res.status(400).json({ success: false, message: 'New PIN must be exactly 4 digits' });
+    
+    if (!newPin || !/^[RMNCE]\d{4}$/.test(String(newPin))) {
+      res.status(400).json({ success: false, message: 'New PIN must start with R, M, N, C, or E followed by exactly 4 digits' });
       return;
     }
+    const normalizedNewPin = String(newPin).trim().toUpperCase();
+    const normalizedCurrentPin = String(currentPin ?? '').trim().toUpperCase();
+
     const { data: user, error: fetchErr } = await supabase
       .from('users')
       .select('pos_pin')
       .eq('id', req.user.id)
       .single();
+
     if (fetchErr || !user) {
       res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
-    // pos_pin may be stored with a type prefix (e.g. "C2040" for cashier,
-    // "M1194" for main bar). Strip non-digit leading chars before comparing
-    // so users entering just "2040" can still verify their current PIN.
-    const storedRaw = String(user.pos_pin ?? '');
-    const storedDigits = storedRaw.replace(/^\D+/, '');
-    const enteredDigits = String(currentPin ?? '').replace(/^\D+/, '');
-    if (storedRaw && storedDigits !== enteredDigits) {
+
+    const storedRaw = String(user.pos_pin ?? '').trim().toUpperCase();
+    if (storedRaw && storedRaw !== normalizedCurrentPin) {
       res.status(400).json({ success: false, message: 'Current PIN is incorrect' });
       return;
     }
-    // Preserve the original type prefix so POS till authentication keeps working.
-    const prefix = storedRaw.match(/^\D+/)?.[0] ?? '';
-    const updatedPin = prefix + String(newPin);
+
+    // Check for duplicates
+    const { data: pinConflict } = await supabase
+      .from('users')
+      .select('id')
+      .eq('pos_pin', normalizedNewPin)
+      .maybeSingle();
+
+    if (pinConflict && pinConflict.id !== req.user.id) {
+      res.status(409).json({ success: false, message: 'POS PIN is already assigned to another user' });
+      return;
+    }
+
     const { error: updateErr } = await supabase
       .from('users')
-      .update({ pos_pin: updatedPin, updated_at: new Date().toISOString() })
+      .update({ pos_pin: normalizedNewPin, updated_at: new Date().toISOString() })
       .eq('id', req.user.id);
+
     if (updateErr) throw updateErr;
     res.json({ success: true, message: 'PIN updated successfully' });
   } catch (error) {
