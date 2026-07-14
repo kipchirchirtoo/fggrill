@@ -120,11 +120,19 @@ const normalizeAuditRow = (source: AuditSource, row: any): any => {
   };
 };
 
-const fetchSourceRows = async (source: AuditSource, limit: number): Promise<any[]> => {
+const fetchSourceRows = async (source: AuditSource, limit: number, branchId?: string): Promise<any[]> => {
   try {
-    const { data, error } = await supabase
-      .from(source.table)
-      .select('*')
+    let query = supabase.from(source.table).select('*');
+
+    if (branchId && branchId !== '0') {
+      if (source.table === 'dispatch_audit_log' || source.table === 'branch_payment_audit' || source.table === 'attendance_audit_logs') {
+        // These tables do not have branch_id directly, skip database-level filtering
+      } else {
+        query = query.eq('branch_id', branchId);
+      }
+    }
+
+    const { data, error } = await query
       .order(source.timeColumn, { ascending: false })
       .limit(limit);
 
@@ -199,7 +207,7 @@ const enrichAuditRows = async (rows: any[]): Promise<any[]> => {
 };
 
 const getUnifiedAuditRows = async (query: AuditQuery, fetchLimit: number): Promise<any[]> => {
-  const rows = (await Promise.all(AUDIT_SOURCES.map((source) => fetchSourceRows(source, fetchLimit)))).flat();
+  const rows = (await Promise.all(AUDIT_SOURCES.map((source) => fetchSourceRows(source, fetchLimit, query.branchId)))).flat();
   return rows
     .filter((row) => matchesAuditQuery(row, query))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

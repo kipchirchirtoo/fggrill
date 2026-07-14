@@ -39,8 +39,7 @@ enum CashierTab {
   voided,
   credit,
   shifts,
-  barcode,
-  insights
+  barcode
 }
 
 class CashierDashboard extends ConsumerStatefulWidget {
@@ -74,7 +73,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     CashierTab.voided,
     CashierTab.credit,
     CashierTab.shifts,
-    CashierTab.insights,
   ];
 
   late int _tab = () {
@@ -203,11 +201,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         icon: Icons.access_time,
         content: _ShiftsTab(),
       ),
-      const DashboardTab(
-        label: 'Insights',
-        icon: Icons.insights,
-        content: _InsightsTab(),
-      ),
     ];
 
     if (widget.embedded) {
@@ -241,7 +234,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
                     ref.invalidate(cashierStatsProvider);
                     ref.invalidate(cashierReconciliationProvider);
                     ref.invalidate(cashierCurrentShiftProvider);
-                    ref.invalidate(cashierInsightsProvider);
                   },
                   icon: const Icon(Icons.refresh, size: 16),
                   label: const Text('Refresh'),
@@ -278,7 +270,6 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
             ref.invalidate(cashierStatsProvider);
             ref.invalidate(cashierReconciliationProvider);
             ref.invalidate(cashierCurrentShiftProvider);
-            ref.invalidate(cashierInsightsProvider);
           },
           icon: const Icon(Icons.refresh, size: 16),
           label: const Text('Refresh'),
@@ -5021,8 +5012,11 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
         // of expenses, matching what the backend now persists. Otherwise a
         // settled credit bill gets counted as a sale twice: once when the
         // credit was originally issued, again here when it's collected.
-        final expectedCash = openingFloat + baseCashSales + cashPaidCredits;
+        final cashDrops = _num(shift['cash_deposited'] ?? shift['cash_drops']);
+        final expectedCash =
+            openingFloat + rawCashSales + cashPaidCredits - cashDrops - cashExpenses;
         final variance = actualCash - expectedCash;
+
 
         return Dialog(
           insetPadding: const EdgeInsets.all(24),
@@ -5069,30 +5063,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           spacing: 12,
                           runSpacing: 12,
                           children: [
-                            _amountField(cashAtHand, 'Cash at hand',
+                            _amountField(cashAtHand, 'Cash at hand (including Opening Float)',
                                 onChanged: (_) => setDialogState(() {})),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Text('Blind digital logbook',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Enter the physical M-Pesa and card totals from the till statements. Expected system totals stay hidden on purpose.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.grey.shade700),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: [
-                            _amountField(mpesaLogged, 'M-Pesa logged'),
-                            _amountField(cardLogged, 'Card logged'),
-                            _inputField(mpesaSummaryRef, 'M-Pesa summary ref'),
-                            _inputField(cardBatchRef, 'Card batch ref'),
                           ],
                         ),
                         const SizedBox(height: 24),
@@ -5212,10 +5184,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                 num.tryParse(cashAtHand.text.trim()) ?? 0,
                             'actual_cash_counted':
                                 num.tryParse(cashAtHand.text.trim()) ?? 0,
-                            'actual_mpesa_logged':
-                                num.tryParse(mpesaLogged.text.trim()) ?? 0,
-                            'actual_card_logged':
-                                num.tryParse(cardLogged.text.trim()) ?? 0,
+                            'actual_mpesa_logged': null,
+                            'actual_card_logged': null,
                             'notes': '',
                             'credit_bills_taken': creditBillsTotal,
                             'credit_bills_count': creditEntries.length,
@@ -5228,6 +5198,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                 .map((entry) => entry.toJson())
                                 .toList(),
                             'expense_total': expenseTotal,
+                            'payouts': expenseTotal,
+                            'paid_outs': expenseTotal,
                             'expense_details': expenseEntries
                                 .map((entry) => entry.toJson())
                                 .toList(),
@@ -5274,20 +5246,6 @@ Widget _amountField(
   );
 }
 
-Widget _inputField(
-  TextEditingController controller,
-  String label, {
-  bool enabled = true,
-}) {
-  return SizedBox(
-    width: 220,
-    child: TextField(
-      controller: controller,
-      enabled: enabled,
-      decoration: InputDecoration(labelText: label),
-    ),
-  );
-}
 
 List<_ShiftStaffMember> _shiftStaffMembers(
   List<Map<String, dynamic>> rows,

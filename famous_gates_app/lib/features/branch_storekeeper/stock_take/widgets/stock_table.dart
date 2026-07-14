@@ -274,7 +274,7 @@ class _StockTableState extends State<StockTable> {
                 // Explanation
                 DataCell(EditableTextCell(
                   value: item.explanation ?? '',
-                  readOnly: widget.isReadOnly,
+                  readOnly: widget.isReadOnly || !hasVar,
                   onChanged: (val) {
                     if (widget.onExplanationChanged != null) {
                       widget.onExplanationChanged!(item.id, val);

@@ -68,3 +68,7 @@ dist/
 
 # Rust/Tauri build artifacts
 famous-gates-desktop/apps/desktop/src-tauri/target/
+
+# Local configuration and temp directories
+.mcp.json
+supabase/

@@ -74,6 +74,8 @@ interface POItem {
     id?: string;
     item_id: string; // UUID
     item?: { id: string; name: string; sku: string };
+    sku?: string;
+    item_name?: string;
     quantity: number;
     unit_price: number;
     total: number;
@@ -752,7 +754,14 @@ export default function BranchPurchasesPage() {
                                                 <tbody className="divide-y">
                                                     {(selectedOrder.items || []).map((item, idx) => (
                                                         <tr key={item.id || idx} className="hover:bg-gray-50/50 transition-colors">
-                                                            <td className="px-4 py-3 text-gray-900 font-medium">{item.item?.name || `Item #${item.item_id}`}</td>
+                                                            <td className="px-4 py-3 text-gray-900 font-medium">
+                                                                <div>{item.item_name || item.item?.name || `Item #${item.item_id}`}</div>
+                                                                {(item.sku || item.item?.sku) && (
+                                                                    <div className="text-xs text-gray-500 font-mono mt-0.5">
+                                                                        SKU: {item.sku || item.item?.sku}
+                                                                    </div>
+                                                                )}
+                                                            </td>
                                                             <td className="px-4 py-3 text-right text-gray-700">{item.quantity}</td>
                                                             <td className="px-4 py-3 text-right text-gray-700">KES {item.unit_price?.toLocaleString()}</td>
                                                             <td className="px-4 py-3 text-right font-bold text-gray-900">KES {item.total?.toLocaleString()}</td>

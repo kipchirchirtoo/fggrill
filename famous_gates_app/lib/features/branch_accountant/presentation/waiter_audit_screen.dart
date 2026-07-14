@@ -21,6 +21,25 @@ class _WaiterAuditScreenState extends ConsumerState<WaiterAuditScreen> {
   DateTime _selectedDate = DateTime.now();
   final Set<String> _busyOrderIds = {};
 
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<List<Map<String, dynamic>>> _loadWaiters() {
     return ref.read(branchAccountantRepositoryProvider).getBranchWaiters();
   }
@@ -190,6 +209,11 @@ class _WaiterAuditScreenState extends ConsumerState<WaiterAuditScreen> {
           }
 
           final waiters = snapshot.data ?? [];
+          final filteredWaiters = waiters.where((w) {
+            if (_searchQuery.isEmpty) return true;
+            final name = '${w['staff_name'] ?? ''} ${w['first_name'] ?? ''} ${w['last_name'] ?? ''} ${w['employee_number'] ?? ''} ${w['employee_id'] ?? ''}'.toLowerCase();
+            return name.contains(_searchQuery.toLowerCase());
+          }).toList();
 
           if (waiters.isEmpty) {
             return Center(
@@ -216,9 +240,10 @@ class _WaiterAuditScreenState extends ConsumerState<WaiterAuditScreen> {
               final wide = constraints.maxWidth > 900;
 
               final waiterList = _WaiterList(
-                waiters: waiters,
+                waiters: filteredWaiters,
                 selectedId: _selectedWaiterId,
                 onSelect: _selectWaiter,
+                searchController: _searchController,
               );
 
               final ordersPanel = _WaiterOrdersPanel(
@@ -262,11 +287,13 @@ class _WaiterList extends StatelessWidget {
     required this.waiters,
     required this.selectedId,
     required this.onSelect,
+    required this.searchController,
   });
 
   final List<Map<String, dynamic>> waiters;
   final String? selectedId;
   final ValueChanged<Map<String, dynamic>> onSelect;
+  final TextEditingController searchController;
 
   @override
   Widget build(BuildContext context) {
@@ -298,14 +325,43 @@ class _WaiterList extends StatelessWidget {
                     color: AppColors.kTextSecondary,
                   ),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search waiter or bartender...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: AppColors.kDivider),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: AppColors.kDivider),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Colors.orange),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: waiters.length,
-              itemBuilder: (context, index) {
+            child: waiters.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No waiters matching search'),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: waiters.length,
+                    itemBuilder: (context, index) {
                 final waiter = waiters[index];
                 final selected = '${waiter['id']}' == selectedId;
                 final name = waiter['staff_name'] ??

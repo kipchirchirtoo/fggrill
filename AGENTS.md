@@ -481,3 +481,8 @@ npm run build        # Build for production
 - Clear node_modules and reinstall: `rm -rf node_modules && npm install`
 - Check TypeScript strict mode violations
 - Review ESLint errors
+
+---
+
+## Workspace Frontend Constraints
+- **CRITICAL**: The active frontend codebase is located in \`/home/john/fggrill-1/famous_gates_app\`. NEVER make any modifications to \`/home/john/fggrill-1/frontend\`.

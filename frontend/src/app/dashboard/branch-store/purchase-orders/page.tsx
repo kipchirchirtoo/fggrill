@@ -39,8 +39,10 @@ interface PurchaseOrder {
 
 interface POItem {
   id?: string;
-  item_id: number;
-  item?: { id: number; name: string; sku: string };
+  item_id: string | number;
+  item?: { id: string | number; name: string; sku: string };
+  sku?: string;
+  item_name?: string;
   quantity: number;
   unit_price: number;
   total: number;
@@ -54,9 +56,10 @@ interface Supplier {
 }
 
 interface StoreItem {
-  id?: number;
+  id?: string | number;
   sku: string;
   name?: string;
+  item_name?: string;
   description?: string;
   cost_price?: number;
   unit_price?: number;
@@ -537,10 +540,10 @@ function PurchaseOrdersContent() {
                 
                 <div className="space-y-3">
                   {formData.items.map((item, index) => {
-                    const selectedItem = items.find(it => (it.sku || it.id) === item.item_id);
+                    const selectedItem = items.find(it => (it.sku || String(it.id)) === String(item.item_id));
                     const filteredItems = items.filter(storeItem => 
                       !itemSearchTerm || 
-                      ((storeItem as any).description || storeItem.name || '')?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
+                      (storeItem.item_name || (storeItem as any).description || storeItem.name || '')?.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
                       storeItem.sku?.toLowerCase().includes(itemSearchTerm.toLowerCase())
                     );
                     
@@ -585,7 +588,7 @@ function PurchaseOrdersContent() {
                                       <div className="flex items-center justify-between">
                                         <div>
                                           <p className="font-semibold text-gray-900 text-sm">
-                                            {(storeItem as any).description || storeItem.name}
+                                            {storeItem.item_name || (storeItem as any).description || storeItem.name}
                                           </p>
                                           <p className="text-xs text-gray-500 mt-0.5">
                                             SKU: {storeItem.sku}
@@ -616,7 +619,7 @@ function PurchaseOrdersContent() {
                                       <span className="text-xs font-semibold text-green-700 uppercase">Selected Item</span>
                                     </div>
                                     <p className="font-bold text-gray-900 text-sm">
-                                      {(selectedItem as any).description || selectedItem.name}
+                                      {selectedItem.item_name || (selectedItem as any).description || selectedItem.name}
                                     </p>
                                     <p className="text-xs text-gray-600 mt-1">
                                       SKU: <span className="font-mono font-semibold">{selectedItem.sku}</span>
@@ -823,7 +826,14 @@ function PurchaseOrdersContent() {
                       <tbody className="divide-y">
                         {(selectedOrder.items || []).map((item, idx) => (
                           <tr key={`selected-item-${item.id ?? item.item_id ?? idx}`}>
-                            <td className="px-3 py-2">{item.item?.name || `Item #${item.item_id}`}</td>
+                            <td className="px-3 py-2">
+                              <div>{item.item_name || item.item?.name || `Item #${item.item_id}`}</div>
+                              {(item.sku || item.item?.sku) && (
+                                <div className="text-xs text-gray-500 font-mono mt-0.5">
+                                  SKU: {item.sku || item.item?.sku}
+                                </div>
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-right">{item.quantity}</td>
                             <td className="px-3 py-2 text-right">KES {item.unit_price?.toLocaleString()}</td>
                             <td className="px-3 py-2 text-right font-medium">KES {item.total?.toLocaleString()}</td>

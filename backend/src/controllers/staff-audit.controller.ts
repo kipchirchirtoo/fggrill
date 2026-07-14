@@ -330,8 +330,8 @@ export const getBranchWaiters = async (
 
         if (usersError) throw usersError;
 
-        // Filter for waiter/bartender roles (case-insensitive pattern matching)
-        const waiterKeywords = ['waiter', 'waitress', 'bartender', 'barman', 'barmaid', 'server', 'bar_'];
+        // Filter for waiter/bartender/restaurant/cashier roles (case-insensitive pattern matching)
+        const waiterKeywords = ['waiter', 'waitress', 'bartender', 'barman', 'barmaid', 'server', 'bar_', 'restaurant', 'cashier'];
         const users = (allUsers || []).filter(user => {
             const role = String(user.role || '').toLowerCase();
             return waiterKeywords.some(keyword => role.includes(keyword));

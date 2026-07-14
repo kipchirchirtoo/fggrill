@@ -792,9 +792,12 @@ const updateStockForItems = async (
     // the pos_outlet_items update for this row (see isBarSourced above).
     if (branchId && isBarSourced) {
       try {
-        const qtyDelta = direction === 1 ? -quantity : (returnedToStock ? quantity : 0);
+        // When returnedToStock=false (broken/wasted item), we now apply a real
+        // stock deduction (-quantity) instead of the old qtyDelta=0 which left
+        // balances unchanged. The ledger records the movement as 'waste'.
+        const qtyDelta = direction === 1 ? -quantity : (returnedToStock ? quantity : -quantity);
         const movType = direction === 1 ? 'sale' : (returnedToStock ? 'sale_reversal' : 'waste');
-        const noteText = direction === 1 ? 'POS bar sale' : (returnedToStock ? 'POS bar sale reversal' : 'POS bar void wasted');
+        const noteText = direction === 1 ? 'POS bar sale' : (returnedToStock ? 'POS bar sale reversal' : 'POS bar void — broken/wasted');
 
         await recordBarStockMovement({
           branchId,
@@ -806,6 +809,7 @@ const updateStockForItems = async (
           referenceId: shiftId,
           shiftId,
           notes: noteText,
+          // auditQuantity only used for informational audit logging, not balance change
           auditQuantity: direction === -1 && !returnedToStock ? quantity : undefined
         });
       } catch (syncErr: any) {
@@ -814,8 +818,8 @@ const updateStockForItems = async (
           syncErr?.message || syncErr,
           syncErr?.details || ''
         );
-        // Fall back to a direct decrement if returning to stock
-        if (direction === 1 || (direction === -1 && returnedToStock)) {
+        // Fall back to a direct decrement if returning to stock or wasting
+        if (direction === 1 || direction === -1) {
           await supabase.rpc('decrement_pos_outlet_item_stock', {
             p_item_id: outletItemId,
             p_outlet_id: outletItem.outlet_id || outletId,
@@ -823,6 +827,23 @@ const updateStockForItems = async (
           });
         }
       }
+    } else if (!isBarSourced && direction === -1 && !returnedToStock && branchId) {
+      // Non-bar item voided as broken/wasted: write an ADJUSTMENT_OUT
+      // branch_stock_movements row so the movement audit trail is complete.
+      // The pos_outlet_items decrement already happened above (line ~781–787).
+      supabase.from('branch_stock_movements').insert({
+        branch_id: branchId,
+        item_sku: outletItem.sku || null,
+        movement_type: 'ADJUSTMENT_OUT',
+        quantity,
+        reference_type: 'pos_void_waste',
+        reference_id: shiftId,
+        notes: 'POS void — item broken/wasted, not returned to stock',
+        performed_by: null,
+        created_by: null,
+      }).then(({ error: mvErr }) => {
+        if (mvErr) logger.warn('branch_stock_movements insert failed (void waste):', mvErr.message);
+      });
     }
   }
 };
@@ -3009,7 +3030,9 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
       throw new AppError('A pending void request already exists for this bill', 409);
     }
 
-    const returnedToStock = req.body.returned_to_stock !== false;
+    // Full-order voids always return items to stock — items that are physically
+    // broken/damaged should be handled via the spoilage flow, not a full-order void.
+    const returnedToStock = true;
 
     const { data: requestRow, error } = await supabase
       .from('pos_void_requests')
@@ -3706,6 +3729,9 @@ const ITEM_VOID_REASON_CATEGORIES = new Set([
   'duplicate_entry',
   'customer_changed_mind',
   'pricing_error',
+  // 'broken' means the item was physically broken/damaged and should NOT be
+  // returned to stock — used to auto-set returned_to_stock=false server-side.
+  'broken',
   'other'
 ]);
 
@@ -3853,7 +3879,9 @@ export const requestItemVoid = async (req: Request, res: Response, next: NextFun
       );
     }
 
-    const returnedToStock = req.body.returned_to_stock !== false;
+    // Server-side: if the item was marked as 'broken', it was physically
+    // damaged and must NOT return to stock — we override any frontend flag.
+    const returnedToStock = reasonCategory !== 'broken';
 
     const unitPrice = numberValue(item.unit_price ?? item.price);
     const { data: requestRow, error } = await supabase
@@ -5515,6 +5543,8 @@ export const CASHIER_VOID_REASON_CATEGORIES = [
   'duplicate_order',
   'customer_cancelled',
   'quality_issue',
+  // 'broken' means physically broken/damaged — auto-sets returned_to_stock=false
+  'broken',
   'manager_instruction',
   'billing_error',
   'other'
@@ -5644,6 +5674,7 @@ export const cashierVoidWholeBill = async (req: Request, res: Response, next: Ne
         requested_by: cashierId,
         reason,
         reason_category: reasonCategory,
+        returned_to_stock: reasonCategory !== 'broken',
         status: 'approved',
         reviewed_by: cashierId,
         reviewed_at: now,
@@ -5653,7 +5684,9 @@ export const cashierVoidWholeBill = async (req: Request, res: Response, next: Ne
       .single();
     if (insertErr) throw insertErr;
 
-    await updateStockForItems(order.shift_id, order.outlet_id, Array.isArray(order.items) ? order.items : [], -1);
+    const voidReturnedToStock = reasonCategory !== 'broken';
+
+    await updateStockForItems(order.shift_id, order.outlet_id, Array.isArray(order.items) ? order.items : [], -1, voidReturnedToStock);
     await reverseKitchenConsumptionForOrder(orderId).catch((consumptionError) =>
       logger.warn('cashierVoidWholeBill: reverseKitchenConsumptionForOrder failed', consumptionError as any));
     if (order.inventory_posted_at && !order.inventory_reversed_at) {
@@ -5882,6 +5915,7 @@ export const cashierVoidLineItems = async (req: Request, res: Response, next: Ne
         requested_by: cashierId,
         void_reason: reason,
         reason_category: reasonCategory,
+        returned_to_stock: reasonCategory !== 'broken',
         branch_id: order.branch_id,
         outlet_type: outletRow?.outlet_type || null,
         bill_code: orderAfterAck.short_code || null,

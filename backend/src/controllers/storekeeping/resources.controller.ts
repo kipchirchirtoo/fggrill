@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import notificationService from '../../services/notification.service';
 import { UserRole } from '../../models/User';
 import pool from '../../db';
+import { isGlobalRole } from '../../utils/branchIsolation';
 
 // =====================================================
 // VEHICLES 
@@ -252,7 +253,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
     const { status, category, search, scope } = req.query;
     const user = (req as any).user;
     const userBranchId = user?.branch_id || user?.branchId;
-    const isCentral = !userBranchId || user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER || user?.role === UserRole.CENTRAL_STOREKEEPER;
+    const isCentral = !userBranchId || isGlobalRole(user?.role);
 
     logger.debug('SUPPLIER_DEBUG_START', { 
       email: user?.email, 
@@ -276,9 +277,11 @@ export const getSuppliers = async (req: Request, res: Response) => {
         query = query.eq('branch_id', branchId);
       } else if (scope === 'global') {
         query = query.is('branch_id', null);
-      } else {
-        // Default: see own branch OR global
+      } else if (scope === 'all') {
         query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+      } else {
+        // Default: strictly separate branch vs central (global) - see own branch only
+        query = query.eq('branch_id', branchId);
       }
     } else {
       // Central users: default to central/global suppliers (branch_id IS NULL)
@@ -286,6 +289,9 @@ export const getSuppliers = async (req: Request, res: Response) => {
       const requestedBranch = req.query.branchId || req.query.branch_id;
       if (scope === 'branch' && requestedBranch) {
         query = query.eq('branch_id', Number(requestedBranch));
+      } else if (scope === 'all') {
+        // Central users see all suppliers when scope is 'all'
+        // Do not apply any branch_id filter
       } else {
         // Default and 'global' scope: only central suppliers
         query = query.is('branch_id', null);
@@ -339,7 +345,7 @@ export const createSupplier = async (req: Request, res: Response) => {
     
     const user = (req as any).user;
     const userBranchId = user?.branch_id || user?.branchId;
-    const isCentral = !userBranchId || user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.GENERAL_MANAGER || user?.role === UserRole.CENTRAL_STOREKEEPER;
+    const isCentral = !userBranchId || isGlobalRole(user?.role);
 
 
     if (!name) {

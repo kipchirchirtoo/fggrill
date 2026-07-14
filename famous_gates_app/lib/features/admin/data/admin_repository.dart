@@ -1501,9 +1501,10 @@ class AdminRepository {
         data: data);
   }
 
-  Future<void> confirmStoreDispatch(String requestId) async {
-    await _dio.post(
+  Future<Map<String, dynamic>> confirmStoreDispatch(String requestId) async {
+    final response = await _dio.post(
         '/storekeeping/stock-requests/$requestId/confirm-dispatch');
+    return _parseMap(response.data);
   }
 
   Future<List<Map<String, dynamic>>> getDirectIssues() async {

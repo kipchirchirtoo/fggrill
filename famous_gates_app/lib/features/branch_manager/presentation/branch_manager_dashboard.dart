@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
@@ -3079,6 +3079,17 @@ class _BranchManagerDashboardState
                       content:
                           Text('First name, last name and national ID are required')));
                   return;
+                }
+                if (createAccount) {
+                  final p = pinCtrl.text.trim().toUpperCase();
+                  if (p.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('POS PIN is required when creating a login account')));
+                    return;
+                  }
+                  if (!RegExp(r'^[RMNCE]\d{4}$').hasMatch(p)) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
+                    return;
+                  }
                 }
                 final data = <String, dynamic>{
                   'first_name': fnCtrl.text.trim(),

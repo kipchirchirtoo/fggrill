@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
+import { isGlobalRole } from '../utils/branchIsolation';
 
 // Get all suppliers
 export const getSuppliers = async (req: Request, res: Response) => {
@@ -7,7 +8,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
     const { status, category, search, scope } = req.query;
     const rawBranchContext = req.user?.branch_id || req.user?.branchId || req.headers['x-branch-id'] || req.query.branchId || req.query.branch_id;
     const userBranchId = rawBranchContext ? Number(rawBranchContext) : null;
-    const isCentral = !userBranchId || req.user?.role === 'super_admin' || req.user?.role === 'central_storekeeper';
+    const isCentral = !userBranchId || isGlobalRole(req.user?.role);
     const scopeParam = typeof scope === 'string' ? scope.toLowerCase() : undefined;
 
     let query = supabase
@@ -104,7 +105,7 @@ export const getSupplierById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const rawBranchId = req.user?.branch_id || req.user?.branchId || req.headers['x-branch-id'] || req.query.branchId;
     const userBranchId = rawBranchId ? Number(rawBranchId) : null;
-    const isCentral = !userBranchId || req.user?.role === 'super_admin' || req.user?.role === 'central_storekeeper';
+    const isCentral = !userBranchId || isGlobalRole(req.user?.role);
 
     let query = supabase
       .from('suppliers')
@@ -214,6 +215,29 @@ export const updateSupplier = async (req: Request, res: Response) => {
 export const deleteSupplier = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    // Check if supplier has any Purchase Orders
+    const { count: poCount, error: poError } = await supabase
+      .from('store_purchase_orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('supplier_id', id);
+      
+    if (poError) throw poError;
+    
+    // Check if supplier has any Goods Receipts (GRNs)
+    const { count: grnCount, error: grnError } = await supabase
+      .from('goods_receipts')
+      .select('id', { count: 'exact', head: true })
+      .eq('supplier_id', id);
+
+    if (grnError) throw grnError;
+
+    if ((poCount && poCount > 0) || (grnCount && grnCount > 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete supplier because they have existing purchase orders or goods receipts. You can deactivate them instead.'
+      });
+    }
 
     const { error } = await supabase
       .from('suppliers')

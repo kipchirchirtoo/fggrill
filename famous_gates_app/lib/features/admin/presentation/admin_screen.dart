@@ -39,6 +39,8 @@ import 'sections/procurement_hr_sections.dart';
 import 'sections/branch_facilities_sections.dart';
 import 'sections/branch_store_kitchen_sections.dart';
 import '../../auditor/presentation/auditor_sections.dart';
+import '../../auditor/presentation/branch_orders_tab.dart';
+import '../../auditor/presentation/auditor_search_tab.dart';
 import '../../hr/domain/providers.dart';
 import '../../hr/presentation/hr_dashboard.dart';
 import '../../hr_terminal/presentation/hr_terminal_screen.dart';
@@ -224,7 +226,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       AdminSection.auditLogs: widget.mode == AdminConsoleMode.auditor
           ? const AuditorOverviewSection()
           : const AuditLogsSection(),
-      AdminSection.auditSearch: const AuditSearchSection(),
+      AdminSection.auditSearch: const AuditorSearchSection(),
       AdminSection.financialVerification:
           widget.mode == AdminConsoleMode.auditor
               ? const AuditorFinancialVerificationSection()
@@ -238,7 +240,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       AdminSection.auditorSales: const AuditorSalesAuditSection(),
       AdminSection.auditorBanking: const AuditorBankingLogsSection(),
       AdminSection.auditorInvoices: const AuditorInvoicesSection(),
-      AdminSection.auditorOrders: const AuditorBranchOrdersSection(),
+      AdminSection.auditorOrders: const BranchOrdersTab(),
       AdminSection.soldItemsAnalysis: widget.mode == AdminConsoleMode.auditor
           ? const AuditorSoldItemsSection()
           : const SoldItemsAnalysisSection(),
@@ -259,7 +261,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       AdminSection.auditorBusinessMpesa: const AuditorBusinessMpesaSection(),
       AdminSection.auditorCreditBills: const AuditorCreditBillsSection(),
       AdminSection.auditorCashierLogbooks:
-          const AuditorCashierLogbooksSection(),
+          const AuditorFinancialVerificationSection(),
       AdminSection.performanceLeaderboard:
           widget.mode == AdminConsoleMode.auditor
               ? const HRSectionView(initialTab: HrTab.performance)

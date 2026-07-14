@@ -5378,6 +5378,9 @@ class _ShiftReconciliationPanel extends StatelessWidget {
                   '- Cash Drops', _money(_cashDrops(shift!))),
               _ShiftReportRow(
                   '- Payouts', _money(_payouts(shift!))),
+              if (_expenseTotal(shift!) > 0)
+                _ShiftReportRow(
+                    '- Expenses', _money(_expenseTotal(shift!))),
               _ShiftReportRow(
                 '= Expected Closing Amount',
                 _money(_expectedClosingAmount(shift!)),
@@ -6506,6 +6509,17 @@ num _payouts(Map<String, dynamic> shift) {
   ]);
 }
 
+num _expenseTotal(Map<String, dynamic> shift) {
+  final reconciliation = _shiftCashReconciliation(shift);
+  final fromReconciliation = _num(reconciliation['expense_total']);
+  if (fromReconciliation != 0) return fromReconciliation;
+  final breakdown = _shiftSalesBreakdown(shift);
+  return _firstNonZero([
+    _firstNumFrom(shift, ['expense_total']),
+    _num(breakdown['expense_total']),
+  ]);
+}
+
 num _cashTendered(Map<String, dynamic> shift) {
   final reconciliation = _shiftCashReconciliation(shift);
   final fromReconciliation = _num(reconciliation['cash_tendered']);
@@ -6651,7 +6665,8 @@ num _expectedClosingAmount(Map<String, dynamic> shift) {
       _cashSales(shift) +
       _creditPaymentsReceived(shift) -
       _cashDrops(shift) -
-      _payouts(shift);
+      _payouts(shift) -
+      _expenseTotal(shift);
 }
 
 num _actualCashCounted(Map<String, dynamic> shift) {
@@ -7391,6 +7406,7 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
           final revenue = _list(detail['revenue_breakdown']);
           final flags = _list(detail['compliance_flags']);
           final lines = _list(detail['lines']);
+          final voidLines = _list(detail['void_lines']);
           final creditBills = _list(detail['credit_bills']);
           final transactionHistory = _list(detail['transaction_history']);
           final clearedTransactions =
@@ -7562,6 +7578,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                         _num(reconciliation['credit_payments_received']),
                     'cash_drops': _num(reconciliation['cash_drops']),
                     'payouts': _num(reconciliation['payouts']),
+                    if (_num(reconciliation['expense_total']) != 0)
+                      'expenses': _num(reconciliation['expense_total']),
                     'expected_closing':
                         _num(reconciliation['expected_closing']),
                     'actual_closing': _num(reconciliation['actual_closing']),
@@ -7727,6 +7745,39 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                         ),
                 );
               }),
+              _SectionCard(
+                title: 'Voided Transactions (${voidLines.length})',
+                child: voidLines.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text(
+                          'No voids or cancelled transactions logged this shift',
+                          style: TextStyle(color: AppColors.kTextSecondary),
+                        ),
+                      )
+                    : _SimpleTable(
+                        columns: const [
+                          'Reference',
+                          'Type',
+                          'Amount',
+                          'Customer/Item',
+                          'Date/Time',
+                          'Authorized By',
+                          'Reason'
+                        ],
+                        rows: voidLines.map((v) {
+                          return [
+                            _text(v, ['reference']),
+                            _title(_text(v, ['void_type', 'revenue_type', 'source_table']).replaceAll('_', ' ')),
+                            _money(_num(v['amount'])),
+                            _text(v, ['customer_name']),
+                            _formatCompactDateTime(_text(v, ['created_at'])),
+                            _text(v, ['voided_by_name']).isEmpty ? 'Self Void' : _text(v, ['voided_by_name']),
+                            _text(v, ['void_reason']).isEmpty ? 'No reason provided' : _text(v, ['void_reason']),
+                          ];
+                        }).toList(),
+                      ),
+              ),
               _SectionCard(
                 title: 'Compliance Checks',
                 child: _ComplianceFlagList(flags: flags),
@@ -9442,6 +9493,7 @@ class _PaymentsInvoicesSectionState
       _date(DateTime(DateTime.now().year, DateTime.now().month, 1));
   late String _to = _today();
   late Future<Map<String, dynamic>> _future = _load();
+  String _searchQuery = '';
 
   Future<Map<String, dynamic>> _load() async {
     final repo = ref.read(branchAccountantRepositoryProvider);
@@ -9456,6 +9508,52 @@ class _PaymentsInvoicesSectionState
         _future = _load();
       });
 
+  Future<void> _downloadCsv(List<Map<String, dynamic>> payments) async {
+    try {
+      final headers = [
+        'Date',
+        'Source',
+        'Description',
+        'Method',
+        'Reference',
+        'Amount',
+        'Recorded By',
+        'Status',
+      ];
+      final buffer = StringBuffer()..writeln(headers.map(_csvCell).join(','));
+      for (final p in payments) {
+        buffer.writeln([
+          _shortDate(_text(p, ['_transaction_date', 'recorded_at', 'created_at', 'transaction_date'])),
+          _paymentSourceLabel(p),
+          _paymentDescription(p),
+          _title(_text(p, ['payment_method'])),
+          _paymentReference(p),
+          _num(p['amount']).toStringAsFixed(2),
+          _paymentRecordedBy(p),
+          _paymentStatusLabel(_text(p, ['status'])).toUpperCase(),
+        ].map(_csvCell).join(','));
+      }
+      final directory = await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/FG_Payments_${_from}_to_$_to.csv');
+      await file.writeAsString(buffer.toString(), flush: true);
+      if (mounted) _notify(context, 'Payments CSV prepared: ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to export payments CSV: $e');
+    }
+  }
+
+  String _csvCell(Object? value) {
+    var text = '${value ?? ''}'.replaceAll('\r', ' ').replaceAll('\n', ' ');
+    if (text.startsWith('=') ||
+        text.startsWith('+') ||
+        text.startsWith('-') ||
+        text.startsWith('@')) {
+      text = "'$text";
+    }
+    return '"${text.replaceAll('"', '""')}"';
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
@@ -9466,11 +9564,44 @@ class _PaymentsInvoicesSectionState
         builder: (data) {
           final payments = _list(data['payments']);
           final stats = _map(data['stats']);
+          
+          final query = _searchQuery.trim().toLowerCase();
+          final filteredPayments = payments.where((p) {
+            if (query.isEmpty) return true;
+            final date = _shortDate(_text(p, ['_transaction_date', 'recorded_at', 'created_at', 'transaction_date'])).toLowerCase();
+            final source = _paymentSourceLabel(p).toLowerCase();
+            final desc = _paymentDescription(p).toLowerCase();
+            final method = _title(_text(p, ['payment_method'])).toLowerCase();
+            final refStr = _paymentReference(p).toLowerCase();
+            final amount = _money(_num(p['amount'])).toLowerCase();
+            final recordedBy = _paymentRecordedBy(p).toLowerCase();
+            final status = _paymentStatusLabel(_text(p, ['status'])).toLowerCase();
+            
+            return date.contains(query) ||
+                source.contains(query) ||
+                desc.contains(query) ||
+                method.contains(query) ||
+                refStr.contains(query) ||
+                amount.contains(query) ||
+                recordedBy.contains(query) ||
+                status.contains(query);
+          }).toList();
+
           return _Page(
             title: 'Payments Dashboard',
             subtitle:
                 'All branch payments from banking, cashier payments, POS, and manual verification records.',
             actions: [
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search payments...',
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+              ),
               _DateField(
                   value: _from, onChanged: (v) => setState(() => _from = v)),
               _DateField(value: _to, onChanged: (v) => setState(() => _to = v)),
@@ -9496,6 +9627,11 @@ class _PaymentsInvoicesSectionState
                 }),
               ),
               _RefreshButton(onPressed: _refresh),
+              OutlinedButton.icon(
+                onPressed: filteredPayments.isEmpty ? null : () => _downloadCsv(filteredPayments),
+                icon: const Icon(Icons.table_view),
+                label: const Text('Export CSV'),
+              ),
             ],
             children: [
               _ResponsiveGrid(children: [
@@ -9535,7 +9671,7 @@ class _PaymentsInvoicesSectionState
                     'Recorded By',
                     'Status',
                   ],
-                  rows: payments
+                  rows: filteredPayments
                       .map((payment) => [
                             _shortDate(_text(payment, [
                               '_transaction_date',
@@ -9576,6 +9712,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
   String _staffTab = 'credit';
   String _query = '';
   bool _customerMode = false;
+  late String _from = _date(DateTime.now().subtract(const Duration(days: 30)));
+  late String _to = _today();
   late Future<Map<String, dynamic>> _future = _load();
 
   Future<Map<String, dynamic>> _load() async {
@@ -9618,6 +9756,52 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         _future = _load();
       });
 
+  bool _isWithinDateRange(String dateStr, String start, String end) {
+    if (dateStr.isEmpty || dateStr.length < 10) return true;
+    final itemDate = dateStr.substring(0, 10);
+    return itemDate.compareTo(start) >= 0 && itemDate.compareTo(end) <= 0;
+  }
+
+  String _itemDateStr(Map<String, dynamic> item, String tab) {
+    if (tab == 'paid_entries') {
+      return _text(item, ['recorded_at', 'shift_end', 'shift_start', 'created_at']);
+    }
+    if (tab == 'advance') {
+      return _text(item, ['advance_date', 'created_at']);
+    }
+    if (tab == 'loan') {
+      return _text(item, ['loan_date', 'created_at']);
+    }
+    return _text(item, ['bill_date', 'created_at', 'due_date']);
+  }
+
+  Future<void> _selectDate(BuildContext context, bool isStart) async {
+    final initial = DateTime.tryParse(isStart ? _from : _to) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _from = _date(picked);
+        } else {
+          _to = _date(picked);
+        }
+      });
+    }
+  }
+
+  Widget _buildDateButton(BuildContext context, String label, String value, bool isStart) {
+    return OutlinedButton.icon(
+      onPressed: () => _selectDate(context, isStart),
+      icon: const Icon(Icons.calendar_today, size: 16),
+      label: Text('$label: $value'),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_customerMode) return _buildCustomer();
@@ -9639,16 +9823,44 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     final loans = _list(data['loans']);
     final staff = _list(data['staff']);
     final lower = _query.trim().toLowerCase();
+
+    final filteredPending = pendingCreditBills.where((e) {
+      final dateStr = _itemDateStr(e, 'approval');
+      if (!_isWithinDateRange(dateStr, _from, _to)) return false;
+      return lower.isEmpty || _staffLedgerHaystack(e).contains(lower);
+    }).toList();
+
+    final filteredCredit = creditBills.where((e) {
+      final dateStr = _itemDateStr(e, 'credit');
+      if (!_isWithinDateRange(dateStr, _from, _to)) return false;
+      return lower.isEmpty || _staffLedgerHaystack(e).contains(lower);
+    }).toList();
+
+    final filteredPaid = paidCreditEntries.where((e) {
+      final dateStr = _itemDateStr(e, 'paid_entries');
+      if (!_isWithinDateRange(dateStr, _from, _to)) return false;
+      return lower.isEmpty || _staffLedgerHaystack(e).contains(lower);
+    }).toList();
+
+    final filteredAdvances = advances.where((e) {
+      final dateStr = _itemDateStr(e, 'advance');
+      if (!_isWithinDateRange(dateStr, _from, _to)) return false;
+      return lower.isEmpty || _staffLedgerHaystack(e).contains(lower);
+    }).toList();
+
+    final filteredLoans = loans.where((e) {
+      final dateStr = _itemDateStr(e, 'loan');
+      if (!_isWithinDateRange(dateStr, _from, _to)) return false;
+      return lower.isEmpty || _staffLedgerHaystack(e).contains(lower);
+    }).toList();
+
     final selectedItems = switch (_staffTab) {
-      'approval' => pendingCreditBills,
-      'paid_entries' => paidCreditEntries,
-      'advance' => advances,
-      'loan' => loans,
-      _ => creditBills,
-    }
-        .where((item) =>
-            lower.isEmpty || _staffLedgerHaystack(item).contains(lower))
-        .toList();
+      'approval' => filteredPending,
+      'paid_entries' => filteredPaid,
+      'advance' => filteredAdvances,
+      'loan' => filteredLoans,
+      _ => filteredCredit,
+    };
 
     return _Page(
       title: 'Staff Credit, Advances & Loans',
@@ -9703,6 +9915,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
             onChanged: (v) => setState(() => _query = v),
           ),
         ),
+        _buildDateButton(context, 'From', _from, true),
+        _buildDateButton(context, 'To', _to, false),
         _RefreshButton(onPressed: _refresh),
         FilledButton.icon(
           onPressed: _staffTab == 'approval' || _staffTab == 'paid_entries'
@@ -9718,32 +9932,32 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       ],
       children: [
         _ResponsiveGrid(children: [
-          _MetricCard('Pending Approval', '${pendingCreditBills.length}',
+          _MetricCard('Pending Approval', '${filteredPending.length}',
               Icons.fact_check, Colors.amber),
-          _MetricCard('Outstanding Bills', '${creditBills.length}',
+          _MetricCard('Outstanding Bills', '${filteredCredit.length}',
               Icons.credit_card, Colors.blue),
           _MetricCard(
               'Credit Outstanding',
-              _money(creditBills.fold<num>(
+              _money(filteredCredit.fold<num>(
                   0, (sum, e) => sum + _staffCreditBalance(e))),
               Icons.warning,
               Colors.orange),
           _MetricCard(
               'Paid Entries To Apply',
-              _money(paidCreditEntries.fold<num>(
+              _money(filteredPaid.fold<num>(
                   0, (sum, e) => sum + _num(e['remaining_amount']))),
               Icons.payments,
               Colors.green),
           _MetricCard(
               'Salary Advances',
-              _money(advances.fold<num>(
+              _money(filteredAdvances.fold<num>(
                   0, (sum, e) => sum + _staffAdvanceBalance(e))),
               Icons.account_balance_wallet,
               Colors.indigo),
           _MetricCard(
               'Staff Loans',
               _money(
-                  loans.fold<num>(0, (sum, e) => sum + _staffLoanBalance(e))),
+                  filteredLoans.fold<num>(0, (sum, e) => sum + _staffLoanBalance(e))),
               Icons.account_balance,
               Colors.purple),
         ]),
@@ -10037,6 +10251,15 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       _text(row, ['status']),
     ].join(' ').toLowerCase();
   }
+
+  String _customerLedgerHaystack(Map<String, dynamic> row) {
+    return [
+      _text(row, ['customer_name']),
+      _text(row, ['bill_number', 'reference', 'id']),
+      _text(row, ['status']),
+    ].join(' ').toLowerCase();
+  }
+
 
   num _staffCreditBalance(Map<String, dynamic> row) {
     final explicit = row['balance'];
@@ -10601,6 +10824,14 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         onRefresh: _refresh,
         builder: (payload) {
           final items = _list(payload['customer_bills']);
+          final lower = _query.trim().toLowerCase();
+
+          final filteredItems = items.where((e) {
+            final dateStr = _text(e, ['created_at', 'bill_date', 'due_date']);
+            if (!_isWithinDateRange(dateStr, _from, _to)) return false;
+            return lower.isEmpty || _customerLedgerHaystack(e).contains(lower);
+          }).toList();
+
           num outstanding(Map<String, dynamic> b) =>
               _num(b['balance_amount'] ?? b['outstanding_amount']) != 0
                   ? _num(b['balance_amount'] ?? b['outstanding_amount'])
@@ -10622,6 +10853,18 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                   _future = _load();
                 }),
               ),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search customer, ID, ref...',
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              _buildDateButton(context, 'From', _from, true),
+              _buildDateButton(context, 'To', _to, false),
               OutlinedButton.icon(
                 onPressed: _downloadOutstanding,
                 icon: const Icon(Icons.download, size: 16),
@@ -10636,13 +10879,13 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
             ],
             children: [
               _ResponsiveGrid(children: [
-                _MetricCard('Customer Bills', '${items.length}',
+                _MetricCard('Customer Bills', '${filteredItems.length}',
                     Icons.receipt_long, Colors.blue),
-                _MetricCard('Total', _money(_sum(items, 'total_amount')),
+                _MetricCard('Total', _money(_sum(filteredItems, 'total_amount')),
                     Icons.payments, Colors.green),
                 _MetricCard(
                     'Outstanding',
-                    _money(items.fold<num>(0, (s, b) => s + outstanding(b))),
+                    _money(filteredItems.fold<num>(0, (s, b) => s + outstanding(b))),
                     Icons.warning,
                     Colors.orange),
               ]),
@@ -10658,7 +10901,7 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                     'Date',
                     'Actions'
                   ],
-                  rows: items
+                  rows: filteredItems
                       .map((e) => [
                             _text(e, ['customer_name']),
                             _text(e, ['bill_number', 'reference', 'id']),
@@ -11021,6 +11264,7 @@ class _BookingsInvoicesSectionState
     extends ConsumerState<_BookingsInvoicesSection> {
   String _sourceType = 'all';
   String _status = 'all';
+  String _searchQuery = '';
   late Future<Map<String, dynamic>> _future = ref
       .read(branchAccountantRepositoryProvider)
       .getBookingInvoiceQueue(sourceType: _sourceType, status: _status);
@@ -11032,6 +11276,52 @@ class _BookingsInvoicesSectionState
     setState(() {
       _future = nextFuture;
     });
+  }
+
+  Future<void> _downloadCsv(List<Map<String, dynamic>> items) async {
+    try {
+      final headers = [
+        'Source',
+        'Reference',
+        'Customer',
+        'Date',
+        'Total',
+        'Balance',
+        'Invoice',
+        'Status',
+      ];
+      final buffer = StringBuffer()..writeln(headers.map(_csvCell).join(','));
+      for (final e in items) {
+        buffer.writeln([
+          _text(e, ['source_label', 'source_type']),
+          _text(e, ['reference', 'invoice_number', 'id']),
+          _text(e, ['customer_name', 'guest_name']),
+          _shortDate(_text(e, ['service_date', 'created_at'])),
+          _num(e['total_amount']).toStringAsFixed(2),
+          _num(e['balance']).toStringAsFixed(2),
+          _text(e, ['invoice_number']).isEmpty ? 'Not generated' : _text(e, ['invoice_number']),
+          _text(e, ['invoice_status', 'payment_status', 'status']).toUpperCase(),
+        ].map(_csvCell).join(','));
+      }
+      final directory = await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/FG_Bookings_Invoices_${DateTime.now().millisecondsSinceEpoch}.csv');
+      await file.writeAsString(buffer.toString(), flush: true);
+      if (mounted) _notify(context, 'Bookings CSV prepared: ${file.path}');
+    } catch (e) {
+      if (mounted) _notify(context, 'Failed to export bookings CSV: $e');
+    }
+  }
+
+  String _csvCell(Object? value) {
+    var text = '${value ?? ''}'.replaceAll('\r', ' ').replaceAll('\n', ' ');
+    if (text.startsWith('=') ||
+        text.startsWith('+') ||
+        text.startsWith('-') ||
+        text.startsWith('@')) {
+      text = "'$text";
+    }
+    return '"${text.replaceAll('"', '""')}"';
   }
 
   Future<void> _generateInvoice(Map<String, dynamic> source) async {
@@ -11077,23 +11367,57 @@ class _BookingsInvoicesSectionState
         builder: (payload) {
           final items = _list(payload);
           final summary = _map(payload['summary']);
-          final uninvoiced = items
+
+          final query = _searchQuery.trim().toLowerCase();
+          final filteredItems = items.where((e) {
+            if (query.isEmpty) return true;
+            final source = _text(e, ['source_label', 'source_type']).toLowerCase();
+            final refStr = _text(e, ['reference', 'invoice_number', 'id']).toLowerCase();
+            final customer = _text(e, ['customer_name', 'guest_name']).toLowerCase();
+            final date = _shortDate(_text(e, ['service_date', 'created_at'])).toLowerCase();
+            final total = _money(_num(e['total_amount'])).toLowerCase();
+            final balance = _money(_num(e['balance'])).toLowerCase();
+            final invoice = (_text(e, ['invoice_number']).isEmpty ? 'not generated' : _text(e, ['invoice_number'])).toLowerCase();
+            final status = _text(e, ['invoice_status', 'payment_status', 'status']).toLowerCase();
+            
+            return source.contains(query) ||
+                refStr.contains(query) ||
+                customer.contains(query) ||
+                date.contains(query) ||
+                total.contains(query) ||
+                balance.contains(query) ||
+                invoice.contains(query) ||
+                status.contains(query);
+          }).toList();
+
+          final uninvoiced = filteredItems
               .where((e) =>
                   _text(e, ['source_type']) != 'invoice' &&
                   _text(e, ['invoice_id']).isEmpty)
               .length;
-          final invoiced = items.where((e) {
+          final invoiced = filteredItems.where((e) {
             return _text(e, ['invoice_id']).isNotEmpty ||
                 _text(e, ['source_type']) == 'invoice';
           }).length;
           final outstanding = summary.isEmpty
-              ? items.fold<num>(0, (sum, e) => sum + _num(e['balance']))
+              ? filteredItems.fold<num>(0, (sum, e) => sum + _num(e['balance']))
               : _num(summary['outstanding_amount']);
+
           return _Page(
             title: 'Bookings & Invoices',
             subtitle:
                 'Invoice room bookings, conference bookings, and outside catering from one branch queue.',
             actions: [
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search bookings...',
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+              ),
               SizedBox(
                 width: 190,
                 child: DropdownButtonFormField<String>(
@@ -11133,10 +11457,15 @@ class _BookingsInvoicesSectionState
                 ),
               ),
               _RefreshButton(onPressed: _refresh),
+              OutlinedButton.icon(
+                onPressed: filteredItems.isEmpty ? null : () => _downloadCsv(filteredItems),
+                icon: const Icon(Icons.table_view),
+                label: const Text('Export CSV'),
+              ),
             ],
             children: [
               _ResponsiveGrid(children: [
-                _MetricCard('Total Records', '${items.length}',
+                _MetricCard('Total Records', '${filteredItems.length}',
                     Icons.request_quote, Colors.blue),
                 _MetricCard('Need Invoice', '$uninvoiced',
                     Icons.pending_actions, Colors.orange),
@@ -11159,7 +11488,7 @@ class _BookingsInvoicesSectionState
                     'Status',
                     'Actions'
                   ],
-                  rows: items
+                  rows: filteredItems
                       .map((e) => [
                             _text(e, ['source_label', 'source_type']),
                             _text(e, ['reference', 'invoice_number', 'id']),
@@ -20719,7 +21048,7 @@ class _BranchStaffManagementSectionState
                 TextField(
                   controller: pinCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'POS PIN (optional)',
+                    labelText: 'POS PIN *',
                     helperText: 'Format: R1234, M1234, E1234, N1234 or C1234',
                     prefixIcon: Icon(Icons.pin_outlined),
                     border: OutlineInputBorder(),
@@ -20745,9 +21074,14 @@ class _BranchStaffManagementSectionState
                   return;
                 }
                 final pinRaw = pinCtrl.text.trim().toUpperCase();
-                if (pinRaw.isNotEmpty && !RegExp(r'^[RMENC]\d{4}$').hasMatch(pinRaw)) {
+                if (pinRaw.isEmpty) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('POS PIN must start with R, M, E, N or C followed by 4 digits')));
+                    const SnackBar(content: Text('POS PIN is required')));
+                  return;
+                }
+                if (pinRaw.length != 5 || !RegExp(r'^[RMNCE]\d{4}$').hasMatch(pinRaw)) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
                   return;
                 }
                 // Capture values before pop
@@ -20802,6 +21136,51 @@ class _BranchStaffManagementSectionState
       }),
     );
     emailCtrl.dispose(); passwordCtrl.dispose(); pinCtrl.dispose();
+  }
+
+  // ── DELETE STAFF ──────────────────────────────────────────────────────────
+  Future<void> _confirmDeleteStaff(Map<String, dynamic> staff) async {
+    final name = _staffName(staff);
+    final id = '${staff['id'] ?? staff['staff_id'] ?? ''}';
+    if (id.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Staff'),
+        content: Text('Are you sure you want to permanently delete $name? This will also delete their login account (if any). This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.delete('/staff/$id');
+      if (mounted) {
+        AppNotifier.showSnackBar(
+          context,
+          SnackBar(
+            content: Text('$name deleted successfully'),
+            backgroundColor: AppColors.kSuccess,
+          ),
+        );
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Failed to delete staff: $e');
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   // ── EDIT STAFF DIALOG ─────────────────────────────────────────────────────
@@ -21023,6 +21402,13 @@ class _BranchStaffManagementSectionState
                         child: IconButton(
                           icon: const Icon(Icons.edit_outlined),
                           onPressed: () => _showEditDialog(s),
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'Delete staff',
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => _confirmDeleteStaff(s),
                         ),
                       ),
                     ]),

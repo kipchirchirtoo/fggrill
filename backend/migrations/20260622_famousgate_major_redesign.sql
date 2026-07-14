@@ -199,7 +199,7 @@ BEGIN
     FROM cashier_shift_transactions cst
     JOIN cashier_shifts cs ON cs.id = cst.shift_id
     WHERE cs.branch_id = get_branch_profit_loss.branch_id
-      AND cs.shift_date BETWEEN start_date AND end_date
+      AND cs.opened_at::date BETWEEN start_date AND end_date
   ) norm;
 
   v_system_revenue := v_rev_mpesa + v_rev_cash + v_rev_card + v_rev_credit;
@@ -210,7 +210,7 @@ BEGIN
   FROM shift_actual_collections sac
   JOIN cashier_shifts cs ON cs.id = sac.shift_id
   WHERE sac.branch_id = get_branch_profit_loss.branch_id
-    AND cs.shift_date BETWEEN start_date AND end_date;
+    AND cs.opened_at::date BETWEEN start_date AND end_date;
 
   -- Outbound payments by category: branch_payments.cash_flow_category (section 3)
   -- — NOT the maker-checker `category` column, see header DEVIATION note.
@@ -233,7 +233,7 @@ BEGIN
   FROM shift_reconciliation_expenses sre
   JOIN cashier_shifts cs ON cs.id = sre.shift_id
   WHERE sre.branch_id = get_branch_profit_loss.branch_id
-    AND cs.shift_date BETWEEN start_date AND end_date;
+    AND cs.opened_at::date BETWEEN start_date AND end_date;
 
   -- Operational expenses: branch_stock_movements flagged is_operational_expense
   -- (section 13), restricted to out-movements via the same predicate
@@ -624,7 +624,11 @@ DECLARE
 BEGIN
   SELECT * INTO v_status FROM shift_opening_stock_status WHERE shift_id = p_shift_id;
   IF NOT FOUND THEN RETURN FALSE; END IF;
-  RETURN v_status.branch_store_complete AND v_status.main_bar_complete AND v_status.executive_bar_complete;
+  -- Only Kyogong (branch 1) has a separate Executive Bar outlet — every other
+  -- branch has just one bar, so executive_bar_complete must not be required there.
+  RETURN v_status.branch_store_complete
+     AND v_status.main_bar_complete
+     AND (v_status.branch_id != 1 OR v_status.executive_bar_complete);
 END;
 $$ LANGUAGE plpgsql;
 

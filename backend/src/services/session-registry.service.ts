@@ -20,17 +20,22 @@ const isMissingRelationError = (error: unknown): boolean => {
 async function ensureSessionTable(): Promise<boolean> {
   if (sessionTableAvailable !== null) return sessionTableAvailable;
   try {
-    await db.query('SELECT 1 FROM active_sessions LIMIT 1');
-    sessionTableAvailable = true;
-  } catch (error) {
-    if (isMissingRelationError(error)) {
-      sessionTableAvailable = false;
+    const res = await db.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE  table_schema = 'public'
+        AND    table_name   = 'active_sessions'
+      );
+    `);
+    sessionTableAvailable = res.rows[0]?.exists === true;
+    if (!sessionTableAvailable) {
       logger.warn('active_sessions table not available yet; session registry running in compatibility mode');
-      return false;
     }
-    throw error;
+  } catch (error) {
+    sessionTableAvailable = false;
+    logger.warn('active_sessions table not available yet; session registry running in compatibility mode');
   }
-  return true;
+  return sessionTableAvailable;
 }
 
 export async function registerManagedSession(input: SessionRegistration): Promise<void> {

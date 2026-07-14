@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -71,14 +71,25 @@ const fetchSimpleItemsBySku = async (skus: any[]): Promise<Record<string, any>> 
 
 const safeRows = async (
   table: string,
+  branchId?: string,
   select = '*',
   limit = 250,
   orderColumn = 'created_at'
 ): Promise<any[]> => {
   try {
-    const { data, error } = await supabase
-      .from(table)
-      .select(select)
+    let query = supabase.from(table).select(select);
+    
+    if (branchId && branchId !== '0') {
+      if (table === 'dispatch_notes' || table === 'dispatches') {
+        query = query.or(`from_branch_id.eq.${branchId},to_branch_id.eq.${branchId}`);
+      } else if (table === 'dispatch_audit_log' || table === 'branch_payment_audit' || table === 'attendance_audit_logs') {
+        // No branch filter possible directly
+      } else {
+        query = query.eq('branch_id', branchId);
+      }
+    }
+
+    const { data, error } = await query
       .order(orderColumn, { ascending: false })
       .limit(limit);
     if (error) {
@@ -213,10 +224,10 @@ export const getAuditTools = async (_req: Request, res: Response): Promise<void>
 export const getInvoiceVerification = async (req: Request, res: Response): Promise<void> => {
   const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
   const [arInvoices, apBills, supplierInvoices, grns] = await Promise.all([
-    safeRows('accounting_ar_invoices'),
-    safeRows('accounting_ap_bills'),
-    safeRows('store_supplier_invoices'),
-    safeRows('store_grn'),
+    safeRows('accounting_ar_invoices', branchId),
+    safeRows('accounting_ap_bills', branchId),
+    safeRows('store_supplier_invoices', branchId),
+    safeRows('store_grn', branchId),
   ]);
 
   const invoiceRows = arInvoices
@@ -299,8 +310,8 @@ export const getCreditBillsForAudit = async (req: Request, res: Response): Promi
 export const getAuditorDeliveriesAlias = async (req: Request, res: Response): Promise<void> => {
   const branchId = asText(req.query.branch_id ?? req.query.branchId) || undefined;
   const [dispatchNotes, deliveries] = await Promise.all([
-    safeRows('dispatch_notes'),
-    safeRows('dispatches'),
+    safeRows('dispatch_notes', branchId),
+    safeRows('dispatches', branchId),
   ]);
   const records = [...dispatchNotes, ...deliveries]
     .filter((row) => branchMatches(row, branchId))
@@ -315,8 +326,8 @@ export const getAuditorDeliveriesAlias = async (req: Request, res: Response): Pr
 };
 
 export const getNightAuditStatus = async (_req: Request, res: Response): Promise<void> => {
-  const sessions = await safeRows('audit_night_sessions', '*', 5);
-  const exceptions = await safeRows('audit_exceptions', '*', 200);
+  const sessions = await safeRows('audit_night_sessions', undefined, '*', 5);
+  const exceptions = await safeRows('audit_exceptions', undefined, '*', 200);
   const latest = sessions[0] || null;
   res.json({
     success: true,
@@ -330,7 +341,7 @@ export const getNightAuditStatus = async (_req: Request, res: Response): Promise
 
 export const completeLatestNightAudit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const sessions = await safeRows('audit_night_sessions', '*', 5);
+    const sessions = await safeRows('audit_night_sessions', undefined, '*', 5);
     const latest = sessions.find((session) => `${session.status}`.toLowerCase() === 'in_progress') || sessions[0];
     if (!latest?.id) {
       res.status(404).json({ success: false, message: 'No night audit session found' });
@@ -693,7 +704,8 @@ export const verifyAnomaly = async (req: Request, res: Response, next: NextFunct
 
 export const getExceptions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { audit_session_id, status, severity } = req.query;
+    const { audit_session_id, status, severity, branch_id, branchId } = req.query;
+    const branch = asText(branch_id ?? branchId) || undefined;
 
     let query = supabase
       .from('audit_exceptions')
@@ -703,6 +715,7 @@ export const getExceptions = async (req: Request, res: Response, next: NextFunct
     if (audit_session_id) query = query.eq('audit_session_id', audit_session_id);
     if (status) query = query.eq('status', status);
     if (severity) query = query.eq('severity', severity);
+    if (branch && branch !== '0') query = query.eq('branch_id', branch);
 
     const { data, error } = await query;
     if (error) throw error;

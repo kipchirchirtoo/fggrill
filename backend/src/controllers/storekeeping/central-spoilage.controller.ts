@@ -461,7 +461,31 @@ export const createSpoilageRecord = async (req: Request, res: Response) => {
 
     if (updateError) throw updateError;
 
-    // 3. Log to stock_history
+    // 3. Write a unified branch_stock_movements audit row so central spoilage
+    //    is visible to the movement history and stocktake deductions screens.
+    //    Best-effort — non-blocking to preserve existing error handling.
+    const branchIdForMvt = barSpoilage ? branchIdForRequest(req) : (item.branch_id || branchIdForRequest(req));
+    if (branchIdForMvt) {
+      supabase.from('branch_stock_movements').insert({
+        branch_id: branchIdForMvt,
+        item_sku,
+        item_id: barSpoilage ? (item.source_item_id || item.drink_id || null) : (item.id || null),
+        movement_type: 'ADJUSTMENT_OUT',
+        quantity,
+        reference: `C-SPOILAGE-${spoilage.id}`,
+        reference_type: 'central_spoilage',
+        reference_id: spoilage.id,
+        notes: `Central spoilage ${spoilage.spoilage_number || ''}: ${reason}${reason_details ? ' — ' + reason_details : ''}`,
+        performed_by: userId || null,
+        created_by: userId || null,
+        previous_stock: previousQuantity,
+        new_stock: newQuantity,
+      }).then(({ error: mvErr }) => {
+        if (mvErr) logger.warn('branch_stock_movements insert failed (central spoilage):', mvErr.message);
+      });
+    }
+
+    // 4. Log to stock_history
     const orderNum = await generateOrderNumber('SPL');
     const { error: historyError } = await supabase.from('stock_history').insert({
       item_sku,

@@ -518,6 +518,43 @@ export const createStaffMember = async (
       createAccount === true ||
       createAccount === 'true';
 
+    // Validate POS PIN format and uniqueness immediately if user account is requested
+    let normalizedPin: string | null = null;
+    if (shouldCreateUserAccount) {
+      if (pos_pin === undefined || pos_pin === null || String(pos_pin).trim() === '') {
+        res.status(400).json({
+          success: false,
+          message: 'POS PIN is required when creating a login account.'
+        });
+        return;
+      }
+    }
+
+    if (pos_pin !== undefined && pos_pin !== null && String(pos_pin).trim() !== '') {
+      normalizedPin = String(pos_pin).trim().toUpperCase();
+      if (!/^[RMNCE]\d{4}$/.test(normalizedPin)) {
+        res.status(400).json({
+          success: false,
+          message: 'POS PIN must strictly start with R, M, N, C, or E followed by exactly 4 digits (e.g., R1234).'
+        });
+        return;
+      }
+
+      // Check PIN uniqueness immediately to avoid creating orphaned Auth accounts
+      const { data: pinConflict } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .eq('pos_pin', normalizedPin)
+        .maybeSingle();
+      if (pinConflict) {
+        res.status(409).json({
+          success: false,
+          message: `PIN ${normalizedPin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
+        });
+        return;
+      }
+    }
+
     // Branch-scoped creators (manager, accountant) may only register staff
     // in their own branch — the staff record is forced onto their branch.
     if (['branch_manager', 'branch_accountant'].includes(callerRole)) {
@@ -735,23 +772,6 @@ export const createStaffMember = async (
 
       const userId = authData.user.id;
 
-      // Enforce PIN uniqueness before creating the account
-      if (pos_pin) {
-        const { data: pinConflict } = await supabase
-          .from('users')
-          .select('id, first_name, last_name')
-          .eq('pos_pin', pos_pin)
-          .maybeSingle();
-        if (pinConflict) {
-          await supabase.auth.admin.deleteUser(userId);
-          res.status(409).json({
-            success: false,
-            message: `PIN ${pos_pin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
-          });
-          return;
-        }
-      }
-
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(userPassword, salt);
 
@@ -768,7 +788,7 @@ export const createStaffMember = async (
           employee_id: idNumber,
           department: finalDepartment,
           status: 'active',
-          pos_pin: pos_pin || null,
+          pos_pin: normalizedPin,
           password_hash: passwordHash,
           updated_at: new Date().toISOString()
         }, { onConflict: 'id' })
@@ -1202,7 +1222,7 @@ export const deleteStaffMember = async (
     // Check if staff member exists
     const { data: staff, error: getError } = await supabase
       .from('staff_profiles')
-      .select('id, first_name, last_name, email')
+      .select('id, first_name, last_name, email, user_id')
       .eq('id', id)
       .single();
 
@@ -1212,6 +1232,15 @@ export const deleteStaffMember = async (
         message: 'Staff member not found' 
       });
       return;
+    }
+
+    // Delete from auth.users if a user_id is linked (this usually cascades to public.users)
+    if (staff.user_id) {
+      const { error: authError } = await supabase.auth.admin.deleteUser(staff.user_id);
+      if (authError) {
+        logger.error(`Error deleting auth user ${staff.user_id} for staff ${id}:`, authError);
+        // Continue to delete staff_profile just in case auth deletion failed or was already deleted
+      }
     }
 
     // Delete staff member (CASCADE will handle related records)

@@ -349,11 +349,7 @@ class AdminSideNavGroup {
               icon: PhosphorIcons.prohibit(),
               label: 'Void Bills',
               routePath: '/auditor/void-bills'),
-          AdminSideNavItem(
-              section: AdminSection.auditorCashierLogbooks,
-              icon: PhosphorIcons.notebook(),
-              label: 'Cashier Logbooks',
-              routePath: '/auditor/cashier-logbooks'),
+
         ]),
         AdminSideNavGroup(title: 'PERSONNEL & HR OVERSIGHT', items: [
           AdminSideNavItem(
@@ -387,58 +383,7 @@ class AdminSideNavGroup {
               label: 'Kitchen Wastage',
               routePath: '/auditor/kitchen-wastage'),
         ]),
-        AdminSideNavGroup(title: 'HR DASHBOARD', items: [
-          AdminSideNavItem(
-              section: AdminSection.hrPayroll,
-              icon: PhosphorIcons.house(),
-              label: 'HR Overview',
-              routePath: '/auditor/hr'),
-          AdminSideNavItem(
-              section: AdminSection.staff,
-              icon: PhosphorIcons.users(),
-              label: 'Employees',
-              routePath: '/auditor/hr/employees'),
-          AdminSideNavItem(
-              section: AdminSection.attendance,
-              icon: PhosphorIcons.checkCircle(),
-              label: 'Attendance',
-              routePath: '/auditor/hr/attendance'),
-          AdminSideNavItem(
-              section: AdminSection.attendanceLogs,
-              icon: PhosphorIcons.clockClockwise(),
-              label: 'Attendance Logs',
-              routePath: '/auditor/hr/staff-attendance'),
-          AdminSideNavItem(
-              section: AdminSection.leaveRequests,
-              icon: PhosphorIcons.calendar(),
-              label: 'Leave',
-              routePath: '/auditor/hr/leave'),
-          AdminSideNavItem(
-              section: AdminSection.salaries,
-              icon: PhosphorIcons.creditCard(),
-              label: 'Salaries',
-              routePath: '/auditor/hr/salaries'),
-          AdminSideNavItem(
-              section: AdminSection.payrollAdjustments,
-              icon: PhosphorIcons.arrowsLeftRight(),
-              label: 'Adjustments',
-              routePath: '/auditor/hr/adjustments'),
-          AdminSideNavItem(
-              section: AdminSection.payrollPolicies,
-              icon: PhosphorIcons.shieldCheck(),
-              label: 'Policies',
-              routePath: '/auditor/hr/policies'),
-          AdminSideNavItem(
-              section: AdminSection.performanceLeaderboard,
-              icon: PhosphorIcons.trophy(),
-              label: 'Performance',
-              routePath: '/auditor/hr/performance'),
-          AdminSideNavItem(
-              section: AdminSection.hrTerminal,
-              icon: PhosphorIcons.fingerprint(),
-              label: 'HR Terminal',
-              routePath: '/auditor/hr/terminal'),
-        ]),
+
         AdminSideNavGroup(title: 'SYSTEM', items: [
           AdminSideNavItem(
               section: AdminSection.auditReports,

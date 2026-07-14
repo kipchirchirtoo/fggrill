@@ -3038,6 +3038,11 @@ class RequisitionsSection extends ConsumerWidget {
                         ], 'normal')} • ${_date(row['created_at'])}',
                     trailing: Wrap(spacing: 6, children: [
                       _statusChip(status),
+                      OutlinedButton.icon(
+                        onPressed: () => _printRequisitionNote(context, row),
+                        icon: Icon(PhosphorIcons.printer(), size: 14),
+                        label: const Text('Print'),
+                      ),
                       OutlinedButton(
                         onPressed: () =>
                             _showRequisitionDetails(context, ref, row),
@@ -3068,6 +3073,11 @@ class RequisitionsSection extends ConsumerWidget {
       'Requisition ${_text(row, ['request_number', 'id'])}',
       row,
       actions: [
+        OutlinedButton.icon(
+          onPressed: () => _printRequisitionNote(context, row),
+          icon: Icon(PhosphorIcons.printer(), size: 14),
+          label: const Text('Print'),
+        ),
         ElevatedButton(
           onPressed: () {
             Navigator.pop(context);
@@ -3123,11 +3133,28 @@ class RequisitionsSection extends ConsumerWidget {
           'issue_status': 'issued',
         });
       }
-      await repo.confirmStoreDispatch(requestId);
+      final res = await repo.confirmStoreDispatch(requestId);
       if (!context.mounted) return;
       _refreshCentralStore(ref);
       _snack(context, 'All items issued — navigating to Dispatch');
-      ref.read(adminSectionProvider.notifier).state = AdminSection.dispatchNotes;
+      
+      final dispatchNote = res['data']?['dispatch_note'] ?? res['dispatch_note'];
+      if (dispatchNote is Map) {
+        final dNote = Map<String, dynamic>.from(dispatchNote);
+        ref.read(adminSectionProvider.notifier).state =
+            AdminSection.dispatchNotes;
+        await _printDispatchNote(context, ref, dNote);
+        if (context.mounted) {
+          await _showMapDetails(
+            context,
+            'Dispatch ${_text(dNote, ['dispatch_number', 'id'])}',
+            dNote,
+          );
+        }
+      } else {
+        ref.read(adminSectionProvider.notifier).state =
+            AdminSection.dispatchNotes;
+      }
     } catch (error) {
       if (context.mounted) _snack(context, 'Failed: $error');
     }
@@ -3206,12 +3233,28 @@ class PackingSection extends ConsumerWidget {
               'issue_status': payload['issue_status'],
             });
           }
-          await repo.confirmStoreDispatch(requestId);
+          final res = await repo.confirmStoreDispatch(requestId);
           if (!context.mounted) return;
           _refreshCentralStore(ref);
           _snack(context, 'Stock issued and dispatch confirmed');
-          ref.read(adminSectionProvider.notifier).state =
-              AdminSection.dispatchNotes;
+          
+          final dispatchNote = res['data']?['dispatch_note'] ?? res['dispatch_note'];
+          if (dispatchNote is Map) {
+            final dNote = Map<String, dynamic>.from(dispatchNote);
+            ref.read(adminSectionProvider.notifier).state =
+                AdminSection.dispatchNotes;
+            await _printDispatchNote(context, ref, dNote);
+            if (context.mounted) {
+              await _showMapDetails(
+                context,
+                'Dispatch ${_text(dNote, ['dispatch_number', 'id'])}',
+                dNote,
+              );
+            }
+          } else {
+            ref.read(adminSectionProvider.notifier).state =
+                AdminSection.dispatchNotes;
+          }
         },
       ),
     );
@@ -3566,6 +3609,9 @@ class DispatchNotesSection extends ConsumerWidget {
     if (!context.mounted) return;
     String? vehicleId = vehicles.isNotEmpty ? _id(vehicles.first) : null;
     String? driverId = drivers.isNotEmpty ? _id(drivers.first) : null;
+    String customVehicleNumber = '';
+    String customDriverName = '';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -3574,30 +3620,48 @@ class DispatchNotesSection extends ConsumerWidget {
           content: SizedBox(
             width: 460,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DropdownButtonFormField<String>(
-                initialValue: vehicleId,
-                decoration: const InputDecoration(labelText: 'Vehicle'),
-                items: vehicles
-                    .map((vehicle) => DropdownMenuItem(
-                          value: _id(vehicle),
-                          child: Text(_text(vehicle,
-                              ['registration_number', 'vehicle_number'])),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => vehicleId = value),
-              ),
+              if (vehicles.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  value: vehicleId,
+                  decoration: const InputDecoration(labelText: 'Vehicle'),
+                  items: vehicles
+                      .map((vehicle) => DropdownMenuItem(
+                            value: _id(vehicle),
+                            child: Text(_text(vehicle,
+                                ['registration_number', 'vehicle_number'])),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => vehicleId = value),
+                )
+              else
+                TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Vehicle Registration Number (Manual)',
+                    hintText: 'e.g. KCD 123X',
+                  ),
+                  onChanged: (value) => customVehicleNumber = value,
+                ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: driverId,
-                decoration: const InputDecoration(labelText: 'Driver'),
-                items: drivers
-                    .map((driver) => DropdownMenuItem(
-                          value: _id(driver),
-                          child: Text(_text(driver, ['name', 'full_name'])),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => driverId = value),
-              ),
+              if (drivers.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  value: driverId,
+                  decoration: const InputDecoration(labelText: 'Driver'),
+                  items: drivers
+                      .map((driver) => DropdownMenuItem(
+                            value: _id(driver),
+                            child: Text(_text(driver, ['name', 'full_name'])),
+                          ))
+                      .toList(),
+                  onChanged: (value) => setState(() => driverId = value),
+                )
+              else
+                TextFormField(
+                  decoration: const InputDecoration(
+                    labelText: 'Driver Name (Manual)',
+                    hintText: 'e.g. John Kamau',
+                  ),
+                  onChanged: (value) => customDriverName = value,
+                ),
             ]),
           ),
           actions: [
@@ -3614,8 +3678,12 @@ class DispatchNotesSection extends ConsumerWidget {
     if (confirmed != true) return;
     try {
       await ref.read(adminRepositoryProvider).dispatchStoreItems(_id(row), {
-        if (vehicleId != null) 'vehicle_id': vehicleId,
-        if (driverId != null) 'driver_id': driverId,
+        if (vehicles.isNotEmpty && vehicleId != null) 'vehicle_id': vehicleId,
+        if (drivers.isNotEmpty && driverId != null) 'driver_id': driverId,
+        if (vehicles.isEmpty && customVehicleNumber.trim().isNotEmpty)
+          'vehicle_number': customVehicleNumber.trim(),
+        if (drivers.isEmpty && customDriverName.trim().isNotEmpty)
+          'driver_name': customDriverName.trim(),
       });
       if (!context.mounted) return;
       _refreshCentralStore(ref);
@@ -3635,45 +3703,45 @@ class DispatchNotesSection extends ConsumerWidget {
       }
     }
   }
+}
 
-  Future<void> _printDispatchNote(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
-    final dispatchId = _id(row);
-    final dispatchNumber = _text(row, ['dispatch_number', 'id']);
+Future<void> _printDispatchNote(
+    BuildContext context, WidgetRef ref, Map<String, dynamic> row) async {
+  final dispatchId = _id(row);
+  final dispatchNumber = _text(row, ['dispatch_number', 'id']);
+  
+  try {
+    // Show loading indicator
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
     
-    try {
-      // Show loading indicator
-      if (!context.mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => const Center(child: CircularProgressIndicator()),
-      );
-      
-      final file = await ref.read(adminRepositoryProvider)
-          .downloadDispatchNotePdf(dispatchId);
-      
-      if (!context.mounted) return;
-      Navigator.pop(context); // Close loading dialog
-      
-      // Read bytes and trigger printer layout dialog
-      final bytes = await file.readAsBytes();
-      await Printing.layoutPdf(
-        name: 'Dispatch_Note_$dispatchNumber.pdf',
-        onLayout: (_) async => bytes,
-      );
-      
-      _snack(context, 'Dispatch note PDF sent to printer');
-    } catch (error) {
-      if (!context.mounted) return;
-      Navigator.pop(context); // Close loading dialog
-      
-      await _showActionError(
-        context,
-        title: 'Print failed',
-        error: error,
-      );
-    }
+    final file = await ref.read(adminRepositoryProvider)
+        .downloadDispatchNotePdf(dispatchId);
+    
+    if (!context.mounted) return;
+    Navigator.pop(context); // Close loading dialog
+    
+    // Read bytes and trigger printer layout dialog
+    final bytes = await file.readAsBytes();
+    await Printing.layoutPdf(
+      name: 'Dispatch_Note_$dispatchNumber.pdf',
+      onLayout: (_) async => bytes,
+    );
+    
+    _snack(context, 'Dispatch note PDF sent to printer');
+  } catch (error) {
+    if (!context.mounted) return;
+    Navigator.pop(context); // Close loading dialog
+    
+    await _showActionError(
+      context,
+      title: 'Print failed',
+      error: error,
+    );
   }
 }
 
@@ -6705,7 +6773,7 @@ class _CentralStockTakesSectionState
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              width: 1314,
+              width: 1422,
               child: Column(children: [
                 _stockWorksheetHeaderRow(),
                 ...items.map((item) => _stockWorksheetInputRow(item)),
@@ -8140,27 +8208,37 @@ class DirectIssueSection extends ConsumerWidget {
               icon: const Icon(Icons.refresh, size: 14),
               label: const Text('Refresh'),
             ),
-            builder: (row) => _rowTile(
-              icon: PhosphorIcons.arrowUpRight(),
-              title: _text(row, ['issue_number', 'id']),
-              subtitle:
-                  '${_text(row, ['branch_name', 'to_branch_name'])} • ${_text(row, ['reason'])} • ${_date(row['created_at'])}',
-              trailing: Wrap(spacing: 6, children: [
-                _statusChip(_text(row, ['status'], 'issued')),
-                OutlinedButton.icon(
-                  onPressed: () => _printDirectIssueNote(context, row),
-                  icon: Icon(PhosphorIcons.printer(), size: 14),
-                  label: const Text('Print'),
-                ),
-                OutlinedButton(
-                  onPressed: () => _showMapDetails(
-                      context,
-                      'Direct Issue ${_text(row, ['issue_number', 'id'])}',
-                      row),
-                  child: const Text('View'),
-                ),
-              ]),
-            ),
+            builder: (row) {
+              final issueNum = _text(row, ['issue_number', 'request_number', 'document_number']);
+              final displayNum = issueNum.isNotEmpty
+                  ? issueNum
+                  : 'Issue ${_text(row, ['id']).isNotEmpty ? _text(row, ['id']).substring(0, 8).toUpperCase() : '—'}';
+              final branchName = _text(row, ['branch_name', 'to_branch_name', 'requesting_branch_name'], 'Unknown Branch');
+              final reason = _text(row, ['reason'], 'Direct issue');
+              final itemCount = row['items_count'] ?? (row['items'] is List ? (row['items'] as List).length : null);
+              final totalValue = _num(row, ['total_value']);
+              final requester = _text(row, ['requester_name']);
+              return _rowTile(
+                icon: PhosphorIcons.arrowUpRight(),
+                title: displayNum,
+                subtitle: '${branchName} • ${reason}${itemCount != null ? ' • $itemCount item${itemCount == 1 ? '' : 's'}' : ''}${totalValue > 0 ? ' • KES ${totalValue.toStringAsFixed(0)}' : ''}${requester.isNotEmpty ? ' • by $requester' : ''} • ${_date(row['created_at'])}',
+                trailing: Wrap(spacing: 6, children: [
+                  _statusChip(_text(row, ['status'], 'issued')),
+                  OutlinedButton.icon(
+                    onPressed: () => _printDirectIssueNote(context, row),
+                    icon: Icon(PhosphorIcons.printer(), size: 14),
+                    label: const Text('Print'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => _showMapDetails(
+                        context,
+                        'Direct Issue $displayNum',
+                        row),
+                    child: const Text('View'),
+                  ),
+                ]),
+              );
+            },
           ),
         ),
       ]),
@@ -8266,46 +8344,62 @@ Future<void> _printDirectIssueNote(BuildContext context, Map<String, dynamic> ro
 
 Future<void> _printRequisitionNote(BuildContext context, Map<String, dynamic> row) async {
   final reqNumber = _text(row, ['request_number', 'requisition_number', 'id']);
-  final branchName = _text(row, ['branch_name', 'requesting_branch_name'], 'Branch');
+  final branchName = _text(row, ['branch_name', 'requesting_branch_name', 'branch'], 'Branch');
   final reason = _text(row, ['reason'], 'Stock Requisition');
   final date = _date(row['created_at']);
-  
+  final status = _text(row, ['status'], 'PENDING');
+  final priority = _text(row, ['priority'], 'normal');
+
+  // Resolve requester and reviewer/auditor names if present in payload
+  final reqUser = row['requested_by_user'];
+  final requestedBy = reqUser is Map
+      ? '${_text(Map<String, dynamic>.from(reqUser), ['first_name'])} ${_text(Map<String, dynamic>.from(reqUser), ['last_name'])}'.trim()
+      : _text(row, ['requested_by_name']);
+      
+  final revUser = row['reviewed_by_user'];
+  final auditedBy = revUser is Map
+      ? '${_text(Map<String, dynamic>.from(revUser), ['first_name'])} ${_text(Map<String, dynamic>.from(revUser), ['last_name'])}'.trim()
+      : _text(row, ['reviewed_by_name', 'auditor_name']);
+
   final itemsList = _list(row['items']);
   final tableRows = itemsList.map((item) {
     final name = _lineItemName(item);
     final sku = _text(item, ['item_sku', 'sku']);
-    final qty = _num(item, ['requested_quantity', 'quantity_requested', 'quantity']);
-    final cost = _num(item, ['unit_cost']);
-    final total = qty * cost;
+    final reqQty = _num(item, ['requested_quantity', 'quantity_requested', 'quantity']);
+    final appQty = _num(item, ['approved_quantity', 'quantity_approved']) ?? reqQty;
+    final unit = _text(item, ['unit', 'unit_of_measure', 'uom'], 'pcs');
+    final itemRemarks = _text(item, ['remarks', 'reason', 'line_notes']);
     
     return [
       sku,
       name,
-      qty.toStringAsFixed(qty % 1 == 0 ? 0 : 2),
-      cost > 0 ? 'KES ${ReportService().money.format(cost)}' : '—',
-      total > 0 ? 'KES ${ReportService().money.format(total)}' : '—',
+      reqQty.toStringAsFixed(reqQty % 1 == 0 ? 0 : 2),
+      appQty.toStringAsFixed(appQty % 1 == 0 ? 0 : 2),
+      unit,
+      itemRemarks,
     ];
   }).toList();
-  
-  final double totalAmount = itemsList.fold(0.0, (sum, item) {
-    final qty = _num(item, ['requested_quantity', 'quantity_requested', 'quantity']);
-    final cost = _num(item, ['unit_cost']);
-    return sum + (qty * cost);
-  });
+
+  final subtitleBuffer = StringBuffer();
+  subtitleBuffer.writeln('Requisition No: $reqNumber');
+  subtitleBuffer.writeln('Date Requested: $date');
+  subtitleBuffer.writeln('Status: ${status.toUpperCase()}');
+  subtitleBuffer.writeln('Priority: ${priority.toUpperCase()}');
+  if (requestedBy.isNotEmpty) subtitleBuffer.writeln('Requested By: $requestedBy');
+  if (auditedBy.isNotEmpty) subtitleBuffer.writeln('Audited By: $auditedBy');
+  subtitleBuffer.write('Reason: $reason');
 
   try {
     await ReportService().generateAndPrint(
-      title: 'STOCK REQUISITION NOTE',
-      subtitle: 'Request Number: $reqNumber\nDate: $date\nReason: $reason',
+      title: 'REQUISITION NOTE',
+      subtitle: subtitleBuffer.toString(),
       branch: branchName,
       sections: [
         ReportSection(
           title: 'Requested Items',
-          tableHeaders: const ['SKU', 'Item Name', 'Qty Requested', 'Unit Cost', 'Total'],
+          tableHeaders: const ['SKU', 'Item Name', 'Qty Req', 'Qty Appr', 'Unit', 'Remarks'],
           tableRows: tableRows,
-          columnWidths: const [80, 220, 80, 100, 100],
-          totalLabel: 'Total Value',
-          totalValue: 'KES ${ReportService().money.format(totalAmount)}',
+          columnWidths: const [70, 200, 60, 60, 60, 130],
         ),
       ],
     );

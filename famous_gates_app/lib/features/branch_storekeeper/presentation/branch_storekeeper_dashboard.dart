@@ -8135,9 +8135,11 @@ String _poItemName(Map<String, dynamic> item) {
 
 String _poItemSku(Map<String, dynamic> item) {
   final nested = _poMap(item['item']);
-  return _poText(item, const ['item_id', 'item_sku', 'sku'],
-      fallback:
-          _poText(nested, const ['sku', 'item_sku', 'item_id'], fallback: '-'));
+  // Prefer the human-readable SKU code; item_id holds the UUID and is last resort
+  return _poText(item, const ['sku', 'item_sku'],
+      fallback: _poText(nested, const ['sku', 'item_sku'],
+          fallback: _poText(item, const ['item_id'],
+              fallback: _poText(nested, const ['item_id'], fallback: '-'))));
 }
 
 String _poItemUnit(Map<String, dynamic> item) {

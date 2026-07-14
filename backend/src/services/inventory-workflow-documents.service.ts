@@ -285,9 +285,28 @@ async function fetchDispatch(id: string): Promise<{ dispatch: JsonRecord; items:
     : { data: [] as any[] };
   const catalogMap = new Map((catalog || []).map((item: any) => [item.sku, item]));
 
+  // Attach requested and approved quantities from the originating stock request if it exists
+  const enrichedItems = (items || []).map((item: any) => ({ ...item, item: catalogMap.get(item.item_sku) || null }));
+  if (dispatch.stock_request_id) {
+    const { data: requestLines } = await supabase
+      .from('stock_request_items')
+      .select('item_sku, requested_quantity, approved_quantity')
+      .eq('request_id', dispatch.stock_request_id);
+    if (requestLines && requestLines.length) {
+      const lineMap = new Map(requestLines.map((l: any) => [String(l.item_sku).trim().toUpperCase(), l]));
+      for (const item of enrichedItems) {
+        const line = lineMap.get(String(item.item_sku).trim().toUpperCase());
+        if (line) {
+          item.requested_quantity = line.requested_quantity;
+          item.approved_quantity = line.approved_quantity;
+        }
+      }
+    }
+  }
+
   return {
     dispatch,
-    items: (items || []).map((item: any) => ({ ...item, item: catalogMap.get(item.item_sku) || null }))
+    items: enrichedItems
   };
 }
 
@@ -343,15 +362,17 @@ export async function streamDispatchDocument(
   ]);
 
   y = 300;
-  y = table(doc, y, ['#', 'Item', 'SKU', 'Packed', 'Received', 'Damaged', 'Missing'], items.map((item: any, index: number) => [
+  y = table(doc, y, ['#', 'Item', 'SKU', 'Req', 'Appr', 'Packed', 'Received', 'Damaged', 'Missing'], items.map((item: any, index: number) => [
     String(index + 1),
     clean(item.item?.item_name || item.item_name || item.item_sku),
     clean(item.item_sku),
+    qty(item.requested_quantity ?? 0),
+    qty(item.approved_quantity ?? item.requested_quantity ?? 0),
     qty(item.packed_quantity || item.dispatched_quantity),
     qty(item.received_quantity),
     qty(item.damaged_quantity),
     qty(item.missing_quantity)
-  ]), [28, 142, 112, 58, 58, 58, 59]);
+  ]), [20, 132, 90, 42, 42, 45, 50, 50, 49]);
 
   signatures(doc, Math.min(y + 18, 700), ['Packer', 'Dispatcher', 'Receiver']);
   doc.end();

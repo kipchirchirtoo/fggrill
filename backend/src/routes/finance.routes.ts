@@ -64,6 +64,7 @@ import { DirectorController } from "../controllers/director.controller";
 import { DirectorEnhancedController } from "../controllers/director-enhanced.controller";
 import { DirectorTasksController } from "../controllers/director-tasks.controller";
 import { DiscrepancyController } from "../controllers/discrepancies.controller";
+import { getDiscrepancyAggregate } from "../controllers/discrepancy-aggregate.controller";
 import { protect, authorize } from "../middleware/auth";
 import { UserRole } from "../models/User";
 import { supabase } from "../config/database";
@@ -963,6 +964,19 @@ router.get(
     UserRole.BRANCH_ACCOUNTANT,
   ]),
   DiscrepancyController.getFlags,
+);
+
+router.get(
+  "/discrepancies/aggregate",
+  authorize([
+    UserRole.SUPER_ADMIN,
+    UserRole.DIRECTOR,
+    UserRole.GENERAL_MANAGER,
+    UserRole.AUDITOR,
+    UserRole.ACCOUNTANT,
+    UserRole.BRANCH_ACCOUNTANT,
+  ]),
+  getDiscrepancyAggregate,
 );
 
 router.post(

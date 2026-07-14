@@ -325,6 +325,23 @@ export const approveSpoilage = async (req: Request, res: Response, next: NextFun
                 notes: `Approved spoilage: ${existing.reason || 'unspecified'}. Request ID: ${existing.id}`,
                 performedBy: req.user?.id || null
             });
+            // Write unified movement audit row for bar spoilage so stocktake
+            // screens can include it under Deductions.
+            await supabase.from('branch_stock_movements').insert({
+                branch_id: existing.branch_id,
+                item_sku: existing.item_sku || null,
+                item_id: existing.item_id || null,
+                movement_type: 'ADJUSTMENT_OUT',
+                quantity: num(existing.quantity),
+                reference: `SPOILAGE-${existing.id}`,
+                reference_type: 'spoilage',
+                reference_id: existing.id,
+                notes: `Approved bar spoilage: ${existing.reason || 'unspecified'}`,
+                performed_by: req.user?.id || null,
+                created_by: req.user?.id || null,
+            }).then(({ error: mvErr }) => {
+                if (mvErr) logger.warn('branch_stock_movements insert failed (bar spoilage):', mvErr.message);
+            });
         } else if (existing.area === 'store') {
             const { data: stockRow, error: stockErr } = await supabase
                 .from('branch_stock')
@@ -347,6 +364,25 @@ export const approveSpoilage = async (req: Request, res: Response, next: NextFun
                 .eq('branch_id', existing.branch_id)
                 .eq('item_sku', existing.item_sku);
             if (updateErr) throw updateErr;
+            // Write unified movement audit row so stocktake Deductions column
+            // shows this spoilage deduction (previously invisible).
+            await supabase.from('branch_stock_movements').insert({
+                branch_id: existing.branch_id,
+                item_sku: existing.item_sku || null,
+                item_id: existing.item_id || null,
+                movement_type: 'ADJUSTMENT_OUT',
+                quantity: num(existing.quantity),
+                reference: `SPOILAGE-${existing.id}`,
+                reference_type: 'spoilage',
+                reference_id: existing.id,
+                notes: `Approved store spoilage: ${existing.reason || 'unspecified'}`,
+                performed_by: req.user?.id || null,
+                created_by: req.user?.id || null,
+                previous_stock: currentQty,
+                new_stock: currentQty - num(existing.quantity),
+            }).then(({ error: mvErr }) => {
+                if (mvErr) logger.warn('branch_stock_movements insert failed (store spoilage):', mvErr.message);
+            });
         }
         // kitchen: no immediate stock table to adjust — approved rows are
         // summed at read-time in kitchen-stocktake.controller.ts.
