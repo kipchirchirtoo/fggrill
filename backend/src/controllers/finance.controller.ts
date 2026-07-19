@@ -890,7 +890,7 @@ export const getProfitLossStatement = async (
       supabase.from('restaurant_orders').select('id, total_amount, grand_total, status').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
       supabase.from('bar_orders').select('id, total, subtotal, status').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
       supabase.from('bookings').select('total_amount, status').eq('branch_id', branchId).gte('check_in_date', start).lte('check_in_date', end).in('status', ['confirmed', 'checked_in', 'checked_out']),
-      supabase.from('pos_shift_orders').select('id, total_amount, status, outlet_id').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'eq', 'cancelled'),
+      supabase.from('pos_shift_orders').select('id, total_amount, status, outlet_id').eq('branch_id', branchId).gte('created_at', startTs).lte('created_at', endTs).not('status', 'in', '(cancelled,voided)'),
     ]);
     // These feed the "fallback to order tables" revenue path below — a failed
     // query must not silently read as "no orders," or it'll just suppress

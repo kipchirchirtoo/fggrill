@@ -585,7 +585,20 @@ const calculateShiftSummary = async (shiftId: string) => {
   const paymentRows = (payments || []) as Array<Record<string, any>>;
   const countRows = (counts || []) as Array<Record<string, any>>;
   const orderRows = (orders || []) as Array<Record<string, any>>;
-  const salesByMethod = paymentRows.reduce<Record<PaymentMethod, number>>(
+
+  const voidedOrderIds = new Set<string>(
+    orderRows
+      .filter((o) => {
+        const s = String(o.status || '').toLowerCase();
+        const p = String(o.payment_status || '').toLowerCase();
+        return s === 'voided' || s === 'cancelled' || p === 'voided' || p === 'cancelled';
+      })
+      .map((o) => String(o.id))
+  );
+
+  const activePayments = paymentRows.filter((p) => !voidedOrderIds.has(String(p.order_id)));
+
+  const salesByMethod = activePayments.reduce<Record<PaymentMethod, number>>(
     (acc, row) => {
       const method = normalizePaymentMethod(row.payment_method);
       if (method && acc[method] !== undefined) {

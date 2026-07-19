@@ -2870,9 +2870,22 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       if (!branchKey) return;
       const orderItems = Array.isArray(order.items) ? order.items : [];
       orderItems.forEach((item: any) => {
-        const quantity = Number(item.quantity ?? item.qty ?? 0) || 0;
+        if (item.is_fully_voided === true) return;
+        const rawQty = Number(item.quantity ?? item.qty ?? 0) || 0;
+        const voidedQty = Number(item.voided_qty || 0);
+        const quantity = Math.max(0, rawQty - voidedQty);
+        if (quantity <= 0) return;
+
         const unitPrice = Number(item.unit_price ?? item.selling_price ?? item.price ?? 0) || 0;
-        const revenue = Number(item.line_total ?? item.total_price ?? item.total ?? quantity * unitPrice) || 0;
+        let revenue = 0;
+        if (item.active_total !== undefined && item.active_total !== null) {
+          revenue = Number(item.active_total);
+        } else if (item.active_qty !== undefined && item.active_qty !== null) {
+          revenue = Number(item.active_qty) * unitPrice;
+        } else {
+          revenue = quantity * unitPrice;
+        }
+
         const itemId = item.outlet_item_id ? String(item.outlet_item_id) : String(item.product_id || item.id || item.name || '');
 
         // Lookup cost price from outlet items (same pattern as P&L fix)
@@ -3227,8 +3240,20 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       }
       paymentMethods = [...new Set(paymentMethods)];
 
-      const itemSummary = (Array.isArray(order.items) ? order.items : [])
-        .map((item: any) => `${item.name || item.item_name || 'Item'} x${item.quantity ?? item.qty ?? 1}`)
+      const activeItems = (Array.isArray(order.items) ? order.items : []).filter((item: any) => {
+        if (item.is_fully_voided === true) return false;
+        const rawQty = Number(item.quantity ?? item.qty ?? 0) || 0;
+        const voidedQty = Number(item.voided_qty || 0);
+        return rawQty - voidedQty > 0;
+      });
+
+      const itemSummary = activeItems
+        .map((item: any) => {
+          const rawQty = Number(item.quantity ?? item.qty ?? 0) || 0;
+          const voidedQty = Number(item.voided_qty || 0);
+          const activeQty = Math.max(0, rawQty - voidedQty);
+          return `${item.name || item.item_name || 'Item'} x${activeQty}`;
+        })
         .join(', ');
 
       const shiftMeta = shiftMetaMap[String(order.shift_id)] || {};

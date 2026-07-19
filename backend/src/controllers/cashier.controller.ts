@@ -7143,7 +7143,17 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         }
     });
     const outletOrderPaymentTotals: Record<string, number> = {};
-    outletOrders.forEach((line: any) => {
+    const voidedOrderIds = new Set<string>(
+        outletOrders
+            .filter((o: any) => {
+                const s = String(o.status || '').toLowerCase();
+                const p = String(o.payment_status || '').toLowerCase();
+                return s === 'voided' || s === 'cancelled' || p === 'voided' || p === 'cancelled';
+            })
+            .map((o: any) => String(o.id))
+    );
+    const activeOutletOrders = outletOrders.filter((o: any) => !voidedOrderIds.has(String(o.id)));
+    activeOutletOrders.forEach((line: any) => {
         const method = normalizeLogbookPaymentMethod(line.payment_method ?? line.payment_status);
         const amount = logbookNumber(line.total_amount ?? line.amount_paid ?? line.amount);
         if (amount > 0) addAmount(outletOrderPaymentTotals, method, amount);
@@ -7215,7 +7225,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     });
 
     // Aggregate from POS outlet shift payments or orders (preventing double counting)
-    const posLines = outletPayments.length > 0 ? outletPayments : outletOrders;
+    const activeOutletPayments = outletPayments.filter((p: any) => !voidedOrderIds.has(String(p.order_id)));
+    const activeOutletOrders2 = outletOrders.filter((o: any) => !voidedOrderIds.has(String(o.id)));
+    const posLines = activeOutletPayments.length > 0 ? activeOutletPayments : activeOutletOrders2;
     posLines.forEach((line: any) => {
         const bucket = inferRevenueBucket(line);
         if (bucket) {
