@@ -2217,18 +2217,23 @@ export async function getCentralDashboardStats() {
       supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).in('status', ['READY', 'DISPATCHED', 'IN_TRANSIT']),
       supabase.from('branch_stock').select('*', { count: 'exact', head: true }).lte('quantity', 10), // Threshold default
       supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-      supabase.from('simple_items').select('*', { count: 'exact', head: true }).eq('is_active', true)
+      // branch_id IS NULL = the shared central catalog. Branch-tagged rows
+      // (e.g. bar drinks auto-synced from a branch's own menu) are that
+      // branch's local stock, not central master inventory — counting them
+      // here inflates the stat past what the Master Inventory list shows.
+      supabase.from('simple_items').select('*', { count: 'exact', head: true }).eq('is_active', true).is('branch_id', null)
     ]);
 
     // For better low stock accuracy across catalog
     // We try to get this from simple_items where quantity <= reorder_level
-    // This is hard to do in one PostgREST call without RPC, so we'll use a count of those that fall below 
-    // BUT since we can't compare columns easily, we'll use a conservative threshold for now or 
+    // This is hard to do in one PostgREST call without RPC, so we'll use a count of those that fall below
+    // BUT since we can't compare columns easily, we'll use a conservative threshold for now or
     // a separate query for those explicitly marked.
     const { count: globalLowStock } = await supabase
       .from('simple_items')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
+      .is('branch_id', null)
       .filter('quantity', 'lte', 10); // Still using numeric for reliability
 
     return {

@@ -69,10 +69,30 @@ export const getItems = async (
       }
     }
 
+    // Branch-tagged items (e.g. bar drinks auto-synced from a branch's own
+    // menu) must stay out of the shared/central catalog — otherwise every
+    // branch's local items inflate central store's master inventory count.
+    // Central-context requests (no branch_id, or the central warehouse
+    // itself) only see branch_id IS NULL rows; branch requests see their
+    // own branch's items plus the shared catalog.
+    let isCentralContext = true;
+    if (branchId) {
+      const { data: branchRow } = await supabase
+        .from('branches')
+        .select('is_central_warehouse')
+        .eq('id', branchId)
+        .maybeSingle();
+      isCentralContext = Number(branchId) === 1 || !!branchRow?.is_central_warehouse;
+    }
+
     let query = supabase
       .from('inventory_items')
-      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, is_active, store_type, metadata, created_at, updated_at')
+      .select('id, sku, item_name, description, category, unit, default_unit_cost, default_selling_price, reorder_level, is_active, store_type, metadata, created_at, updated_at, branch_id')
       .eq('is_active', true);
+
+    query = isCentralContext
+      ? query.is('branch_id', null)
+      : query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
 
     if (category) query = query.eq('category', category);
     if (store_type) {
@@ -349,7 +369,20 @@ export const createItem = async (
 
       logger.info(`Auto-generated SKU: ${sku} for item "${item_name || description}"`);
     } else {
-      // User provided SKU - get category code
+      // User provided SKU — must match the canonical FGH-CAT-PRODUCT-SERIAL
+      // shape generateSKU() produces. The catalog already has 8+ legacy SKU
+      // formats from historical bulk imports (left alone deliberately — a
+      // retroactive rewrite risks breaking printed barcodes and historical
+      // document references), but new items must not add a 9th.
+      const sanitizedSku = sku.trim().toUpperCase();
+      if (!/^FGH-[A-Z]{2,6}-[A-Z0-9]{1,6}-\d{4}$/.test(sanitizedSku)) {
+        res.status(400).json({
+          success: false,
+          message: `Invalid SKU format "${sku}". Expected FGH-<CATEGORY>-<PRODUCT>-<SERIAL>, e.g. FGH-BEV-COKE-0001. Leave the SKU field blank to auto-generate one.`
+        });
+        return;
+      }
+      sku = sanitizedSku;
       categoryCode = getCategoryCode(category || 'General');
     }
 

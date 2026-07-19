@@ -158,8 +158,12 @@ async function resolveBarOutletLocation(
 
 /**
  * Resolve inventory_item_id from SKU, creating one if needed.
+ * Auto-created rows are tagged with the owning branch's branch_id so a
+ * branch's own bar-menu items stay scoped to that branch instead of
+ * silently joining the shared/central catalog (which inflates central
+ * store's master inventory count — see items.controller.ts getItems).
  */
-async function resolveInventoryItemId(sku: string): Promise<string | null> {
+async function resolveInventoryItemId(sku: string, branchId: number): Promise<string | null> {
   const { data: existing } = await supabase
     .from('inventory_items')
     .select('id')
@@ -195,6 +199,7 @@ async function resolveInventoryItemId(sku: string): Promise<string | null> {
       default_selling_price: drink.price || drink.selling_price || 0,
       reorder_level: drink.min_stock || 5,
       is_active: drink.is_available !== false,
+      branch_id: branchId,
       metadata: { source: 'bar_drinks', source_id: drink.id }
     })
     .select('id')
@@ -241,7 +246,7 @@ export async function recordBarStockMovement(
   }
 
   if (!itemId && drinkId) {
-    itemId = await resolveInventoryItemId(sku);
+    itemId = await resolveInventoryItemId(sku, branchId);
   }
 
   const { locationId, outletId } = await resolveBarOutletLocation(branchId, inputOutletId);

@@ -232,7 +232,9 @@ final centralStoreValuationProvider =
 
 final centralStoreItemsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(adminRepositoryProvider).getStoreItems(limit: 500);
+  // Cap raised past the true central-catalog size (~580 after excluding
+  // branch-scoped items) so Master Inventory no longer silently truncates.
+  return ref.read(adminRepositoryProvider).getStoreItems(limit: 1000);
 });
 
 final centralFoodstuffsProvider =
