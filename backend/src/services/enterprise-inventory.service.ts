@@ -565,6 +565,15 @@ export async function recordDepartmentIssue(input: {
       minNumber,
       input.notes || `Issued to ${account.department_name}`
     );
+
+    const departmentStr = (account.department_code || '').toLowerCase();
+    const departmentTypeStr = (account.department_type || '').toLowerCase();
+    
+    if (departmentStr.includes('bar') || departmentTypeStr.includes('bar')) {
+      await syncIssuedStockToBar(input.branchId, input.itemSku, issuedQuantity, itemName, input.actorId);
+    } else if (departmentStr.includes('kitchen') || departmentTypeStr.includes('kitchen') || ['buffet', 'breakfast', 'outside_catering'].includes(departmentStr)) {
+      await syncIssuedStockToKitchen(input.branchId, input.itemSku, issuedQuantity, itemName, input.actorId);
+    }
   }
 
   const { data: ledger, error: ledgerError } = await supabase
@@ -1841,4 +1850,123 @@ export async function finalizeStockTakeByAuditor(input: {
   });
 
   return approved;
+}
+
+async function syncIssuedStockToBar(branchId: number, itemSku: string, quantity: number, itemName: string, userId: string) {
+  const { data: drink } = await supabase
+    .from('bar_drinks')
+    .select('id, item_name')
+    .eq('branch_id', branchId)
+    .eq('item_sku', itemSku)
+    .maybeSingle();
+
+  if (drink?.id) {
+    const { data: currentStock } = await supabase
+      .from('bar_stock')
+      .select('current_stock')
+      .eq('branch_id', branchId)
+      .eq('drink_id', drink.id)
+      .maybeSingle();
+      
+    const newStock = Number(currentStock?.current_stock || 0) + quantity;
+    
+    await supabase
+      .from('bar_stock')
+      .upsert({
+        branch_id: branchId,
+        drink_id: drink.id,
+        current_stock: newStock,
+        par_level: 10,
+        unit: 'Unit',
+        last_updated: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'branch_id,drink_id' });
+
+    const { data: outlets } = await supabase
+      .from('pos_outlets')
+      .select('id')
+      .eq('branch_id', branchId)
+      .in('outlet_type', ['bar', 'restaurant_bar']);
+      
+    if (outlets && outlets.length > 0) {
+      for (const outlet of outlets) {
+        const { data: posStock } = await supabase
+          .from('pos_outlet_items')
+          .select('current_stock')
+          .eq('outlet_id', outlet.id)
+          .eq('item_sku', itemSku)
+          .maybeSingle();
+          
+        const newPosStock = Number(posStock?.current_stock || 0) + quantity;
+        
+        await supabase
+          .from('pos_outlet_items')
+          .upsert({
+            outlet_id: outlet.id,
+            item_sku: itemSku,
+            item_name: drink.item_name || itemName,
+            current_stock: newPosStock,
+            price: 0,
+            last_updated: new Date().toISOString()
+          }, { onConflict: 'outlet_id,item_sku' });
+      }
+    }
+
+    await supabase
+      .from('bar_stock_ledger')
+      .insert({
+        branch_id: branchId,
+        item_sku: itemSku,
+        item_name: drink.item_name || itemName,
+        transaction_type: 'RECEIPT',
+        reference_type: 'STOCK_OUT',
+        reference_id: null,
+        opening_balance: Number(currentStock?.current_stock || 0),
+        quantity_in: quantity,
+        quantity_out: 0,
+        closing_balance: newStock,
+        unit_of_measure: 'Unit',
+        user_id: userId,
+        notes: `Issued from branch store`
+      });
+  }
+}
+
+async function syncIssuedStockToKitchen(branchId: number, itemSku: string, quantity: number, itemName: string, userId: string) {
+  const { data: currentStock } = await supabase
+    .from('kitchen_stock')
+    .select('current_balance')
+    .eq('branch_id', branchId)
+    .eq('item_sku', itemSku)
+    .maybeSingle();
+    
+  const newBalance = Number(currentStock?.current_balance || 0) + quantity;
+  
+  await supabase
+    .from('kitchen_stock')
+    .upsert({
+      branch_id: branchId,
+      item_sku: itemSku,
+      item_name: itemName,
+      current_balance: newBalance,
+      last_updated: new Date().toISOString()
+    }, { onConflict: 'branch_id,item_sku' });
+    
+  await supabase
+    .from('kitchen_stock_ledger')
+    .insert({
+      branch_id: branchId,
+      item_sku: itemSku,
+      item_name: itemName,
+      transaction_type: 'RECEIPT',
+      reference_type: 'STOCK_OUT',
+      reference_id: null,
+      opening_balance: Number(currentStock?.current_balance || 0),
+      quantity_in: quantity,
+      quantity_out: 0,
+      closing_balance: newBalance,
+      unit_of_measure: 'Unit',
+      user_id: userId,
+      notes: `Issued from branch store`
+    });
 }
