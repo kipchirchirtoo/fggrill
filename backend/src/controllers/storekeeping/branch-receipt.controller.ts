@@ -579,7 +579,7 @@ export const receiveFromSupplier = async (
             .from('inventory_locations')
             .select('id')
             .eq('branch_id', branchId)
-            .eq('location_type', 'store')
+            .in('location_type', ['branch_store', 'central_store', 'store'])
             .maybeSingle();
         let locationId = storeLocation?.id || null;
 
