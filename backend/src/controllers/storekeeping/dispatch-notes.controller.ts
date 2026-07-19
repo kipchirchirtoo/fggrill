@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 import notificationService from '../../services/notification.service';
 
-const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
+const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active, cost_price';
 
 const normalizeSku = (sku: unknown): string => {
     if (sku === null || sku === undefined) return '';
@@ -49,7 +49,8 @@ const attachCatalogItem = (row: any, itemMap: Map<string, any>): any => {
         },
         item_name: itemName,
         unit: 'Unit',
-        unit_of_measure: 'Unit'
+        unit_of_measure: 'Unit',
+        cost_price: item?.cost_price ?? 0
     };
 };
 
