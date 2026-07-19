@@ -8087,85 +8087,238 @@ class CentralReportsSection extends ConsumerWidget {
       final dispatches = await repo.getStoreDispatchNotes();
       final spoilage = await repo.getCentralSpoilageRecords();
       final grns = await repo.getGRNs();
+
+      final sections = <ReportSection>[];
+
+      // Stock Valuation Report / Low Stock Alert — both are inventory-scoped,
+      // but a "valuation" report is meaningless without cost x qty, so every
+      // row carries unit cost and line value plus a grand-total footer.
+      if (title.contains('Stock') || title.contains('Low')) {
+        final isLowStock = title.contains('Low');
+        double totalValue = 0;
+        final rows = items
+            .where((item) =>
+                !isLowStock ||
+                _num(item, ['quantity']) <=
+                    _num(item, ['reorder_level', 'min_stock']))
+            .map((item) {
+          final qty = _num(item, ['quantity']);
+          final unitCost = _num(item, ['cost_price', 'unit_cost']);
+          final value = qty * unitCost;
+          totalValue += value;
+          return [
+            _text(item, ['sku']),
+            _text(item, ['item_name', 'name', 'description']),
+            _text(item, ['store_type']),
+            qty.toStringAsFixed(0),
+            _num(item, ['reorder_level', 'min_stock']).toStringAsFixed(0),
+            _money(unitCost),
+            _money(value),
+          ];
+        }).toList();
+        sections.add(ReportSection(
+          title: 'Inventory',
+          tableHeaders: const [
+            'SKU',
+            'Item',
+            'Store',
+            'Qty',
+            'Reorder',
+            'Unit Cost',
+            'Value'
+          ],
+          tableRows: rows,
+          totalLabel: 'Total Stock Value',
+          totalValue: _money(totalValue),
+        ));
+      }
+
+      if (title.contains('Purchase')) {
+        sections.add(ReportSection(
+          title: 'Purchase Orders',
+          tableHeaders: const ['PO', 'Supplier', 'Status', 'Total'],
+          tableRows: pos
+              .map((po) => [
+                    _text(po, ['po_number', 'id']),
+                    _text(po, ['supplier_name']),
+                    _text(po, ['status']),
+                    _money(_num(po, ['total_amount', 'total'])),
+                  ])
+              .toList(),
+        ));
+      }
+
+      if (title.contains('Dispatch')) {
+        sections.add(ReportSection(
+          title: 'Dispatch Notes',
+          tableHeaders: const ['Dispatch', 'Branch', 'Driver', 'Status'],
+          tableRows: dispatches
+              .map((dispatch) => [
+                    _text(dispatch,
+                        ['dispatch_number', 'dispatch_note_number', 'id']),
+                    _text(dispatch, ['to_branch_name', 'branch_name']),
+                    _text(dispatch, ['driver_name']),
+                    _text(dispatch, ['status']),
+                  ])
+              .toList(),
+        ));
+      }
+
+      // Supplier Performance — aggregate real PO + GRN data per supplier
+      // instead of reprinting the raw PO list (that's what Purchase Summary
+      // is for). On-time % only counts POs that have a matching GRN with a
+      // parseable date, so suppliers with no deliveries yet show "N/A".
+      if (title.contains('Supplier Performance')) {
+        final ordersCount = <String, int>{};
+        final totalValue = <String, double>{};
+        final fullyReceivedCount = <String, int>{};
+        final matchedCount = <String, int>{};
+        final onTimeCount = <String, int>{};
+
+        for (final po in pos) {
+          final supplier = _text(po, ['supplier_name'], 'Unknown Supplier');
+          ordersCount[supplier] = (ordersCount[supplier] ?? 0) + 1;
+          totalValue[supplier] =
+              (totalValue[supplier] ?? 0) + _num(po, ['total_amount', 'total']);
+          if (_text(po, ['status']).toLowerCase() == 'fully_received') {
+            fullyReceivedCount[supplier] =
+                (fullyReceivedCount[supplier] ?? 0) + 1;
+          }
+
+          final poNumber = _text(po, ['po_number', 'id']);
+          final expected = po['expected_delivery_date'];
+          if (expected != null && poNumber.isNotEmpty) {
+            final matches =
+                grns.where((g) => _text(g, ['po_number']) == poNumber);
+            if (matches.isNotEmpty) {
+              final grnDate =
+                  matches.first['grn_date'] ?? matches.first['delivery_date'];
+              final expDate = DateTime.tryParse('$expected');
+              final actualDate = DateTime.tryParse('$grnDate');
+              if (expDate != null && actualDate != null) {
+                matchedCount[supplier] = (matchedCount[supplier] ?? 0) + 1;
+                if (!actualDate.isAfter(expDate)) {
+                  onTimeCount[supplier] = (onTimeCount[supplier] ?? 0) + 1;
+                }
+              }
+            }
+          }
+        }
+
+        final rows = ordersCount.keys.map((supplier) {
+          final orders = ordersCount[supplier] ?? 0;
+          final matched = matchedCount[supplier] ?? 0;
+          final onTime = onTimeCount[supplier] ?? 0;
+          final fullyReceived = fullyReceivedCount[supplier] ?? 0;
+          return [
+            supplier,
+            orders.toString(),
+            _money(totalValue[supplier] ?? 0),
+            orders > 0
+                ? '${((fullyReceived / orders) * 100).toStringAsFixed(0)}%'
+                : '0%',
+            matched > 0
+                ? '${((onTime / matched) * 100).toStringAsFixed(0)}%'
+                : 'N/A',
+          ];
+        }).toList();
+
+        sections.add(ReportSection(
+          title: 'Supplier Performance',
+          tableHeaders: const [
+            'Supplier',
+            'Orders',
+            'Total Value',
+            'Fully Received',
+            'On-Time Delivery'
+          ],
+          tableRows: rows,
+        ));
+      }
+
+      // GRN Discrepancy Report — the GRN list endpoint only returns headers,
+      // so line-level ordered/received/rejected quantities are fetched per
+      // GRN and only genuine variances are surfaced.
+      if (title.contains('GRN')) {
+        final recentGrns = grns.take(20).toList();
+        final grnDetails = await Future.wait(recentGrns.map((grn) async {
+          final grnId = _text(grn, ['id']);
+          if (grnId.isEmpty) return null;
+          try {
+            return await repo.getGRN(grnId);
+          } catch (_) {
+            return null;
+          }
+        }));
+
+        final discrepancyRows = <List<String>>[];
+        for (var i = 0; i < recentGrns.length; i++) {
+          final detail = grnDetails[i];
+          if (detail == null) continue;
+          final grn = recentGrns[i];
+          final rawItems = detail['items'];
+          final grnItems = rawItems is List
+              ? rawItems
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : <Map<String, dynamic>>[];
+          for (final line in grnItems) {
+            final ordered = _num(line, ['quantity_ordered']);
+            final received = _num(line, ['quantity_received']);
+            final rejected = _num(line, ['quantity_rejected']);
+            final variance = received - ordered;
+            if (variance == 0 && rejected == 0) continue;
+            discrepancyRows.add([
+              _text(grn, ['grn_number', 'id']),
+              _text(line, ['sku']),
+              _text(line, ['item_name']),
+              ordered.toStringAsFixed(0),
+              received.toStringAsFixed(0),
+              rejected.toStringAsFixed(0),
+              variance.toStringAsFixed(0),
+            ]);
+          }
+        }
+
+        sections.add(ReportSection(
+          title: 'GRN Discrepancies',
+          description: discrepancyRows.isEmpty
+              ? 'No quantity discrepancies found in the last ${recentGrns.length} GRNs.'
+              : null,
+          tableHeaders: const [
+            'GRN',
+            'SKU',
+            'Item',
+            'Ordered',
+            'Received',
+            'Rejected',
+            'Variance'
+          ],
+          tableRows: discrepancyRows,
+        ));
+      }
+
+      if (spoilage.isNotEmpty && title.contains('Stock')) {
+        sections.add(ReportSection(
+          title: 'Spoilage Summary',
+          tableHeaders: const ['Ref', 'Item', 'Reason', 'Loss'],
+          tableRows: spoilage
+              .take(50)
+              .map((record) => [
+                    _text(record, ['reference_number', 'id']),
+                    _text(record, ['item_name', 'name']),
+                    _text(record, ['reason']),
+                    _money(_num(record, ['loss_value', 'total_loss'])),
+                  ])
+              .toList(),
+        ));
+      }
+
       await ReportService().generateAndPrint(
         title: title,
         subtitle: 'Central Store ${_text(row, ['kind'])}',
-        sections: [
-          if (title.contains('Stock') || title.contains('Low'))
-            ReportSection(
-              title: 'Inventory',
-              tableHeaders: const ['SKU', 'Item', 'Store', 'Qty', 'Reorder'],
-              tableRows: items
-                  .where((item) =>
-                      !title.contains('Low') ||
-                      _num(item, ['quantity']) <=
-                          _num(item, ['reorder_level', 'min_stock']))
-                  .map((item) => [
-                        _text(item, ['sku']),
-                        _text(item, ['item_name', 'name', 'description']),
-                        _text(item, ['store_type']),
-                        _num(item, ['quantity']).toStringAsFixed(0),
-                        _num(item, ['reorder_level', 'min_stock'])
-                            .toStringAsFixed(0),
-                      ])
-                  .toList(),
-            ),
-          if (title.contains('Purchase') ||
-              title.contains('Supplier Performance'))
-            ReportSection(
-              title: 'Purchase Orders',
-              tableHeaders: const ['PO', 'Supplier', 'Status', 'Total'],
-              tableRows: pos
-                  .map((po) => [
-                        _text(po, ['po_number', 'id']),
-                        _text(po, ['supplier_name']),
-                        _text(po, ['status']),
-                        _money(_num(po, ['total_amount', 'total'])),
-                      ])
-                  .toList(),
-            ),
-          if (title.contains('Dispatch'))
-            ReportSection(
-              title: 'Dispatch Notes',
-              tableHeaders: const ['Dispatch', 'Branch', 'Driver', 'Status'],
-              tableRows: dispatches
-                  .map((dispatch) => [
-                        _text(dispatch,
-                            ['dispatch_number', 'dispatch_note_number', 'id']),
-                        _text(dispatch, ['to_branch_name', 'branch_name']),
-                        _text(dispatch, ['driver_name']),
-                        _text(dispatch, ['status']),
-                      ])
-                  .toList(),
-            ),
-          if (title.contains('GRN'))
-            ReportSection(
-              title: 'GRNs',
-              tableHeaders: const ['GRN', 'Supplier', 'PO', 'Date'],
-              tableRows: grns
-                  .map((grn) => [
-                        _text(grn, ['grn_number', 'id']),
-                        _text(grn, ['supplier_name']),
-                        _text(grn, ['po_number'], 'Direct'),
-                        _date(grn['grn_date'] ?? grn['delivery_date']),
-                      ])
-                  .toList(),
-            ),
-          if (spoilage.isNotEmpty && title.contains('Stock'))
-            ReportSection(
-              title: 'Spoilage Summary',
-              tableHeaders: const ['Ref', 'Item', 'Reason', 'Loss'],
-              tableRows: spoilage
-                  .take(50)
-                  .map((record) => [
-                        _text(record, ['reference_number', 'id']),
-                        _text(record, ['item_name', 'name']),
-                        _text(record, ['reason']),
-                        _money(_num(record, ['loss_value', 'total_loss'])),
-                      ])
-                  .toList(),
-            ),
-        ],
+        sections: sections,
       );
     } catch (error) {
       if (context.mounted) _snack(context, 'Report failed: $error');
