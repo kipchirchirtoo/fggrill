@@ -2775,6 +2775,8 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
                   if (_num(expenses['bar_stock_variance']) != 0)
                     'Bar Stock Variance':
                         _money(_num(expenses['bar_stock_variance'])),
+                  if (_num(expenses['other']) != 0)
+                    'Other': _money(_num(expenses['other'])),
                   'Total': _money(totalExpenses),
                 }),
               ),

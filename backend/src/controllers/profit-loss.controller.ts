@@ -128,6 +128,28 @@ const resolvePnlParams = (req: Request): { branchId: any; startDate: string; end
     return { branchId, startDate, endDate };
 };
 
+// PostgREST silently caps unbounded selects at its default row limit (1000),
+// so any table whose row count scales with transaction volume (orders, line
+// items, cashier transactions) must be paged through in full or busy
+// branches/periods silently lose data past the first page — with no error,
+// just a quietly wrong total. Requires a stable order to page without gaps.
+const PNL_PAGE_SIZE = 1000;
+async function fetchAllRows<T = any>(
+    build: (query: any) => any,
+): Promise<T[]> {
+    const rows: T[] = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await build(supabase).range(from, from + PNL_PAGE_SIZE - 1);
+        if (error) throw error;
+        const batch = (data || []) as T[];
+        rows.push(...batch);
+        if (batch.length < PNL_PAGE_SIZE) break;
+        from += PNL_PAGE_SIZE;
+    }
+    return rows;
+}
+
 const computePosProfitLoss = async (branchId: any, startDate: string, endDate: string): Promise<any> => {
         const startTs = `${startDate}T00:00:00`;
         const endTs = `${endDate}T23:59:59`;
@@ -152,7 +174,7 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
 
         if (posOutletIds.length) {
             // Get all POS orders for this period (paid orders only)
-            const { data: posOrders } = await supabase
+            const posOrders = await fetchAllRows((sb) => sb
                 .from('pos_shift_orders')
                 .select('id, outlet_id, total_amount, items, payment_status, status')
                 .in('outlet_id', posOutletIds)
@@ -160,7 +182,8 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
                 .lte('created_at', endTs)
                 .eq('payment_status', 'paid')
                 .neq('status', 'cancelled')
-                .neq('status', 'voided');
+                .neq('status', 'voided')
+                .order('id', { ascending: true }));
 
             // Build cost price map from all outlet items
             const { data: outletItems } = await supabase
@@ -217,21 +240,23 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
         });
 
         // ── 3. Restaurant orders → "Restaurant" outlet (revenue + item COGS) ────
-        const { data: restOrders } = await supabase
+        const restOrders = await fetchAllRows((sb) => sb
             .from('restaurant_orders')
             .select('id, total_amount, grand_total, status')
             .eq('branch_id', branchId)
             .gte('created_at', startTs)
             .lte('created_at', endTs)
-            .not('status', 'eq', 'cancelled');
+            .not('status', 'eq', 'cancelled')
+            .order('id', { ascending: true }));
         if ((restOrders || []).length) {
             const acc = outletFor('restaurant', 'Restaurant', 'restaurant');
             const restIds = (restOrders || []).map((o: any) => o.id);
             (restOrders || []).forEach((o: any) => { acc.revenue += n(o.grand_total) || n(o.total_amount); });
-            const { data: items } = await supabase
+            const items = await fetchAllRows((sb) => sb
                 .from('restaurant_order_items')
-                .select('order_id, menu_item_id, quantity')
-                .in('order_id', restIds);
+                .select('id, order_id, menu_item_id, quantity')
+                .in('order_id', restIds)
+                .order('id', { ascending: true }));
             (items || []).forEach((it: any) => {
                 const qty = n(it.quantity);
                 acc.cogs += qty * (restCost.get(String(it.menu_item_id)) || 0);
@@ -240,21 +265,23 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
         }
 
         // ── 4. Bar orders → "Bar" outlet (revenue + item COGS) ──────────────────
-        const { data: barOrders } = await supabase
+        const barOrders = await fetchAllRows((sb) => sb
             .from('bar_orders')
             .select('id, total, subtotal, status')
             .eq('branch_id', branchId)
             .gte('created_at', startTs)
             .lte('created_at', endTs)
-            .not('status', 'eq', 'cancelled');
+            .not('status', 'eq', 'cancelled')
+            .order('id', { ascending: true }));
         if ((barOrders || []).length) {
             const acc = outletFor('bar', 'Bar', 'bar');
             const barIds = (barOrders || []).map((o: any) => o.id);
             (barOrders || []).forEach((o: any) => { acc.revenue += n(o.total) || n(o.subtotal); });
-            const { data: items } = await supabase
+            const items = await fetchAllRows((sb) => sb
                 .from('bar_order_items')
-                .select('order_id, drink_id, quantity')
-                .in('order_id', barIds);
+                .select('id, order_id, drink_id, quantity')
+                .in('order_id', barIds)
+                .order('id', { ascending: true }));
             (items || []).forEach((it: any) => {
                 const qty = n(it.quantity);
                 acc.cogs += qty * (barCost.get(String(it.drink_id)) || 0);
@@ -265,14 +292,15 @@ const computePosProfitLoss = async (branchId: any, startDate: string, endDate: s
         // ── 5. Cashier-recorded revenue cross-check ─────────────────────────────
         // Primary: cashier_transactions (canonical posted payments)
         // Fallback: cashier_shift_logs (legacy shift data)
-        const [{ data: cashierTxns }, { data: cashierShiftLogs }] = await Promise.all([
-            supabase.from('cashier_transactions')
-                .select('amount, transaction_type, status')
+        const [cashierTxns, { data: cashierShiftLogs }] = await Promise.all([
+            fetchAllRows((sb) => sb.from('cashier_transactions')
+                .select('id, amount, transaction_type, status')
                 .eq('branch_id', branchId)
                 .gte('transaction_date', startTs)
                 .lte('transaction_date', endTs)
                 .eq('status', 'posted')
-                .neq('transaction_type', 'refund'),
+                .neq('transaction_type', 'refund')
+                .order('id', { ascending: true })),
             supabase.from('cashier_shift_logs')
                 .select('cash_at_hand, total_sales')
                 .eq('branch_id', branchId)
@@ -504,12 +532,50 @@ export const getBranchProfitLossRpc = async (req: Request, res: Response, next: 
 
         if (error) throw error;
 
+        const rpcData: Record<string, any> = data || {};
+        const n = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+        const round2 = (v: number) => Math.round(v * 100) / 100;
+
+        // The live get_branch_profit_loss() RPC prices COGS off goods_receipt_lines
+        // (stock RECEIVED directly at this branch via a local GRN). Branches like
+        // this one mostly get stock via central-store dispatch, not local supplier
+        // GRNs, so that figure is almost always 0 — which then makes gross/net
+        // profit silently equal system_revenue instead of reflecting real cost.
+        // computePosProfitLoss() already derives true cost of goods SOLD from
+        // actual POS/restaurant/bar order line items (the same data backing the
+        // "P&L by POS Outlet" table below) — reuse that instead of the RPC's cogs.
+        const posPnl = await computePosProfitLoss(branchId, params.startDate, params.endDate);
+
+        const systemRevenue = n(rpcData.system_revenue);
+        const cogs = n(posPnl.costOfGoods);
+
+        // The RPC also mislays 'operational' as a sibling top-level
+        // operational_expenses field instead of inside expenses_by_category, and
+        // omits net_margin entirely — both silently read as 0 by the frontend.
+        const expensesByCategory: Record<string, number> = {
+            ...(rpcData.expenses_by_category || {}),
+            operational: n(rpcData.operational_expenses),
+        };
+        if (n(rpcData.other_expenses) !== 0) {
+            expensesByCategory.other = n(rpcData.other_expenses);
+        }
+        const totalExpenses = Object.values(expensesByCategory).reduce((s, v) => s + n(v), 0);
+
+        const grossProfit = systemRevenue - cogs;
+        const netProfit = grossProfit - totalExpenses;
+        const netMargin = systemRevenue === 0 ? 0 : round2((netProfit / systemRevenue) * 100);
+
         res.status(200).json({
             success: true,
             data: {
                 period: { from: params.startDate, to: params.endDate },
                 branch_id: branchId,
-                ...(data || {}),
+                ...rpcData,
+                expenses_by_category: expensesByCategory,
+                cogs: round2(cogs),
+                gross_profit: round2(grossProfit),
+                net_profit: round2(netProfit),
+                net_margin: netMargin,
             },
         });
     } catch (error) {
