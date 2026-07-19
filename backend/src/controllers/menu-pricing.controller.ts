@@ -223,7 +223,7 @@ export const upsertBranchItemPricing = async (
       branch_id: branchId,
       cost_price: cost_price != null ? num(cost_price) : 0,
       selling_price: selling_price != null && selling_price !== '' ? num(selling_price) : null,
-      is_available: is_available == null ? null : Boolean(is_available),
+      is_available: is_available == null ? true : Boolean(is_available),
       updated_by: req.user?.id || null,
       updated_at: new Date().toISOString(),
     };
@@ -271,7 +271,7 @@ export const bulkUpsertBranchPricing = async (
         branch_id: branchId,
         cost_price: it.cost_price != null ? num(it.cost_price) : 0,
         selling_price: it.selling_price != null && it.selling_price !== '' ? num(it.selling_price) : null,
-        is_available: it.is_available == null ? null : Boolean(it.is_available),
+        is_available: it.is_available == null ? true : Boolean(it.is_available),
         updated_by: req.user?.id || null,
         updated_at: now,
       }));
