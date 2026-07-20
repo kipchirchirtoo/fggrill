@@ -21966,6 +21966,11 @@ class _BranchBarMenuSectionState
 // Restaurant Menu Section
 // ─────────────────────────────────────────────────────────────────────────────
 
+String _menuCategoryName(dynamic rawCat) {
+  if (rawCat is Map) return '${rawCat['name'] ?? ''}';
+  return '${rawCat ?? ''}';
+}
+
 class _BranchRestaurantMenuSection extends ConsumerStatefulWidget {
   const _BranchRestaurantMenuSection();
 
@@ -22018,7 +22023,7 @@ class _BranchRestaurantMenuSectionState
           .toList();
       final cats = <String>{'All'};
       for (final item in items) {
-        final c = '${item['category'] ?? ''}';
+        final c = _menuCategoryName(item['category']);
         if (c.isNotEmpty) cats.add(c);
       }
       if (!mounted) return;
@@ -22043,8 +22048,7 @@ class _BranchRestaurantMenuSectionState
       _filtered = cat == 'All'
           ? _all
           : _all
-              .where((i) =>
-                  '${i['category'] ?? ''}' == cat)
+              .where((i) => _menuCategoryName(i['category']) == cat)
               .toList();
     });
   }
@@ -22065,13 +22069,38 @@ class _BranchRestaurantMenuSectionState
   }
 
   Future<void> _showEditDialog(Map<String, dynamic> item) async {
-    final nameCtrl =
-        TextEditingController(text: '${item['name'] ?? ''}');
-    final catCtrl =
-        TextEditingController(text: '${item['category'] ?? ''}');
-    final priceCtrl =
-        TextEditingController(text: '${item['price'] ?? ''}');
+    final nameCtrl = TextEditingController(text: '${item['name'] ?? ''}');
+    final priceCtrl = TextEditingController(text: '${item['price'] ?? ''}');
+
+    // Resolve initial category_id from the nested category object or direct field
+    final rawCat = item['category'];
+    String? selectedCategoryId = rawCat is Map
+        ? (rawCat['id']?.toString().isNotEmpty == true ? rawCat['id'].toString() : null)
+        : (item['category_id']?.toString().isNotEmpty == true ? item['category_id'].toString() : null);
+
     bool saving = false;
+
+    // Load categories before opening dialog
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final branchId = await repo.getBranchId();
+    if (!mounted) return;
+    final dio = ref.read(dioProvider);
+    List<Map<String, dynamic>> cats = [];
+    try {
+      final catRes = await dio.get('/restaurant/menu/categories',
+          queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId});
+      final catData = catRes.data;
+      final rawList = catData is List
+          ? catData
+          : catData is Map
+              ? ((catData['data'] ?? []) as List)
+              : <dynamic>[];
+      cats = rawList
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {}
+    if (!mounted) return;
 
     await showDialog(
       context: context,
@@ -22083,10 +22112,22 @@ class _BranchRestaurantMenuSectionState
                 controller: nameCtrl,
                 decoration: const InputDecoration(labelText: 'Name')),
             const SizedBox(height: 8),
-            TextField(
-                controller: catCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Category')),
+            DropdownButtonFormField<String?>(
+              value: cats.any((c) => c['id']?.toString() == selectedCategoryId)
+                  ? selectedCategoryId
+                  : null,
+              decoration: const InputDecoration(labelText: 'Category'),
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('No category')),
+                ...cats.map((cat) => DropdownMenuItem<String?>(
+                      value: '${cat['id']}',
+                      child: Text('${cat['name']}'),
+                    )),
+              ],
+              onChanged: (v) => setDlgState(() => selectedCategoryId = v),
+            ),
             const SizedBox(height: 8),
             TextField(
                 controller: priceCtrl,
@@ -22105,16 +22146,11 @@ class _BranchRestaurantMenuSectionState
                       if (id.isEmpty) return;
                       setDlgState(() => saving = true);
                       try {
-                        final dio = ref.read(dioProvider);
-                        await dio.put(
-                            '/restaurant/menu/items/$id',
-                            data: {
-                              'name': nameCtrl.text.trim(),
-                              'category': catCtrl.text.trim(),
-                              'price':
-                                  double.tryParse(priceCtrl.text) ??
-                                      item['price'],
-                            });
+                        await dio.put('/restaurant/menu/items/$id', data: {
+                          'name': nameCtrl.text.trim(),
+                          'category_id': selectedCategoryId,
+                          'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                        });
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         await _load();
@@ -22134,18 +22170,36 @@ class _BranchRestaurantMenuSectionState
     );
 
     nameCtrl.dispose();
-    catCtrl.dispose();
     priceCtrl.dispose();
   }
 
   Future<void> _showAddDialog() async {
     final nameCtrl = TextEditingController();
-    final catCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
+    String? selectedCategoryId;
     bool saving = false;
 
     final repo = ref.read(branchAccountantRepositoryProvider);
     final branchId = await repo.getBranchId();
+    if (!mounted) return;
+    final dio = ref.read(dioProvider);
+
+    // Load categories before opening dialog
+    List<Map<String, dynamic>> cats = [];
+    try {
+      final catRes = await dio.get('/restaurant/menu/categories',
+          queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId});
+      final catData = catRes.data;
+      final rawList = catData is List
+          ? catData
+          : catData is Map
+              ? ((catData['data'] ?? []) as List)
+              : <dynamic>[];
+      cats = rawList
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {}
     if (!mounted) return;
 
     await showDialog(
@@ -22156,19 +22210,27 @@ class _BranchRestaurantMenuSectionState
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
                 controller: nameCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Name *')),
+                decoration: const InputDecoration(labelText: 'Name *')),
             const SizedBox(height: 8),
-            TextField(
-                controller: catCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Category')),
+            DropdownButtonFormField<String?>(
+              value: selectedCategoryId,
+              decoration: const InputDecoration(labelText: 'Category'),
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('No category')),
+                ...cats.map((cat) => DropdownMenuItem<String?>(
+                      value: '${cat['id']}',
+                      child: Text('${cat['name']}'),
+                    )),
+              ],
+              onChanged: (v) => setDlgState(() => selectedCategoryId = v),
+            ),
             const SizedBox(height: 8),
             TextField(
                 controller: priceCtrl,
                 keyboardType: TextInputType.number,
-                decoration:
-                    const InputDecoration(labelText: 'Price *')),
+                decoration: const InputDecoration(labelText: 'Price *')),
           ]),
           actions: [
             TextButton(
@@ -22188,16 +22250,13 @@ class _BranchRestaurantMenuSectionState
                       }
                       setDlgState(() => saving = true);
                       try {
-                        final dio = ref.read(dioProvider);
-                        await dio.post('/restaurant/menu/items',
-                            data: {
-                              'name': nameCtrl.text.trim(),
-                              'category': catCtrl.text.trim(),
-                              'price': double.tryParse(priceCtrl.text) ?? 0,
-                              if (branchId.isNotEmpty)
-                                'branch_id':
-                                    int.tryParse(branchId) ?? branchId,
-                            });
+                        await dio.post('/restaurant/menu/items', data: {
+                          'name': nameCtrl.text.trim(),
+                          'category_id': selectedCategoryId,
+                          'price': double.tryParse(priceCtrl.text) ?? 0,
+                          if (branchId.isNotEmpty)
+                            'branch_id': int.tryParse(branchId) ?? branchId,
+                        });
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         await _load();
@@ -22217,7 +22276,6 @@ class _BranchRestaurantMenuSectionState
     );
 
     nameCtrl.dispose();
-    catCtrl.dispose();
     priceCtrl.dispose();
   }
 
@@ -22309,8 +22367,8 @@ class _BranchRestaurantMenuSectionState
                 itemBuilder: (context, i) {
                   final item = _filtered[i];
                   final name = '${item['name'] ?? '—'}';
-                  final category =
-                      '${item['category'] ?? '—'}';
+                  final catName = _menuCategoryName(item['category']);
+                  final category = catName.isNotEmpty ? catName : '—';
                   final price = item['price'];
                   final available =
                       item['available'] != false &&

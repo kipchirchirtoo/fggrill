@@ -1566,7 +1566,7 @@ class _CategorySelect extends StatelessWidget {
       decoration: const InputDecoration(labelText: 'Category'),
       items: [
         const DropdownMenuItem<String?>(
-            value: null, child: Text('Uncategorized')),
+            value: null, child: Text('Select category')),
         ...rows.whereType<Map>().map((row) {
           final category = Map<String, dynamic>.from(row);
           return DropdownMenuItem<String?>(
