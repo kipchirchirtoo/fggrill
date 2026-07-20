@@ -186,13 +186,23 @@ export const createMenuItem = async (
       isSpicy,
       allergens,
       ingredients,
-      branchId
+      branchId,
+      sku,
+      costPrice,
+      cost_price,
+      unit
     } = req.body;
+
+    const categoryName = req.body.category || req.body.category_name;
+    let resolvedCategoryId = categoryId;
+    if (!resolvedCategoryId && categoryName) {
+      resolvedCategoryId = await resolveRestaurantCategoryId(categoryName) || undefined;
+    }
 
     const { data: item, error } = await supabase
       .from('restaurant_menu_items')
       .insert([{
-        category_id: categoryId,
+        category_id: resolvedCategoryId,
         name,
         description,
         price,
@@ -202,7 +212,10 @@ export const createMenuItem = async (
         is_spicy: isSpicy ?? false,
         allergens,
         ingredients,
-        branch_id: req.user?.branch_id || branchId || null
+        branch_id: req.user?.branch_id || branchId || null,
+        sku: sku || null,
+        cost_price: costPrice || cost_price || 0,
+        unit: unit || 'portion'
       }])
       .select()
       .single();
@@ -250,7 +263,11 @@ export const updateMenuItem = async (
       isAvailable,
       is_available,
       branchId,
-      branch_id
+      branch_id,
+      sku,
+      costPrice,
+      cost_price,
+      unit
     } = req.body;
 
     // Build update object with only provided fields
@@ -259,7 +276,16 @@ export const updateMenuItem = async (
     };
 
     // Handle both camelCase and snake_case field names
-    if (categoryId !== undefined || category_id !== undefined) updateData.category_id = categoryId || category_id;
+    let resolvedCategoryId = categoryId || category_id;
+    if (resolvedCategoryId === undefined) {
+      const categoryName = req.body.category || req.body.category_name;
+      if (categoryName !== undefined) {
+        resolvedCategoryId = await resolveRestaurantCategoryId(categoryName) || null;
+      }
+    }
+    if (resolvedCategoryId !== undefined) {
+      updateData.category_id = resolvedCategoryId || null;
+    }
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (price !== undefined) updateData.price = price;
@@ -271,6 +297,9 @@ export const updateMenuItem = async (
     if (ingredients !== undefined) updateData.ingredients = ingredients;
     if (isAvailable !== undefined || is_available !== undefined) updateData.is_available = (isAvailable ?? is_available) ?? true;
     if (branchId !== undefined || branch_id !== undefined) updateData.branch_id = branchId || branch_id || null;
+    if (sku !== undefined) updateData.sku = sku || null;
+    if (costPrice !== undefined || cost_price !== undefined) updateData.cost_price = costPrice || cost_price || 0;
+    if (unit !== undefined) updateData.unit = unit;
 
     const { data: item, error } = await supabase
       .from('restaurant_menu_items')
@@ -1382,3 +1411,34 @@ export const getDailySales = async (
     next(error);
   }
 };
+
+async function resolveRestaurantCategoryId(categoryName: string | undefined): Promise<string | null> {
+  if (!categoryName) return null;
+  const name = categoryName.trim();
+  if (!name) return null;
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(name)) return name;
+
+  const { data } = await supabase
+    .from('restaurant_menu_categories')
+    .select('id')
+    .ilike('name', name)
+    .limit(1);
+
+  if (data && data.length > 0) {
+    return data[0].id;
+  }
+
+  const { data: newCat, error } = await supabase
+    .from('restaurant_menu_categories')
+    .insert([{ name }])
+    .select('id')
+    .single();
+
+  if (error || !newCat) {
+    logger.error('Error creating restaurant category from name:', error);
+    return null;
+  }
+  return newCat.id;
+}

@@ -342,7 +342,6 @@ class _BranchManagerDashboardState
         case BranchManagerSection.kitchenWastage:
         case BranchManagerSection.exchangeHistory:
         case BranchManagerSection.dataHealth:
-          break;
       }
     } catch (error) {
       if (mounted) _snack('Failed to load ${_label(_section)}: $error');

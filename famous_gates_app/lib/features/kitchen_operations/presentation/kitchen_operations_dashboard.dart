@@ -1372,7 +1372,7 @@ class _KitchenOperationsDashboardState
         _ActionButton(
           label: 'Export PDF',
           icon: Icons.picture_as_pdf_outlined,
-          onPressed: () => _export('kitchen_food_controls'),
+          onPressed: () => _export('kitchen_production_recipes'),
         ),
       ],
       child: Column(

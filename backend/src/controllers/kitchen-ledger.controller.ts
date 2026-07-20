@@ -363,27 +363,40 @@ export const getKitchenStats = async (req: Request, res: Response) => {
   try {
     const { branch_id } = req.query;
 
-    // Only return stats for existing tables
-    const { data: stockLedger } = await supabase
+    const { count: stockLedgerEntries } = await supabase
       .from('kitchen_stock_ledger')
       .select('*', { count: 'exact', head: true })
       .eq('branch_id', branch_id);
 
-    const { data: foodControls } = await supabase
-      .from('kitchen_food_controls')
+    const { count: activeRecipes } = await supabase
+      .from('kitchen_production_recipes')
       .select('*', { count: 'exact', head: true })
       .eq('branch_id', branch_id)
       .eq('is_active', true);
+
+    const { count: directMappings } = await supabase
+      .from('food_control_direct_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('branch_id', branch_id)
+      .eq('is_active', true);
+
+    const { count: channelStandards } = await supabase
+      .from('channel_food_standards')
+      .select('*', { count: 'exact', head: true })
+      .eq('branch_id', branch_id);
 
     res.json({
       success: true,
       message: 'Kitchen statistics retrieved successfully',
       data: {
-        stockLedgerEntries: 0,
-        activeFoodControls: 0,
+        stockLedgerEntries: stockLedgerEntries ?? 0,
+        activeFoodControls: (activeRecipes ?? 0) + (directMappings ?? 0) + (channelStandards ?? 0),
+        activeRecipes: activeRecipes ?? 0,
+        directMappings: directMappings ?? 0,
+        channelStandards: channelStandards ?? 0,
         todayReceipts: 0,
         pendingVariances: 0,
-        message: 'Limited statistics - most kitchen tables do not exist in new database'
+        message: 'Food control configuration counts come from canonical production recipes, direct mappings, and channel standards.'
       }
     });
   } catch (error: any) {

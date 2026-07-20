@@ -11,6 +11,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 
 import '../../../core/storage/secure_storage_provider.dart';
@@ -24,10 +25,12 @@ import 'branch_po_create_screen.dart';
 import 'branch_stock_request_screen.dart';
 import 'pos_outlet_issue_screen.dart';
 import 'bar_stocktake_screen.dart';
+import 'kitchen_production_logging_screen.dart';
 import 'kitchen_stocktake_screen.dart';
 import 'store_stocktake_screen.dart';
 import 'record_spoilage_screen.dart';
 import 'wastage_report_screen.dart';
+import '../../kitchen/presentation/kitchen_sessions_screen.dart';
 import '../../kitchen_operations/data/repository.dart';
 
 enum BranchStorekeeperSection {
@@ -47,6 +50,7 @@ enum BranchStorekeeperSection {
   kitchenUsage,
   stockOut,
   kitchenProduction,
+  kitchenProductionLog,
   storeStocktake,
   barStocktake,
   kitchenStocktake,
@@ -54,6 +58,7 @@ enum BranchStorekeeperSection {
   wastageReport,
   reports,
   notifications,
+  internalTransfers,
 }
 
 class BranchStorekeeperDashboard extends ConsumerStatefulWidget {
@@ -127,6 +132,17 @@ class _BranchStorekeeperDashboardState
   bool _outletItemsLoading = false;
   String _analyticsPeriod = 'month';
   bool _analyticsLoading = false;
+
+  List<Map<String, dynamic>> _branches = [];
+  List<Map<String, dynamic>> _outgoingTransfers = [];
+  int? _transferDestBranchId;
+  final List<_TransferLineItem> _transferLines = [];
+  bool _transferUrgent = false;
+  final _transferNotesCtrl = TextEditingController();
+  bool _loadingTransfers = false;
+  String? _expandedIncomingTransferId;
+  final Map<String, Map<String, num>> _incomingQuantities = {};
+  final Map<String, TextEditingController> _incomingNotesCtrls = {};
 
   static const _categories = [
     'all',
@@ -945,6 +961,10 @@ class _BranchStorekeeperDashboardState
           WidgetsBinding.instance
               .addPostFrameCallback((_) => _focusReceiveScanner());
         }
+        if (section == BranchStorekeeperSection.internalTransfers) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _loadTransfersData());
+        }
       },
       child: KeyedSubtree(
         key: ValueKey(_section.name),
@@ -1002,6 +1022,12 @@ class _BranchStorekeeperDashboardState
           icon: PhosphorIcons.buildings(),
           group: 'Receiving',
         ),
+        MasterNavItem(
+          section: BranchStorekeeperSection.internalTransfers,
+          label: 'Branch Transfers',
+          icon: PhosphorIcons.arrowsLeftRight(),
+          group: 'Receiving',
+        ),
         const MasterNavItem(
           section: BranchStorekeeperSection.storeStocktake,
           label: 'Store Stocktake',
@@ -1050,6 +1076,12 @@ class _BranchStorekeeperDashboardState
           icon: Icons.soup_kitchen_outlined,
           group: 'Usage',
         ),
+        const MasterNavItem(
+          section: BranchStorekeeperSection.kitchenProductionLog,
+          label: 'Production Logging',
+          icon: Icons.blender_outlined,
+          group: 'Usage',
+        ),
         MasterNavItem(
           section: BranchStorekeeperSection.reports,
           label: 'Reports',
@@ -1088,7 +1120,11 @@ class _BranchStorekeeperDashboardState
       case BranchStorekeeperSection.suppliers:
         return _suppliersPage();
       case BranchStorekeeperSection.barStock:
-        return const _BarStockSection();
+        return _BarStockSection(
+          onOpenOutletIssue: () {
+            setState(() => _section = BranchStorekeeperSection.stockOut);
+          },
+        );
       case BranchStorekeeperSection.foodStuffsStock:
         return const _FoodStuffsStockSection();
       case BranchStorekeeperSection.purchaseOrders:
@@ -1104,7 +1140,9 @@ class _BranchStorekeeperDashboardState
       case BranchStorekeeperSection.stockOut:
         return _consolidatedStockOutPage(0);
       case BranchStorekeeperSection.kitchenProduction:
-        return _KitchenProductionSection(stock: _stock);
+        return const KitchenSessionsScreen();
+      case BranchStorekeeperSection.kitchenProductionLog:
+        return const KitchenProductionLoggingScreen();
       case BranchStorekeeperSection.storeStocktake:
         return const StoreStocktakeScreen();
       case BranchStorekeeperSection.barStocktake:
@@ -1119,6 +1157,8 @@ class _BranchStorekeeperDashboardState
         return _reportsPage();
       case BranchStorekeeperSection.notifications:
         return _notificationsPage();
+      case BranchStorekeeperSection.internalTransfers:
+        return _internalTransfersPage();
     }
   }
 
@@ -6205,6 +6245,654 @@ class _BranchStorekeeperDashboardState
     }
     if (status == 'REJECTED' || status == 'CANCELLED') return 'Closed';
     return '-';
+  }
+
+  // ── Branch Transfers (Internal transfers) ───────────────────────────────────
+
+  Widget _internalTransfersPage() {
+    return DefaultTabController(
+      length: 2,
+      child: _Page(
+        title: 'Branch Transfers',
+        subtitle: 'Initiate and receive internal stock transfers between branches.',
+        actions: [
+          _RefreshButton(onPressed: _loadTransfersData),
+        ],
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.kPrimary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const TabBar(
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white60,
+              indicatorColor: Colors.white,
+              indicatorSize: TabBarIndicatorSize.tab,
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.outbox_outlined, size: 18),
+                  text: 'Transfer Out',
+                ),
+                Tab(
+                  icon: Icon(Icons.inbox_outlined, size: 18),
+                  text: 'Transfer In',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 980,
+            child: TabBarView(
+              children: [
+                _transferOutTab(),
+                _transferInTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _transferOutTab() {
+    return LayoutBuilder(builder: (context, constraints) {
+      final form = _transferOutFormCard();
+      final list = _transferOutHistoryCard();
+      if (constraints.maxWidth < 980) {
+        return SingleChildScrollView(
+          child: Column(children: [
+            form,
+            const SizedBox(height: 16),
+            list,
+          ]),
+        );
+      }
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(flex: 3, child: form),
+        const SizedBox(width: 16),
+        Expanded(flex: 2, child: list),
+      ]);
+    });
+  }
+
+  Widget _transferOutFormCard() {
+    final otherBranches = _branches.where((b) => '${b['id']}' != _branchId).toList();
+    
+    return _SectionCard(
+      title: 'New Branch Transfer',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // Destination Branch Dropdown
+        const Text('Destination Branch', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<int>(
+          value: _transferDestBranchId,
+          hint: const Text('Select target branch…'),
+          isExpanded: true,
+          decoration: const InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          ),
+          items: otherBranches.map((b) {
+            return DropdownMenuItem<int>(
+              value: _num(b['id']).toInt(),
+              child: Text(_text(b, ['name'])),
+            );
+          }).toList(),
+          onChanged: (val) => setState(() => _transferDestBranchId = val),
+        ),
+        const SizedBox(height: 16),
+
+        // Priority & Notes
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('Urgency', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Row(children: [
+                Switch(
+                  value: _transferUrgent,
+                  onChanged: (val) => setState(() => _transferUrgent = val),
+                  activeColor: AppColors.kPrimary,
+                ),
+                const SizedBox(width: 8),
+                Text(_transferUrgent ? 'Urgent' : 'Normal', 
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: _transferUrgent ? AppColors.kError : AppColors.kTextPrimary,
+                  ),
+                ),
+              ]),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 16),
+
+        const Text('Notes', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _transferNotesCtrl,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            hintText: 'Add transfer notes…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Items Grid
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('Items to Transfer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          TextButton.icon(
+            onPressed: () => setState(() => _transferLines.add(_TransferLineItem())),
+            icon: const Icon(Icons.add),
+            label: const Text('Add Row'),
+          ),
+        ]),
+        const Divider(height: 16),
+
+        if (_transferLines.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: TextButton.icon(
+                onPressed: () => setState(() => _transferLines.add(_TransferLineItem())),
+                icon: const Icon(Icons.add_box_outlined),
+                label: const Text('Add your first transfer item'),
+              ),
+            ),
+          )
+        else
+          Column(children: [
+            // Header Row
+            Row(children: [
+              const Expanded(flex: 3, child: Text('Item Name / SKU', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+              const SizedBox(width: 8),
+              const SizedBox(width: 80, child: Text('Qty', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary))),
+              const SizedBox(width: 100, child: Text('Stock', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.kTextSecondary), textAlign: TextAlign.center)),
+              const SizedBox(width: 40),
+            ]),
+            const Divider(height: 8),
+
+            ..._transferLines.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final line = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  // Item Autocomplete
+                  Expanded(
+                    flex: 3,
+                    child: LayoutBuilder(builder: (context, constraints) {
+                      return Autocomplete<Map<String, dynamic>>(
+                        displayStringForOption: (o) => '${o['item_name'] ?? ''}',
+                        optionsBuilder: (value) {
+                          if (value.text.isEmpty) return const [];
+                          final q = value.text.toLowerCase();
+                          return _catalog.where((c) =>
+                              '${c['item_name'] ?? ''}'.toLowerCase().contains(q) ||
+                              '${c['sku'] ?? ''}'.toLowerCase().contains(q));
+                        },
+                        onSelected: (o) {
+                          setState(() {
+                            line.sku = o['sku'];
+                            line.itemName = o['item_name'] ?? '';
+                            line.unit = o['unit_of_measure'] ?? '';
+                            final stockItem = _stock.firstWhere(
+                              (s) => s['item_sku'] == o['sku'],
+                              orElse: () => <String, dynamic>{},
+                            );
+                            line.availableQty = _num(stockItem['quantity'] ?? 0).toDouble();
+                          });
+                        },
+                        fieldViewBuilder: (context, ctrl, focusNode, onSubmit) {
+                          if (line.sku != null && ctrl.text.isEmpty) {
+                            ctrl.text = line.itemName;
+                          }
+                          return TextField(
+                            controller: ctrl,
+                            focusNode: focusNode,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                              hintText: 'Search catalog…',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                            ),
+                          );
+                        },
+                      );
+                    }),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Qty
+                  SizedBox(
+                    width: 80,
+                    child: TextField(
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: '0',
+                        suffixText: line.unit.isNotEmpty ? line.unit : null,
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          line.quantity = double.tryParse(val) ?? 0;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Available Stock Indicator
+                  SizedBox(
+                    width: 100,
+                    child: line.sku == null
+                        ? const SizedBox.shrink()
+                        : Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: line.availableQty <= 0
+                                  ? AppColors.kError.withOpacity(0.1)
+                                  : line.quantity > line.availableQty
+                                      ? AppColors.kWarning.withOpacity(0.12)
+                                      : AppColors.kSuccess.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${_plainNum(line.availableQty)} ${line.unit}',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: line.availableQty <= 0
+                                    ? AppColors.kError
+                                    : line.quantity > line.availableQty
+                                        ? AppColors.kWarning
+                                        : AppColors.kSuccess,
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 4),
+
+                  // Delete row
+                  IconButton(
+                    onPressed: () => setState(() => _transferLines.removeAt(idx)),
+                    icon: const Icon(Icons.delete_outline, color: AppColors.kError, size: 20),
+                  ),
+                ]),
+              );
+            }),
+          ]),
+        const SizedBox(height: 24),
+
+        // Submit Button
+        FilledButton.icon(
+          onPressed: _loadingTransfers ? null : _submitTransfer,
+          icon: _loadingTransfers
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Icon(Icons.send_outlined),
+          label: const Text('Initiate Transfer Out'),
+        ),
+      ]),
+    );
+  }
+
+  Widget _transferOutHistoryCard() {
+    return _SectionCard(
+      title: 'Outgoing Transfers Log',
+      child: _RecordList(
+        emptyText: 'No outgoing transfers recorded.',
+        children: _outgoingTransfers.map((tx) {
+          final docNum = _text(tx, ['dispatch_number', 'dispatch_document_number', 'id']);
+          final toBranch = tx['to_branch'] ?? tx['destination_branch'];
+          final destName = toBranch != null ? _text(toBranch, ['name']) : 'Branch ${tx['to_branch_id']}';
+          final dateStr = _text(tx, ['dispatched_at', 'created_at']);
+          final date = dateStr.isNotEmpty ? DateFormat('MMM d, yyyy HH:mm').format(DateTime.parse(dateStr)) : '-';
+          
+          final status = '${tx['status'] ?? ''}'.toUpperCase();
+          final isDiscrepancy = status == 'DISPUTED' || 
+              _listFrom(tx['items']).any((i) => _num(i['damaged_quantity']) > 0 || _num(i['missing_quantity']) > 0);
+          
+          final badgeText = isDiscrepancy 
+              ? 'Discrepancy' 
+              : (status == 'CONFIRMED' || status == 'COMPLETED' || status == 'RECEIVED') 
+                  ? 'Received' 
+                  : 'Dispatched';
+                  
+          final badgeColor = isDiscrepancy 
+              ? AppColors.kError 
+              : (status == 'CONFIRMED' || status == 'COMPLETED' || status == 'RECEIVED') 
+                  ? AppColors.kSuccess 
+                  : AppColors.kWarning;
+
+          final meta = tx['document_metadata'];
+          final isUrgent = meta is Map && (meta['urgency'] == 'Urgent' || meta['priority'] == 'URGENT');
+
+          return _RecordTile(
+            icon: PhosphorIcons.arrowUpRight(),
+            title: docNum,
+            subtitle: 'To: $destName\n$date',
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (isUrgent)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.kError.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('URGENT', style: TextStyle(color: AppColors.kError, fontSize: 8, fontWeight: FontWeight.bold)),
+                  ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _transferInTab() {
+    final sortedIncoming = List<Map<String, dynamic>>.from(_incomingDispatches);
+    sortedIncoming.sort((a, b) {
+      final aUrgent = _isUrgent(a);
+      final bUrgent = _isUrgent(b);
+      if (aUrgent && !bUrgent) return -1;
+      if (!aUrgent && bUrgent) return 1;
+      return 0;
+    });
+
+    return _SectionCard(
+      title: 'Incoming Transfers Queue',
+      child: _RecordList(
+        emptyText: 'No incoming transfers awaiting receipt.',
+        children: sortedIncoming.map((dispatch) {
+          final id = '${dispatch['id']}';
+          final docNum = _text(dispatch, ['dispatch_number', 'dispatch_document_number', 'id']);
+          final fromBranch = dispatch['from_branch'] ?? dispatch['source_branch'];
+          final sourceName = fromBranch != null ? _text(fromBranch, ['name']) : 'Branch ${dispatch['from_branch_id']}';
+          final dateStr = _text(dispatch, ['dispatched_at', 'created_at']);
+          final date = dateStr.isNotEmpty ? DateFormat('MMM d, yyyy HH:mm').format(DateTime.parse(dateStr)) : '-';
+          
+          final isExpanded = _expandedIncomingTransferId == id;
+          final isUrgent = _isUrgent(dispatch);
+          final items = _listFrom(dispatch['items']);
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: isUrgent ? const BorderSide(color: AppColors.kError, width: 1.5) : BorderSide(color: Colors.grey.shade200),
+            ),
+            child: Column(children: [
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isUrgent ? AppColors.kError.withOpacity(0.1) : AppColors.kPrimary.withOpacity(0.1),
+                  child: Icon(
+                    isUrgent ? Icons.warning_amber_rounded : Icons.south_west,
+                    color: isUrgent ? AppColors.kError : AppColors.kPrimary,
+                  ),
+                ),
+                title: Row(children: [
+                  Text(docNum, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  if (isUrgent)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.kError,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('URGENT', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ),
+                ]),
+                subtitle: Text('From: $sourceName\nSent: $date\n${items.length} item(s)'),
+                trailing: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                onTap: () {
+                  setState(() {
+                    _expandedIncomingTransferId = isExpanded ? null : id;
+                    if (!isExpanded) {
+                      // Pre-fill quantities
+                      _incomingQuantities[id] = {
+                        for (final item in items)
+                          '${item['id']}': _num(item['dispatched_quantity'] ?? item['quantity'])
+                      };
+                      // Pre-fill notes controller
+                      _incomingNotesCtrls[id] = TextEditingController();
+                    }
+                  });
+                },
+              ),
+              if (isExpanded)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text('Verify Received Quantities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 12),
+                    
+                    ...items.map((item) {
+                      final itemId = '${item['id']}';
+                      final dispatchedQty = _num(item['dispatched_quantity'] ?? item['quantity']);
+                      final sku = _text(item, ['item_sku', 'sku']);
+                      final name = _text(item, ['item_name'], sku);
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Row(children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('Sent: ${_plainNum(dispatchedQty)}', style: const TextStyle(color: AppColors.kTextSecondary)),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 100,
+                            child: TextFormField(
+                              initialValue: _plainNum(dispatchedQty),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              textAlign: TextAlign.center,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                labelText: 'Received',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              ),
+                              onChanged: (val) {
+                                final qty = num.tryParse(val) ?? 0;
+                                setState(() {
+                                  _incomingQuantities[id]?[itemId] = qty;
+                                });
+                              },
+                            ),
+                          ),
+                        ]),
+                      );
+                    }),
+                    const SizedBox(height: 12),
+                    
+                    TextField(
+                      controller: _incomingNotesCtrls[id],
+                      decoration: const InputDecoration(
+                        labelText: 'Receipt Notes / Discrepancy details',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                      OutlinedButton(
+                        onPressed: () => setState(() => _expandedIncomingTransferId = null),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: _loadingTransfers ? null : () => _confirmIncomingReceipt(dispatch),
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text('Confirm Receipt'),
+                      ),
+                    ]),
+                  ]),
+                ),
+            ]),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  bool _isUrgent(Map<String, dynamic> dispatch) {
+    final meta = dispatch['document_metadata'];
+    if (meta is Map) {
+      return meta['urgency'] == 'Urgent' || meta['priority'] == 'URGENT';
+    }
+    return false;
+  }
+
+  Future<void> _submitTransfer() async {
+    if (_transferDestBranchId == null) {
+      _showSnack('Please select a destination branch', error: true);
+      return;
+    }
+    if (_transferLines.isEmpty) {
+      _showSnack('Please add at least one item to transfer', error: true);
+      return;
+    }
+
+    final validLines = _transferLines.where((l) => l.sku != null && l.quantity > 0).toList();
+    if (validLines.isEmpty) {
+      _showSnack('Please ensure all items have a valid catalog match and quantity > 0', error: true);
+      return;
+    }
+
+    final overLines = validLines.where((l) => l.quantity > l.availableQty).toList();
+    if (overLines.isNotEmpty) {
+      _showSnack('Insufficient stock for item: ${overLines.first.itemName}', error: true);
+      return;
+    }
+
+    setState(() => _loadingTransfers = true);
+    try {
+      final payload = {
+        'to_branch_id': _transferDestBranchId,
+        'urgency': _transferUrgent ? 'Urgent' : 'Normal',
+        'notes': _transferNotesCtrl.text,
+        'items': validLines.map((l) => {
+          'item_sku': l.sku,
+          'dispatched_quantity': l.quantity,
+        }).toList(),
+      };
+
+      final response = await _repo.createBranchTransfer(payload);
+      _showSnack('Branch transfer note ${response['dispatch_number'] ?? ''} generated successfully!');
+      
+      // Clear form
+      setState(() {
+        _transferDestBranchId = null;
+        _transferLines.clear();
+        _transferUrgent = false;
+        _transferNotesCtrl.clear();
+      });
+      
+      // Reload
+      await _loadTransfersData();
+    } catch (e) {
+      _showSnack('Transfer failed: $e', error: true);
+    } finally {
+      setState(() => _loadingTransfers = false);
+    }
+  }
+
+  Future<void> _confirmIncomingReceipt(Map<String, dynamic> dispatch) async {
+    final id = '${dispatch['id']}';
+    final items = _listFrom(dispatch['items']);
+    final qtys = _incomingQuantities[id];
+    final notesCtrl = _incomingNotesCtrls[id];
+    if (qtys == null) return;
+
+    setState(() => _loadingTransfers = true);
+    try {
+      final receivedItems = items.map((item) {
+        final itemId = '${item['id']}';
+        final recQty = qtys[itemId] ?? 0;
+        final dispQty = _num(item['dispatched_quantity'] ?? item['quantity']);
+        final diff = dispQty - recQty;
+        return {
+          'item_id': itemId,
+          'received_quantity': recQty,
+          'damaged_quantity': 0,
+          'missing_quantity': diff > 0 ? diff : 0,
+          'discrepancy_reason': diff > 0 ? 'Shortage on receipt' : '',
+        };
+      }).toList();
+
+      await _repo.confirmBranchTransferReceipt(id, {
+        'items_received': receivedItems,
+        'notes': notesCtrl?.text ?? '',
+      });
+
+      _showSnack('Receipt confirmed successfully!');
+      setState(() => _expandedIncomingTransferId = null);
+      await _loadTransfersData();
+    } catch (e) {
+      _showSnack('Confirmation failed: $e', error: true);
+    } finally {
+      setState(() => _loadingTransfers = false);
+    }
+  }
+
+  Future<void> _loadTransfersData() async {
+    if (_loadingTransfers) return;
+    setState(() => _loadingTransfers = true);
+    try {
+      final branches = await _safe(_repo.getBranches, <Map<String, dynamic>>[]);
+      final outgoing = await _safe(_repo.getOutgoingTransfers, <Map<String, dynamic>>[]);
+      final incoming = await _safe(_repo.getIncomingTransfers, <Map<String, dynamic>>[]);
+      setState(() {
+        _branches = branches;
+        _outgoingTransfers = outgoing;
+        _incomingDispatches = incoming;
+      });
+    } catch (e) {
+      _showSnack('Failed to load transfers: $e', error: true);
+    } finally {
+      setState(() => _loadingTransfers = false);
+    }
+  }
+
+  String _plainNum(num v) =>
+      v == v.truncate() ? v.toInt().toString() : v.toString();
+
+  String _text(Map<String, dynamic> row, List<String> keys, [String fallback = '']) {
+    for (final key in keys) {
+      final v = row[key];
+      if (v != null && '$v'.trim().isNotEmpty && '$v' != 'null') return '$v'.trim();
+    }
+    return fallback;
   }
 }
 
@@ -13497,17 +14185,29 @@ class _SummaryRow extends StatelessWidget {
 // Bar Stocktake screen.
 
 class _BarStockSection extends ConsumerStatefulWidget {
-  const _BarStockSection();
+  const _BarStockSection({required this.onOpenOutletIssue});
+
+  final VoidCallback onOpenOutletIssue;
 
   @override
   ConsumerState<_BarStockSection> createState() => _BarStockSectionState();
 }
 
 class _BarStockSectionState extends ConsumerState<_BarStockSection> {
-  List<Map<String, dynamic>> _items = [];
+  static const _barOutletTypes = {
+    'main_bar': 'Main Bar',
+    'executive_bar': 'Executive Bar',
+    'sports_bar': 'Sports Bar',
+    'kyogong_executive_bar': 'Executive Bar',
+    'kyogong_sports_bar': 'Sports Bar',
+  };
+
+  List<Map<String, dynamic>> _outlets = [];
+  List<Map<String, dynamic>> _outletStockRows = [];
   bool _loading = true;
   String _search = '';
   String? _error;
+  String? _selectedOutletId;
 
   @override
   void initState() {
@@ -13522,8 +14222,31 @@ class _BarStockSectionState extends ConsumerState<_BarStockSection> {
     });
     try {
       final repo = ref.read(branchStorekeeperRepositoryProvider);
-      final data = await repo.barStockLedger(search: _search);
-      if (mounted) setState(() => _items = data);
+      final results = await Future.wait([
+        repo.posOutlets(),
+        repo.outletStock(search: _search),
+      ]);
+      final outlets = List<Map<String, dynamic>>.from(results[0] as List)
+          .where((row) {
+        final type = '${row['outlet_type'] ?? row['type'] ?? ''}'.trim();
+        return _barOutletTypes.containsKey(type);
+      }).toList()
+        ..sort((a, b) =>
+            _outletDisplayName(a).compareTo(_outletDisplayName(b)));
+      final outletStockRows =
+          List<Map<String, dynamic>>.from(results[1] as List).where((row) {
+        final type = '${row['outlet_type'] ?? row['type'] ?? ''}'.trim();
+        return _barOutletTypes.containsKey(type);
+      }).toList();
+      if (!mounted) return;
+      setState(() {
+        _outlets = outlets;
+        _outletStockRows = outletStockRows;
+        _selectedOutletId = _selectedOutletId != null &&
+                outlets.any((row) => _outletId(row) == _selectedOutletId)
+            ? _selectedOutletId
+            : (outlets.isNotEmpty ? _outletId(outlets.first) : null);
+      });
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -13533,11 +14256,41 @@ class _BarStockSectionState extends ConsumerState<_BarStockSection> {
 
   double _num(dynamic v) => v == null ? 0 : (double.tryParse('$v') ?? 0);
 
-  List<Map<String, dynamic>> get _filtered {
-    if (_search.isEmpty) return _items;
+  String _outletId(Map<String, dynamic> row) =>
+      '${row['outlet_id'] ?? row['id'] ?? ''}'.trim();
+
+  String _outletDisplayName(Map<String, dynamic> row) {
+    final name = '${row['outlet_name'] ?? row['name'] ?? ''}'.trim();
+    if (name.isNotEmpty) return name;
+    final type = '${row['outlet_type'] ?? row['type'] ?? ''}'.trim();
+    return _barOutletTypes[type] ?? 'Bar Outlet';
+  }
+
+  String _outletType(Map<String, dynamic> row) =>
+      '${row['outlet_type'] ?? row['type'] ?? ''}'.trim();
+
+  String _itemName(Map<String, dynamic> item) =>
+      '${item['item_name'] ?? item['name'] ?? item['description'] ?? item['sku'] ?? ''}';
+
+  String _sku(Map<String, dynamic> item) =>
+      '${item['sku'] ?? item['item_sku'] ?? ''}'.trim();
+
+  String _unit(Map<String, dynamic> item) =>
+      '${item['unit'] ?? item['unit_of_measure'] ?? 'units'}';
+
+  List<Map<String, dynamic>> get _selectedOutletStock {
+    final outletId = _selectedOutletId;
+    final rows = outletId == null
+        ? _outletStockRows
+        : _outletStockRows.where((row) {
+            return '${row['outlet_id'] ?? row['outletId'] ?? ''}'.trim() ==
+                outletId;
+          }).toList();
+    if (_search.isEmpty) return rows;
     final q = _search.toLowerCase();
-    return _items.where((item) {
-      return '${item['name']}'.toLowerCase().contains(q) ||
+    return rows.where((item) {
+      return _itemName(item).toLowerCase().contains(q) ||
+          _sku(item).toLowerCase().contains(q) ||
           '${item['category'] ?? ''}'.toLowerCase().contains(q);
     }).toList();
   }
@@ -13553,58 +14306,88 @@ class _BarStockSectionState extends ConsumerState<_BarStockSection> {
     );
   }
 
-  Future<void> _openRequestStockDialog(Map<String, dynamic> item) async {
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (_) => _RequestBarStockDialog(drink: item),
-    );
-    if (submitted == true && mounted) {
-      _showSnack('Restock request sent to central store');
-    }
-  }
-
-  Future<void> _openPricingDialog(Map<String, dynamic> item) async {
-    final updated = await showDialog<bool>(
-      context: context,
-      builder: (_) => _EditBarDrinkPricingDialog(drink: item),
-    );
-    if (updated == true) _load();
-  }
-
-  Future<void> _openAddItemDialog() async {
-    final created = await showDialog<bool>(
-      context: context,
-      builder: (_) => const _AddBarDrinkDialog(),
-    );
-    if (created == true) _load();
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) return const _LoadingPage();
 
-    final lowStock = _filtered.where((item) {
-      final qty = item['quantity'];
-      final min = _num(item['min_stock']);
-      return qty != null && _num(qty) <= min;
+    final outletRows = _selectedOutletStock;
+    final lowStock = outletRows.where((item) {
+      final qty = _num(item['current_stock'] ?? item['quantity']);
+      final min = _num(item['minimum_stock'] ?? item['reorder_level']);
+      return min > 0 && qty <= min;
     }).length;
+    final selectedOutlet = _outlets.cast<Map<String, dynamic>?>().firstWhere(
+          (row) => row != null && _outletId(row) == _selectedOutletId,
+          orElse: () => null,
+        );
+    final isMultiOutlet = _outlets.length > 1;
 
     return _Page(
-      title: 'Bar Stock',
+      title: 'Bar Outlet Stock',
       subtitle:
-          'Bar menu, pricing, cost of goods, and stock reconciled against actual bar sales.',
+          'Branch receiving increases branch store only. Bar counters increase only when the storekeeper issues stock to a specific outlet.',
       actions: [
         OutlinedButton.icon(
-          onPressed: _openAddItemDialog,
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('Add Bar Item'),
+          onPressed: widget.onOpenOutletIssue,
+          icon: const Icon(Icons.north_east, size: 18),
+          label: const Text('Open POS Outlet Issue'),
         ),
         _RefreshButton(onPressed: _load),
       ],
       children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.kPrimary.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.kPrimary.withOpacity(0.16)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.info_outline, color: AppColors.kPrimary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Push model: supplier receipts and central-store receipts land in Branch Store only. '
+                  'Main Bar and Executive Bar do not auto-increase. Use POS Outlet Issue to transfer stock from branch store into each bar counter. '
+                  'Each outlet keeps its own stock, cashier, and shift lifecycle.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_outlets.isNotEmpty)
+          _SectionCard(
+            title: 'Bar Outlets',
+            subtitle: isMultiOutlet
+                ? 'Each outlet is fully separate. Switch between them below.'
+                : 'This branch has one bar outlet.',
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _outlets.map((outlet) {
+                final outletId = _outletId(outlet);
+                final count = _outletStockRows.where((row) {
+                  return '${row['outlet_id'] ?? row['outletId'] ?? ''}'.trim() ==
+                      outletId;
+                }).length;
+                return ChoiceChip(
+                  selected: outletId == _selectedOutletId,
+                  label: Text('${_outletDisplayName(outlet)} ($count)'),
+                  onSelected: (_) =>
+                      setState(() => _selectedOutletId = outletId),
+                );
+              }).toList(),
+            ),
+          ),
         TextField(
-          decoration: const InputDecoration(
-            hintText: 'Search by drink name or category',
+          decoration: InputDecoration(
+            hintText: selectedOutlet == null
+                ? 'Search outlet stock by item name, SKU or category'
+                : 'Search ${_outletDisplayName(selectedOutlet)} stock',
             prefixIcon: Icon(Icons.search),
             border: OutlineInputBorder(),
             isDense: true,
@@ -13635,54 +14418,73 @@ class _BarStockSectionState extends ConsumerState<_BarStockSection> {
             ]),
           ),
         const SizedBox(height: 16),
-        if (_filtered.isEmpty)
-          const _EmptyState('No bar drinks found.')
+        _StatGrid(cards: [
+          _StatCardData(
+              'Bar Outlets',
+              '${_outlets.length}',
+              Icons.storefront_outlined,
+              AppColors.kPrimary),
+          _StatCardData(
+              'Selected Outlet Items',
+              '${outletRows.length}',
+              PhosphorIcons.package(),
+              Colors.teal),
+          _StatCardData('Low / Zero', '$lowStock', PhosphorIcons.warning(),
+              AppColors.kWarning),
+        ]),
+        const SizedBox(height: 12),
+        if (_outlets.isEmpty)
+          const _EmptyState('No bar outlets are configured for this branch.')
+        else if (outletRows.isEmpty)
+          const _EmptyState(
+              'No outlet stock rows found yet. Issue stock from branch store into the selected bar outlet first.')
         else
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columns: const [
-                DataColumn(label: Text('Drink')),
+                DataColumn(label: Text('Outlet')),
+                DataColumn(label: Text('Item')),
+                DataColumn(label: Text('SKU')),
                 DataColumn(label: Text('Category')),
                 DataColumn(label: Text('Unit')),
-                DataColumn(label: Text('Price'), numeric: true),
-                DataColumn(label: Text('Cost (COGS)'), numeric: true),
                 DataColumn(label: Text('Stock'), numeric: true),
                 DataColumn(label: Text('Min Stock'), numeric: true),
-                DataColumn(label: Text('Last Restocked')),
-                DataColumn(label: Text('')),
+                DataColumn(label: Text('Status')),
               ],
-              rows: _filtered.map((item) {
-                final qty = item['quantity'];
-                final minStock = _num(item['min_stock']);
-                final isLow = qty != null && _num(qty) <= minStock;
-                final lastRestocked = item['last_restocked'];
+              rows: outletRows.map((item) {
+                final qty = _num(item['current_stock'] ?? item['quantity']);
+                final minStock = _num(item['minimum_stock'] ?? item['reorder_level']);
+                final isLow = minStock > 0 && qty <= minStock;
                 return DataRow(cells: [
-                  DataCell(Text('${item['name'] ?? ''}')),
+                  DataCell(Text(_barOutletTypes[_outletType(item)] ??
+                      _outletDisplayName(selectedOutlet ?? const {}))),
+                  DataCell(Text(_itemName(item))),
+                  DataCell(Text(_sku(item).isEmpty ? '—' : _sku(item))),
                   DataCell(Text('${item['category'] ?? '—'}')),
-                  DataCell(Text('${item['unit'] ?? '—'}')),
-                  DataCell(
-                    Text(_num(item['price']).toStringAsFixed(2)),
-                    onTap: () => _openPricingDialog(item),
-                  ),
-                  DataCell(
-                    Text(_num(item['cost_price']).toStringAsFixed(2)),
-                    onTap: () => _openPricingDialog(item),
-                  ),
+                  DataCell(Text(_unit(item))),
                   DataCell(Text(
-                    qty == null ? 'Not set' : _num(qty).toStringAsFixed(1),
+                    _num(qty).toStringAsFixed(1),
                     style: TextStyle(
                       color: isLow ? AppColors.kError : null,
                       fontWeight: isLow ? FontWeight.w700 : null,
                     ),
                   )),
-                  DataCell(Text(qty == null ? '—' : minStock.toStringAsFixed(1))),
-                  DataCell(Text(lastRestocked == null
-                      ? 'Never'
-                      : '${lastRestocked}'.split('T').first)),
-                  DataCell(TextButton(
-                    onPressed: () => _openRequestStockDialog(item),
-                    child: const Text('Request Stock'),
+                  DataCell(Text(minStock <= 0 ? '—' : minStock.toStringAsFixed(1))),
+                  DataCell(Text(
+                    qty <= 0
+                        ? 'Out'
+                        : isLow
+                            ? 'Low'
+                            : 'Available',
+                    style: TextStyle(
+                      color: qty <= 0
+                          ? AppColors.kError
+                          : isLow
+                              ? AppColors.kWarning
+                              : AppColors.kSuccess,
+                      fontWeight: FontWeight.w700,
+                    ),
                   )),
                 ]);
               }).toList(),
@@ -14455,3 +15257,12 @@ class _ShiftBadge extends StatelessWidget {
     );
   }
 }
+
+class _TransferLineItem {
+  String? sku;
+  String itemName = '';
+  double quantity = 0;
+  String unit = '';
+  double availableQty = 0;
+}
+

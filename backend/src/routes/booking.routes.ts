@@ -11,7 +11,9 @@ import {
   checkAvailability,
   getPricingQuote,
   modifyBooking,
-  getBookingByConfirmation
+  getBookingByConfirmation,
+  getDailyBreakfastPax,
+  upsertDailyBreakfastPax
 } from '../controllers/booking.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -27,6 +29,16 @@ router.post('/', createBooking);
 
 // Protected routes
 router.use(protect);
+
+router.get('/breakfast-pax/daily',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER, UserRole.BRANCH_STOREKEEPER, UserRole.BRANCH_ACCOUNTANT]),
+  getDailyBreakfastPax
+);
+
+router.put('/breakfast-pax/daily',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
+  upsertDailyBreakfastPax
+);
 
 router.get('/', getBookings);
 router.get('/:id', getBooking);

@@ -1,0 +1,344 @@
+class _KitchenSessionHistoryScreen extends ConsumerStatefulWidget {
+  const _KitchenSessionHistoryScreen();
+
+  @override
+  ConsumerState<_KitchenSessionHistoryScreen> createState() =>
+      _KitchenSessionHistoryScreenState();
+}
+
+class _KitchenSessionHistoryScreenState
+    extends ConsumerState<_KitchenSessionHistoryScreen> {
+  String? _selectedShiftId;
+
+  @override
+  Widget build(BuildContext context) {
+    final closedShiftsAsync = ref.watch(closedKitchenShiftsProvider);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text('Kitchen Sessions History'),
+        actions: [
+          IconButton(
+            onPressed: () => ref.invalidate(closedKitchenShiftsProvider),
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: closedShiftsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => Center(
+          child: Text('Failed to load kitchen history: $error'),
+        ),
+        data: (shifts) {
+          if (shifts.isEmpty) {
+            return const Center(
+              child: Text('No past kitchen sessions found.'),
+            );
+          }
+
+          final selectedShift = shifts.firstWhere(
+            (shift) => shift.id == _selectedShiftId,
+            orElse: () => shifts.first,
+          );
+          if (_selectedShiftId != selectedShift.id) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() => _selectedShiftId = selectedShift.id);
+              }
+            });
+          }
+
+          return Row(
+            children: [
+              Container(
+                width: 320,
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: shifts.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final shift = shifts[index];
+                    final isSelected = shift.id == selectedShift.id;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        setState(() => _selectedShiftId = shift.id);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFFEAF2FF)
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFF1E5CC6)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              shift.shiftNumber,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${shift.shiftDate} • ${shift.shiftType.toUpperCase()}${shift.subShiftType != null ? ' (Shift ${shift.subShiftType})' : ''}',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Department: ${shift.department ?? 'KITCHEN'}',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                  child: _KitchenSessionHistoryDetail(shift: selectedShift),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _KitchenSessionHistoryDetail extends ConsumerWidget {
+  const _KitchenSessionHistoryDetail({required this.shift});
+
+  final KitchenShift shift;
+
+  double _closingQty(Map<String, dynamic> item) {
+    final physical = (item['physical_count'] as num?)?.toDouble();
+    if (physical != null) return physical;
+    final systemClosing = (item['system_closing_stock'] as num?)?.toDouble();
+    if (systemClosing != null) return systemClosing;
+    final opening = (item['opening_stock'] as num?)?.toDouble() ?? 0;
+    final additions = (item['additions'] as num?)?.toDouble() ?? 0;
+    final sold = (item['sold_quantity'] as num?)?.toDouble() ?? 0;
+    final spoilage = (item['spoilage_quantity'] as num?)?.toDouble() ?? 0;
+    return opening + additions - sold - spoilage;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailsAsync = ref.watch(shiftDetailsProvider(shift.id));
+    final numberFmt = NumberFormat('#,##0.00');
+
+    return detailsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Center(
+        child: Text('Failed to load session detail: $error'),
+      ),
+      data: (details) {
+        final itemRows = ((details['items'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList()
+          ..sort((a, b) => ((a['item_name'] ?? '') as String)
+              .compareTo((b['item_name'] ?? '') as String));
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Session ${shift.shiftNumber}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${shift.shiftDate} • ${shift.shiftType.toUpperCase()}${shift.subShiftType != null ? ' (Shift ${shift.subShiftType})' : ''} • ${shift.status.toUpperCase()}',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Read-only kitchen ledger view showing opening, additions during the session, and closing balances.',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 920),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 14),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF0F2E5E),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(14),
+                              topRight: Radius.circular(14),
+                            ),
+                          ),
+                          child: const Row(
+                            children: [
+                              _IssueHeaderCell('#', 50),
+                              _IssueHeaderCell('Item', 280),
+                              _IssueHeaderCell('Unit', 90),
+                              _IssueHeaderCell('Opening', 140),
+                              _IssueHeaderCell('Additions', 140),
+                              _IssueHeaderCell('Closing', 140),
+                              _IssueHeaderCell('Variance', 120),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: itemRows.length,
+                            itemBuilder: (context, index) {
+                              final item = itemRows[index];
+                              final opening =
+                                  (item['opening_stock'] as num?)?.toDouble() ??
+                                      0;
+                              final additions =
+                                  (item['additions'] as num?)?.toDouble() ?? 0;
+                              final closing = _closingQty(item);
+                              final variance =
+                                  (item['variance'] as num?)?.toDouble() ?? 0;
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 18, vertical: 16),
+                                decoration: BoxDecoration(
+                                  color: index.isEven
+                                      ? Colors.white
+                                      : const Color(0xFFF8FAFC),
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Colors.grey.shade200,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 50,
+                                      child: Text('${index + 1}'),
+                                    ),
+                                    SizedBox(
+                                      width: 280,
+                                      child: Text(
+                                        (item['item_name'] ?? 'Unnamed Item')
+                                            .toString(),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 90,
+                                      child: Text(
+                                        (item['unit_of_measure'] ?? '-')
+                                            .toString(),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 140,
+                                      child: Text(numberFmt.format(opening)),
+                                    ),
+                                    SizedBox(
+                                      width: 140,
+                                      child: Text(numberFmt.format(additions)),
+                                    ),
+                                    SizedBox(
+                                      width: 140,
+                                      child: Text(numberFmt.format(closing)),
+                                    ),
+                                    SizedBox(
+                                      width: 120,
+                                      child: Text(
+                                        numberFmt.format(variance),
+                                        style: TextStyle(
+                                          color: variance < 0
+                                              ? Colors.red.shade700
+                                              : variance > 0
+                                                  ? Colors.green.shade700
+                                                  : const Color(0xFF0F172A),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+

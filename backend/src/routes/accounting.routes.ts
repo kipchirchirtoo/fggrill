@@ -24,7 +24,21 @@ import {
   createBankDeposit,
   getReconciliationData,
   matchTransactions,
-  getBankAccounts
+  getBankAccounts,
+  getEventOrders,
+  createEventOrder,
+  updateEventOrder,
+  completeEventOrder,
+  deleteEventOrder,
+  downloadEventOrderPdf,
+  getChannelFoodStandards,
+  getChannelPackages,
+  getChannelPackageMenuItems,
+  createChannelFoodStandard,
+  createChannelPackageMenuItem,
+  updateChannelFoodStandard,
+  deleteChannelFoodStandard,
+  deleteChannelPackageMenuItem
 } from '../controllers/accounting.controller';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
@@ -85,6 +99,77 @@ router.post('/invoices',
 router.post('/booking-invoice-queue/:sourceType/:sourceId/invoice',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
   createInvoiceFromBookingSource
+);
+
+// Event Orders
+router.get('/event-orders',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getEventOrders
+);
+
+router.post('/event-orders',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  createEventOrder
+);
+
+router.put('/event-orders/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  updateEventOrder
+);
+
+router.post('/event-orders/:id/complete',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  completeEventOrder
+);
+
+router.delete('/event-orders/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  deleteEventOrder
+);
+
+router.get('/event-orders/:id/export/pdf',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  downloadEventOrderPdf
+);
+
+router.get('/food-control/channel-standards',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getChannelFoodStandards
+);
+
+router.get('/food-control/channel-packages',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getChannelPackages
+);
+
+router.get('/food-control/channel-package-menu-items',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getChannelPackageMenuItems
+);
+
+router.post('/food-control/channel-standards',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  createChannelFoodStandard
+);
+
+router.post('/food-control/channel-package-menu-items',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  createChannelPackageMenuItem
+);
+
+router.put('/food-control/channel-standards/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  updateChannelFoodStandard
+);
+
+router.delete('/food-control/channel-standards/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  deleteChannelFoodStandard
+);
+
+router.delete('/food-control/channel-package-menu-items/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  deleteChannelPackageMenuItem
 );
 
 router.get('/invoices/:id/pdf',

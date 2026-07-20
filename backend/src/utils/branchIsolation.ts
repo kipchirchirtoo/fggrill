@@ -20,11 +20,24 @@ export const isGlobalRole = (role: string | undefined): boolean => {
  */
 export const applyBranchFilter = (query: any, req: Request, tableAlias: string = '') => {
     const userRole = (req as any).user?.role;
-    const userBranchId = (req as any).user?.branch_id;
+    const userBranchIdRaw = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+    const userBranchId = userBranchIdRaw !== undefined && userBranchIdRaw !== null ? Number(userBranchIdRaw) : null;
 
-    if (!isGlobalRole(userRole) && userBranchId) {
+    if (!isGlobalRole(userRole)) {
         const column = tableAlias ? `${tableAlias}.branch_id` : 'branch_id';
-        return query.eq(column, userBranchId);
+        
+        // Defensive fallback: if user lookup failed / legacy token lacks branch_id,
+        // use the query or header branch_id if available to prevent blank screens.
+        const reqBranchIdRaw = req.query.branch_id || req.headers['x-branch-id'] || req.headers['branch-id'];
+        const reqBranchId = reqBranchIdRaw ? Number(Array.isArray(reqBranchIdRaw) ? reqBranchIdRaw[0] : reqBranchIdRaw) : null;
+        const resolvedBranchId = userBranchId !== null ? userBranchId : reqBranchId;
+
+        if (resolvedBranchId !== null && Number.isFinite(resolvedBranchId) && resolvedBranchId > 0) {
+            return query.eq(column, resolvedBranchId);
+        } else {
+            // Non-global user has no valid branch ID assigned -> restrict to -1 to return empty instead of leaking all branches
+            return query.eq(column, -1);
+        }
     }
     
     return query;

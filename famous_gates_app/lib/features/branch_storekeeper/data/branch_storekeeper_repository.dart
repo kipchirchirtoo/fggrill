@@ -496,6 +496,48 @@ class BranchStorekeeperRepository {
     );
   }
 
+  Future<List<Map<String, dynamic>>> getBranches() async {
+    final response = await _dio.get(
+      '/system/branches',
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getOutgoingTransfers() async {
+    final response = await _dio.get(
+      '/store/branch-transfers/outgoing',
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<Map<String, dynamic>> createBranchTransfer(Map<String, dynamic> data) async {
+    final response = await _dio.post(
+      '/store/branch-transfers',
+      data: data,
+      options: await _authOptions,
+    );
+    return _unwrapMap(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getIncomingTransfers() async {
+    final response = await _dio.get(
+      '/store/branch-transfers/incoming',
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> confirmBranchTransferReceipt(
+      String transferId, Map<String, dynamic> data) async {
+    await _dio.put(
+      '/store/branch-transfers/$transferId/confirm',
+      data: data,
+      options: await _authOptions,
+    );
+  }
+
   Future<Map<String, dynamic>> receiveFromSupplier(
       Map<String, dynamic> data) async {
     final response = await _dio.post('/store/branch-stock/receive-supplier',
@@ -1192,14 +1234,34 @@ class BranchStorekeeperRepository {
     return _unwrapList(response.data);
   }
 
-  Future<List<Map<String, dynamic>>> getProductionRecipes() async {
-    final branchId = await _branchId;
+  Future<List<Map<String, dynamic>>> getKitchenYieldTypes() async {
     final response = await _dio.get(
-      '/kitchen/shifts/recipes/list',
-      queryParameters: {'branch_id': branchId},
+      '/kitchen/yield-types',
       options: await _authOptions,
     );
     return _unwrapList(response.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getProductionRecipes(
+      {String? yieldType}) async {
+    final branchId = await _branchId;
+    final response = await _dio.get(
+      '/kitchen/shifts/recipes/list',
+      queryParameters: {
+        'branch_id': branchId,
+        if (yieldType != null) 'yield_type': yieldType,
+      },
+      options: await _authOptions,
+    );
+    return _unwrapList(response.data);
+  }
+
+  Future<void> logProductionEvent(Map<String, dynamic> payload) async {
+    await _dio.post(
+      '/kitchen/shifts/production/log',
+      data: payload,
+      options: await _authOptions,
+    );
   }
 
   /// POS menu items a Food Control recipe can be linked to — sourced from the
@@ -2032,6 +2094,7 @@ class BranchStorekeeperRepository {
     String? notes,
     String? barLocation,
     String? shift,
+    String? kitchenShiftId,
     String? spoilageDate,
     String? responsibleStaffId,
     bool chargeToStaff = false,
@@ -2049,6 +2112,7 @@ class BranchStorekeeperRepository {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         if (barLocation != null) 'bar_location': barLocation,
         if (shift != null) 'shift': shift,
+        if (kitchenShiftId != null) 'kitchen_shift_id': kitchenShiftId,
         if (spoilageDate != null) 'spoilage_date': spoilageDate,
         if (responsibleStaffId != null)
           'responsible_staff_id': responsibleStaffId,

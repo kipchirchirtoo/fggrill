@@ -10,7 +10,10 @@ import '../../auth/domain/auth_notifier.dart';
 
 final branchAccountantRepositoryProvider =
     Provider<BranchAccountantRepository>((ref) {
-  return BranchAccountantRepository(ref.watch(dioProvider), ref);
+  return BranchAccountantRepository(
+    ref.watch(dioProvider),
+    ref,
+  );
 });
 
 class BranchAccountantRepository {
@@ -178,10 +181,214 @@ class BranchAccountantRepository {
         data: {'notes': notes});
   }
 
-  Future<void> updateKitchenStocktakeItems(String shiftId, List<Map<String, dynamic>> items) async {
+  Future<void> updateKitchenStocktakeItems(
+      String shiftId, List<Map<String, dynamic>> items) async {
     await _dio.put('/storekeeping/kitchen-stocktake/$shiftId/items', data: {
       'items': items,
     });
+  }
+
+  // ── Food Control Standards (Recipes) ──────────────────────────────────────
+  Future<List<Map<String, dynamic>>> getKitchenRecipes() async {
+    return _getList('/kitchen/shifts/recipes/list');
+  }
+
+  Future<List<Map<String, dynamic>>> getLinkableMenuItems() async {
+    final branchId = await getBranchId();
+    final rows = await _getList('/kitchen/shifts/recipes/menu-items', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+    return rows.map((row) {
+      final normalized = Map<String, dynamic>.from(row);
+      final sku = '${normalized['sku'] ?? ''}'.trim();
+      final fallbackName = [
+        normalized['name'],
+        normalized['item_name'],
+        normalized['product_name'],
+        normalized['category'],
+      ]
+          .map((value) => '$value'.trim())
+          .firstWhere(
+            (value) =>
+                value.isNotEmpty &&
+                value.toLowerCase() != 'unnamed' &&
+                value.toLowerCase() != 'null',
+            orElse: () => sku.isNotEmpty ? sku : 'POS Item',
+          );
+      normalized['name'] = fallbackName;
+      normalized['item_name'] = fallbackName;
+      normalized['sku'] = sku;
+      normalized['unit'] = '${normalized['unit'] ?? 'pcs'}'.trim();
+      return normalized;
+    }).toList();
+  }
+
+  Future<void> saveKitchenRecipe(Map<String, dynamic> payload) async {
+    final branchId = await getBranchId();
+    payload['branch_id'] = branchId;
+    await _dio.post('/kitchen/shifts/recipes', data: payload);
+  }
+
+  Future<void> updateKitchenRecipe(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
+    final branchId = await getBranchId();
+    await _dio.put('/kitchen/shifts/recipes/$id', data: {
+      ...payload,
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<void> deactivateKitchenRecipe(String id) async {
+    await _dio.delete('/kitchen/shifts/recipes/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> getDirectFoodControlItems() async {
+    final branchId = await getBranchId();
+    return _getList('/kitchen/shifts/direct-items', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+  }
+
+  Future<Map<String, dynamic>> createDirectFoodControlItem(
+      Map<String, dynamic> payload) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post('/kitchen/shifts/direct-items', data: {
+      ...payload,
+      if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<void> deactivateDirectFoodControlItem(String id) async {
+    await _dio.delete('/kitchen/shifts/direct-items/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> getChannelFoodStandards({
+    String? channel,
+    String? packageName,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/accounting/food-control/channel-standards', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (channel != null && channel.isNotEmpty) 'channel': channel,
+      if (packageName != null && packageName.isNotEmpty)
+        'package_name': packageName,
+    });
+  }
+
+  Future<Map<String, dynamic>> createChannelFoodStandard(
+      Map<String, dynamic> payload) async {
+    final branchId = await getBranchId();
+    final res =
+        await _dio.post('/accounting/food-control/channel-standards', data: {
+      ...payload,
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getChannelPackageMenuItems({
+    String? channel,
+    String? packageName,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/accounting/food-control/channel-package-menu-items',
+        query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (channel != null && channel.isNotEmpty) 'channel': channel,
+      if (packageName != null && packageName.isNotEmpty)
+        'package_name': packageName,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getChannelPackages({
+    String? channel,
+    bool completeOnly = false,
+  }) async {
+    final branchId = await getBranchId();
+    return _getList('/accounting/food-control/channel-packages', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+      if (channel != null && channel.isNotEmpty) 'channel': channel,
+      if (completeOnly) 'complete_only': 'true',
+    });
+  }
+
+  Future<Map<String, dynamic>> createChannelPackageMenuItem(
+      Map<String, dynamic> payload) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post(
+      '/accounting/food-control/channel-package-menu-items',
+      data: {
+        ...payload,
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      },
+    );
+    return _asMap(res.data);
+  }
+
+  Future<void> deleteChannelPackageMenuItem(String id) async {
+    final branchId = await getBranchId();
+    await _dio.delete('/accounting/food-control/channel-package-menu-items/$id',
+        queryParameters: {
+          if (branchId.isNotEmpty) 'branch_id': branchId,
+        });
+  }
+
+  Future<Map<String, dynamic>> updateChannelFoodStandard(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
+    final branchId = await getBranchId();
+    final res =
+        await _dio.put('/accounting/food-control/channel-standards/$id', data: {
+      ...payload,
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+    return _asMap(res.data);
+  }
+
+  Future<void> deleteChannelFoodStandard(String id) async {
+    final branchId = await getBranchId();
+    await _dio.delete('/accounting/food-control/channel-standards/$id',
+        queryParameters: {
+          if (branchId.isNotEmpty) 'branch_id': branchId,
+        });
+  }
+
+  Future<List<Map<String, dynamic>>> getRawStockCandidates() async {
+    final branchId = await getBranchId();
+    final rows = await _getList('/storekeeping/spoilage/candidates', query: {
+      'area': 'store',
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
+    return rows.map((row) {
+      final normalized = Map<String, dynamic>.from(row);
+      final sku = '${normalized['sku'] ?? normalized['item_sku'] ?? ''}'.trim();
+      final fallbackName = [
+        normalized['item_name'],
+        normalized['name'],
+        normalized['description'],
+        normalized['product_name'],
+      ]
+          .map((value) => '$value'.trim())
+          .firstWhere(
+            (value) =>
+                value.isNotEmpty &&
+                value.toLowerCase() != 'unnamed' &&
+                value.toLowerCase() != 'null',
+            orElse: () => sku.isNotEmpty ? sku : 'Unknown Item',
+          );
+
+      normalized['item_name'] = fallbackName;
+      normalized['name'] = fallbackName;
+      normalized['sku'] = sku;
+      normalized['unit'] =
+          '${normalized['unit'] ?? normalized['unit_of_measure'] ?? 'unit'}'
+              .trim();
+      return normalized;
+    }).toList();
   }
 
   // ----------------------------------------------------------------------
@@ -713,6 +920,10 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getKitchenYieldTypes() async {
+    return _getList('/kitchen/yield-types');
+  }
+
   /// Branch-wide P&L (system vs verified revenue, expense categories, COGS,
   /// bar stock variance) sourced from the get_branch_profit_loss() RPC.
   Future<Map<String, dynamic>> getBranchProfitLoss({
@@ -760,7 +971,6 @@ class BranchAccountantRepository {
       'FG_Profit_Loss_${fromDate}_$toDate.pdf',
     );
   }
-
 
   Future<Map<String, dynamic>> getSoldItems({
     required String startDate,
@@ -1339,6 +1549,71 @@ class BranchAccountantRepository {
     return _asMap(res.data);
   }
 
+  Future<List<Map<String, dynamic>>> getEventOrders({
+    bool activeOnly = false,
+    String? eventType,
+  }) async {
+    final branchId = await getBranchId();
+    try {
+      final res = await _dio.get(
+        '/accounting/event-orders',
+        queryParameters: {
+          if (branchId.isNotEmpty) 'branch_id': branchId,
+          if (activeOnly) 'active_only': 'true',
+          if (eventType != null && eventType.trim().isNotEmpty)
+            'event_type': eventType.trim(),
+        },
+      );
+      final list = res.data['data'] as List?;
+      return list?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ??
+          [];
+    } catch (e) {
+      if (e is DioException &&
+          (e.response?.statusCode == 404 || e.response?.statusCode == 403)) {
+        return [];
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> completeEventOrder(String id) async {
+    final branchId = await getBranchId();
+    await _dio.post(
+      '/accounting/event-orders/$id/complete',
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+    );
+  }
+
+  Future<Map<String, dynamic>> createEventOrder(
+      Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    final res = await _dio.post(
+      '/accounting/event-orders',
+      data: data,
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+    );
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> updateEventOrder(
+      String id, Map<String, dynamic> data) async {
+    final branchId = await getBranchId();
+    final res = await _dio.put(
+      '/accounting/event-orders/$id',
+      data: data,
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+    );
+    return _asMap(res.data);
+  }
+
+  Future<void> deleteEventOrder(String id) async {
+    final branchId = await getBranchId();
+    await _dio.delete(
+      '/accounting/event-orders/$id',
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+    );
+  }
+
   Future<File> downloadArInvoicePdf(String id, {String? invoiceNumber}) async {
     final branchId = await getBranchId();
     final res = await _dio.get<List<int>>(
@@ -1350,6 +1625,19 @@ class BranchAccountantRepository {
         ? id
         : invoiceNumber.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     return _saveBytes(res.data ?? const [], 'Invoice_$safeNumber.pdf');
+  }
+
+  Future<File> downloadEventOrderPdf(String id, {String? eventNumber}) async {
+    final branchId = await getBranchId();
+    final res = await _dio.get<List<int>>(
+      '/accounting/event-orders/$id/export/pdf',
+      queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final safeNumber = (eventNumber == null || eventNumber.trim().isEmpty)
+        ? id
+        : eventNumber.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    return _saveBytes(res.data ?? const [], '$safeNumber.pdf');
   }
 
   Future<List<Map<String, dynamic>>> getBranchPayments({

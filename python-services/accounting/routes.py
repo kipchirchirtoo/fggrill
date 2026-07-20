@@ -1086,3 +1086,134 @@ def export_po_pdf(id):
     except Exception as e:
         logger.error(f"Error exporting PO PDF: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@accounting_bp.route('/event-orders/<id>/export/pdf', methods=['GET'])
+def export_event_order_pdf(id):
+    """Export Event Order as a customer-facing PDF."""
+    try:
+        if not supabase:
+            return jsonify({'success': False, 'message': 'Service unavailable'}), 503
+
+        res = supabase.table('event_orders') \
+            .select('*, conference_halls(name)') \
+            .eq('id', id) \
+            .single() \
+            .execute()
+
+        if not res.data:
+            return jsonify({'success': False, 'message': 'Event order not found'}), 404
+
+        eo = res.data
+
+        # Resolve branch details
+        branch_name = 'FamousGate Hotels'
+        branch_address = 'FamousGate Hotels'
+        branch_phone = '+254 706 782 828'
+        branch_email = 'info@famousgatehotels.com'
+        if eo.get('branch_id'):
+            branch_res = supabase.table('branches') \
+                .select('name, address, location, phone, email') \
+                .eq('id', eo['branch_id']) \
+                .maybeSingle() \
+                .execute()
+            if branch_res.data:
+                branch_name = branch_res.data.get('name', branch_name)
+                branch_address = branch_res.data.get('address') or branch_res.data.get('location') or branch_address
+                branch_phone = branch_res.data.get('phone') or branch_phone
+                branch_email = branch_res.data.get('email') or branch_email
+
+        event_type = str(eo.get('event_type') or '').strip().lower()
+        channel_map = {
+            'conference': 'conference_event',
+            'buffet': 'buffet',
+            'outside_catering': 'outside_catering',
+            'group_meal': 'group_meal',
+        }
+        channel_code = channel_map.get(event_type, 'pos_restaurant')
+        package_definition_id = str(eo.get('package_definition_id') or '').strip()
+        menu_package = str(eo.get('menu_package') or '').strip()
+        pax = max(int(float(eo.get('pax') or 0)), 0)
+        charge_per_pax = float(eo.get('charge_per_pax') or 0)
+        total_amount = float(eo.get('total_amount') or 0)
+        package_total = (charge_per_pax * pax) if pax > 0 else total_amount
+        remainder = total_amount - package_total
+
+        package_query = supabase.table('channel_package_menu_items') \
+            .select('pos_item_name, pos_item_sku, quantity_per_pax, unit, package_name, package_definition_id') \
+            .eq('branch_id', eo.get('branch_id')) \
+            .eq('channel', channel_code)
+        if package_definition_id:
+            package_query = package_query.eq('package_definition_id', package_definition_id)
+        elif menu_package:
+            package_query = package_query.eq('package_name', menu_package)
+        package_query = package_query.order('pos_item_name')
+        package_res = package_query.execute()
+        package_rows = package_res.data or []
+
+        pricing_items = []
+        if pax > 0 or charge_per_pax > 0 or total_amount > 0:
+            pricing_items.append({
+                'description': menu_package or f'{event_type.title()} package',
+                'unit': 'pax',
+                'quantity': pax or 1,
+                'unit_price': charge_per_pax or total_amount,
+                'total': package_total or total_amount,
+            })
+        if abs(remainder) > 0.01:
+            pricing_items.append({
+                'description': 'Additional Charges' if remainder > 0 else 'Package Discount / Adjustment',
+                'unit': 'lot',
+                'quantity': 1,
+                'unit_price': remainder,
+                'total': remainder,
+            })
+
+        payload = dict(eo)
+        payload['branch_name'] = branch_name
+        payload['branch_address'] = branch_address
+        payload['branch_phone'] = branch_phone
+        payload['branch_email'] = branch_email
+        payload['menu_lines'] = [
+            {
+                'description': row.get('pos_item_name') or row.get('pos_item_sku') or 'Menu item',
+                'sku': row.get('pos_item_sku'),
+                'unit': row.get('unit') or 'pcs',
+                'quantity_per_pax': float(row.get('quantity_per_pax') or 0),
+                'planned_total': float(row.get('quantity_per_pax') or 0) * pax,
+            }
+            for row in package_rows
+        ]
+        payload['items'] = pricing_items
+
+        pdf_bytes = doc_generator.generate_event_order_pdf_v2(payload)
+
+        safe_number = (eo.get('event_number') or 'EO').replace('/', '-')
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"{safe_number}.pdf"
+        )
+    except Exception as e:
+        logger.error(f"Error exporting event order PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@accounting_bp.route('/event-orders/render/pdf', methods=['POST'])
+def render_event_order_pdf():
+    """Render an Event Order PDF from an already-resolved payload."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        pdf_bytes = doc_generator.generate_event_order_pdf_v2(payload)
+
+        safe_number = str(payload.get('event_number') or 'EO').replace('/', '-')
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"{safe_number}.pdf"
+        )
+    except Exception as e:
+        logger.error(f"Error rendering event order PDF: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

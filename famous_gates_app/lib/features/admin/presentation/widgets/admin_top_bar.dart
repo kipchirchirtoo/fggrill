@@ -11,12 +11,16 @@ const _allBranchesMenuValue = '__all_branches__';
 class AdminTopBar extends ConsumerStatefulWidget {
   final int unreadCount;
   final VoidCallback? onMenuTap;
+  final VoidCallback? onToggleSidebar;
+  final bool sidebarCollapsed;
   final String consoleLabel;
 
   const AdminTopBar({
     super.key,
     required this.unreadCount,
     this.onMenuTap,
+    this.onToggleSidebar,
+    this.sidebarCollapsed = false,
     this.consoleLabel = 'Admin Console',
   });
 
@@ -42,6 +46,17 @@ class _AdminTopBarState extends ConsumerState<AdminTopBar> {
             IconButton(
                 icon: Icon(PhosphorIcons.listBullets()),
                 onPressed: widget.onMenuTap),
+          if (widget.onToggleSidebar != null && widget.onMenuTap == null)
+            IconButton(
+              icon: Icon(
+                widget.sidebarCollapsed
+                    ? Icons.keyboard_double_arrow_right
+                    : Icons.keyboard_double_arrow_left,
+              ),
+              tooltip:
+                  widget.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',
+              onPressed: widget.onToggleSidebar,
+            ),
           const SizedBox(width: 16),
           Container(
             width: 28,

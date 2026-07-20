@@ -337,7 +337,7 @@ export async function generateCashierShiftLogbook(shift: any, reviewerId?: strin
             total_sales: totalSales,
             expected_closing_float: toNumber(shift.expected_closing_float),
             variance: toNumber(shift.variance),
-            cash_drops: toNumber(shift.cash_deposited),
+            cash_drops: 0,
             payouts: toNumber(shift.payouts ?? shift.paid_outs),
             expense_total: toNumber(shift.expense_total),
             transaction_count: toNumber(shift.transaction_count),
@@ -385,6 +385,7 @@ export async function generateCashierShiftLogbook(shift: any, reviewerId?: strin
             gross_sales: toNumber(shift.gross_sales ?? totalSales),
             net_sales: toNumber(shift.net_sales ?? totalSales),
         },
+        total_cash: totalCash,
         total_mpesa: totalMpesa,
         total_swipe: totalCard,
         notes: shift.notes || 'Generated automatically when the cashier shift was closed.',
@@ -628,7 +629,7 @@ export const getShiftLogs = async (
             };
 
             // For closed/reconciled shifts that already have totals stored, use them as-is
-            if (shift.status !== 'open' && shift.total_sales > 0) {
+            if (shift.status !== 'open' && shift.status !== 'pending_open') {
                 const voidAudit = await buildVoidAudit();
                 return {
                     ...shift,
@@ -667,7 +668,15 @@ export const getShiftLogs = async (
                         else if (m.includes('card') || m.includes('swipe')) txnCard += amt;
                         else txnCash += amt;
                     }
-                    const expectedClosingFloat = Number(shift.opening_float || 0) + txnCash;
+                    // Include cash paid-credits already recorded during the shift
+                    // (staff settling credit bills with cash) — these physically
+                    // land in the drawer and must be in the expected reconciliation.
+                    // Expenses can't be known yet (entered at close), so they're excluded.
+                    const paidBillsList = Array.isArray(shift.paid_bills_details) ? shift.paid_bills_details : [];
+                    const cashPaidCreditsLive = paidBillsList
+                        .filter((b: any) => !String(b.payment_method || 'cash').toLowerCase().match(/mpesa|card/))
+                        .reduce((s: number, b: any) => s + (Number(b.amount) || 0), 0);
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + txnCash + cashPaidCreditsLive;
                     const closingFloat = Number(shift.closing_float || 0);
                     return {
                         ...shift,
@@ -690,7 +699,11 @@ export const getShiftLogs = async (
                     .rpc('calculate_shift_summary', { p_shift_id: shift.id });
 
                 if (summary && summary.total_sales > 0) {
-                    const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0);
+                    const paidBillsListRpc = Array.isArray(shift.paid_bills_details) ? shift.paid_bills_details : [];
+                    const cashPaidCreditsRpc = paidBillsListRpc
+                        .filter((b: any) => !String(b.payment_method || 'cash').toLowerCase().match(/mpesa|card/))
+                        .reduce((s: number, b: any) => s + (Number(b.amount) || 0), 0);
+                    const expectedClosingFloat = Number(shift.opening_float || 0) + Number(summary.total_cash || 0) + cashPaidCreditsRpc;
                     const closingFloat = Number(shift.closing_float || 0);
                     return {
                         ...shift,
@@ -830,7 +843,7 @@ export const getShiftLog = async (
         // If totals are zero, recompute from payments table
         let enrichedShift = { ...shift, cashier_name: cashierName, transactions: transactions || [] };
 
-        if (shift.cashier_id && shift.shift_start) {
+        if ((shift.status === 'open' || shift.status === 'pending_open') && shift.cashier_id && shift.shift_start) {
             const shiftEnd = shift.shift_end || new Date().toISOString();
             const branchId = shift.branch_id;
             let rpcOk = false;
@@ -1190,7 +1203,7 @@ export const getShiftLog = async (
             }));
 
             // --- cash reconciliation ---
-            const cashDrops = toNumber(shift.cash_deposited);
+            const cashDrops = 0; // cash_deposited is not part of the drawer formula
             const payouts = toNumber(shift.payouts ?? shift.paid_outs);
             const openingFloat = toNumber(shift.opening_float);
             const closingFloat = toNumber(shift.closing_float ?? shift.cash_at_hand);
@@ -1926,7 +1939,11 @@ export const closeShift = async (
         const other_sales = hasTransactionEvidence ? transactionSummary.total_other : toNumber(other_revenue);
         const total_sales = hasTransactionEvidence ? transactionSummary.total_sales : toNumber(summary?.total_sales);
         const transaction_count = hasTransactionEvidence ? transactionSummary.transaction_count : toNumber(summary?.transaction_count);
-        const cashDrops = cash_deposited !== undefined ? toNumber(cash_deposited) : toNumber(shift.cash_deposited);
+        // cash_deposited is not part of the drawer reconciliation formula —
+        // it was set historically by interim cash-at-hand snapshots, not by
+        // cashier declaration. Keeping it at 0 prevents ECF from being
+        // deflated by a phantom "deposit" that never happened.
+        const cashDrops = 0;
         const payouts = toNumber(req.body.payouts ?? req.body.paid_outs ?? req.body.expense_total);
 
         // Paid credits recorded this shift (a customer settling an OLD credit
@@ -1977,8 +1994,10 @@ export const closeShift = async (
         });
         const gross_sales = total_sales_net + toNumber(voidAudit.summary.total_void_amount);
 
-        // Strict accounting formula: Expected = Opening Float + Raw Cash Sales + Cash Paid Credits - Cash Drops - Cash Expenses. Only cash-affecting items count.
-        const expectedClosingFloat = toNumber(shift.opening_float) + cash_sales + cashPaidCredits - cashDrops - cashExpenses;
+        // Correct formula: Expected = Opening Float + Gross Cash Sales + Cash Paid Credits - Cash Expenses.
+        // cash_deposited is NOT subtracted — it is not a cashier-declared deposit but a computed snapshot
+        // that was historically misused in the formula, causing inflated/deflated variance.
+        const expectedClosingFloat = toNumber(shift.opening_float) + cash_sales + cashPaidCredits - cashExpenses;
         const hasDeclaredClosingFloat = closing_float !== undefined
             && closing_float !== null
             && `${closing_float}`.trim() !== '';
@@ -2071,7 +2090,7 @@ export const closeShift = async (
                 actual_cash_counted: actualCashCounted,
                 actual_mpesa_logged: actualMpesaLogged,
                 actual_card_logged: actualCardLogged,
-                cash_deposited: cashDrops,
+                cash_deposited: 0,
                 bank_deposit_ref,
                 mpesa_summary_ref: mpesa_summary_ref || null,
                 card_batch_ref: card_batch_ref || null,

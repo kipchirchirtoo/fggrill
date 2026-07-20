@@ -1,0 +1,669 @@
+# Shift A → Shift B Logic in Kitchen Sessions
+
+This logic applies **only to TWO_SHIFT branches**.
+
+Current pilot example:
+
+```text id="uul7km"
+Bomet Town branch_id=2 = TWO_SHIFT
+Mogogosiek branch_id=5 = SINGLE_SHIFT
+```
+
+So:
+
+```text id="idjv3g"
+Bomet = Shift A → Shift B flow
+Mogogosiek = no Shift A/B, only one daily session
+```
+
+The production setup already has `branch_shift_config`, `kitchen_shifts`, `kitchen_shift_items`, and `kitchen_shift_stock_take` for this Kitchen Sessions structure. 
+
+---
+
+# 1. Main idea
+
+Shift A and Shift B are **two kitchen sub-shifts inside one restaurant business day**.
+
+```text id="z3whbq"
+Restaurant cashier shift / business day
+        ↓
+Kitchen Shift A
+        ↓ handover stocktake
+Kitchen Shift B
+```
+
+Shift A does not just close blindly. The storekeeper must count what is left, then that count becomes Shift B opening stock.
+
+---
+
+# 2. Full flow
+
+```text id="uurqlh"
+Morning:
+Opening Kitchen Stocktake
+→ Shift A opens
+
+During Shift A:
+Stock issued
+Production logged
+Spoilage recorded
+POS/event usage happens
+
+End of Shift A:
+Storekeeper performs handover stocktake
+→ System calculates Shift A variance
+→ Shift A closes
+→ Remaining physical stock becomes Shift B opening stock
+
+Shift B:
+Continues with the remaining kitchen stock
+Additional stock can be issued if needed
+Production can be logged if needed
+Stocktake/variance continues
+
+End of business day:
+Shift B closes with the restaurant cashier day
+Next day opening stocktake confirms final variance
+```
+
+---
+
+# 3. What happens at Shift A close?
+
+At the end of Shift A, storekeeper enters physical count.
+
+Example:
+
+```text id="rb53rr"
+Shift A opening potatoes: 20kg
+Stock added during A: 30kg
+Expected balance: 15kg
+Physical count at handover: 13kg
+```
+
+System calculates:
+
+```text id="3gixm9"
+Variance = Physical Count - Expected Balance
+Variance = 13kg - 15kg
+Variance = -2kg shortage
+```
+
+Then:
+
+```text id="fuh4rx"
+Shift A closes with 13kg physical potatoes.
+Shift B opens with 13kg potatoes.
+```
+
+So the rule is:
+
+```text id="zijp0g"
+Shift A physical handover count = Shift B opening stock
+```
+
+---
+
+# 4. What Shift B receives
+
+Shift B should receive:
+
+```text id="xth3fk"
+- all remaining raw stock
+- all remaining produced finished stock
+- all unresolved items carried forward
+- opening stock equal to Shift A physical handover count
+```
+
+Example:
+
+```text id="8ak6jf"
+Shift A handover count:
+Potatoes: 13kg
+Beef: 4kg
+Mango juice: 8 litres
+
+Shift B opening:
+Potatoes: 13kg
+Beef: 4kg
+Mango juice: 8 litres
+```
+
+---
+
+# 5. Important validations
+
+The system must block wrong flow.
+
+```text id="do82be"
+1. Shift B cannot open before Shift A is closed.
+2. Shift A cannot close without handover stocktake.
+3. Shift B opening stock must come from Shift A physical count.
+4. Storekeeper cannot manually invent Shift B opening stock.
+5. Accountant approval should not block Shift B opening.
+6. Large variance needs explanation/recount.
+7. Extreme variance needs supervisor override before handover continues.
+```
+
+---
+
+# 6. UI logic in KitchenSessionsScreen
+
+For **TWO_SHIFT branch**, show:
+
+```text id="ln73pa"
+Sub-shift selector:
+[Shift A] [Shift B]
+```
+
+## When no shift is open
+
+Show:
+
+```text id="y4tsvw"
+No Active Kitchen Session
+
+[Start Opening Stocktake]
+```
+
+After opening stocktake:
+
+```text id="y0ek7o"
+Shift A opens
+```
+
+---
+
+## During Shift A
+
+Show:
+
+```text id="rxspst"
+Current Shift: A
+Status: Active
+
+Buttons:
+- Add Stock
+- Log Production
+- Record Spoilage
+- Start Handover Stocktake
+```
+
+Do **not** show “Open Shift B” yet.
+
+---
+
+## When storekeeper clicks Start Handover Stocktake
+
+Show handover stocktake screen:
+
+```text id="xai2su"
+Item              Expected     Physical     Variance
+Potatoes          15kg         [enter]      calculated
+Beef              5kg          [enter]      calculated
+Juice             8L           [enter]      calculated
+```
+
+Then:
+
+```text id="5sgkyf"
+[Submit Handover Stocktake]
+```
+
+After submit:
+
+```text id="hnvqm9"
+Shift A closed.
+Shift B opening stock generated from handover count.
+```
+
+Then show:
+
+```text id="qvazpq"
+[Open Shift B]
+```
+
+or auto-open B if that is the approved design.
+
+---
+
+## During Shift B
+
+Show:
+
+```text id="y7dftr"
+Current Shift: B
+Opening stock came from Shift A handover.
+
+Buttons:
+- Add Stock
+- Log Production
+- Record Spoilage
+- Close with business day
+```
+
+No Shift C.
+
+---
+
+# 7. Database logic
+
+Use current approved tables.
+
+```text id="h2r70q"
+kitchen_shifts
+- one row for Shift A
+- one row for Shift B
+
+kitchen_shift_items
+- stock items for each shift
+- Shift A opening / additions / expected / physical
+- Shift B opening copied from Shift A physical count
+
+kitchen_shift_stock_take
+- handover stocktake records
+- physical count
+- explanation
+- action_taken
+- variance
+```
+
+Do **not** introduce a new handover table unless separately reviewed and confirmed as existing/approved.
+
+---
+
+# 8. Simple backend algorithm
+
+```text id="ivhmge"
+IF branch shift_mode != TWO_SHIFT:
+    Do not show Shift A/B
+    Use single daily session only
+
+IF branch shift_mode == TWO_SHIFT:
+    Open Shift A after opening kitchen stocktake
+
+When closing Shift A:
+    Require physical handover stocktake
+    Calculate variance
+    Require explanation if large variance
+    Require supervisor override if extreme variance
+    Save Shift A physical counts
+    Mark Shift A closed
+    Create/open Shift B
+    Set Shift B opening_stock = Shift A physical_count
+
+When Shift B closes:
+    Close with business day
+    Next day opening stocktake reveals final variance
+```
+
+---
+
+# 9. Diagram
+
+```mermaid
+flowchart TD
+    A["Branch Config: TWO_SHIFT"] --> B["Opening Kitchen Stocktake"]
+    B --> C["Open Shift A"]
+    C --> D["Shift A Operations"]
+    D --> D1["Add Stock"]
+    D --> D2["Log TRUE_BATCH_PRODUCTION"]
+    D --> D3["Record Spoilage"]
+    D --> E["End Shift A"]
+
+    E --> F["Handover Stocktake"]
+    F --> G["Enter Physical Count"]
+    G --> H["Calculate Shift A Variance"]
+
+    H --> I{Variance Level}
+    I -->|Normal| J["Allow Handover"]
+    I -->|Large| K["Require Explanation / Recount"]
+    I -->|Extreme| L["Require Supervisor Override"]
+
+    J --> M["Close Shift A"]
+    K --> M
+    L --> M
+
+    M --> N["Shift A Physical Count becomes Shift B Opening Stock"]
+    N --> O["Open Shift B"]
+    O --> P["Shift B Operations"]
+    P --> Q["Close with Business Day"]
+    Q --> R["Next Day Opening Stocktake Confirms Final Variance"]
+```
+
+---
+
+# Final rule
+
+```text id="wjtpwy"
+Shift A does not pass stock to Shift B by assumption.
+
+Shift A must physically count stock at handover.
+
+That physical count becomes Shift B opening stock.
+
+Any difference between expected and physical count becomes Shift A variance for accountant review.
+```
+Below is the recommended **Shift A → Shift B Kitchen Sessions logic** for **Bomet Town**, which uses `TWO_SHIFT` mode.
+
+# KITCHEN SHIFT A TO SHIFT B HANDOVER LOGIC
+
+## 1. Shift A Opening
+
+The Opening Kitchen Stocktake starts **Shift A** for the business date.
+
+Shift A opening stock may come from:
+
+* The previous day’s Shift B closing stock.
+* A manually entered opening stocktake when there is no previous closing stock.
+* New issues received from the Branch Main Store after opening.
+
+The opening stocktake is only an opening balance. It must **not deduct stock from the Branch Main Store**.
+
+---
+
+## 2. Shift A Operations
+
+All kitchen transactions performed while Shift A is open must be attached to:
+
+* Branch
+* Business date
+* Kitchen session
+* Shift A
+* Responsible employee
+* Transaction timestamp
+
+This includes:
+
+* Main Store issues
+* Returns to Main Store
+* POS recipe consumption
+* Conference consumption
+* Buffet consumption
+* Accommodation breakfast consumption
+* Outside catering consumption
+* Staff meals
+* Production raw-material usage
+* Production finished output
+* Transfers
+* Wastage
+* Manual stock adjustments
+
+Transactions must never be posted to Shift A after its handover has been completed.
+
+---
+
+## 3. Starting the Shift A Handover
+
+The storekeeper selects:
+
+**Close Shift A / Handover to Shift B**
+
+The system changes Shift A to:
+
+`HANDOVER_IN_PROGRESS`
+
+During the handover:
+
+* New Shift A transactions should be blocked.
+* The storekeeper performs a physical count of every kitchen stock item.
+* All required production, consumption, wastage, issue and return records must be submitted.
+* Any unsubmitted wastage must block completion of the handover.
+* Accountant approval of submitted wastage does not have to block the handover.
+
+---
+
+## 4. Expected Shift A Closing Stock
+
+For every kitchen item, the system calculates:
+
+**Expected Closing Stock**
+
+`Opening Stock`
+`+ Receipts and Transfers In`
+`+ Production Output`
+`- POS Recipe Consumption`
+`- Other Consumption Channels`
+`- Production Raw Materials Used`
+`- Returns and Transfers Out`
+`- Wastage`
+`± Approved Adjustments`
+
+The storekeeper enters the physical closing quantity.
+
+The system calculates:
+
+`Variance = Physical Closing Stock - Expected Closing Stock`
+
+A negative figure represents a shortage.
+
+A positive figure represents an excess.
+
+Where a variance exceeds the configured tolerance, the storekeeper must enter:
+
+* Variance reason
+* Explanation
+* Responsible employee or shift team, where known
+* Supporting comments
+
+---
+
+## 5. Closing Shift A
+
+Shift A can only close when:
+
+* The physical handover count is complete.
+* All mandatory items have been counted.
+* Required Shift A records have been submitted.
+* All wastage has been recorded and submitted.
+* Mandatory variance explanations have been entered.
+* There is no existing open Shift B.
+
+After submission, Shift A changes to:
+
+`CLOSED_PENDING_ACCOUNTANT_REVIEW`
+
+Shift B does **not** need to wait for the accountant to approve Shift A.
+
+---
+
+## 6. Opening Shift B
+
+Shift B can only be created after Shift A reaches:
+
+`CLOSED_PENDING_ACCOUNTANT_REVIEW`
+
+Shift B must use the same:
+
+* Branch
+* Business date
+* Kitchen session
+
+The system automatically copies:
+
+`Shift A Physical Closing Stock → Shift B Opening Stock`
+
+This is a stock carry-forward, not a new Main Store issue.
+
+The system must therefore:
+
+* Create the Shift B opening stock snapshot.
+* Create a handover audit record.
+* Link Shift B to Shift A.
+* Avoid deducting any quantities from the Branch Main Store.
+* Avoid creating duplicate stock receipts.
+
+Shift B opening stock should normally be read-only because it came from the completed Shift A handover.
+
+After confirmation, Shift B changes to:
+
+`OPEN`
+
+---
+
+## 7. Handover Audit Record
+
+The handover record should contain:
+
+* Branch ID
+* Business date
+* Shift A ID
+* Shift B ID
+* Shift A closing employee
+* Shift B receiving employee, where applicable
+* Handover time
+* Item quantities handed over
+* Expected quantities
+* Physical quantities
+* Variances
+* Comments
+* Status
+* Device or user responsible for submission
+
+---
+
+## 8. Accountant Review of Shift A
+
+The accountant reviews Shift A independently after Shift B has opened.
+
+The accountant may:
+
+* Approve Shift A
+* Request clarification
+* Assign responsibility
+* Create a staff recovery
+* Create a team charge
+* Write off an approved variance
+* Reject an unsupported stock adjustment
+
+Accountant approval must not interrupt active Shift B operations.
+
+### Important correction rule
+
+Once Shift B has opened, Shift A closing quantities must not be edited directly.
+
+Any correction affecting stock must be posted as an auditable adjustment against Shift B or the currently open shift.
+
+The adjustment must reference:
+
+* Original Shift A
+* Original item
+* Original closing quantity
+* Corrected quantity
+* Difference
+* Reason
+* Accountant
+* Date and time
+
+This prevents the system from silently changing Shift B opening stock after operations have already started.
+
+---
+
+## 9. Reopening Shift A
+
+Shift A may only be reopened when:
+
+* Shift B has not yet been opened.
+* The user has the required permission.
+* A reopening reason is entered.
+* The action is recorded in the audit log.
+
+Once Shift B is open, Shift A must never be reopened.
+
+Corrections must use adjustment transactions.
+
+---
+
+## 10. Shift B Closing
+
+Shift B continues using:
+
+`Shift A Physical Closing Stock`
+
+as its opening stock.
+
+Shift B then records its own:
+
+* Issues
+* POS consumption
+* Other consumption
+* Production
+* Wastage
+* Returns
+* Transfers
+* Closing physical count
+* Variances
+
+Shift B closing stock becomes the final kitchen closing stock for that business date.
+
+That closing quantity becomes the next business date’s Shift A opening stock.
+
+---
+
+## 11. Required System Controls
+
+The system must reject:
+
+* Opening Shift B while Shift A is still open.
+* Opening more than one Shift B for the same kitchen session.
+* Posting Shift A transactions after handover.
+* Editing Shift A closing quantities after Shift B has opened.
+* Deducting Branch Main Store stock during the handover.
+* Creating Shift B opening stock from expected stock instead of physical stock.
+* Closing Shift A with incomplete item counts.
+* Closing Shift A with unsubmitted wastage.
+* Opening another kitchen shift while an applicable shift is already open.
+
+---
+
+## 12. Shift Status Flow
+
+### Shift A
+
+`OPEN`
+
+→ `HANDOVER_IN_PROGRESS`
+
+→ `CLOSED_PENDING_ACCOUNTANT_REVIEW`
+
+→ `APPROVED`
+
+or
+
+→ `REVIEW_ACTION_REQUIRED`
+
+### Shift B
+
+`NOT_CREATED`
+
+→ `OPEN`
+
+→ `CLOSING_IN_PROGRESS`
+
+→ `CLOSED_PENDING_ACCOUNTANT_REVIEW`
+
+→ `APPROVED`
+
+---
+
+## 13. Mogogosiek Exception
+
+This Shift A-to-Shift B logic applies only to branches configured as:
+
+`TWO_SHIFT`
+
+For the pilot:
+
+* **Bomet Town:** `TWO_SHIFT`
+* **Mogogosiek:** `SINGLE_SHIFT`
+
+Mogogosiek must not create Shift B.
+
+It has:
+
+* One opening kitchen stocktake.
+* One continuous kitchen shift.
+* One final closing stocktake.
+* No midday handover.
+
+The most important rule is: **Shift B opens using Shift A’s physical closing count, not its expected closing stock, and the handover must not deduct stock from the Main Store.**

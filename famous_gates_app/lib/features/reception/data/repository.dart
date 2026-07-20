@@ -196,6 +196,35 @@ class ReceptionRepository {
     await _dio.put('/bookings/$bookingId/check-out');
   }
 
+  Future<Map<String, dynamic>> getDailyBreakfastPax({String? date}) async {
+    final response = await _dio.get(
+      '/bookings/breakfast-pax/daily',
+      queryParameters: await _branchParams({
+        if (date != null && date.isNotEmpty) 'date': date,
+      }),
+    );
+    return _payload(response.data);
+  }
+
+  Future<Map<String, dynamic>> saveDailyBreakfastPax({
+    required String date,
+    required int confirmedPax,
+    required String status,
+    String? adjustmentReason,
+  }) async {
+    final response = await _dio.put(
+      '/bookings/breakfast-pax/daily',
+      data: await _withBranch({
+        'date': date,
+        'confirmed_pax': confirmedPax,
+        'status': status,
+        if (adjustmentReason != null && adjustmentReason.trim().isNotEmpty)
+          'adjustment_reason': adjustmentReason.trim(),
+      }),
+    );
+    return _payload(response.data);
+  }
+
   Future<List<Map<String, dynamic>>> getAvailableRooms(
       Map<String, dynamic> params) async {
     final response = await _dio.get('/bookings/available',
@@ -537,8 +566,7 @@ class ReceptionRepository {
   /// The backend fetches guest email and room details automatically.
   Future<Map<String, dynamic>> sendBookingConfirmationEmail(
       String bookingId) async {
-    final response =
-        await _dio.post('/email/send-booking/$bookingId');
+    final response = await _dio.post('/email/send-booking/$bookingId');
     return _payload(response.data);
   }
 
@@ -549,10 +577,10 @@ class ReceptionRepository {
   }
 
   /// Send a booking cancellation email.
-  Future<Map<String, dynamic>> sendCancellationEmail(
-      String bookingId, {String? reason}) async {
-    final response = await _dio.post('/email/send-cancellation/$bookingId',
-        data: {'reason': reason});
+  Future<Map<String, dynamic>> sendCancellationEmail(String bookingId,
+      {String? reason}) async {
+    final response = await _dio
+        .post('/email/send-cancellation/$bookingId', data: {'reason': reason});
     return _payload(response.data);
   }
 

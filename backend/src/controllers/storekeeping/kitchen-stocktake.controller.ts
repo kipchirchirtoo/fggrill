@@ -3,6 +3,7 @@ import { supabase } from '../../config/database';
 import db from '../../db';
 import { logger } from '../../utils/logger';
 import { isGlobalRole } from '../../utils/branchIsolation';
+import { getActiveShiftMode } from '../../services/shiftConfigService';
 
 // Kitchen Stocktake — replicates the physical paper logbook used at the
 // kitchen serving counter: OPEN / ADD / CLOSING / VAR per item, two shifts
@@ -466,6 +467,896 @@ const resolveBranchId = (req: Request): number | null => {
   return Number.isInteger(branchId) ? (branchId as number) : null;
 };
 
+type StocktakeContextRow = {
+  item_id: string | null;
+  item_name: string;
+  opening_qty: number;
+  added_qty: number;
+  sold_qty: number;
+  spoilage_qty: number;
+  closing_qty: number;
+  variance: number;
+  explanation: string | null;
+  action_taken: string | null;
+  unit: string | null;
+  category: string | null;
+  item_type: string;
+  channel: string | null;
+  item_sku: string | null;
+  expected_qty: number;
+  system_qty: number;
+};
+
+type StandardsCatalogRow = {
+  item_id: string | null;
+  item_name: string;
+  item_sku: string | null;
+  unit: string | null;
+  category: string | null;
+  standard_type: 'RECIPE_STANDARD' | 'CHANNEL_STANDARD';
+  default_channel: string | null;
+};
+
+type ChannelStandardRow = {
+  channel: string;
+  raw_item_sku: string | null;
+  raw_item_name: string | null;
+  quantity_per_pax: number;
+  event_id: string | null;
+  package_definition_id: string | null;
+  package_name: string | null;
+};
+
+type StaffSummary = {
+  user_id: string;
+  name: string;
+  role: string | null;
+  department: string | null;
+};
+
+const toShiftLetter = (value: any): 'A' | 'B' => {
+  const raw = String(value || 'A').trim().toUpperCase();
+  return raw === 'B' ? 'B' : 'A';
+};
+
+const normalizeName = (value: any): string =>
+  String(value || '').trim().toLowerCase();
+
+const normalizeCode = (value: any): string =>
+  String(value || '').trim().toUpperCase();
+
+const titleCaseWords = (value: string): string =>
+  value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+
+const buildKitchenShiftLabel = (
+  shiftMode: 'SINGLE_SHIFT' | 'TWO_SHIFT' | null,
+  shiftLetter: 'A' | 'B'
+): string => (shiftMode === 'SINGLE_SHIFT' ? 'Single Shift' : `Shift ${shiftLetter}`);
+
+const inferStocktakeType = (
+  shiftMode: 'SINGLE_SHIFT' | 'TWO_SHIFT' | null,
+  kitchenShift: any | null,
+  shiftLetter: 'A' | 'B'
+): string => {
+  if (!kitchenShift) {
+    return shiftMode === 'SINGLE_SHIFT'
+      ? 'opening_single_shift'
+      : shiftLetter === 'B'
+          ? 'shift_b_unavailable'
+          : 'opening_shift_a';
+  }
+  if (shiftMode === 'SINGLE_SHIFT') return 'single_shift_stocktake';
+  if (shiftLetter === 'A') {
+    return kitchenShift.status === 'open' ? 'shift_a_active' : 'shift_a_handover';
+  }
+  return 'shift_b_active';
+};
+
+const buildStandardMatchKeys = (entry: {
+  item_id?: string | null;
+  item_sku?: string | null;
+  item_name?: string | null;
+}): string[] => {
+  const keys = new Set<string>();
+  if (entry.item_id) keys.add(`id:${String(entry.item_id)}`);
+  if (entry.item_sku) keys.add(`sku:${normalizeCode(entry.item_sku)}`);
+  if (entry.item_name) keys.add(`name:${normalizeName(entry.item_name)}`);
+  return [...keys].filter((key) => !key.endsWith(':'));
+};
+
+const buildInventoryOrFilter = (
+  ids: string[],
+  skus: string[],
+  names: string[]
+): string | null => {
+  const parts: string[] = [];
+  if (ids.length) {
+    parts.push(`id.in.(${ids.map((id) => `"${String(id).replace(/"/g, '\\"')}"`).join(',')})`);
+  }
+  if (skus.length) {
+    parts.push(`sku.in.(${skus.map((sku) => `"${String(sku).replace(/"/g, '\\"')}"`).join(',')})`);
+  }
+  if (names.length) {
+    parts.push(`item_name.in.(${names.map((name) => `"${String(name).replace(/"/g, '\\"')}"`).join(',')})`);
+  }
+  return parts.length ? parts.join(',') : null;
+};
+
+const includesKitchenStocktake = (location: string | null | undefined): boolean => {
+  const normalized = String(location || 'KITCHEN').trim().toUpperCase();
+  return normalized === 'KITCHEN' || normalized === 'BOTH';
+};
+
+const includesRawSide = (mode: string | null | undefined): boolean => {
+  const normalized = String(mode || 'BOTH').trim().toUpperCase();
+  return normalized === 'RAW_ONLY' || normalized === 'BOTH';
+};
+
+const includesProducedSide = (mode: string | null | undefined): boolean => {
+  const normalized = String(mode || 'BOTH').trim().toUpperCase();
+  return normalized === 'PRODUCED_ONLY' || normalized === 'BOTH';
+};
+
+const formatStandardChannel = (
+  channel: string | null,
+  standardType: StandardsCatalogRow['standard_type']
+): string | null => {
+  if (channel) return titleCaseWords(channel);
+  if (standardType === 'RECIPE_STANDARD') {
+    return 'POS Restaurant';
+  }
+  return null;
+};
+
+const getStandardTypePriority = (type: StandardsCatalogRow['standard_type']): number => {
+  switch (type) {
+    case 'CHANNEL_STANDARD':
+      return 3;
+    case 'RECIPE_STANDARD':
+      return 2;
+    default:
+      return 0;
+  }
+};
+
+const getStandardTypeRank = (type: string): number => {
+  switch (String(type || '')) {
+    case 'TRUE_BATCH_PRODUCTION_OUTPUT':
+      return 4;
+    case 'PRODUCTION_RAW_INPUT':
+      return 3;
+    case 'RECIPE_STANDARD':
+      return 2;
+    case 'CHANNEL_STANDARD':
+      return 2;
+    default:
+      return 0;
+  }
+};
+
+const fetchKitchenStandardsCatalog = async (
+  branchId: number
+): Promise<{
+  entries: StandardsCatalogRow[];
+  matchIndex: Map<string, StandardsCatalogRow>;
+}> => {
+  const [
+    { data: recipeRows, error: recipeErr },
+    { data: recipeInputs, error: recipeInputsErr },
+    { data: channelStandards, error: standardsErr },
+  ] = await Promise.all([
+    supabase
+      .from('kitchen_production_recipes')
+      .select('raw_item_sku, raw_item_name, raw_unit, produced_item_sku, produced_item_name, produced_unit, stocktake_control_mode, stocktake_location')
+      .eq('branch_id', branchId)
+      .eq('is_active', true),
+    supabase
+      .from('kitchen_production_recipe_inputs')
+      .select('raw_item_sku, raw_item_name, unit, recipe:kitchen_production_recipes!inner(branch_id, is_active, stocktake_control_mode, stocktake_location)')
+      .eq('recipe.branch_id', branchId)
+      .eq('recipe.is_active', true),
+    supabase
+      .from('channel_food_standards')
+      .select('channel, raw_item_sku, raw_item_name, unit')
+      .eq('branch_id', branchId),
+  ]);
+  if (recipeErr) throw recipeErr;
+  if (recipeInputsErr) throw recipeInputsErr;
+  if (standardsErr) throw standardsErr;
+
+  const rawEntries: StandardsCatalogRow[] = [];
+  for (const row of (recipeRows || []) as any[]) {
+    if (includesKitchenStocktake(row.stocktake_location) && includesRawSide(row.stocktake_control_mode)) {
+      rawEntries.push({
+        item_id: null,
+        item_name: String(row.raw_item_name || '').trim(),
+        item_sku: row.raw_item_sku || null,
+        unit: row.raw_unit || null,
+        category: null,
+        standard_type: 'RECIPE_STANDARD',
+        default_channel: formatStandardChannel(null, 'RECIPE_STANDARD'),
+      });
+    }
+    if (includesKitchenStocktake(row.stocktake_location) &&
+        includesProducedSide(row.stocktake_control_mode) &&
+        row.produced_item_name) {
+      rawEntries.push({
+        item_id: null,
+        item_name: String(row.produced_item_name || '').trim(),
+        item_sku: row.produced_item_sku || null,
+        unit: row.produced_unit || null,
+        category: null,
+        standard_type: 'RECIPE_STANDARD',
+        default_channel: formatStandardChannel(null, 'RECIPE_STANDARD'),
+      });
+    }
+  }
+  for (const row of (recipeInputs || []) as any[]) {
+    const recipe = row.recipe || {};
+    if (!includesKitchenStocktake(recipe.stocktake_location) ||
+        !includesRawSide(recipe.stocktake_control_mode)) {
+      continue;
+    }
+    rawEntries.push({
+      item_id: null,
+      item_name: String(row.raw_item_name || '').trim(),
+      item_sku: row.raw_item_sku || null,
+      unit: row.unit || null,
+      category: null,
+      standard_type: 'RECIPE_STANDARD',
+      default_channel: formatStandardChannel(null, 'RECIPE_STANDARD'),
+    });
+  }
+  for (const row of (channelStandards || []) as any[]) {
+    rawEntries.push({
+      item_id: null,
+      item_name: String(row.raw_item_name || '').trim(),
+      item_sku: row.raw_item_sku || null,
+      unit: row.unit || null,
+      category: null,
+      standard_type: 'CHANNEL_STANDARD',
+      default_channel: formatStandardChannel(String(row.channel || ''), 'CHANNEL_STANDARD'),
+    });
+  }
+
+  const candidateIds = [...new Set(rawEntries.map((entry) => String(entry.item_sku || '')).filter((value) => /^[0-9a-fA-F-]{36}$/.test(value)))];
+  const candidateSkus = [...new Set(rawEntries.map((entry) => normalizeCode(entry.item_sku)).filter(Boolean))];
+  const candidateNames = [...new Set(rawEntries.map((entry) => String(entry.item_name || '').trim()).filter(Boolean))];
+  const inventoryFilter = buildInventoryOrFilter(candidateIds, candidateSkus, candidateNames);
+
+  const inventoryRows = inventoryFilter
+    ? await supabase
+        .from('inventory_items')
+        .select('id, sku, item_name, unit, category')
+        .or(inventoryFilter)
+    : { data: [], error: null } as any;
+  if (inventoryRows.error) throw inventoryRows.error;
+
+  const inventoryById = new Map<string, any>();
+  const inventoryBySku = new Map<string, any>();
+  const inventoryByName = new Map<string, any>();
+  for (const row of (inventoryRows.data || []) as any[]) {
+    if (row.id) inventoryById.set(String(row.id), row);
+    if (row.sku) inventoryBySku.set(normalizeCode(row.sku), row);
+    if (row.item_name) inventoryByName.set(normalizeName(row.item_name), row);
+  }
+
+  const dedupedByName = new Map<string, StandardsCatalogRow>();
+  for (const entry of rawEntries) {
+    if (!entry.item_name) continue;
+    const inv =
+      (entry.item_sku && inventoryById.get(String(entry.item_sku))) ||
+      (entry.item_sku && inventoryBySku.get(normalizeCode(entry.item_sku))) ||
+      inventoryByName.get(normalizeName(entry.item_name)) ||
+      null;
+    const hydrated: StandardsCatalogRow = {
+      ...entry,
+      item_id: inv?.id || entry.item_id || null,
+      item_sku: inv?.sku || entry.item_sku || null,
+      item_name: inv?.item_name || entry.item_name,
+      unit: inv?.unit || entry.unit || null,
+      category: inv?.category || entry.category || null,
+      default_channel: entry.default_channel,
+    };
+    const key = normalizeName(hydrated.item_name);
+    const existing = dedupedByName.get(key);
+    if (!existing || getStandardTypePriority(hydrated.standard_type) > getStandardTypePriority(existing.standard_type)) {
+      dedupedByName.set(key, hydrated);
+    }
+  }
+
+  const entries = [...dedupedByName.values()].sort((a, b) => a.item_name.localeCompare(b.item_name));
+  const matchIndex = new Map<string, StandardsCatalogRow>();
+  for (const entry of entries) {
+    for (const key of buildStandardMatchKeys(entry)) {
+      if (!matchIndex.has(key)) matchIndex.set(key, entry);
+    }
+  }
+
+  return { entries, matchIndex };
+};
+
+const resolveStandardEntry = (
+  matchIndex: Map<string, StandardsCatalogRow>,
+  value: { item_id?: string | null; item_sku?: string | null; item_name?: string | null }
+): StandardsCatalogRow | null => {
+  for (const key of buildStandardMatchKeys(value)) {
+    const match = matchIndex.get(key);
+    if (match) return match;
+  }
+  return null;
+};
+
+const getStaffSummaries = async (userIds: string[]): Promise<StaffSummary[]> => {
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+  if (!ids.length) return [];
+  const [{ data: users }, { data: profiles }] = await Promise.all([
+    supabase.from('users').select('id, first_name, last_name, role').in('id', ids),
+    supabase
+      .from('staff_profiles')
+      .select('user_id, first_name, last_name, role, department')
+      .in('user_id', ids),
+  ]);
+  const profileByUserId = new Map(
+    ((profiles || []) as any[]).map((row) => [String(row.user_id), row])
+  );
+  return ((users || []) as any[]).map((user) => {
+    const profile = profileByUserId.get(String(user.id)) || {};
+    const first = profile.first_name || user.first_name || '';
+    const last = profile.last_name || user.last_name || '';
+    return {
+      user_id: String(user.id),
+      name: `${first} ${last}`.trim() || String(user.id),
+      role: profile.role || user.role || null,
+      department: profile.department || null,
+    };
+  });
+};
+
+const buildShiftExpectedConsumptionMap = async (
+  branchId: number,
+  kitchenShift: any,
+  shiftItems: any[],
+  additions: any[]
+): Promise<Map<string, number>> => {
+  const expectedByMatchKey = new Map<string, number>();
+  const addExpected = (
+    item: { item_id?: string | null; item_sku?: string | null; item_name?: string | null },
+    quantity: number
+  ) => {
+    const qty = num(quantity);
+    if (qty <= 0) return;
+    for (const key of buildStandardMatchKeys(item)) {
+      expectedByMatchKey.set(key, (expectedByMatchKey.get(key) || 0) + qty);
+    }
+  };
+
+  const shiftId = String(kitchenShift?.id || '').trim();
+  let posConsumptionRows: any[] = [];
+  if (shiftId) {
+    const { data, error } = await supabase
+      .from('kitchen_shift_pos_consumption')
+      .select('raw_item_sku, raw_item_name, raw_quantity_consumed')
+      .eq('shift_id', shiftId);
+    if (error) throw error;
+    posConsumptionRows = (data || []) as any[];
+  }
+
+  if (posConsumptionRows.length > 0) {
+    for (const row of posConsumptionRows) {
+      addExpected(
+        {
+          item_sku: row.raw_item_sku || null,
+          item_name: row.raw_item_name || null,
+        },
+        num(row.raw_quantity_consumed)
+      );
+    }
+  } else {
+    for (const item of shiftItems) {
+      addExpected(
+        {
+          item_sku: item.item_sku || null,
+          item_name: item.item_name || null,
+        },
+        num(item.sold_quantity)
+      );
+    }
+  }
+
+  const eventRefIds = [...new Set(
+    additions
+      .map((row: any) => String(row.reference_id || '').trim())
+      .filter(Boolean)
+  )];
+
+  const [{ data: standardsData, error: standardsErr }, { data: eventOrdersData, error: eventOrdersErr }] =
+    await Promise.all([
+      supabase
+        .from('channel_food_standards')
+        .select('channel, raw_item_sku, raw_item_name, quantity_per_pax, event_id, package_definition_id, package_name')
+        .eq('branch_id', branchId),
+      eventRefIds.length
+        ? supabase.from('event_orders').select('id, pax, menu_package, package_definition_id').in('id', eventRefIds)
+        : Promise.resolve({ data: [], error: null } as any),
+    ]);
+  if (standardsErr) throw standardsErr;
+  if (eventOrdersErr) throw eventOrdersErr;
+
+  const standards = ((standardsData || []) as any[]).map((row) => ({
+    channel: String(row.channel || ''),
+    raw_item_sku: row.raw_item_sku || null,
+    raw_item_name: row.raw_item_name || null,
+    quantity_per_pax: num(row.quantity_per_pax),
+    event_id: row.event_id || null,
+    package_definition_id: row.package_definition_id || null,
+    package_name: row.package_name ? String(row.package_name).trim() : null,
+  })) as ChannelStandardRow[];
+  const eventOrderById = new Map<string, any>(
+    ((eventOrdersData || []) as any[]).map((row) => [String(row.id), row])
+  );
+
+  const breakfastPax = num(kitchenShift?.breakfast_pax);
+  if (breakfastPax > 0) {
+    for (const standard of standards.filter((row) => row.channel === 'accommodation_breakfast')) {
+      addExpected(
+        {
+          item_sku: standard.raw_item_sku,
+          item_name: standard.raw_item_name,
+        },
+        standard.quantity_per_pax * breakfastPax
+      );
+    }
+  }
+
+  const staffMealPax = num(kitchenShift?.staff_meal_pax);
+  if (staffMealPax > 0) {
+    for (const standard of standards.filter((row) => row.channel === 'staff_meal')) {
+      addExpected(
+        {
+          item_sku: standard.raw_item_sku,
+          item_name: standard.raw_item_name,
+        },
+        standard.quantity_per_pax * staffMealPax
+      );
+    }
+  }
+
+  const eventChannels = new Set([
+    'buffet',
+    'conference_event',
+    'outside_catering',
+    'group_meal',
+  ]);
+  const additionsByChannel = new Map<string, any[]>();
+  for (const addition of additions) {
+    const channel = String(addition.purpose_channel || '').trim();
+    if (!channel || !eventChannels.has(channel) || !addition.reference_id) continue;
+    const bucket = additionsByChannel.get(channel) || [];
+    bucket.push(addition);
+    additionsByChannel.set(channel, bucket);
+  }
+
+  for (const [channel, rows] of additionsByChannel.entries()) {
+    const refIds = [...new Set(rows.map((row) => String(row.reference_id)).filter(Boolean))];
+    for (const refId of refIds) {
+      const eventOrder = eventOrderById.get(refId);
+      const pax = num(eventOrder?.pax);
+      if (pax <= 0) continue;
+      const packageName = String(eventOrder?.menu_package || '').trim().toLowerCase();
+      const packageDefinitionId = String(eventOrder?.package_definition_id || '').trim();
+      const matchedStandards = standards.filter((standard) => {
+        if (standard.channel !== channel) return false;
+        if (standard.event_id && String(standard.event_id) === refId) return true;
+        if (
+          packageDefinitionId &&
+          String(standard.package_definition_id || '').trim() === packageDefinitionId
+        ) {
+          return true;
+        }
+        if (packageName && String(standard.package_name || '').trim().toLowerCase() === packageName) {
+          return true;
+        }
+        return !standard.event_id && !String(standard.package_name || '').trim();
+      });
+      for (const standard of matchedStandards) {
+        addExpected(
+          {
+            item_sku: standard.raw_item_sku,
+            item_name: standard.raw_item_name,
+          },
+          standard.quantity_per_pax * pax
+        );
+      }
+    }
+  }
+
+  return expectedByMatchKey;
+};
+
+const getPreviousKitchenStocktakeSeedRows = async (
+  branchId: number,
+  stocktakeDate: string,
+  shift: 'A' | 'B'
+): Promise<any[]> => {
+  try {
+    const { rows } = await db.query(
+      `SELECT DISTINCT ON (COALESCE(kti.inventory_item_id::text, LOWER(TRIM(kti.item_name))))
+              kti.inventory_item_id,
+              kti.item_name,
+              kti.closing_qty,
+              ii.unit,
+              ii.category,
+              ii.sku
+         FROM public.kitchen_stocktake_items kti
+         JOIN public.kitchen_stocktake_shifts ks ON ks.id = kti.shift_id
+         LEFT JOIN public.inventory_items ii ON ii.id = kti.inventory_item_id
+        WHERE ks.branch_id = $1
+          AND (ks.stocktake_date < $2 OR (ks.stocktake_date = $2 AND ks.shift < $3))
+        ORDER BY COALESCE(kti.inventory_item_id::text, LOWER(TRIM(kti.item_name))),
+                 ks.stocktake_date DESC,
+                 ks.shift DESC`,
+      [branchId, stocktakeDate, shift]
+    );
+    return rows || [];
+  } catch (err) {
+    logger.warn('getPreviousKitchenStocktakeSeedRows failed:', (err as Error).message);
+    return [];
+  }
+};
+
+const buildKitchenStocktakeContext = async (
+  branchId: number,
+  stocktakeDate: string,
+  requestedShift: 'A' | 'B',
+  existingShiftRow?: any | null
+): Promise<Record<string, any>> => {
+  const standardsCatalog = await fetchKitchenStandardsCatalog(branchId);
+  const shiftMode = await getActiveShiftMode(branchId, stocktakeDate);
+  const { data: kitchenShifts, error: kitchenShiftErr } = await supabase
+    .from('kitchen_shifts')
+    .select('id, shift_number, shift_date, shift_type, sub_shift_type, status, opened_by, opened_at, closed_at, department, assigned_chef_ids, assigned_dispense_ids')
+    .eq('branch_id', branchId)
+    .eq('shift_date', stocktakeDate)
+    .order('opened_at', { ascending: true });
+  if (kitchenShiftErr) throw kitchenShiftErr;
+
+  const shifts = (kitchenShifts || []) as any[];
+  const shiftA = shifts.find((row) => String(row.sub_shift_type || 'A').toUpperCase() === 'A') || null;
+  const shiftB = shifts.find((row) => String(row.sub_shift_type || '').toUpperCase() === 'B') || null;
+
+  const availableShifts: Array<{ value: 'A' | 'B'; label: string }> = [];
+  availableShifts.push({
+    value: 'A',
+    label: buildKitchenShiftLabel(shiftMode, 'A'),
+  });
+  if (shiftMode === 'TWO_SHIFT' && (shiftB || existingShiftRow?.shift === 'B')) {
+    availableShifts.push({ value: 'B', label: 'Shift B' });
+  }
+
+  const resolvedShift =
+    shiftMode === 'SINGLE_SHIFT'
+      ? 'A'
+      : availableShifts.some((option) => option.value === requestedShift)
+          ? requestedShift
+          : 'A';
+
+  const activeKitchenShift =
+    shiftMode === 'SINGLE_SHIFT'
+      ? shiftA || shiftB || shifts[0] || null
+      : resolvedShift === 'B'
+          ? shiftB
+          : shiftA;
+
+  const relevantShiftIds = [
+    activeKitchenShift?.id,
+    shiftA?.id,
+    shiftB?.id,
+  ].filter(Boolean) as string[];
+  let handover: any | null = null;
+  if (relevantShiftIds.length) {
+    const { data: handoverRows, error: handoverErr } = await supabase
+      .from('kitchen_shift_handovers')
+      .select('*')
+      .or(
+        relevantShiftIds
+          .map((id) => `outgoing_shift_id.eq.${id},incoming_shift_id.eq.${id}`)
+          .join(',')
+      )
+      .order('confirmed_at', { ascending: false })
+      .limit(5);
+    if (handoverErr) throw handoverErr;
+    const rows = (handoverRows || []) as any[];
+    handover =
+      rows.find((row) => row.incoming_shift_id === activeKitchenShift?.id) ||
+      rows.find((row) => row.outgoing_shift_id === activeKitchenShift?.id) ||
+      rows.find((row) => row.incoming_shift_id === shiftB?.id) ||
+      rows.find((row) => row.outgoing_shift_id === shiftA?.id) ||
+      rows[0] ||
+      null;
+  }
+
+  const assignedChefIds = ((activeKitchenShift?.assigned_chef_ids || []) as string[]).filter(Boolean);
+  const assignedDispenseIds = ((activeKitchenShift?.assigned_dispense_ids || []) as string[]).filter(Boolean);
+  const outgoingWitnessIds = ((handover?.outgoing_witness_ids || []) as string[]).filter(Boolean);
+  const incomingWitnessIds = ((handover?.incoming_witness_ids || []) as string[]).filter(Boolean);
+  const staffSummaries = await getStaffSummaries([
+    ...assignedChefIds,
+    ...assignedDispenseIds,
+    ...outgoingWitnessIds,
+    ...incomingWitnessIds,
+  ]);
+  const staffByUserId = new Map(staffSummaries.map((row) => [row.user_id, row]));
+  const assignedChefNames = assignedChefIds
+    .map((id) => staffByUserId.get(String(id))?.name)
+    .filter(Boolean) as string[];
+  const assignedDispenseNames = assignedDispenseIds
+    .map((id) => staffByUserId.get(String(id))?.name)
+    .filter(Boolean) as string[];
+  const outgoingWitnessNames = outgoingWitnessIds
+    .map((id) => staffByUserId.get(String(id))?.name)
+    .filter(Boolean) as string[];
+  const incomingWitnessNames = incomingWitnessIds
+    .map((id) => staffByUserId.get(String(id))?.name)
+    .filter(Boolean) as string[];
+
+  const autoDispenserName =
+    assignedDispenseNames.join(', ') ||
+    (resolvedShift === 'B' ? incomingWitnessNames.join(', ') : outgoingWitnessNames.join(', ')) ||
+    null;
+  const autoChefsOnDuty =
+    assignedChefNames.length > 0
+      ? assignedChefNames
+      : (resolvedShift === 'B' ? incomingWitnessNames : outgoingWitnessNames);
+  const autoConfirmationName =
+    resolvedShift === 'B'
+      ? (incomingWitnessNames.join(', ') || assignedDispenseNames.join(', ') || null)
+      : (outgoingWitnessNames.join(', ') || assignedDispenseNames.join(', ') || null);
+
+  const itemsByKey = new Map<string, any>();
+  for (const item of (existingShiftRow?.items || []) as any[]) {
+    const key = item.inventory_item_id || String(item.item_name || '').trim().toLowerCase();
+    itemsByKey.set(String(key), item);
+  }
+
+  let rows: StocktakeContextRow[] = [];
+
+  if (activeKitchenShift?.id) {
+    const [{ data: shiftItems, error: shiftItemsErr }, { data: additions }, { data: productions }, { data: productionInputs }] =
+      await Promise.all([
+        supabase
+          .from('kitchen_shift_items')
+          .select('*')
+          .eq('shift_id', activeKitchenShift.id)
+          .order('item_name'),
+        supabase
+          .from('kitchen_shift_additions')
+          .select('item_sku, purpose_channel, quantity')
+          .eq('shift_id', activeKitchenShift.id),
+        supabase
+          .from('kitchen_shift_production')
+          .select('produced_item_sku')
+          .eq('shift_id', activeKitchenShift.id),
+        supabase
+          .from('kitchen_shift_production_inputs')
+          .select('raw_item_sku')
+          .eq('shift_id', activeKitchenShift.id),
+      ]);
+    if (shiftItemsErr) throw shiftItemsErr;
+
+    const shiftItemList = (shiftItems || []) as any[];
+    const additionsList = (additions || []) as any[];
+    const skuList = shiftItemList.map((item) => String(item.item_sku || '')).filter(Boolean);
+    const nameList = shiftItemList.map((item) => String(item.item_name || '')).filter(Boolean);
+    const { data: inventoryMatches } = await supabase
+      .from('inventory_items')
+      .select('id, sku, item_name, unit, category')
+      .or(
+        [
+          skuList.length ? `sku.in.(${skuList.map((sku) => `"${sku.replace(/"/g, '\\"')}"`).join(',')})` : null,
+          nameList.length ? `item_name.in.(${nameList.map((name) => `"${name.replace(/"/g, '\\"')}"`).join(',')})` : null,
+        ]
+          .filter(Boolean)
+          .join(',')
+      );
+
+    const inventoryBySku = new Map<string, any>();
+    const inventoryByName = new Map<string, any>();
+    for (const row of (inventoryMatches || []) as any[]) {
+      if (row.sku) inventoryBySku.set(String(row.sku), row);
+      if (row.item_name) inventoryByName.set(String(row.item_name).trim().toLowerCase(), row);
+    }
+
+    const channelTotalsBySku = new Map<string, Map<string, number>>();
+    const additionsBySku = new Map<string, number>();
+    for (const addition of additionsList) {
+      const sku = String(addition.item_sku || '');
+      if (!sku) continue;
+      const channel = String(addition.purpose_channel || 'kitchen_session');
+      const bucket = channelTotalsBySku.get(sku) || new Map<string, number>();
+      bucket.set(channel, (bucket.get(channel) || 0) + num(addition.quantity));
+      channelTotalsBySku.set(sku, bucket);
+      additionsBySku.set(sku, (additionsBySku.get(sku) || 0) + num(addition.quantity));
+    }
+    const expectedConsumptionByKey = await buildShiftExpectedConsumptionMap(
+      branchId,
+      activeKitchenShift,
+      shiftItemList,
+      additionsList
+    );
+    const producedSkuSet = new Set<string>(
+      ((productions || []) as any[])
+        .map((row) => String(row.produced_item_sku || ''))
+        .filter(Boolean)
+    );
+    const rawSkuSet = new Set<string>(
+      ((productionInputs || []) as any[])
+        .map((row) => String(row.raw_item_sku || ''))
+        .filter(Boolean)
+    );
+
+    rows = shiftItemList.map((item: any) => {
+      const inv =
+        inventoryBySku.get(String(item.item_sku || '')) ||
+        inventoryByName.get(String(item.item_name || '').trim().toLowerCase()) ||
+        null;
+      const standard = resolveStandardEntry(standardsCatalog.matchIndex, {
+        item_id: inv?.id || null,
+        item_sku: item.item_sku || inv?.sku || null,
+        item_name: item.item_name || inv?.item_name || null,
+      });
+      if (!standard) return null;
+      const saved =
+        itemsByKey.get(inv?.id || '') ||
+        itemsByKey.get(String(item.item_name || '').trim().toLowerCase()) ||
+        null;
+      const opening = num(item.opening_stock);
+      const added = additionsBySku.get(String(item.item_sku || '')) ?? num(item.additions);
+      const sold = num(item.sold_quantity);
+      const spoilage = num(item.spoilage_quantity);
+      const systemQty = opening + added - sold - spoilage;
+      const expectedQty =
+        expectedConsumptionByKey.get(`id:${String(inv?.id || '')}`) ??
+        expectedConsumptionByKey.get(`sku:${normalizeCode(item.item_sku || inv?.sku || standard.item_sku || '')}`) ??
+        expectedConsumptionByKey.get(`name:${normalizeName(item.item_name || inv?.item_name || standard.item_name || '')}`) ??
+        0;
+      const channelBucket = channelTotalsBySku.get(String(item.item_sku || ''));
+      let channel: string | null = null;
+      if (channelBucket && channelBucket.size > 0) {
+        const top = [...channelBucket.entries()].sort((a, b) => b[1] - a[1])[0];
+        channel = titleCaseWords(top[0]);
+      } else if (producedSkuSet.has(String(item.item_sku || ''))) {
+        channel = 'Production';
+      } else {
+        channel = standard.default_channel;
+      }
+      const itemType = producedSkuSet.has(String(item.item_sku || ''))
+        ? 'TRUE_BATCH_PRODUCTION_OUTPUT'
+        : rawSkuSet.has(String(item.item_sku || ''))
+            ? 'PRODUCTION_RAW_INPUT'
+            : standard.standard_type;
+      const closing = saved?.closing_qty != null
+        ? num(saved.closing_qty)
+        : item.physical_count != null
+            ? num(item.physical_count)
+            : item.system_closing_stock != null
+                ? num(item.system_closing_stock)
+                : systemQty;
+      return {
+        item_id: inv?.id || standard.item_id || null,
+        item_name: String(standard.item_name || item.item_name || item.item_sku || 'Unnamed Item'),
+        opening_qty: opening,
+        added_qty: added,
+        sold_qty: sold,
+        spoilage_qty: spoilage,
+        closing_qty: closing,
+        variance: closing - expectedQty,
+        explanation: saved?.explanation ?? null,
+        action_taken: saved?.action_taken ?? null,
+        unit: inv?.unit || standard.unit || item.unit_of_measure || null,
+        category: inv?.category || standard.category || null,
+        item_type: itemType,
+        channel,
+        item_sku: item.item_sku || inv?.sku || standard.item_sku || null,
+        expected_qty: expectedQty,
+        system_qty: systemQty,
+      } satisfies StocktakeContextRow;
+    }).filter(Boolean) as StocktakeContextRow[];
+  } else {
+    const previousRows = await getPreviousKitchenStocktakeSeedRows(
+      branchId,
+      stocktakeDate,
+      resolvedShift
+    );
+    const previousByMatchKey = new Map<string, any>();
+    for (const row of previousRows) {
+      const standard = resolveStandardEntry(standardsCatalog.matchIndex, {
+        item_id: row.inventory_item_id || row.item_id || null,
+        item_sku: row.sku || null,
+        item_name: row.item_name || null,
+      });
+      if (!standard) continue;
+      previousByMatchKey.set(normalizeName(standard.item_name), row);
+    }
+
+    const savedSeedItems = ((existingShiftRow?.items || []) as any[])
+      .map((row: any) => {
+        const standard = resolveStandardEntry(standardsCatalog.matchIndex, {
+          item_id: row.inventory_item_id || row.item_id || null,
+          item_sku: row.sku || null,
+          item_name: row.item_name || null,
+        });
+        if (!standard) return null;
+        return [normalizeName(standard.item_name), row] as const;
+      })
+      .filter(Boolean) as Array<readonly [string, any]>;
+    for (const [key, row] of savedSeedItems) {
+      if (!previousByMatchKey.has(key)) previousByMatchKey.set(key, row);
+    }
+
+    rows = standardsCatalog.entries.map((standard) => {
+      const key = normalizeName(standard.item_name);
+      const prior = previousByMatchKey.get(key) || null;
+      const saved =
+        itemsByKey.get(String(standard.item_id || '')) ||
+        itemsByKey.get(key) ||
+        null;
+      const opening = num(prior?.closing_qty ?? prior?.opening_qty ?? 0);
+      const closing = saved?.closing_qty != null ? num(saved.closing_qty) : opening;
+      return {
+        item_id: standard.item_id || prior?.inventory_item_id || prior?.item_id || null,
+        item_name: standard.item_name,
+        opening_qty: opening,
+        added_qty: 0,
+        sold_qty: 0,
+        spoilage_qty: 0,
+        closing_qty: closing,
+        variance: closing - opening,
+        explanation: saved?.explanation ?? prior?.explanation ?? null,
+        action_taken: saved?.action_taken ?? prior?.action_taken ?? null,
+        unit: standard.unit || prior?.unit || null,
+        category: standard.category || prior?.category || null,
+        item_type: standard.standard_type,
+        channel: standard.default_channel,
+        item_sku: standard.item_sku || prior?.sku || null,
+        expected_qty: 0,
+        system_qty: opening,
+      } satisfies StocktakeContextRow;
+    });
+  }
+
+  rows = rows
+    .sort((a, b) => {
+      const typeDelta = getStandardTypeRank(b.item_type) - getStandardTypeRank(a.item_type);
+      if (typeDelta !== 0) return typeDelta;
+      return a.item_name.localeCompare(b.item_name);
+    });
+
+  return {
+    branch_id: branchId,
+    stocktake_date: stocktakeDate,
+    shift: resolvedShift,
+    shift_mode: shiftMode,
+    shift_label: buildKitchenShiftLabel(shiftMode, resolvedShift),
+    stocktake_type: inferStocktakeType(shiftMode, activeKitchenShift, resolvedShift),
+    available_shifts: availableShifts,
+    allow_shift_b: availableShifts.some((row) => row.value === 'B'),
+    kitchen_shift_id: activeKitchenShift?.id || null,
+    kitchen_shift_number: activeKitchenShift?.shift_number || null,
+    kitchen_shift_status: activeKitchenShift?.status || null,
+    department: activeKitchenShift?.department || 'KITCHEN',
+    standards_configured: standardsCatalog.entries.length > 0,
+    auto_dispenser_name: autoDispenserName,
+    auto_cheps_on_duty: autoChefsOnDuty,
+    auto_confirmation_name: autoConfirmationName,
+    rows,
+  };
+};
+
 /**
  * Sync the kitchen stocktake shift for a branch/date into the unified
  * stock_counts / stock_count_items tables. This is the canonical source used
@@ -639,34 +1530,7 @@ export const approveKitchenStocktake = async (req: Request, res: Response, next:
       return;
     }
 
-    // Validate that all items with non-zero variance have an explanation and action taken
-    const branchId = existing.branch_id;
-    const stocktakeDate = existing.stocktake_date;
-    const shift = existing.shift;
-
-    const [spoilageByName, soldByName] = await Promise.all([
-      getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
-      getKitchenSoldByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
-    ]);
-
     const savedItems = (existing.items || []) as any[];
-    const unexplained = savedItems.filter((it: any) => {
-      const spoilage = spoilageByName.get(it.item_name) ?? 0;
-      const sold = soldByName.get(it.item_name) ?? 0;
-      const system = num(it.opening_qty) + num(it.added_qty) - spoilage - sold;
-      const physical = num(it.closing_qty);
-      const variance = physical - system;
-      return variance !== 0 && (!it.explanation || !it.action_taken);
-    });
-
-    if (unexplained.length > 0) {
-      res.status(400).json({
-        success: false,
-        message: `All kitchen item variances must have an explanation and action taken before approval. Missing for: ${unexplained.map(i => i.item_name).join(', ')}`,
-      });
-      return;
-    }
-
     const now = new Date().toISOString();
     const { data, error } = await supabase
       .from('kitchen_stocktake_shifts')
@@ -757,16 +1621,22 @@ export const updateKitchenStocktakeItems = async (req: Request, res: Response, n
 
     if (itemsErr) throw itemsErr;
 
-    const [spoilageByName, soldByName] = await Promise.all([
-      getApprovedKitchenSpoilageByName(existingShift.branch_id, KITCHEN_STOCKTAKE_ITEMS, existingShift.stocktake_date, existingShift.shift),
-      getKitchenSoldByName(existingShift.branch_id, KITCHEN_STOCKTAKE_ITEMS, existingShift.stocktake_date, existingShift.shift),
-    ]);
-
+    const context = await buildKitchenStocktakeContext(
+      existingShift.branch_id,
+      existingShift.stocktake_date,
+      toShiftLetter(existingShift.shift),
+      { ...existingShift, items: updatedItems || [] }
+    );
+    const sourceByName = new Map<string, StocktakeContextRow>(
+      context.rows.map((row: StocktakeContextRow) => [row.item_name.trim().toLowerCase(), row])
+    );
     const itemsForSync = (updatedItems || []).map((it: any) => ({
       ...it,
-      inventory_item_id: it.inventory_item_id || null,
-      spoilage_qty: spoilageByName.get(it.item_name) ?? 0,
-      sold_qty: soldByName.get(it.item_name) ?? 0,
+      inventory_item_id: it.inventory_item_id || sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.item_id || null,
+      spoilage_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.spoilage_qty ?? 0,
+      sold_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.sold_qty ?? 0,
+      opening_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.opening_qty ?? num(it.opening_qty),
+      added_qty: sourceByName.get(String(it.item_name || '').trim().toLowerCase())?.added_qty ?? num(it.added_qty),
       explanation: it.explanation || null,
       action_taken: it.action_taken || null,
     }));
@@ -839,11 +1709,7 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
       res.status(400).json({ success: false, message: 'branch_id is required' });
       return;
     }
-    const shift = String(req.query.shift || 'A').toUpperCase();
-    if (!['A', 'B'].includes(shift)) {
-      res.status(400).json({ success: false, message: "shift must be 'A' or 'B'" });
-      return;
-    }
+    const requestedShift = toShiftLetter(req.query.shift);
     const stocktakeDate = String(req.query.date || new Date().toISOString().split('T')[0]);
 
     const { data: shiftRow, error: shiftErr } = await supabase
@@ -851,11 +1717,10 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
       .select('*, items:kitchen_stocktake_items(*)')
       .eq('branch_id', branchId)
       .eq('stocktake_date', stocktakeDate)
-      .eq('shift', shift)
+      .eq('shift', requestedShift)
       .maybeSingle();
     if (shiftErr) throw shiftErr;
 
-    // Fetch thresholds
     let largePct = 3.0;
     let extremePct = 10.0;
     try {
@@ -876,77 +1741,34 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
       logger.warn('Failed to fetch branch settings thresholds in getKitchenStocktake:', err);
     }
 
-    const kitchenItemMap = await ensureKitchenInventoryItems();
-    const invIds = Array.from(kitchenItemMap.values());
-
-    const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName, soldByName] = await Promise.all([
-      getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate, shift),
-      getKitchenProductionAddedByInvId(branchId, invIds, stocktakeDate, shift),
-      getPastryAddedByInvId(branchId, invIds, stocktakeDate),
-      getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
-      getKitchenSoldByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
-    ]);
-
-    const buildItem = (name: string, existing?: any): Record<string, any> => {
-      const invId = kitchenItemMap.get(name);
-      const spoilageQty = spoilageByName.get(name) ?? 0;
-      const soldQty = soldByName.get(name) ?? 0;
-      const opening = invId ? previousClosingByInvId.get(invId) ?? 0 : 0;
-      const computedAdded = invId
-        ? (productionAddedByInvId.get(invId) ?? 0) + (pastryAddedByInvId.get(invId) ?? 0)
-        : 0;
-      // added_qty is editable by the storekeeper (kitchen staff prepare extra
-      // items that never go through the separate production-logging flow),
-      // so once a draft row has been saved, its stored value wins over a
-      // fresh system recompute — same precedence as closing_qty below.
-      const added = existing?.added_qty != null ? num(existing.added_qty) : computedAdded;
-      return {
-        item_id: invId || null,
-        item_name: name,
-        opening_qty: opening,
-        added_qty: added,
-        sold_qty: soldQty,
-        closing_qty: num(existing?.closing_qty),
-        spoilage_qty: spoilageQty,
-        variance: 0,
-        explanation: existing?.explanation ?? null,
-        action_taken: existing?.action_taken ?? null,
-      };
-    };
-
-    const submitted = shiftRow?.status === 'submitted';
-    if (shiftRow) {
-      const itemsByName = new Map((shiftRow.items || []).map((i: any) => [i.item_name, i]));
-      const items = KITCHEN_STOCKTAKE_ITEMS.map((name) => {
-        const existing: any = itemsByName.get(name);
-        if (submitted && existing) {
-          return { ...existing, spoilage_qty: spoilageByName.get(name) ?? 0, sold_qty: soldByName.get(name) ?? 0 };
-        }
-        return buildItem(name, existing);
-      });
-      res.status(200).json({
-        success: true,
-        data: {
-          ...shiftRow,
-          items,
-          stocktake_variance_large_pct: largePct,
-          stocktake_variance_extreme_pct: extremePct,
-        },
-      });
-      return;
-    }
+    const context = await buildKitchenStocktakeContext(
+      branchId,
+      stocktakeDate,
+      requestedShift,
+      shiftRow
+    );
 
     res.status(200).json({
       success: true,
       data: {
         branch_id: branchId,
         stocktake_date: stocktakeDate,
-        shift,
-        dispenser_name: null,
-        cheps_on_duty: [],
-        confirmation_name: null,
-        status: 'draft',
-        items: KITCHEN_STOCKTAKE_ITEMS.map((name) => buildItem(name)),
+        shift: context.shift,
+        shift_mode: context.shift_mode,
+        shift_label: context.shift_label,
+        stocktake_type: context.stocktake_type,
+        available_shifts: context.available_shifts,
+        allow_shift_b: context.allow_shift_b,
+        kitchen_shift_id: context.kitchen_shift_id,
+        kitchen_shift_number: context.kitchen_shift_number,
+        kitchen_shift_status: context.kitchen_shift_status,
+        department: context.department,
+        standards_configured: context.standards_configured,
+        dispenser_name: shiftRow?.dispenser_name ?? context.auto_dispenser_name ?? null,
+        cheps_on_duty: (shiftRow?.cheps_on_duty?.length ? shiftRow.cheps_on_duty : context.auto_cheps_on_duty) ?? [],
+        confirmation_name: shiftRow?.confirmation_name ?? context.auto_confirmation_name ?? null,
+        status: shiftRow?.status ?? 'draft',
+        items: context.rows,
         stocktake_variance_large_pct: largePct,
         stocktake_variance_extreme_pct: extremePct,
       },
@@ -955,17 +1777,11 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
     logger.error('getKitchenStocktake failed:', error);
     next(error);
   }
-}
+};
 
 /**
  * @desc    Save (and optionally submit) a kitchen stocktake for a branch/date/shift.
- *          The storekeeper only supplies the closing quantity. Opening is taken
- *          from the previous stocktake's closing and added is taken from the
- *          kitchen production output for the date/shift.
  * @route   POST /api/storekeeping/kitchen-stocktake
- *          body: { branch_id, stocktake_date, shift, dispenser_name?, cheps_on_duty?,
- *                  confirmation_name?, submit?: boolean,
- *                  items: [{ item_name, closing_qty }] }
  * @access  Branch Storekeeper, Central Storekeeper, Super Admin
  */
 export const saveKitchenStocktake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -975,11 +1791,7 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
       res.status(400).json({ success: false, message: 'branch_id is required' });
       return;
     }
-    const shift = String(req.body?.shift || '').toUpperCase();
-    if (!['A', 'B'].includes(shift)) {
-      res.status(400).json({ success: false, message: "shift must be 'A' or 'B'" });
-      return;
-    }
+    const requestedShift = toShiftLetter(req.body?.shift);
     const stocktakeDate = req.body?.stocktake_date || new Date().toISOString().split('T')[0];
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     const submit = Boolean(req.body?.submit);
@@ -987,10 +1799,26 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
       ? req.body.cheps_on_duty.filter((n: any) => String(n || '').trim()).slice(0, 5)
       : [];
 
+    const { data: existingShift, error: existingShiftErr } = await supabase
+      .from('kitchen_stocktake_shifts')
+      .select('*, items:kitchen_stocktake_items(*)')
+      .eq('branch_id', branchId)
+      .eq('stocktake_date', stocktakeDate)
+      .eq('shift', requestedShift)
+      .maybeSingle();
+    if (existingShiftErr) throw existingShiftErr;
+
+    const context = await buildKitchenStocktakeContext(
+      branchId,
+      stocktakeDate,
+      requestedShift,
+      existingShift
+    );
+
     const shiftPayload: Record<string, any> = {
       branch_id: branchId,
       stocktake_date: stocktakeDate,
-      shift,
+      shift: context.shift,
       dispenser_name: req.body?.dispenser_name ?? null,
       cheps_on_duty: chepsOnDuty,
       confirmation_name: req.body?.confirmation_name ?? null,
@@ -1009,43 +1837,21 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
       .single();
     if (shiftErr) throw shiftErr;
 
-    const kitchenItemMap = await ensureKitchenInventoryItems();
-    const invIds = Array.from(kitchenItemMap.values());
-
-    const [previousClosingByInvId, productionAddedByInvId, pastryAddedByInvId, spoilageByName, soldByName] = await Promise.all([
-      getPreviousKitchenClosingByInvId(branchId, invIds, stocktakeDate, shift),
-      getKitchenProductionAddedByInvId(branchId, invIds, stocktakeDate, shift),
-      getPastryAddedByInvId(branchId, invIds, stocktakeDate),
-      getApprovedKitchenSpoilageByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
-      getKitchenSoldByName(branchId, KITCHEN_STOCKTAKE_ITEMS, stocktakeDate, shift),
-    ]);
-
-    const itemRows = KITCHEN_STOCKTAKE_ITEMS.map((name) => {
-      const invId = kitchenItemMap.get(name);
-      // Accept either item_id (unified) or item_name (legacy) from the client.
+    const itemRows = context.rows.map((row: StocktakeContextRow) => {
       const submitted = items.find(
-        (it: any) => (it.item_id && invId && it.item_id === invId) || it.item_name === name
+        (it: any) =>
+          (it.item_id && row.item_id && String(it.item_id) === String(row.item_id)) ||
+          String(it.item_name || '').trim().toLowerCase() === row.item_name.trim().toLowerCase()
       );
-      const closing = num(submitted?.closing_qty);
-      const opening = invId ? previousClosingByInvId.get(invId) ?? 0 : 0;
-      const computedAdded = invId
-        ? (productionAddedByInvId.get(invId) ?? 0) + (pastryAddedByInvId.get(invId) ?? 0)
-        : 0;
-      // added_qty is storekeeper-editable: if the client sends a value, it
-      // overrides the system-computed production/pastry total (kitchen
-      // staff often prepare extras that never get logged as a separate
-      // production session). Falls back to the computed total when omitted
-      // so older app builds that don't send added_qty keep working.
-      const added = submitted?.added_qty != null ? num(submitted.added_qty) : computedAdded;
       return {
         shift_id: shiftRow.id,
-        item_name: name,
-        inventory_item_id: invId || null,
-        opening_qty: opening,
-        added_qty: added,
-        closing_qty: closing,
-        explanation: submitted?.explanation || null,
-        action_taken: submitted?.action_taken || null,
+        item_name: row.item_name,
+        inventory_item_id: row.item_id || null,
+        opening_qty: num(row.opening_qty),
+        added_qty: num(row.added_qty),
+        closing_qty: submitted?.closing_qty != null ? num(submitted.closing_qty) : num(row.closing_qty),
+        explanation: submitted?.explanation || row.explanation || null,
+        action_taken: submitted?.action_taken || row.action_taken || null,
         updated_at: new Date().toISOString(),
       };
     });
@@ -1056,21 +1862,22 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
       .select('*');
     if (itemsErr) throw itemsErr;
 
-    // Sync into the unified stock_counts table so the cashier shift gate works.
-    // spoilage_qty/sold_qty aren't stored on kitchen_stocktake_items — they're
-    // computed fresh each time, same as on the GET side — so merge them in
-    // here for both the variance sync and the response the storekeeper sees.
-    const itemsForSync = (savedItems || itemRows).map((it: any) => ({
-      ...it,
-      inventory_item_id: it.inventory_item_id || null,
-      spoilage_qty: spoilageByName.get(it.item_name) ?? 0,
-      sold_qty: soldByName.get(it.item_name) ?? 0,
-    }));
+    const sourceByName = new Map<string, StocktakeContextRow>(
+      context.rows.map((row: StocktakeContextRow) => [row.item_name.trim().toLowerCase(), row])
+    );
+    const itemsForSync = (savedItems || itemRows).map((it: any) => {
+      const source = sourceByName.get(String(it.item_name || '').trim().toLowerCase());
+      return {
+        ...it,
+        inventory_item_id: it.inventory_item_id || source?.item_id || null,
+        opening_qty: source?.opening_qty ?? num(it.opening_qty),
+        added_qty: source?.added_qty ?? num(it.added_qty),
+        spoilage_qty: source?.spoilage_qty ?? 0,
+        sold_qty: source?.sold_qty ?? 0,
+      };
+    });
     await syncKitchenStocktakeToStockCounts(branchId, stocktakeDate, shiftRow.shift, shiftRow.status, itemsForSync);
 
-    // Closing count = reconciled kitchen portion count → write into the
-    // restaurant POS outlet so waiters see the actual available stock.
-    // Match pos_outlet_items to kitchen items by name (case-insensitive).
     if (savedItems && savedItems.length > 0) {
       try {
         await db.query(
@@ -1096,7 +1903,23 @@ export const saveKitchenStocktake = async (req: Request, res: Response, next: Ne
 
     res.status(200).json({
       success: true,
-      data: { ...shiftRow, items: itemsForSync },
+      data: {
+        ...shiftRow,
+        shift_mode: context.shift_mode,
+        shift_label: context.shift_label,
+        stocktake_type: context.stocktake_type,
+        available_shifts: context.available_shifts,
+        allow_shift_b: context.allow_shift_b,
+        kitchen_shift_id: context.kitchen_shift_id,
+        kitchen_shift_number: context.kitchen_shift_number,
+        kitchen_shift_status: context.kitchen_shift_status,
+        department: context.department,
+        standards_configured: context.standards_configured,
+        dispenser_name: shiftRow.dispenser_name ?? context.auto_dispenser_name ?? null,
+        cheps_on_duty: (shiftRow.cheps_on_duty?.length ? shiftRow.cheps_on_duty : context.auto_cheps_on_duty) ?? [],
+        confirmation_name: shiftRow.confirmation_name ?? context.auto_confirmation_name ?? null,
+        items: itemsForSync,
+      },
     });
   } catch (error) {
     logger.error('saveKitchenStocktake failed:', error);

@@ -35,13 +35,19 @@ class KyogongSpaDashboard extends ConsumerStatefulWidget {
 class _KyogongSpaDashboardState extends ConsumerState<KyogongSpaDashboard> {
   late KyogongSection _section =
       widget.initialSection ?? KyogongSection.reception;
+  bool _sidebarCollapsed = false;
+  bool _sidebarOverrideActive = false;
 
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 768;
     final isTablet = MediaQuery.of(context).size.width >= 768 &&
         MediaQuery.of(context).size.width < 1024;
-    final navWidth = isMobile ? 0.0 : (isTablet ? 64.0 : 240.0);
+    final effectiveSidebarCollapsed = _sidebarOverrideActive
+        ? _sidebarCollapsed
+        : (_sidebarCollapsed || isTablet);
+    final navWidth =
+        isMobile ? 0.0 : (effectiveSidebarCollapsed ? 64.0 : 240.0);
 
     return Scaffold(
       backgroundColor: AppColors.kSurface,
@@ -50,7 +56,7 @@ class _KyogongSpaDashboardState extends ConsumerState<KyogongSpaDashboard> {
           if (!isMobile)
             _KyogongSideNav(
               width: navWidth,
-              isCollapsed: isTablet,
+              isCollapsed: effectiveSidebarCollapsed,
               current: _section,
               onChanged: (section) => setState(() => _section = section),
             ),
@@ -60,6 +66,13 @@ class _KyogongSpaDashboardState extends ConsumerState<KyogongSpaDashboard> {
                 _KyogongTopBar(
                   section: _section,
                   onMenuTap: isMobile ? () => _showMobileNav(context) : null,
+                  onToggleSidebar: !isMobile
+                      ? () => setState(() {
+                            _sidebarOverrideActive = true;
+                            _sidebarCollapsed = !effectiveSidebarCollapsed;
+                          })
+                      : null,
+                  sidebarCollapsed: effectiveSidebarCollapsed,
                 ),
                 Expanded(child: _buildSection()),
               ],
@@ -2184,10 +2197,17 @@ class _KyogongSideNav extends ConsumerWidget {
 }
 
 class _KyogongTopBar extends ConsumerWidget {
-  const _KyogongTopBar({required this.section, this.onMenuTap});
+  const _KyogongTopBar({
+    required this.section,
+    this.onMenuTap,
+    this.onToggleSidebar,
+    this.sidebarCollapsed = false,
+  });
 
   final KyogongSection section;
   final VoidCallback? onMenuTap;
+  final VoidCallback? onToggleSidebar;
+  final bool sidebarCollapsed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2203,6 +2223,18 @@ class _KyogongTopBar extends ConsumerWidget {
           if (onMenuTap != null) ...[
             IconButton(
                 onPressed: onMenuTap, icon: Icon(PhosphorIcons.listBullets())),
+            const SizedBox(width: 16),
+          ],
+          if (onToggleSidebar != null && onMenuTap == null) ...[
+            IconButton(
+              onPressed: onToggleSidebar,
+              tooltip: sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',
+              icon: Icon(
+                sidebarCollapsed
+                    ? Icons.keyboard_double_arrow_right
+                    : Icons.keyboard_double_arrow_left,
+              ),
+            ),
             const SizedBox(width: 16),
           ],
           Text('Kyogong',

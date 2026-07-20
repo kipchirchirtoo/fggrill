@@ -1,0 +1,519 @@
+Production Logging should be a **separate screen inside Kitchen Sessions** used only for **TRUE_BATCH_PRODUCTION items**.
+
+It is **not** for normal items like chips, beef stew, ugali, rice, chicken curry, etc. Those are controlled by POS sales and recipe standards.
+
+---
+
+# Production Logging Screen
+
+## 1. Purpose of the screen
+
+The function of Production Logging is:
+
+```text
+To record when raw kitchen stock is converted into a new finished/intermediate stock item before sale.
+```
+
+Examples:
+
+```text
+Mangoes → Mango juice
+Flour → Chapatis
+Flour + sugar + eggs → Cake
+Tomatoes + onions + spices → Sauce
+Dough → Mandazi
+```
+
+So the screen answers:
+
+```text
+What raw stock was used?
+What finished item was produced?
+Was the output normal, short, or surplus compared to the standard?
+```
+
+---
+
+# 2. Where it should open from
+
+In Kitchen Sessions:
+
+```text
+Kitchen Sessions
+→ Production Logging
+```
+
+Or from the active session header:
+
+```text
+[Production Logging]
+```
+
+When clicked, it should open:
+
+```text
+Production Logging Screen
+```
+
+This screen must automatically attach to:
+
+```text
+current branch
+current kitchen_shift_id
+current sub-shift: Shift A / Shift B / Single Shift
+current business date
+logged-in storekeeper
+```
+
+Storekeeper should not manually choose the shift.
+
+---
+
+# 3. Header section
+
+At the top, show:
+
+```text
+Production Logging
+
+Branch: Bomet Town
+Kitchen Shift: KS-1784140372714
+Shift: Shift A
+Business Date: 2026-07-15
+Storekeeper: James Pkemoi
+Department: Kitchen
+```
+
+If the branch is TWO_SHIFT:
+
+```text
+Shift A or Shift B must come from the active shift automatically.
+```
+
+If the branch is SINGLE_SHIFT:
+
+```text
+Show Single Shift only.
+```
+
+---
+
+# 4. Main item selection logic
+
+The screen should only show items flagged as:
+
+```text
+TRUE_BATCH_PRODUCTION
+```
+
+Do not show:
+
+```text
+NORMAL_DIRECT_KITCHEN
+```
+
+So when storekeeper opens Production Logging, the item search/autocomplete should only load batch-production items from DB.
+
+Allowed examples:
+
+```text
+Mango Juice Batch
+Orange Juice Batch
+Chapati Batch
+Mandazi Batch
+Cake
+Sauce
+Pastry
+Bakery items
+```
+
+Not allowed examples:
+
+```text
+Potatoes
+Beef stew
+Rice
+Ugali
+Chicken curry
+Chips
+```
+
+---
+
+# 5. Screen layout
+
+The screen should be like this:
+
+```text
+Production Logging
+
+[Header Card: branch, shift, date, storekeeper]
+
+[Select Produced Item]
+Search batch-production item from DB...
+
+[Standard Preview Card]
+Raw Inputs Expected:
+- Mangoes: 10kg
+- Watermelon: 1 pc
+
+Expected Output:
+- Mango Juice: 25 litres
+
+Serving Standard:
+- 1 glass = 250ml
+
+Tolerance:
+- ±5%
+
+[Raw Used Table]
+# | Raw Item | Available Qty | Qty Used | Unit
+
+[Actual Output]
+Produced Quantity: [        ]
+Unit: Litres
+
+[Produced By]
+Chef / staff attribution: [        ]
+
+[Variance Summary]
+Expected Output: 25 litres
+Actual Output: 22 litres
+Variance: -3 litres
+Variance %: -12%
+Status: Reason required
+
+[Reason Note]
+Reason for variance: [        ]
+
+[Cancel] [Save Production Log]
+```
+
+---
+
+# 6. Raw input table logic
+
+After selecting the produced item, the system should load the standard raw inputs automatically.
+
+Example:
+
+```text
+Produced Item: Mango Juice
+
+System loads:
+- Mangoes
+- Watermelon
+- Sugar
+```
+
+The storekeeper does not choose the recipe.
+
+The storekeeper only enters actual quantity used.
+
+Table:
+
+```text
+| # | Raw Item | Available Qty | Qty Used | Unit |
+| 1 | Mangoes | 15kg | 10kg | kg |
+| 2 | Watermelon | 5 pcs | 1 pc | pcs |
+| 3 | Sugar | 10kg | 0.5kg | kg |
+```
+
+Rules:
+
+```text
+- Raw items come from the accountant standard.
+- Unit loads automatically from DB.
+- Available quantity loads from current kitchen stock.
+- Storekeeper enters Qty Used only.
+- Qty used cannot exceed available kitchen stock unless override exists.
+```
+
+---
+
+# 7. Actual output section
+
+Storekeeper enters what the chef reported.
+
+Example:
+
+```text
+Actual output produced: 22 litres
+```
+
+The expected output is calculated by the system.
+
+Example standard:
+
+```text
+10kg mangoes + 1 watermelon = 25 litres juice
+```
+
+If storekeeper enters:
+
+```text
+Actual output = 22 litres
+```
+
+System calculates:
+
+```text
+Variance = Actual - Expected
+Variance = 22L - 25L
+Variance = -3L
+```
+
+Important:
+
+```text
+Production variance must be signed.
+Shortage = negative.
+Surplus = positive.
+Do not clamp production variance to zero.
+```
+
+---
+
+# 8. Variance logic
+
+Production variance formula:
+
+```text
+Actual Output - Expected Output = Production Variance
+```
+
+Example shortage:
+
+```text
+Expected output: 25L
+Actual output: 22L
+Variance: -3L
+```
+
+Example surplus:
+
+```text
+Expected output: 25L
+Actual output: 27L
+Variance: +2L
+```
+
+Both must be shown.
+
+Why?
+
+```text
+Shortage shows under-production or loss.
+Surplus shows better-than-standard yield and must remain visible for review.
+```
+
+---
+
+# 9. Reason note logic
+
+If variance is within tolerance:
+
+```text
+Save normally.
+Reason optional.
+```
+
+If variance exceeds tolerance:
+
+```text
+Reason required.
+```
+
+Example:
+
+```text
+Expected: 25L
+Actual: 22L
+Variance: -12%
+Tolerance: ±5%
+Reason required.
+```
+
+Storekeeper enters:
+
+```text
+Reason: Some mangoes were overripe and pulp was low.
+```
+
+Then save is allowed.
+
+---
+
+# 10. Save behavior
+
+When user clicks **Save Production Log**, the system should:
+
+```text
+1. Validate active kitchen shift exists.
+2. Validate item is TRUE_BATCH_PRODUCTION.
+3. Validate selected item has production/yield standard.
+4. Validate raw inputs are from the standard.
+5. Validate Qty Used > 0.
+6. Validate Actual Output > 0.
+7. Calculate expected output.
+8. Calculate production variance.
+9. Require reason if outside tolerance.
+10. Save production log.
+11. Deduct raw inputs from current kitchen shift stock.
+12. Credit finished produced stock.
+13. Refresh production history.
+14. Refresh kitchen stock balance.
+```
+
+---
+
+# 11. Save payload
+
+Suggested payload:
+
+```json
+{
+  "branch_id": 2,
+  "kitchen_shift_id": "KS-1784140372714",
+  "sub_shift": "SHIFT_A",
+  "business_date": "2026-07-15",
+  "produced_item_sku": "JUICE-MANGO-001",
+  "produced_item_name": "Mango Juice",
+  "actual_output_quantity": 22,
+  "actual_output_unit": "litres",
+  "produced_by": "Chef Kiptoo",
+  "variance_reason": "Some mangoes were overripe",
+  "raw_inputs": [
+    {
+      "raw_item_sku": "RAW-MANGO-001",
+      "raw_item_name": "Mangoes",
+      "quantity_used": 10,
+      "unit": "kg"
+    },
+    {
+      "raw_item_sku": "RAW-SUGAR-001",
+      "raw_item_name": "Sugar",
+      "quantity_used": 0.5,
+      "unit": "kg"
+    }
+  ]
+}
+```
+
+---
+
+# 12. Production history section
+
+Below the form, show recent production logs.
+
+Columns:
+
+```text
+Time
+Produced Item
+Raw Used
+Expected Output
+Actual Output
+Variance
+Produced By
+Status
+```
+
+Example:
+
+```text
+10:30 AM | Mango Juice | Mangoes 10kg | 25L | 22L | -3L | Chef Kiptoo | Variance
+11:15 AM | Chapati Batch | Flour 2kg | 60 pcs | 60 pcs | 0 | Chef Mary | Normal
+```
+
+---
+
+# 13. Role rules
+
+Only these roles can log production:
+
+```text
+branch_storekeeper
+storekeeper
+kitchen_operations
+```
+
+Read-only roles can view production logs only:
+
+```text
+branch_accountant
+branch_manager
+super_admin
+auditor
+```
+
+Blocked roles:
+
+```text
+chef
+cook
+waiter
+general kitchen roles
+```
+
+Chef is attribution only. Chef does not log into the system to post production.
+
+---
+
+# 14. Important restrictions
+
+Do not allow storekeeper to:
+
+```text
+- create recipe standards
+- edit recipe standards
+- choose arbitrary raw inputs outside the standard
+- create new inventory items
+- log production for normal direct kitchen items
+- manually choose Shift B
+- log production without active kitchen shift
+```
+
+---
+
+# 15. Simple UI structure
+
+```text
+ProductionLoggingScreen
+ ├── HeaderCard
+ ├── ProducedItemAutocomplete
+ ├── StandardPreviewCard
+ ├── RawInputUsageTable
+ ├── ActualOutputCard
+ ├── VarianceSummaryCard
+ ├── VarianceReasonField
+ ├── ProducedByField
+ ├── SaveProductionLogButton
+ └── ProductionHistoryTable
+```
+
+---
+
+# 16. Simple final rule
+
+```text
+Production Logging is only for batch-produced items.
+
+Storekeeper enters:
+- raw quantity used
+- actual output produced
+- chef attribution
+- reason if variance exists
+
+Accountant owns:
+- production/yield standard
+- serving/portion standard
+- tolerance
+
+System calculates:
+- expected output
+- actual vs expected variance
+- finished stock balance
+```
+
+So the screen should be **a controlled production ledger**, not a free-entry recipe screen.

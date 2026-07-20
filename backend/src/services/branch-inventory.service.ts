@@ -163,7 +163,7 @@ async function getLiveBranchBalancesBySku(branchId: number): Promise<Map<string,
   return result;
 }
 
-async function resolveBranchStockSource(branchId: number, itemSku: string): Promise<BranchStockSource> {
+export async function resolveBranchStockSource(branchId: number, itemSku: string): Promise<BranchStockSource> {
   const [branchStockRes, itemRes, locationContext] = await Promise.all([
     supabase
       .from('branch_stock')
@@ -741,7 +741,7 @@ export async function creditOutletItemStock(outletItemId: string, qty: number, s
         .maybeSingle();
       if (
         outlet?.branch_id &&
-        ['main_bar', 'executive_bar', 'kyogong_executive_bar', 'kyogong_sports_bar'].includes(outlet.outlet_type)
+        ['main_bar', 'executive_bar', 'sports_bar', 'kyogong_executive_bar', 'kyogong_sports_bar'].includes(outlet.outlet_type)
       ) {
         await recordBarStockMovement({
           branchId: outlet.branch_id,

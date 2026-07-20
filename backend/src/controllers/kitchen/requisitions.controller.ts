@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
-import { createLedgerEntry, createPortionLedgerEntry } from './stock.controller';
+import { createLedgerEntry } from './stock.controller';
 
 /**
  * Create kitchen requisition
@@ -279,30 +279,14 @@ export const fulfillRequisition = async (req: Request, res: Response) => {
                 .update({ issued_quantity: issuedItem.issued_quantity })
                 .eq('id', issuedItem.item_id);
 
-            // --- YIELD CONVERSION LOGIC ---
-            // Check if there is a yield rule for this item
-            const { data: yieldRule } = await supabase
-                .from('kitchen_food_controls')
-                .select('*')
-                .or(`raw_item_sku.eq.${reqItem.item_sku},raw_item_name.ilike.%${reqItem.item_name}%`)
-                .limit(1)
-                .maybeSingle();
-
-            if (yieldRule) {
-                const expectedPortions = (issuedItem.issued_quantity / yieldRule.raw_quantity) * yieldRule.produced_portions;
-
-                await createPortionLedgerEntry({
-                    branch_id: requisition.branch_id,
-                    item_sku: reqItem.item_sku,
-                    portion_name: yieldRule.produced_item_name,
-                    transaction_type: 'ISSUE',
-                    reference_type: 'GRN',
-                    reference_id: grn.grn_number,
-                    quantity_in: expectedPortions,
-                    user_id: userId,
-                    notes: `Autogen from ${issuedItem.issued_quantity} ${reqItem.unit_of_measure} of ${reqItem.item_name}`
-                });
-            }
+            // Canonical food control now happens in Kitchen Sessions /
+            // Production Logging using kitchen shifts, production recipes,
+            // direct mappings, and POS consumption snapshots.
+            //
+            // Requisition fulfillment should only move stock into the kitchen
+            // ledger. The old path used a legacy yield-control table to invent portion
+            // balances at requisition time, which no longer matches the active
+            // food-control architecture and can create double counting.
         }
 
         // Update requisition status

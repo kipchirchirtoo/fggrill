@@ -1404,7 +1404,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         'department': staff.department,
         'bill_type': 'cashier_payment',
         'reference_type': 'cashier_payment',
-        'reference_id': _text(bill, ['id']),
+        'reference_id': _billId(bill),
         'total_amount': amount,
         'amount': amount,
         'due_date': _dateOnly(DateTime.now().add(const Duration(days: 30))),
@@ -2301,7 +2301,7 @@ class _UnpaidBillsTabState extends ConsumerState<_UnpaidBillsTab> {
               'staff_name': _text(payment, ['staff_name']),
               'bill_type': 'cashier_payment',
               'reference_type': 'cashier_payment',
-              'reference_id': _text(row, ['id']),
+              'reference_id': _billId(row),
               'total_amount': amt,
               'amount': amt,
               'due_date':
@@ -4425,12 +4425,20 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
       // Non-fatal — logbook will still open with empty lists.
     }
 
+    // Fetch the full shift log detail to obtain transactions and enriched credit bills
+    Map<String, dynamic> shift = row;
+    try {
+      shift = await repo.getShift(shiftId);
+    } catch (e) {
+      debugPrint('Failed to load full shift details: $e');
+    }
+
     if (!mounted) return;
 
     // Full logbook dialog — cash on drawer is mandatory before submitting.
     final payload = await _shiftCloseLogbookDialog(
       context,
-      shift: row,
+      shift: shift,
       staffMembers: staffMembers,
     );
     if (payload == null) return;
@@ -5012,9 +5020,10 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
         // of expenses, matching what the backend now persists. Otherwise a
         // settled credit bill gets counted as a sale twice: once when the
         // credit was originally issued, again here when it's collected.
-        final cashDrops = _num(shift['cash_deposited'] ?? shift['cash_drops']);
+        // cash_deposited is not a cashier-declared deposit — exclude it from
+        // the drawer formula to avoid inflating/deflating the expected cash.
         final expectedCash =
-            openingFloat + rawCashSales + cashPaidCredits - cashDrops - cashExpenses;
+            openingFloat + rawCashSales + cashPaidCredits - cashExpenses;
         final variance = actualCash - expectedCash;
 
 
@@ -7105,6 +7114,17 @@ String _text(Map<String, dynamic> row, List<String> keys) {
     if (value != null && value.toString().trim().isNotEmpty) {
       return value.toString();
     }
+  }
+  return '';
+}
+
+String _billId(Map<String, dynamic> bill) {
+  final direct = _text(bill, ['id']);
+  if (direct.isNotEmpty) return direct;
+  for (final nestedKey in ['order', 'booking', 'invoice', 'bill', 'transaction']) {
+    final nested = _asMap(bill[nestedKey]);
+    final nestedId = _text(nested, ['id']);
+    if (nestedId.isNotEmpty) return nestedId;
   }
   return '';
 }

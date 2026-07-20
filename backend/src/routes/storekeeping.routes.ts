@@ -58,7 +58,11 @@ import {
   getMasterCatalog,
   getStockMovements,
   updateBranchStock,
-  updateDispatchLogistics
+  updateDispatchLogistics,
+  createBranchTransfer,
+  getOutgoingBranchTransfers,
+  getIncomingBranchTransfers,
+  confirmBranchTransferReceipt
 } from '../controllers/storekeeping/branch-inventory.controller';
 
 import {
@@ -373,6 +377,12 @@ router.put('/dispatch-notes/:id/logistics', authorize(centralRoles), updateDispa
 // Incoming dispatches (Branch receives)
 router.get('/incoming-dispatches', authorize(branchRoles), getIncomingDispatches);
 router.put('/dispatch-notes/:id/confirm', authorize(branchRoles), confirmDelivery);
+
+// Branch transfers (Branch → Branch)
+router.post('/branch-transfers', authorize(branchRoles), createBranchTransfer);
+router.get('/branch-transfers/outgoing', authorize(branchRoles), getOutgoingBranchTransfers);
+router.get('/branch-transfers/incoming', authorize(branchRoles), getIncomingBranchTransfers);
+router.put('/branch-transfers/:id/confirm', authorize(branchRoles), confirmBranchTransferReceipt);
 
 // Dashboard routes
 router.get('/dashboard/central', authorize(centralRoles), getCentralDashboard);

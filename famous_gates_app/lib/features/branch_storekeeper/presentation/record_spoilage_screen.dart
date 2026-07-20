@@ -16,15 +16,18 @@ class RecordSpoilageScreen extends ConsumerStatefulWidget {
     this.initialArea = 'bar',
     this.initialBarLocation,
     this.initialShift,
+    this.initialKitchenShiftId,
   });
 
   /// 'bar' | 'kitchen' | 'store'
   final String initialArea;
   final String? initialBarLocation;
   final String? initialShift;
+  final String? initialKitchenShiftId;
 
   @override
-  ConsumerState<RecordSpoilageScreen> createState() => _RecordSpoilageScreenState();
+  ConsumerState<RecordSpoilageScreen> createState() =>
+      _RecordSpoilageScreenState();
 }
 
 const _reasons = [
@@ -70,7 +73,9 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _loadCandidates() {
-    return ref.read(branchStorekeeperRepositoryProvider).spoilageCandidates(_area);
+    return ref
+        .read(branchStorekeeperRepositoryProvider)
+        .spoilageCandidates(_area);
   }
 
   Future<List<Map<String, dynamic>>> _loadStaff() {
@@ -107,9 +112,12 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
             quantity: qty,
             reason: _reason,
             unit: item['unit'] as String?,
-            notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+            notes:
+                _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
             barLocation: _area == 'bar' ? _barLocation : null,
             shift: _area == 'kitchen' ? _shift : null,
+            kitchenShiftId:
+                _area == 'kitchen' ? widget.initialKitchenShiftId : null,
             spoilageDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
             responsibleStaffId: _selectedStaff?['id']?.toString(),
             chargeToStaff: _chargeToStaff,
@@ -155,15 +163,19 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
           ),
           const SizedBox(height: 16),
           if (_area == 'bar') ...[
-            const Text('Bar location', style: TextStyle(fontWeight: FontWeight.w800)),
+            const Text('Bar location',
+                style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _barLocation,
-              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  isDense: true, border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem(value: 'main_bar', child: Text('Main Bar')),
+                const DropdownMenuItem(
+                    value: 'main_bar', child: Text('Main Bar')),
                 if (_hasExecutiveBar)
-                  const DropdownMenuItem(value: 'executive_bar', child: Text('Executive Bar')),
+                  const DropdownMenuItem(
+                      value: 'executive_bar', child: Text('Executive Bar')),
               ],
               onChanged: (v) => setState(() => _barLocation = v ?? 'main_bar'),
             ),
@@ -174,7 +186,8 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _shift,
-              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                  isDense: true, border: OutlineInputBorder()),
               items: const [
                 DropdownMenuItem(value: 'A', child: Text('Shift A')),
                 DropdownMenuItem(value: 'B', child: Text('Shift B')),
@@ -216,7 +229,8 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
             },
           ),
           const SizedBox(height: 16),
-          const Text('Quantity spoiled', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text('Quantity spoiled',
+              style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           TextField(
             controller: _quantityCtrl,
@@ -232,14 +246,17 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: _reason,
-            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                isDense: true, border: OutlineInputBorder()),
             items: [
-              for (final r in _reasons) DropdownMenuItem(value: r.$1, child: Text(r.$2)),
+              for (final r in _reasons)
+                DropdownMenuItem(value: r.$1, child: Text(r.$2)),
             ],
             onChanged: (v) => setState(() => _reason = v ?? _reason),
           ),
           const SizedBox(height: 16),
-          const Text('Responsible Staff (Optional)', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text('Responsible Staff (Optional)',
+              style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           FutureBuilder<List<Map<String, dynamic>>>(
             future: _staffFuture,
@@ -250,20 +267,29 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
               final staffList = snap.data ?? [];
               return DropdownButtonFormField<Map<String, dynamic>?>(
                 value: _selectedStaff,
-                decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    isDense: true, border: OutlineInputBorder()),
                 hint: const Text('Select staff member…'),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('None (General branch loss)')),
+                  const DropdownMenuItem(
+                      value: null, child: Text('None (General branch loss)')),
                   for (final staff in staffList)
                     DropdownMenuItem(
                       value: staff,
                       child: Text(
                         (() {
-                          final firstName = staff['first_name']?.toString() ?? '';
+                          final firstName =
+                              staff['first_name']?.toString() ?? '';
                           final lastName = staff['last_name']?.toString() ?? '';
-                          final name = [firstName, lastName].where((s) => s.isNotEmpty).join(' ').trim();
+                          final name = [firstName, lastName]
+                              .where((s) => s.isNotEmpty)
+                              .join(' ')
+                              .trim();
                           if (name.isNotEmpty) return name;
-                          return staff['name']?.toString() ?? staff['full_name']?.toString() ?? staff['email']?.toString() ?? 'Unknown Staff';
+                          return staff['name']?.toString() ??
+                              staff['full_name']?.toString() ??
+                              staff['email']?.toString() ??
+                              'Unknown Staff';
                         })(),
                       ),
                     ),
@@ -283,20 +309,23 @@ class _RecordSpoilageScreenState extends ConsumerState<RecordSpoilageScreen> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Charge loss to staff salary'),
-            subtitle: const Text('If enabled, a pending credit bill will be generated upon accountant approval'),
+            subtitle: const Text(
+                'If enabled, a pending credit bill will be generated upon accountant approval'),
             value: _chargeToStaff,
             onChanged: _selectedStaff == null
                 ? null
                 : (v) => setState(() => _chargeToStaff = v),
           ),
           const SizedBox(height: 16),
-          const Text('Notes (optional)', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text('Notes (optional)',
+              style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           TextField(
             controller: _notesCtrl,
             minLines: 2,
             maxLines: 4,
-            decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                isDense: true, border: OutlineInputBorder()),
           ),
           const SizedBox(height: 24),
           SizedBox(

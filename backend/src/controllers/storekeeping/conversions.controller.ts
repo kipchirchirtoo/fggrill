@@ -73,7 +73,8 @@ export const convertStock = async (
     }
 };
 
-// @desc    Get available yield rules (reusing kitchen food controls)
+// @desc    Get available active conversion standards from the canonical
+//          kitchen production recipe configuration
 // @route   GET /api/store/yield-rules
 // @access  Private
 export const getYieldRules = async (
@@ -85,12 +86,12 @@ export const getYieldRules = async (
         const branchId = (req as any).user?.branch_id;
 
         let query = supabase
-            .from('kitchen_food_controls')
-            .select('*')
-            .order('raw_item_name', { ascending: true });
+            .from('kitchen_production_recipes')
+            .select('*, inputs:kitchen_production_recipe_inputs(*)')
+            .eq('is_active', true)
+            .order('recipe_name', { ascending: true });
 
         if (branchId) {
-            // Optionally filter by branch, though rules might be global or copied
             query = query.eq('branch_id', branchId);
         }
 
@@ -100,7 +101,7 @@ export const getYieldRules = async (
 
         res.status(200).json({
             success: true,
-            data
+            data: data || []
         });
     } catch (error) {
         next(error);

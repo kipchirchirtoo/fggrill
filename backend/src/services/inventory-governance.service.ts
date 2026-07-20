@@ -229,6 +229,35 @@ export async function getExceptionQueue(input: {
     }));
   }));
 
+  rows.push(...await safeQuery('branch_stock_transfers', warnings, async () => {
+    const branchId = input.branchId;
+    let queryStr = `
+      SELECT id, from_branch_id, to_branch_id, transfer_number, status, note, created_at
+      FROM branch_stock_transfers
+      WHERE status = 'DISPATCHED'
+        AND created_at < NOW() - INTERVAL '24 hours'
+    `;
+    const queryParams: any[] = [];
+    if (branchId) {
+      queryStr += ` AND (from_branch_id = $1 OR to_branch_id = $1)`;
+      queryParams.push(branchId);
+    }
+    queryStr += ` ORDER BY created_at DESC LIMIT ${limit}`;
+    const result = await db.query(queryStr, queryParams);
+
+    return result.rows.map((row) => exceptionRow({
+      ...row,
+      branch_id: branchId || row.to_branch_id,
+      exception_type: 'pending_transfer_confirmation',
+      severity: 'medium',
+      source_table: 'branch_stock_transfers',
+      source_id: row.id,
+      source_number: row.transfer_number,
+      title: `Pending Transfer: ${row.transfer_number}`,
+      description: `Transfer from branch #${row.from_branch_id} to branch #${row.to_branch_id} remains unconfirmed after 24 hours`
+    }));
+  }));
+
   const filtered = rows
     .filter((row) => !input.severity || row.severity === input.severity)
     .sort((a, b) => {

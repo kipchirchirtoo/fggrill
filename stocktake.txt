@@ -1,0 +1,608 @@
+Yes — your thinking is right, but let’s separate it clearly.
+
+The **Kitchen Stocktake screen should not load every item in the whole inventory**. It should load the items that are relevant to the **current kitchen session / current shift**.
+
+It should include:
+
+```text
+1. Items physically available in the kitchen
+2. Items issued to the kitchen during the shift
+3. TRUE_BATCH_PRODUCTION finished items produced during the shift
+4. Items with food-control standards that need variance calculation
+5. Items carried from Shift A to Shift B during handover
+```
+
+It should **not** be an empty screen like the screenshot.
+
+---
+
+# Correct Kitchen Stocktake Screen Logic
+
+## 1. What is the purpose of Kitchen Stocktake?
+
+Kitchen Stocktake is where the storekeeper physically counts what is in the kitchen.
+
+It answers:
+
+```text
+What should be in the kitchen?
+What is physically in the kitchen?
+What is missing or extra?
+```
+
+Then the system calculates variance.
+
+Formula:
+
+```text
+Expected Balance - Physical Count = Variance
+```
+
+Or:
+
+```text
+Opening Stock
++ Stock Issued
++ Production Added
+- POS/Event/Breakfast/Staff/Wastage Consumption
+= Expected Balance
+```
+
+Then:
+
+```text
+Physical Count compared to Expected Balance = Stocktake variance
+```
+
+---
+
+# 2. What should load on Kitchen Stocktake screen?
+
+## A. Current active kitchen shift
+
+The screen must load:
+
+```text
+Branch
+Business date
+Kitchen shift number
+Shift type: Single / Shift A / Shift B
+Status: open / pending handover / closed
+Storekeeper
+```
+
+For Bomet:
+
+```text
+Branch: Bomet Town
+Mode: TWO_SHIFT
+Current Shift: Shift A or Shift B
+```
+
+For Mogogosiek:
+
+```text
+Branch: Mogogosiek
+Mode: SINGLE_SHIFT
+Current Shift: Single Shift
+```
+
+Important: if this is opening stocktake before Shift A opens, it should show **Opening Stocktake for Shift A**, not both Shift A and Shift B.
+
+---
+
+## 3. Should Shift B tab show?
+
+At opening stage, **no**.
+
+Your screenshot shows **Shift A** and **Shift B** tabs. That is wrong if the session has not reached Shift B.
+
+Correct logic:
+
+```text
+Before Shift A opens:
+Show only Shift A / Opening Stocktake
+
+During Shift A:
+Show Shift A stocktake only
+
+During Shift A handover:
+Show Handover Stocktake for Shift A
+
+After Shift A closes:
+System opens Shift B automatically
+
+During Shift B:
+Show Shift B stocktake only
+```
+
+So the screen should not let the user freely switch to Shift B before Shift A handover.
+
+---
+
+# 4. What items should appear?
+
+## A. Opening Kitchen Stocktake
+
+At the start of the day, the screen should load kitchen items expected to be counted.
+
+This can come from:
+
+```text
+1. Previous day closing / last physical kitchen count
+2. Kitchen stock ledger balance
+3. Items previously issued to kitchen but not consumed
+4. Produced finished stock remaining in kitchen
+5. Active kitchen inventory items for that branch
+```
+
+It should not load random central store items.
+
+Example opening stocktake:
+
+```text
+Item                  System Qty      Physical Qty      Unit
+Potatoes              20.00           [enter]           kg
+Beef                  10.00           [enter]           kg
+Cooking Oil           5.00            [enter]           L
+Mango Juice           8.00            [enter]           L
+Chapati Batch         40.00           [enter]           pcs
+```
+
+---
+
+## B. Stock issued during the shift
+
+If stock was issued from channel cards, those items must appear.
+
+Example:
+
+```text
+Potatoes issued to POS Restaurant: 30kg
+Beef issued to Conference: 20kg
+Rice issued to Staff Meal: 5kg
+```
+
+These must load into stocktake because they are now part of the kitchen session.
+
+---
+
+## C. TRUE_BATCH_PRODUCTION outputs
+
+Yes — items produced through Production Logging must also appear.
+
+Example:
+
+```text
+Production logged:
+Mangoes used: 10kg
+Mango Juice produced: 25L
+```
+
+Then stocktake should include:
+
+```text
+Mango Juice     Expected balance: 25L minus POS sales     Physical count: [enter]
+```
+
+So production logging creates finished stock, and that finished stock must be counted.
+
+---
+
+## D. Raw inputs used in production
+
+Raw items used during production should also be reflected.
+
+Example:
+
+```text
+Opening mangoes: 15kg
+Used in production: 10kg
+Expected mangoes remaining: 5kg
+Physical count: [enter]
+```
+
+So raw items also appear because their balance changed.
+
+---
+
+## E. Items with standards set
+
+Yes, but with a condition.
+
+Items with food-control standards should appear **if they are active in the kitchen session**.
+
+Do not load every item that has a standard if it was not issued, not produced, not carried forward, and not present in kitchen balance.
+
+Correct rule:
+
+```text
+Load items that are in the current kitchen session ledger, then apply standards where available.
+```
+
+Not:
+
+```text
+Load all standard items even if they are not in the kitchen today.
+```
+
+---
+
+# 5. Recommended screen layout
+
+Make it Excel-like, similar to Bar Stocktake.
+
+```text
+Kitchen Stocktake
+
+Header:
+Branch: Bomet Town
+Business Date: 2026-07-16
+Shift: Shift A
+Mode: TWO_SHIFT
+Stocktake Type: Opening / Handover / Daily Count
+
+Table:
+# | Item Search/Name | Category | Channel | System Qty | Physical Qty | Unit | Variance | Reason | Action
+```
+
+But for opening stocktake, item names should mostly load automatically.
+
+The storekeeper should enter only:
+
+```text
+Physical Qty
+Reason if variance is large
+Action taken if needed
+```
+
+---
+
+# 6. Suggested table columns
+
+Use this:
+
+```text
+# 
+Item Name
+Item Type
+Channel
+System Qty
+Physical Qty
+Unit
+Variance
+Variance %
+Reason
+Action
+```
+
+Example:
+
+```text
+1 | Potatoes | NORMAL_DIRECT_KITCHEN | POS Restaurant | 15kg | 12kg | kg | -3kg | -20% | [Reason]
+2 | Mango Juice | TRUE_BATCH_PRODUCTION | Production | 25L | 24L | L | -1L | -4% | -
+3 | Beef | NORMAL_DIRECT_KITCHEN | Conference | 8kg | 8kg | kg | 0 | 0% | -
+```
+
+---
+
+# 7. What item types should show?
+
+## NORMAL_DIRECT_KITCHEN
+
+Show these if they were issued or carried in kitchen stock.
+
+Examples:
+
+```text
+potatoes
+beef
+rice
+vegetables
+cooking oil
+ugali flour
+chicken
+```
+
+Expected balance comes from:
+
+```text
+Opening + issued - expected consumption from POS/Event/Breakfast/Staff standards
+```
+
+---
+
+## TRUE_BATCH_PRODUCTION raw inputs
+
+Show raw inputs because they were consumed during production.
+
+Examples:
+
+```text
+mangoes
+flour
+sugar
+eggs
+tomatoes
+onions
+```
+
+Expected balance comes from:
+
+```text
+Opening + issued - raw used in production
+```
+
+---
+
+## TRUE_BATCH_PRODUCTION finished outputs
+
+Show finished outputs because they were produced and now exist as stock.
+
+Examples:
+
+```text
+mango juice
+chapati batch
+cake slices
+sauce batch
+mandazi
+```
+
+Expected balance comes from:
+
+```text
+Opening finished stock
++ actual production output
+- POS sales / serving consumption
+- wastage
+= expected finished stock balance
+```
+
+---
+
+# 8. Channel logic on stocktake
+
+The stocktake should show where expected consumption came from.
+
+Channels:
+
+```text
+POS_RESTAURANT
+ACCOMMODATION_BREAKFAST
+BUFFET
+CONFERENCE
+OUTSIDE_CATERING
+STAFF_MEAL
+WASTAGE
+PRODUCTION
+```
+
+Example:
+
+```text
+Potatoes
+Expected used:
+- POS Restaurant: 35kg
+- Staff Meal: 3kg
+- Buffet EO-BMT-001: 10kg
+
+Total expected used: 48kg
+```
+
+Then:
+
+```text
+Expected balance = opening + added - 48kg
+```
+
+---
+
+# 9. Stocktake types
+
+The screen should support 3 types.
+
+## 1. Opening Stocktake
+
+Used before opening the kitchen session.
+
+Purpose:
+
+```text
+Confirm what stock is physically in kitchen before the shift starts.
+```
+
+For Bomet TWO_SHIFT:
+
+```text
+Opening stocktake opens Shift A.
+```
+
+For Mogogosiek SINGLE_SHIFT:
+
+```text
+Opening stocktake opens Single Shift.
+```
+
+---
+
+## 2. Handover Stocktake
+
+Used only for TWO_SHIFT branches when Shift A ends.
+
+Purpose:
+
+```text
+Count physical stock at end of Shift A.
+Shift A physical count becomes Shift B opening stock.
+```
+
+This is the most important one for Bomet.
+
+Rule:
+
+```text
+Shift A physical count = Shift B opening stock
+```
+
+---
+
+## 3. Review / Closing Count
+
+This is not a normal “end-of-day closing stocktake” that blocks operations.
+
+For Shift B / Single Shift, final confirmation may be reviewed through next day opening count.
+
+Approved rule:
+
+```text
+No normal end-of-day closing stocktake.
+Next day opening stocktake reveals final variance.
+```
+
+So do not build a confusing manual “Shift B stocktake close” unless it matches approved flow.
+
+---
+
+# 10. Variance rules
+
+Kitchen Stocktake should use the same tiered variance logic.
+
+```text
+Normal variance:
+Submit directly
+
+Large variance:
+Reason required
+Recount confirmation required
+
+Extreme variance:
+Supervisor override required
+```
+
+The screen should show:
+
+```text
+Expected Qty
+Physical Qty
+Variance
+Variance %
+Status
+```
+
+Example:
+
+```text
+Expected potatoes: 15kg
+Physical count: 12kg
+Variance: -3kg
+Variance %: -20%
+Status: Extreme
+Reason required
+```
+
+---
+
+# 11. What should the blank screen become?
+
+Your screenshot should become something like this:
+
+```text
+Kitchen Stocktake
+
+Branch: Bomet Town
+Business Date: 2026-07-16
+Mode: TWO_SHIFT
+Stocktake Type: Opening Stocktake
+Shift: Shift A
+
+[Load Previous Kitchen Balance] [Refresh]
+
+Table:
+# | Item | Type | System Qty | Physical Qty | Unit | Variance | Reason
+
+1 | Potatoes | Normal Direct | 20.00 | [enter] | kg | auto | -
+2 | Beef | Normal Direct | 10.00 | [enter] | kg | auto | -
+3 | Cooking Oil | Normal Direct | 5.00 | [enter] | L | auto | -
+4 | Mango Juice | True Batch Output | 8.00 | [enter] | L | auto | -
+5 | Chapati | True Batch Output | 40.00 | [enter] | pcs | auto | -
+
+[Submit Opening Stocktake]
+```
+
+---
+
+# 12. Should the storekeeper add items manually?
+
+Only carefully.
+
+Best rule:
+
+```text
+The screen auto-loads expected kitchen items.
+Storekeeper can add missing item only by searching DB.
+No free-text item names.
+Unit auto-loads from DB.
+```
+
+So add item row can exist, but it must be:
+
+```text
+Search item from DB
+Select item
+Unit auto-loads
+Enter physical count
+```
+
+---
+
+# 13. What should not be on Kitchen Stocktake?
+
+Do not put:
+
+```text
+Food standard setup
+Recipe setup
+Production standard setup
+Serving standard setup
+Branch shift config setup
+Event order creation
+POS menu mapping
+```
+
+Those are accountant/admin screens.
+
+Kitchen Stocktake is only:
+
+```text
+Physical count + variance explanation
+```
+
+---
+
+# 14. Final logic
+
+The Kitchen Stocktake screen should load:
+
+```text
+1. Current active branch
+2. Current business date
+3. Current kitchen shift / stocktake type
+4. All items in current kitchen session ledger
+5. Opening carried stock
+6. Stock issued to kitchen
+7. Produced finished stock
+8. Raw inputs affected by production
+9. Expected balance from POS/event/breakfast/staff/wastage standards
+10. Physical count input
+11. Variance calculation
+12. Reason/action fields only when required
+```
+
+Final rule:
+
+```text
+If an item physically exists in the kitchen or affected today’s kitchen movement, it should appear in Kitchen Stocktake.
+
+If it is only a standard but not active in kitchen stock today, it should not appear.
+```

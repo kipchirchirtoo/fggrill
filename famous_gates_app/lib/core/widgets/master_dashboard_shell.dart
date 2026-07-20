@@ -60,7 +60,7 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
     this.searchHint = 'Search...',
     this.palette,
     this.initialSidebarCollapsed = false,
-    this.allowSidebarCollapse = false,
+    this.allowSidebarCollapse = true,
     this.sidebarTitle,
     this.sidebarSubtitle,
     this.sidebarInitials,
@@ -90,6 +90,7 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
 class _MasterDashboardShellState<T>
     extends ConsumerState<MasterDashboardShell<T>> {
   late bool _sidebarCollapsed;
+  bool _sidebarOverrideActive = false;
 
   @override
   void initState() {
@@ -101,7 +102,8 @@ class _MasterDashboardShellState<T>
   void didUpdateWidget(covariant MasterDashboardShell<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialSidebarCollapsed != widget.initialSidebarCollapsed &&
-        _sidebarCollapsed == oldWidget.initialSidebarCollapsed) {
+        _sidebarCollapsed == oldWidget.initialSidebarCollapsed &&
+        !_sidebarOverrideActive) {
       _sidebarCollapsed = widget.initialSidebarCollapsed;
     }
   }
@@ -111,7 +113,10 @@ class _MasterDashboardShellState<T>
     final width = MediaQuery.of(context).size.width;
     final isMobile = width < 768;
     final isTablet = width >= 768 && width < 1024;
-    final isCollapsed = isTablet || _sidebarCollapsed;
+    final autoCollapsed = isTablet;
+    final isCollapsed = _sidebarOverrideActive
+        ? _sidebarCollapsed
+        : (_sidebarCollapsed || autoCollapsed);
     final navWidth = isMobile ? 0.0 : (isCollapsed ? 72.0 : 240.0);
 
     return Scaffold(
@@ -122,9 +127,12 @@ class _MasterDashboardShellState<T>
             _MasterSideNav<T>(
               width: navWidth,
               isCollapsed: isCollapsed,
-              canToggle: widget.allowSidebarCollapse && !isTablet,
+              canToggle: widget.allowSidebarCollapse,
               onToggleCollapsed: widget.allowSidebarCollapse
-                  ? () => setState(() => _sidebarCollapsed = !_sidebarCollapsed)
+                  ? () => setState(() {
+                        _sidebarOverrideActive = true;
+                        _sidebarCollapsed = !isCollapsed;
+                      })
                   : null,
               title: widget.title,
               subtitle: widget.subtitle,
@@ -251,10 +259,30 @@ class _MasterSideNav<T> extends ConsumerWidget {
               height: 60,
               padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 16),
               child: isCollapsed
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  ? Stack(
                       children: [
-                        _Logo(initials: sidebarInitials ?? initials),
+                        Align(
+                          alignment: Alignment.center,
+                          child: _Logo(initials: sidebarInitials ?? initials),
+                        ),
+                        if (canToggle)
+                          Align(
+                            alignment: Alignment.topRight,
+                            child: IconButton(
+                              tooltip: 'Expand sidebar',
+                              onPressed: onToggleCollapsed,
+                              icon: const Icon(
+                                Icons.keyboard_double_arrow_right,
+                                size: 18,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                            ),
+                          ),
                       ],
                     )
                   : Row(

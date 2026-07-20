@@ -72,6 +72,8 @@ class AdminScreen extends ConsumerStatefulWidget {
 
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   bool _pendingInitialSectionSync = false;
+  bool _sidebarCollapsed = false;
+  bool _sidebarOverrideActive = false;
 
   @override
   void initState() {
@@ -156,7 +158,11 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     final isMobile = MediaQuery.of(context).size.width < 768;
     final isTablet = MediaQuery.of(context).size.width >= 768 &&
         MediaQuery.of(context).size.width < 1024;
-    final navWidth = isMobile ? 0.0 : (isTablet ? 64.0 : 220.0);
+    final effectiveSidebarCollapsed = _sidebarOverrideActive
+        ? _sidebarCollapsed
+        : (_sidebarCollapsed || isTablet);
+    final navWidth =
+        isMobile ? 0.0 : (effectiveSidebarCollapsed ? 64.0 : 220.0);
     final navGroups = _navGroups;
 
     return Scaffold(
@@ -166,7 +172,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           if (!isMobile)
             AdminSideNav(
               width: navWidth,
-              isCollapsed: isTablet,
+              isCollapsed: effectiveSidebarCollapsed,
               groups: navGroups,
               selectedSection: currentSection,
             ),
@@ -178,6 +184,13 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                   consoleLabel: _consoleLabel,
                   onMenuTap:
                       isMobile ? () => _showMobileNav(context, ref) : null,
+                  onToggleSidebar: !isMobile
+                      ? () => setState(() {
+                            _sidebarOverrideActive = true;
+                            _sidebarCollapsed = !effectiveSidebarCollapsed;
+                          })
+                      : null,
+                  sidebarCollapsed: effectiveSidebarCollapsed,
                 ),
                 Expanded(
                   child: _buildSection(currentSection, ref),

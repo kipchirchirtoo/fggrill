@@ -16,6 +16,7 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/working_directory_guard.dart';
 
 bool _updateNoticeShown = false;
+bool _isExitingFullScreen = false;
 
 bool get _isDesktop =>
     !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
@@ -25,18 +26,23 @@ Future<void> main() async {
   tz.initializeTimeZones(); // KENYA TIME
   ensureStableWorkingDirectory();
 
-  // Desktop: launch in full screen. Esc exits full screen (see the app-wide
-  // shortcut in FamousGatesApp below).
+  // Desktop: start from a stable normal window, then enter full screen.
+  // On Windows, creating the window directly in fullScreen mode can leave the
+  // window with a bad restore target; pressing Esc then appears to minimize or
+  // hide the app instead of returning to a usable normal window.
   if (_isDesktop) {
     await windowManager.ensureInitialized();
     await windowManager.waitUntilReadyToShow(
       const WindowOptions(
-        fullScreen: true,
         title: 'FamousGate Hotels System',
+        center: true,
+        size: Size(1440, 900),
+        minimumSize: Size(1100, 700),
       ),
       () async {
         await windowManager.show();
         await windowManager.focus();
+        await windowManager.setFullScreen(true);
       },
     );
   }
@@ -115,8 +121,22 @@ class FamousGatesApp extends ConsumerWidget {
             // the focus first, so this only fires when nothing else consumed
             // it — closing a dialog will not also drop out of full screen.
             const SingleActivator(LogicalKeyboardKey.escape): () async {
-              if (_isDesktop && await windowManager.isFullScreen()) {
-                await windowManager.setFullScreen(false);
+              if (!_isDesktop || _isExitingFullScreen) return;
+              if (await windowManager.isFullScreen()) {
+                _isExitingFullScreen = true;
+                try {
+                  await windowManager.setFullScreen(false);
+                  if (await windowManager.isMinimized()) {
+                    await windowManager.restore();
+                  }
+                  await windowManager.show();
+                  await windowManager.focus();
+                  if (Platform.isWindows) {
+                    await windowManager.maximize();
+                  }
+                } finally {
+                  _isExitingFullScreen = false;
+                }
               }
             },
           },

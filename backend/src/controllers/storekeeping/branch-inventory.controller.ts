@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import { logger } from '../../utils/logger';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
+import * as BranchStockTransferService from '../../services/branch-stock-transfer.service';
 import { isGlobalRole } from '../../utils/branchIsolation';
 import { ensureInventoryLocation } from './items.controller';
 
@@ -186,39 +187,6 @@ export const recordStockOut = async (
 
         syncMessage = ' and synced to Kitchen operations';
         logger.info(`[Stock Out] Auto-synced ${quantity} ${itemUnit} of ${itemName} to Kitchen`);
-
-      } else if (department.includes('bar')) {
-        // Sync to bar stock ledger
-        const { data: currentStock } = await supabase
-          .from('bar_stock')
-          .select('current_balance')
-          .eq('branch_id', branchId)
-          .eq('item_sku', item_sku)
-          .single();
-
-        const openingBalance = currentStock?.current_balance || 0;
-        const closingBalance = Number(openingBalance) + Number(quantity);
-
-        await supabase
-          .from('bar_stock_ledger')
-          .insert({
-            branch_id: branchId,
-            item_sku,
-            item_name: itemName,
-            transaction_type: 'RECEIPT',
-            reference_type: 'STOCK_OUT',
-            reference_id: null, // No specific transaction ID for manual stock out
-            opening_balance: openingBalance,
-            quantity_in: quantity,
-            quantity_out: 0,
-            closing_balance: closingBalance,
-            unit_of_measure: itemUnit,
-            user_id: userId,
-            notes: `Auto-approved from branch store: ${notes || reason || 'Stock out'}`
-          });
-
-        syncMessage = ' and synced to Bar operations';
-        logger.info(`[Stock Out] Auto-synced ${quantity} ${itemUnit} of ${itemName} to Bar`);
 
       } else if (department === 'housekeeping' || department === 'reception' || department === 'maintenance') {
         // For housekeeping/reception, just log - they may not have separate stock tables
@@ -1347,6 +1315,196 @@ export const getStockMovements = async (
       success: true,
       count: data.length,
       data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Create a branch-to-branch stock transfer
+ */
+export const createBranchTransfer = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const {
+      to_branch_id,
+      items,
+      notes,
+      urgency // Toggle (NORMAL / URGENT)
+    } = req.body;
+
+    const fromBranchId = req.user?.branch_id;
+    if (!fromBranchId) {
+      res.status(400).json({ success: false, message: 'User branch not set' });
+      return;
+    }
+
+    const normalizedItems = Array.isArray(items)
+      ? (items as any[]).map((item) => ({
+          item_sku: String(item.item_sku ?? item.sku ?? '').trim(),
+          dispatched_quantity: Number(item.dispatched_quantity ?? item.quantity ?? 0)
+        }))
+      : [];
+
+    if (normalizedItems.length === 0) {
+      res.status(400).json({ success: false, message: 'At least one item is required for transfer' });
+      return;
+    }
+
+    const invalidItems = normalizedItems.filter(
+      item => !item.item_sku || !Number.isFinite(item.dispatched_quantity) || item.dispatched_quantity <= 0
+    );
+    if (invalidItems.length > 0) {
+      res.status(400).json({
+        success: false,
+        message: 'All items must have a valid SKU and positive quantity',
+        invalidItems
+      });
+      return;
+    }
+
+    const transfer = await BranchStockTransferService.initiateTransfer(
+      fromBranchId,
+      Number(to_branch_id),
+      req.user.id,
+      normalizedItems,
+      notes,
+      urgency
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Branch stock transfer initiated successfully',
+      data: transfer
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+/**
+ * Get outgoing branch transfers from the user's branch
+ */
+export const getOutgoingBranchTransfers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const fromBranchId = req.user?.branch_id;
+    if (!fromBranchId) {
+      res.status(400).json({ success: false, message: 'User branch not set' });
+      return;
+    }
+
+    const { data: transfers, error } = await supabase
+      .from('branch_stock_transfers')
+      .select('*, items:branch_stock_transfer_items(*)')
+      .eq('from_branch_id', fromBranchId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Fetch branches to map destination branch name in-memory
+    const { data: branches } = await supabase.from('branches').select('id, name, code');
+    const branchMap = new Map((branches || []).map(b => [b.id, b]));
+
+    const enriched = (transfers || []).map(tx => ({
+      ...tx,
+      to_branch: branchMap.get(tx.to_branch_id) || null
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: enriched.length,
+      data: enriched
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get incoming branch transfers to the user's branch
+ */
+export const getIncomingBranchTransfers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const toBranchId = req.user?.branch_id;
+    if (!toBranchId) {
+      res.status(400).json({ success: false, message: 'User branch not set' });
+      return;
+    }
+
+    const { data: transfers, error } = await supabase
+      .from('branch_stock_transfers')
+      .select('*, items:branch_stock_transfer_items(*)')
+      .eq('to_branch_id', toBranchId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Fetch branches to map sender branch name in-memory
+    const { data: branches } = await supabase.from('branches').select('id, name, code');
+    const branchMap = new Map((branches || []).map(b => [b.id, b]));
+
+    const enriched = (transfers || []).map(tx => ({
+      ...tx,
+      from_branch: branchMap.get(tx.from_branch_id) || null
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: enriched.length,
+      data: enriched
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Confirm receipt of a branch stock transfer
+ */
+export const confirmBranchTransferReceipt = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { items_received, notes } = req.body;
+
+    const normalizedReceived = Array.isArray(items_received)
+      ? (items_received as any[]).map((item) => ({
+          item_sku: String(item.item_sku ?? item.sku ?? '').trim(),
+          quantity_received: Number(item.quantity_received ?? item.received_quantity ?? 0)
+        }))
+      : [];
+
+    if (normalizedReceived.length === 0) {
+      res.status(400).json({ success: false, message: 'Received items details are required' });
+      return;
+    }
+
+    const result = await BranchStockTransferService.confirmTransferReceipt(
+      id,
+      req.user.id,
+      normalizedReceived,
+      notes
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Branch transfer receipt confirmed successfully',
+      data: result
     });
   } catch (error) {
     next(error);

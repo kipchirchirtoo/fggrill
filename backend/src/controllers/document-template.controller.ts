@@ -104,6 +104,18 @@ const pythonPdf = (name: string, titleText: string, source: string): TemplateDef
   sections: catalogSections(titleText, 'PDF/report template catalog entry. Wiring status: pending Python/backend renderer integration.'),
 });
 
+const activePythonPdfCatalog = (
+  name: string,
+  titleText: string,
+  source: string,
+  body: string
+): TemplateDef => ({
+  name,
+  description: `${source}. Active export route is wired and uses this generator. Template section editing is still catalog-only until the renderer is connected to resolved template sections.`,
+  document_type: 'pdf',
+  sections: catalogSections(titleText, body),
+});
+
 const backendPdf = (name: string, titleText: string, source: string): TemplateDef => ({
   name,
   description: `${source}. Catalogued from backend PDFKit exports; current generator is still hardcoded and must be routed through the template resolver before edits affect generated PDFs.`,
@@ -212,6 +224,12 @@ const DEFAULT_TEMPLATES: Record<string, TemplateDef> = {
   booking_invoice: pythonPdf('Booking Invoice', 'HOTEL BOOKING INVOICE', 'python-services/pdf_generator/invoice.py'),
   guest_checkout_bill: pythonPdf('Guest Checkout Bill', 'GUEST BILL / INVOICE', 'python-services/reports/branded_pdf_generator.py generate_checkout_bill'),
   conference_invoice: pythonPdf('Conference Invoice', 'CONFERENCE INVOICE', 'python-services/reports/branded_pdf_generator.py reportType=conference_invoice'),
+  event_order_pdf: activePythonPdfCatalog(
+    'Event Order PDF',
+    'EVENT ORDER / FUNCTION CONFIRMATION',
+    'python-services/accounting/document_generator.py generate_event_order_pdf_v2',
+    'Active Event Order PDF export used by Branch Accountant. The document includes client details, event type, package/menu lines, pricing, payment status, and signature blocks.'
+  ),
   dispatch_note: pythonPdf('Dispatch Note', 'DISPATCH NOTE', 'python-services/reports/branded_pdf_generator.py reportType=dispatch_note'),
   sale_receipt_pdf: pythonPdf('PDF Sale Receipt', 'CASH RECEIPT', 'python-services/receipts/receipt_generator.py ReceiptGenerator'),
   invoice_pdf: pythonPdf('PDF Invoice', 'INVOICE', 'python-services/receipts/receipt_generator.py InvoiceGenerator'),

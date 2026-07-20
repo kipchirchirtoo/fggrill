@@ -35,6 +35,9 @@ import 'payroll_policies_screen.dart';
 import 'payroll_adjustments_screen.dart';
 import 'staff_pos_accounting_screen.dart';
 import 'waiter_audit_screen.dart';
+import 'daily_controls_screen.dart';
+import 'event_orders_screen.dart';
+import 'food_control_standards_screen.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../../../core/services/user_service.dart';
 
@@ -77,6 +80,9 @@ enum BranchAccountantSection {
   branchRestaurantMenu,
   posStockLink,
   restaurantStockLink,
+  dailyControls,
+  foodControlStandards,
+  eventOrders,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -93,9 +99,27 @@ class _BranchAccountantDashboardState
     extends ConsumerState<BranchAccountantDashboard> {
   late BranchAccountantSection _section =
       widget.initialSection ?? BranchAccountantSection.overview;
+  BranchAccountantSection _lastStandardSection =
+      BranchAccountantSection.foodControlStandards;
+  bool _sidebarCollapsed = false;
+  bool _sidebarOverrideActive = false;
 
   /// Pre-fill data passed from Supplier Finance → Outbound Payments.
   Map<String, dynamic>? _outboundPreload;
+
+  bool get _isFullScreenSection =>
+      _section == BranchAccountantSection.dailyControls;
+
+  void _navigateToSection(BranchAccountantSection section) {
+    setState(() {
+      if (section != BranchAccountantSection.dailyControls) {
+        _lastStandardSection = section;
+      } else if (_section != BranchAccountantSection.dailyControls) {
+        _lastStandardSection = _section;
+      }
+      _section = section;
+    });
+  }
 
   void _navigateToOutbound(Map<String, dynamic> preload) {
     setState(() {
@@ -109,6 +133,10 @@ class _BranchAccountantDashboardState
     final width = MediaQuery.of(context).size.width;
     final isMobile = width < 768;
     final isTablet = width >= 768 && width < 1024;
+    final effectiveSidebarCollapsed = _sidebarOverrideActive
+        ? _sidebarCollapsed
+        : (_sidebarCollapsed || isTablet);
+    final sidebarWidth = effectiveSidebarCollapsed ? 72.0 : 256.0;
     // Ctrl+R / F5 → rebuild the active section so it reloads its data.
     final tick = ref.watch(globalRefreshTickProvider);
 
@@ -116,35 +144,57 @@ class _BranchAccountantDashboardState
       backgroundColor: const Color(0xFFF0F4F0),
       body: Row(
         children: [
-          if (!isMobile)
+          if (!isMobile && !_isFullScreenSection)
             _BranchAccountantSideNav(
-              width: isTablet ? 64 : 256,
-              isCollapsed: isTablet,
+              width: sidebarWidth,
+              isCollapsed: effectiveSidebarCollapsed,
               current: _section,
-              onChanged: (section) => setState(() => _section = section),
+              onChanged: _navigateToSection,
+              onToggleCollapsed: () {
+                setState(() {
+                  _sidebarOverrideActive = true;
+                  _sidebarCollapsed = !effectiveSidebarCollapsed;
+                });
+              },
             ),
           Expanded(
-            child: Column(
-              children: [
-                _BranchAccountantTopBar(
-                  section: _section,
-                  onMenuTap: isMobile ? () => _showMobileNav(context) : null,
-                ),
-                Expanded(
-                  child: KeyedSubtree(
+            child: _isFullScreenSection
+                ? KeyedSubtree(
                     key: ValueKey('ba_${_section}_$tick'),
                     child: _buildSection(),
+                  )
+                : Column(
+                    children: [
+                      _BranchAccountantTopBar(
+                        section: _section,
+                        onMenuTap:
+                            isMobile ? () => _showMobileNav(context) : null,
+                        onToggleSidebar: !isMobile
+                            ? () {
+                                setState(() {
+                                  _sidebarOverrideActive = true;
+                                  _sidebarCollapsed =
+                                      !effectiveSidebarCollapsed;
+                                });
+                              }
+                            : null,
+                        sidebarCollapsed: effectiveSidebarCollapsed,
+                      ),
+                      Expanded(
+                        child: KeyedSubtree(
+                          key: ValueKey('ba_${_section}_$tick'),
+                          child: _buildSection(),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
-      bottomNavigationBar: isMobile
+      bottomNavigationBar: isMobile && !_isFullScreenSection
           ? _BranchAccountantBottomNav(
               current: _section,
-              onChanged: (section) => setState(() => _section = section),
+              onChanged: _navigateToSection,
             )
           : null,
     );
@@ -154,7 +204,7 @@ class _BranchAccountantDashboardState
     switch (_section) {
       case BranchAccountantSection.overview:
         return _OverviewSection(
-          onNavigate: (section) => setState(() => _section = section),
+          onNavigate: _navigateToSection,
         );
       case BranchAccountantSection.search:
         return const BranchSearchSection();
@@ -233,6 +283,14 @@ class _BranchAccountantDashboardState
         return const _PosStockLinkSection();
       case BranchAccountantSection.restaurantStockLink:
         return const _RestaurantStockLinkSection();
+      case BranchAccountantSection.dailyControls:
+        return DailyControlsScreen(
+          onBack: () => _navigateToSection(_lastStandardSection),
+        );
+      case BranchAccountantSection.foodControlStandards:
+        return const FoodControlStandardsScreen();
+      case BranchAccountantSection.eventOrders:
+        return const EventOrdersScreen();
     }
   }
 
@@ -243,7 +301,7 @@ class _BranchAccountantDashboardState
       builder: (_) => _MobileNavSheet(
         current: _section,
         onChanged: (section) {
-          setState(() => _section = section);
+          _navigateToSection(section);
           Navigator.pop(context);
         },
       ),
@@ -275,6 +333,8 @@ const _navItems = [
       Icons.receipt_long),
   _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings & Invoices',
       Icons.request_quote),
+  _NavItem(BranchAccountantSection.eventOrders, 'Event Orders',
+      Icons.event_note),
   _NavItem(BranchAccountantSection.outboundPayments, 'Outbound Payments',
       Icons.payments),
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
@@ -308,6 +368,10 @@ const _navItems = [
       Icons.account_balance_wallet),
   _NavItem(BranchAccountantSection.kitchenVariance, 'Kitchen Variance',
       Icons.soup_kitchen),
+  _NavItem(BranchAccountantSection.dailyControls, 'Daily Controls',
+      Icons.analytics_outlined),
+  _NavItem(BranchAccountantSection.foodControlStandards, 'Food Control Standards',
+      Icons.gavel),
   _NavItem(BranchAccountantSection.barStocktakeReview, 'Bar Stocktake Review',
       Icons.liquor),
   _NavItem(BranchAccountantSection.storeStocktakeReview, 'Store Stocktake Review',
@@ -335,15 +399,37 @@ class _BranchAccountantSideNav extends ConsumerWidget {
     required this.isCollapsed,
     required this.current,
     required this.onChanged,
+    this.onToggleCollapsed,
   });
 
   final double width;
   final bool isCollapsed;
   final BranchAccountantSection current;
   final ValueChanged<BranchAccountantSection> onChanged;
+  final VoidCallback? onToggleCollapsed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    Widget buildBadge() {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.kPrimary,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Center(
+          child: Text(
+            'BA',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
       width: width,
       color: Colors.white,
@@ -351,37 +437,64 @@ class _BranchAccountantSideNav extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.kPrimary,
-                    borderRadius: BorderRadius.circular(10),
+            child: isCollapsed
+                ? Stack(
+                    children: [
+                      Align(
+                        alignment: Alignment.center,
+                        child: buildBadge(),
+                      ),
+                      if (onToggleCollapsed != null)
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: IconButton(
+                            tooltip: 'Expand sidebar',
+                            onPressed: onToggleCollapsed,
+                            icon: const Icon(
+                              Icons.keyboard_double_arrow_right,
+                              size: 18,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 28,
+                              minHeight: 28,
+                            ),
+                          ),
+                        ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      buildBadge(),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Branch Accountant',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              'Famous Gates',
+                              style:
+                                  TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (onToggleCollapsed != null)
+                        IconButton(
+                          tooltip: 'Collapse sidebar',
+                          onPressed: onToggleCollapsed,
+                          icon: const Icon(
+                            Icons.keyboard_double_arrow_left,
+                            size: 20,
+                          ),
+                        ),
+                    ],
                   ),
-                  child: const Center(
-                    child: Text('BA',
-                        style: TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.w800)),
-                  ),
-                ),
-                if (!isCollapsed) ...[
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Branch Accountant',
-                            style: TextStyle(fontWeight: FontWeight.w800)),
-                        Text('Famous Gates',
-                            style: TextStyle(fontSize: 12, color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
           ),
           const Divider(height: 1),
           Expanded(
@@ -410,11 +523,13 @@ class _BranchAccountantSideNav extends ConsumerWidget {
                         ),
                         child: Row(
                           children: [
-                            Icon(item.icon,
-                                size: 20,
-                                color: active
-                                    ? AppColors.kPrimary
-                                    : AppColors.kTextSecondary),
+                            Icon(
+                              item.icon,
+                              size: 20,
+                              color: active
+                                  ? AppColors.kPrimary
+                                  : AppColors.kTextSecondary,
+                            ),
                             if (!isCollapsed) ...[
                               const SizedBox(width: 12),
                               Expanded(
@@ -456,14 +571,22 @@ class _BranchAccountantSideNav extends ConsumerWidget {
 }
 
 class _BranchAccountantTopBar extends ConsumerWidget {
-  const _BranchAccountantTopBar({required this.section, this.onMenuTap});
+  const _BranchAccountantTopBar({
+    required this.section,
+    this.onMenuTap,
+    this.onToggleSidebar,
+    this.sidebarCollapsed = false,
+  });
 
   final BranchAccountantSection section;
   final VoidCallback? onMenuTap;
+  final VoidCallback? onToggleSidebar;
+  final bool sidebarCollapsed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authNotifierProvider).valueOrNull;
+    final width = MediaQuery.of(context).size.width;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       decoration: BoxDecoration(
@@ -473,18 +596,37 @@ class _BranchAccountantTopBar extends ConsumerWidget {
       child: Row(
         children: [
           if (onMenuTap != null)
-            IconButton(onPressed: onMenuTap, icon: const Icon(Icons.menu)),
-          Text('Branch Accountant',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
+            IconButton(
+              onPressed: onMenuTap,
+              icon: const Icon(Icons.menu),
+            ),
+          if (onToggleSidebar != null && onMenuTap == null)
+            IconButton(
+              tooltip: sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',
+              onPressed: onToggleSidebar,
+              icon: Icon(
+                sidebarCollapsed
+                    ? Icons.keyboard_double_arrow_right
+                    : Icons.keyboard_double_arrow_left,
+              ),
+            ),
+          Text(
+            'Branch Accountant',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+          ),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Icon(Icons.chevron_right, size: 16),
           ),
-          Text(_label(section),
-              style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-          const Spacer(),
-          if (MediaQuery.of(context).size.width > 900)
+          Expanded(
+            child: Text(
+              _label(section),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (width > 900) ...[
+            const SizedBox(width: 16),
             SizedBox(
               width: 280,
               height: 40,
@@ -502,6 +644,7 @@ class _BranchAccountantTopBar extends ConsumerWidget {
                 ),
               ),
             ),
+          ],
           const SizedBox(width: 16),
           CircleAvatar(
             radius: 17,
@@ -510,22 +653,30 @@ class _BranchAccountantTopBar extends ConsumerWidget {
               (user?.name.isNotEmpty == true ? user!.name[0] : 'B')
                   .toUpperCase(),
               style: const TextStyle(
-                  color: AppColors.kPrimary, fontWeight: FontWeight.w800),
+                color: AppColors.kPrimary,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
-          const SizedBox(width: 10),
-          if (MediaQuery.of(context).size.width > 700)
+          if (width > 700) ...[
+            const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user?.name ?? 'Branch Accountant',
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w700)),
-                Text(user?.branchName ?? '',
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                Text(
+                  user?.name ?? 'Branch Accountant',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  user?.branchName ?? '',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
               ],
             ),
+          ],
         ],
       ),
     );
@@ -3845,7 +3996,7 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
   Future<void> _downloadCsv(List<Map<String, dynamic>> items) async {
     try {
       final headers = [
-        'Date',
+        'Last Sold',
         'Item Name',
         'SKU',
         'Category',
@@ -5359,7 +5510,7 @@ class _ShiftReconciliationPanel extends StatelessWidget {
             title: 'Cash Drawer & Change Trace',
             rows: [
               _ShiftReportRow('Opening Float', _money(_openingFloat(shift!))),
-              _ShiftReportRow('+ Cash Sales', _money(_cashSales(shift!))),
+              _ShiftReportRow('+ Cash Sales', _money(_cashSales(shift!) + _payouts(shift!) + _expenseTotal(shift!))),
               _ShiftReportRow(
                 'Cash Tendered by Customers',
                 _money(_cashTendered(shift!)),
@@ -5376,8 +5527,7 @@ class _ShiftReconciliationPanel extends StatelessWidget {
               ),
               _ShiftReportRow('+ Credit Payments Received',
                   _money(_creditPaymentsReceived(shift!))),
-              _ShiftReportRow(
-                  '- Cash Drops', _money(_cashDrops(shift!))),
+
               _ShiftReportRow(
                   '- Payouts', _money(_payouts(shift!))),
               if (_expenseTotal(shift!) > 0)
@@ -5954,6 +6104,8 @@ class _VarianceAnalysisBox extends StatelessWidget {
     final actual = _actualCashCounted(shift);
     final variance = _varianceAmount(shift);
     final balanced = variance.abs() < 0.01;
+    final payoutsAndExpenses = _payouts(shift) + _expenseTotal(shift);
+    final grossCashSales = _cashSales(shift) + payoutsAndExpenses;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -5978,7 +6130,7 @@ class _VarianceAnalysisBox extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Opening Float (${_money(_openingFloat(shift))}) + Cash Sales (${_money(_cashSales(shift))}) + Credit Paid (${_money(_creditPaymentsReceived(shift))}) = Expected (${_money(expected)})\n'
+            'Opening Float (${_money(_openingFloat(shift))}) + Gross Cash Sales (${_money(grossCashSales)}) + Credit Paid (${_money(_creditPaymentsReceived(shift))}) - Expenses/Payouts (${_money(payoutsAndExpenses)}) = Expected (${_money(expected)})\n'
             'Actual (${_money(actual)}) - Expected (${_money(expected)}) = Variance',
             style: const TextStyle(color: AppColors.kTextSecondary),
           ),
@@ -6666,9 +6818,7 @@ num _expectedClosingAmount(Map<String, dynamic> shift) {
   return _openingFloat(shift) +
       _cashSales(shift) +
       _creditPaymentsReceived(shift) -
-      _cashDrops(shift) -
-      _payouts(shift) -
-      _expenseTotal(shift);
+      _cashDrops(shift);
 }
 
 num _actualCashCounted(Map<String, dynamic> shift) {
@@ -7980,10 +8130,17 @@ class _LogbookEvidenceTable extends StatelessWidget {
       );
     }
 
-    // Totals banner
-    final totalAmount = lines.fold<num>(0, (s, line) => s + _num(_map(line)['amount']));
+    // Totals banner (excluding voided/cancelled transactions)
+    final nonVoidLines = lines.where((line) {
+      final item = _map(line);
+      final status = '${item['status'] ?? ''}'.trim().toLowerCase();
+      final isVoid = '${item['is_voided'] ?? ''}'.trim().toLowerCase() == 'true' || item['is_voided'] == true;
+      return status != 'voided' && status != 'cancelled' && !isVoid;
+    }).toList();
+
+    final totalAmount = nonVoidLines.fold<num>(0, (s, line) => s + _num(_map(line)['amount']));
     final methodTotals = <String, num>{};
-    for (final line in lines) {
+    for (final line in nonVoidLines) {
       final item = _map(line);
       final method = '${item['payment_method'] ?? 'other'}'.toLowerCase();
       methodTotals[method] = (methodTotals[method] ?? 0) + _num(item['amount']);

@@ -151,9 +151,8 @@ class KitchenRepository {
   // Accountant final approval). Covers both per-item and whole-bill voids.
 
   List<Map<String, dynamic>> _parseMapList(dynamic data) {
-    final list = data is List
-        ? data
-        : (data is Map ? (data['data'] ?? []) : []);
+    final list =
+        data is List ? data : (data is Map ? (data['data'] ?? []) : []);
     return (list as List)
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
@@ -166,7 +165,8 @@ class KitchenRepository {
       return _parseMapList(response.data);
     } catch (e) {
       debugPrint('KitchenRepository.getPendingItemVoidsKitchen error: $e');
-      throw Exception('Unable to load pending item void requests: ${_errorMessage(e)}');
+      throw Exception(
+          'Unable to load pending item void requests: ${_errorMessage(e)}');
     }
   }
 
@@ -196,7 +196,8 @@ class KitchenRepository {
       return _parseMapList(response.data);
     } catch (e) {
       debugPrint('KitchenRepository.getPendingWholeBillVoidsKitchen error: $e');
-      throw Exception('Unable to load pending bill void requests: ${_errorMessage(e)}');
+      throw Exception(
+          'Unable to load pending bill void requests: ${_errorMessage(e)}');
     }
   }
 
@@ -242,15 +243,32 @@ class KitchenRepository {
     }
   }
 
+  Future<List<KitchenShift>> getOpenShifts() async {
+    try {
+      final branchId = await _branchId;
+      final response = await _dio.get('/kitchen/shifts', queryParameters: {
+        if (branchId != null) 'branch_id': branchId,
+        'status': 'open',
+      });
+      final list = _parseMapList(response.data);
+      return list.map((json) => KitchenShift.fromJson(json)).toList();
+    } catch (e) {
+      debugPrint('KitchenRepository.getOpenShifts error: $e');
+      return [];
+    }
+  }
+
   Future<KitchenShiftConfig> getActiveShiftConfig() async {
     try {
       final branchId = await _branchId;
-      final response = await _dio.get('/kitchen/shifts/shift-mode', queryParameters: {
+      final response =
+          await _dio.get('/kitchen/shifts/shift-mode', queryParameters: {
         if (branchId != null) 'branch_id': branchId,
       });
       final data = response.data;
-      if (data is Map && data['data'] is Map) {
-        return KitchenShiftConfig.fromJson(Map<String, dynamic>.from(data['data']));
+      if (data is Map && data['data'] != null) {
+        return KitchenShiftConfig.fromJson(
+            Map<String, dynamic>.from(data['data']));
       }
       return KitchenShiftConfig(enabled: false, reason: 'INVALID_RESPONSE');
     } catch (e) {
@@ -259,23 +277,41 @@ class KitchenRepository {
     }
   }
 
+  Future<void> configureShiftMode(String shiftMode) async {
+    try {
+      final branchId = await _branchId;
+      if (branchId == null)
+        throw Exception('No branch ID associated with user.');
+      await _dio.post('/kitchen/shifts/shift-mode', data: {
+        'branch_id': branchId,
+        'shift_mode': shiftMode,
+      });
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
   Future<KitchenShift> openShift({
     required String shiftType,
     required List<String> assignedChefIds,
+    required List<String> assignedDispenseIds,
     String? subShiftType,
     String? department,
   }) async {
     try {
       final branchId = await _branchId;
-      if (branchId == null) throw Exception('No branch ID associated with user.');
-      
+      if (branchId == null)
+        throw Exception('No branch ID associated with user.');
+
       final response = await _dio.post('/kitchen/shifts', data: {
         'branch_id': branchId,
         'shift_type': shiftType,
         'assigned_chef_ids': assignedChefIds,
+        'assigned_dispense_ids': assignedDispenseIds,
         if (subShiftType != null) 'sub_shift_type': subShiftType,
         'department': department ?? 'KITCHEN',
-        'opening_items': [], // Backend will resolve morning stocktake / handover
+        'opening_items':
+            [], // Backend will resolve morning stocktake / handover
       });
       final data = response.data;
       if (data is Map && data['data'] != null) {
@@ -300,6 +336,34 @@ class KitchenRepository {
     }
   }
 
+  Future<List<KitchenShift>> listKitchenShifts({
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) async {
+    try {
+      final branchId = await _branchId;
+      final response = await _dio.get(
+        '/kitchen/shifts',
+        queryParameters: {
+          if (branchId != null) 'branch_id': branchId,
+          if (status != null && status.isNotEmpty) 'status': status,
+          if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+          if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+        },
+      );
+      final list = response.data is List
+          ? response.data
+          : (response.data is Map ? (response.data['data'] ?? []) : []);
+      return (list as List)
+          .whereType<Map>()
+          .map((json) => KitchenShift.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
   Future<List<KitchenProductionRecipe>> getRecipesList() async {
     try {
       final response = await _dio.get('/kitchen/shifts/recipes/list');
@@ -308,10 +372,21 @@ class KitchenRepository {
           : (response.data is Map ? (response.data['data'] ?? []) : []);
       return (list as List)
           .whereType<Map>()
-          .map((json) => KitchenProductionRecipe.fromJson(Map<String, dynamic>.from(json)))
+          .map((json) =>
+              KitchenProductionRecipe.fromJson(Map<String, dynamic>.from(json)))
           .toList();
     } catch (e) {
       debugPrint('KitchenRepository.getRecipesList error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getRecipeCatalog() async {
+    try {
+      final response = await _dio.get('/kitchen/shifts/recipes/list');
+      return _parseMapList(response.data is Map ? response.data['data'] : response.data);
+    } catch (e) {
+      debugPrint('KitchenRepository.getRecipeCatalog error: $e');
       return [];
     }
   }
@@ -332,11 +407,51 @@ class KitchenRepository {
           : (response.data is Map ? (response.data['data'] ?? []) : []);
       return (list as List)
           .whereType<Map>()
-          .map((json) => KitchenShiftAddition.fromJson(Map<String, dynamic>.from(json)))
+          .map((json) =>
+              KitchenShiftAddition.fromJson(Map<String, dynamic>.from(json)))
           .toList();
     } catch (e) {
       debugPrint('KitchenRepository.getShiftAdditions error: $e');
       return [];
+    }
+  }
+
+  Future<List<KitchenPrepBatch>> getPrepBatches(String shiftId) async {
+    try {
+      final response = await _dio.get('/kitchen/shifts/$shiftId/prep-batches');
+      final list = response.data is List
+          ? response.data
+          : (response.data is Map ? (response.data['data'] ?? []) : []);
+      return (list as List)
+          .whereType<Map>()
+          .map((json) => KitchenPrepBatch.fromJson(Map<String, dynamic>.from(json)))
+          .toList();
+    } catch (e) {
+      debugPrint('KitchenRepository.getPrepBatches error: $e');
+      return [];
+    }
+  }
+
+  Future<void> sendPrepBatch(String shiftId, Map<String, dynamic> payload) async {
+    try {
+      await _dio.post('/kitchen/shifts/$shiftId/prep-batches', data: payload);
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<void> receivePrepBatch(
+    String shiftId,
+    String batchId,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      await _dio.post(
+        '/kitchen/shifts/$shiftId/prep-batches/$batchId/receive',
+        data: payload,
+      );
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
     }
   }
 
@@ -361,7 +476,25 @@ class KitchenRepository {
     }
   }
 
-  Future<void> addStock(String shiftId, List<Map<String, dynamic>> items) async {
+  Future<List<Map<String, dynamic>>> getStoreInventoryItems({
+    String? search,
+    int limit = 500,
+  }) async {
+    try {
+      final response = await _dio.get('/store/items', queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        'store_type': 'foodstuffs',
+        'limit': limit,
+      });
+      return _parseMapList(response.data);
+    } catch (e) {
+      debugPrint('KitchenRepository.getStoreInventoryItems error: $e');
+      return [];
+    }
+  }
+
+  Future<void> addStock(
+      String shiftId, List<Map<String, dynamic>> items) async {
     try {
       await _dio.post('/kitchen/shifts/$shiftId/stock', data: {'items': items});
     } on DioException catch (e) {
@@ -375,6 +508,8 @@ class KitchenRepository {
     required List<String> outgoingWitnessIds,
     required List<String> incomingWitnessIds,
     String? closingNotes,
+    int? breakfastPax,
+    int? staffMealPax,
   }) async {
     try {
       await _dio.post('/kitchen/shifts/$shiftId/close', data: {
@@ -382,7 +517,117 @@ class KitchenRepository {
         'outgoing_witness_ids': outgoingWitnessIds,
         'incoming_witness_ids': incomingWitnessIds,
         'closing_notes': closingNotes,
+        if (breakfastPax != null) 'breakfast_pax': breakfastPax,
+        if (staffMealPax != null) 'staff_meal_pax': staffMealPax,
       });
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<int> getBreakfastPax() async {
+    try {
+      final response = await _dio.get('/kitchen/shifts/breakfast-pax');
+      if (response.data is Map && response.data['breakfast_pax'] != null) {
+        return (response.data['breakfast_pax'] as num).toInt();
+      }
+      return 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  Future<Map<String, dynamic>> getBreakfastPaxSnapshot({String? date}) async {
+    try {
+      final response =
+          await _dio.get('/kitchen/shifts/breakfast-pax', queryParameters: {
+        if (date != null && date.isNotEmpty) 'date': date,
+      });
+      if (response.data is Map) {
+        final data = response.data['data'];
+        if (data is Map) {
+          return Map<String, dynamic>.from(data);
+        }
+        return Map<String, dynamic>.from(response.data);
+      }
+      return {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveBuffets() async {
+    try {
+      final bId = await _branchId;
+      final response = await _dio.get('/buffet', queryParameters: {
+        if (bId != null) 'branch_id': bId,
+      });
+      return _parseMapList(response.data);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveCateringEvents() async {
+    try {
+      final bId = await _branchId;
+      final response = await _dio.get('/catering-bookings', queryParameters: {
+        if (bId != null) 'branch_id': bId,
+      });
+      return _parseMapList(response.data);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveConferences() async {
+    try {
+      final bId = await _branchId;
+      final response = await _dio.get('/conference/bookings', queryParameters: {
+        if (bId != null) 'branch_id': bId,
+        'status': 'confirmed',
+      });
+      return _parseMapList(response.data);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveEventOrders({
+    String? eventType,
+  }) async {
+    try {
+      final bId = await _branchId;
+      final response =
+          await _dio.get('/accounting/event-orders', queryParameters: {
+        if (bId != null) 'branch_id': bId,
+        'active_only': 'true',
+        if (eventType != null && eventType.isNotEmpty) 'event_type': eventType,
+      });
+      return _parseMapList(response.data['data']);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> getReconciliationReport(String shiftId) async {
+    try {
+      final response =
+          await _dio.get('/kitchen/shifts/$shiftId/reconciliation-report');
+      return Map<String, dynamic>.from(response.data is Map
+          ? response.data['data'] ?? response.data
+          : response.data);
+    } on DioException catch (e) {
+      throw Exception(_errorMessage(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> getDailyControlsReport(String shiftId) async {
+    try {
+      final response = await _dio.get('/kitchen/shifts/$shiftId/daily-controls');
+      return Map<String, dynamic>.from(response.data is Map
+          ? response.data['data'] ?? response.data
+          : response.data);
     } on DioException catch (e) {
       throw Exception(_errorMessage(e));
     }

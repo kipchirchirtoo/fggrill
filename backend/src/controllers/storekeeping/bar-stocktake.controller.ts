@@ -58,6 +58,66 @@ const getSinceLastApprovalWindow = async (
     return { from, to: dayEnd };
 };
 
+const resolveBarOutlet = async (branchId: number, barLocation: string) => {
+    const outletTypes =
+        barLocation === 'executive_bar'
+            ? ['executive_bar', 'kyogong_executive_bar']
+            : ['main_bar', 'sports_bar', 'kyogong_sports_bar'];
+
+    const { data, error } = await supabase
+        .from('pos_outlets')
+        .select('id, branch_id, outlet_type, name')
+        .eq('branch_id', branchId)
+        .in('outlet_type', outletTypes)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+    if (error) throw error;
+    return data || null;
+};
+
+const loadShiftCountMaps = async (
+    outletId: string | null,
+    skus: string[],
+    fromIso: string,
+    toIso: string
+): Promise<{ additionsBySku: Map<string, number>; salesBySku: Map<string, number> }> => {
+    const additionsBySku = new Map<string, number>();
+    const salesBySku = new Map<string, number>();
+    if (!outletId || skus.length === 0) {
+        return { additionsBySku, salesBySku };
+    }
+
+    const { data: shifts, error: shiftsError } = await supabase
+        .from('cashier_shift_logs')
+        .select('id')
+        .eq('outlet_id', outletId)
+        .gte('shift_start', fromIso)
+        .lt('shift_start', toIso);
+    if (shiftsError) throw shiftsError;
+
+    const shiftIds = (shifts || []).map((row: any) => String(row.id)).filter(Boolean);
+    if (shiftIds.length === 0) {
+        return { additionsBySku, salesBySku };
+    }
+
+    const { data: countRows, error: countError } = await supabase
+        .from('pos_shift_stock_counts')
+        .select('sku, additions, sold_quantity')
+        .in('shift_id', shiftIds)
+        .in('sku', skus);
+    if (countError) throw countError;
+
+    for (const row of (countRows || [])) {
+        const sku = String(row.sku || '');
+        if (!sku) continue;
+        additionsBySku.set(sku, (additionsBySku.get(sku) ?? 0) + num(row.additions));
+        salesBySku.set(sku, (salesBySku.get(sku) ?? 0) + num(row.sold_quantity));
+    }
+
+    return { additionsBySku, salesBySku };
+};
+
 const loadRecord = async (id: string): Promise<Record<string, any> | null> => {
     const { data, error } = await supabase
         .from('bar_stocktake_records')
@@ -73,7 +133,9 @@ const loadRecord = async (id: string): Promise<Record<string, any> | null> => {
  * looking up cashier_shift_logs for each distinct shift_id in the records.
  */
 const enrichWithShiftInfo = async (records: any[]): Promise<any[]> => {
-    const shiftIds = [...new Set(records.map((r: any) => r.shift_id).filter(Boolean))] as string[];
+    const shiftIds = Array.from(
+        new Set(records.map((r: any) => r.shift_id).filter(Boolean))
+    ) as string[];
     if (shiftIds.length === 0) return records;
     const { data: shifts } = await supabase
         .from('cashier_shift_logs')
@@ -336,7 +398,8 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         //    for items the storekeeper has formally received, so using it as the
         //    source silently drops every item not yet restocked.  bar_drinks holds
         //    ALL items for the branch regardless of stock movement history.
-        const [{ data: allDrinks, error: drinksErr }, { data: barStockRows, error: stockErr }] = await Promise.all([
+        const outlet = await resolveBarOutlet(branchId, locationFilter);
+        const [{ data: allDrinks, error: drinksErr }, { data: posRows, error: stockErr }] = await Promise.all([
             supabase
                 .from('bar_drinks')
                 .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id')
@@ -344,9 +407,10 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 .eq('is_active', true)
                 .order('name'),
             supabase
-                .from('bar_stock')
-                .select('drink_id, current_stock')
-                .eq('branch_id', branchId),
+                .from('pos_outlet_items')
+                .select('source_item_id, sku, current_stock')
+                .eq('outlet_id', outlet?.id || '00000000-0000-0000-0000-000000000000')
+                .eq('source_table', 'bar_drinks'),
         ]);
         if (drinksErr) throw drinksErr;
         if (stockErr) throw stockErr;
@@ -354,7 +418,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         const drinkRows = (allDrinks || []) as Array<Record<string, any>>;
         // Build a quick lookup: drink_id → current_stock (0 if no bar_stock row yet)
         const stockByDrinkId = new Map<string, number>(
-            (barStockRows || []).map((r: any) => [String(r.drink_id), num(r.current_stock)])
+            (posRows || []).map((r: any) => [String(r.source_item_id), num(r.current_stock)])
         );
 
         // inventory_item_id is populated by the unification migration.
@@ -388,28 +452,23 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             }
         }
 
-        const drinkIds = drinkRows.map((d: any) => String(d.id)).filter(Boolean);
+        const drinkSkus = drinkRows
+            .map((d: any) => String(d.sku || `BAR-${d.id}`))
+            .filter(Boolean);
+        const { additionsBySku, salesBySku } = await loadShiftCountMaps(
+            outlet?.id || null,
+            drinkSkus,
+            sumWindow.from,
+            sumWindow.to
+        );
         const additionsByInvId = new Map<string, number>();
         const salesByInvId = new Map<string, number>();
-        if (drinkIds.length > 0) {
-            const { data: ledgerRows } = await supabase
-                .from('bar_stock_ledger')
-                .select('drink_id, transaction_type, quantity')
-                .eq('branch_id', branchId)
-                .in('drink_id', drinkIds)
-                .gte('created_at', sumWindow.from)
-                .lt('created_at', sumWindow.to);
-            for (const row of (ledgerRows || [])) {
-                const did = String(row.drink_id);
-                const invId = invIdByDrinkId.get(did);
-                if (!invId) continue;
-                const tType = (row.transaction_type || '').toLowerCase();
-                if (tType === 'restock') {
-                    additionsByInvId.set(invId, (additionsByInvId.get(invId) ?? 0) + num(row.quantity));
-                } else if (tType === 'sale') {
-                    salesByInvId.set(invId, (salesByInvId.get(invId) ?? 0) + num(row.quantity));
-                }
-            }
+        for (const d of drinkRows) {
+            const invId = invIdByDrinkId.get(String(d.id));
+            if (!invId) continue;
+            const sku = String(d.sku || `BAR-${d.id}`);
+            additionsByInvId.set(invId, additionsBySku.get(sku) ?? 0);
+            salesByInvId.set(invId, salesBySku.get(sku) ?? 0);
         }
 
         // 2. Check for existing bar_stocktake_records for this branch/date/location
@@ -558,41 +617,41 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
 
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, bar_location, stocktakeDate);
         const sumWindow = await getSinceLastApprovalWindow(branchId, bar_location, stocktakeDate);
-        const [{ data: stockRows }, { data: ledgerRows }] = await Promise.all([
-            resolvedDrinkIds.length > 0
-                ? supabase.from('bar_stock').select('drink_id, current_stock').eq('branch_id', branchId).in('drink_id', resolvedDrinkIds)
+        const outlet = await resolveBarOutlet(branchId, bar_location);
+        const [{ data: posRows }, { additionsBySku, salesBySku }] = await Promise.all([
+            resolvedDrinkIds.length > 0 && outlet?.id
+                ? supabase
+                    .from('pos_outlet_items')
+                    .select('source_item_id, sku, current_stock')
+                    .eq('outlet_id', outlet.id)
+                    .eq('source_table', 'bar_drinks')
+                    .in('source_item_id', resolvedDrinkIds)
                 : Promise.resolve({ data: [] }),
-            resolvedDrinkIds.length > 0
-                ? supabase.from('bar_stock_ledger')
-                    .select('drink_id, transaction_type, quantity')
-                    .eq('branch_id', branchId)
-                    .in('drink_id', resolvedDrinkIds)
-                    .gte('created_at', sumWindow.from)
-                    .lt('created_at', sumWindow.to)
-                : Promise.resolve({ data: [] }),
+            loadShiftCountMaps(
+                outlet?.id || null,
+                branchDrinks
+                    .filter((d) => resolvedDrinkIds.includes(String(d.id)))
+                    .map((d) => String(d.sku || `BAR-${d.id}`)),
+                sumWindow.from,
+                sumWindow.to
+            ),
         ]);
 
         // Build stockByInvId using the drinkIdByInvId reverse map.
         const stockByDrinkId = new Map<string, number>(
-            (stockRows || []).map((r: any) => [String(r.drink_id), num(r.current_stock)])
+            (posRows || []).map((r: any) => [String(r.source_item_id), num(r.current_stock)])
         );
         const additionsByInvId = new Map<string, number>();
         const salesByInvId = new Map<string, number>();
-        for (const row of (ledgerRows || [])) {
-            const did = String(row.drink_id);
-            // find which invId this drink maps to
-            const invId = Array.from(drinkIdByInvId.entries()).find(([, d]) => d === did)?.[0];
-            if (!invId) continue;
-            const tType = (row.transaction_type || '').toLowerCase();
-            if (tType === 'restock') {
-                additionsByInvId.set(invId, (additionsByInvId.get(invId) ?? 0) + num(row.quantity));
-            } else if (tType === 'sale') {
-                salesByInvId.set(invId, (salesByInvId.get(invId) ?? 0) + num(row.quantity));
-            }
+        for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
+            const drink = branchDrinks.find((d) => String(d.id) === drinkId);
+            const sku = String(drink?.sku || `BAR-${drinkId}`);
+            additionsByInvId.set(invId, additionsBySku.get(sku) ?? 0);
+            salesByInvId.set(invId, salesBySku.get(sku) ?? 0);
         }
 
         const stockByInvId = new Map<string, number>();
-        for (const [invId, drinkId] of drinkIdByInvId.entries()) {
+        for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
             stockByInvId.set(invId, stockByDrinkId.get(drinkId) ?? 0);
         }
 

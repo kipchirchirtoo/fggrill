@@ -1,0 +1,365 @@
+Food control is calculated by asking **where the food went** and comparing:
+
+```text
+Expected food usage vs Actual food usage
+```
+
+## Main formula
+
+```text
+Actual Consumption = Opening Stock + Stock Issued/Added + Produced Stock - Physical Count
+```
+
+Then:
+
+```text
+Variance = Actual Consumption - Expected Consumption
+```
+
+If actual is higher than expected, there is overuse/shortage.
+
+---
+
+# 1. Channels in Kitchen Sessions
+
+These are the food-control channels:
+
+```text
+1. POS_RESTAURANT
+2. ACCOMMODATION_BREAKFAST
+3. BUFFET
+4. CONFERENCE
+5. OUTSIDE_CATERING
+6. STAFF_MEAL
+7. WASTAGE / SPOILAGE
+8. TRUE_BATCH_PRODUCTION
+```
+
+Each channel has a different way of calculating **expected usage**.
+
+---
+
+# 2. POS_RESTAURANT
+
+Used for normal restaurant sales.
+
+Example:
+
+```text
+Chips sold through POS = 100 plates
+Standard: 1 plate chips = 0.35kg potatoes
+```
+
+Expected usage:
+
+```text
+100 × 0.35kg = 35kg potatoes
+```
+
+Actual usage:
+
+```text
+Opening potatoes + issued potatoes - physical potatoes count
+```
+
+Variance:
+
+```text
+Actual potatoes used - 35kg
+```
+
+So POS food control is:
+
+```text
+POS sales × menu recipe standard = expected usage
+```
+
+---
+
+# 3. ACCOMMODATION_BREAKFAST
+
+Used for hotel guests with breakfast.
+
+No Event Order needed.
+
+Expected usage comes from:
+
+```text
+Breakfast pax × breakfast standard
+```
+
+Example:
+
+```text
+Breakfast pax = 50 guests
+
+Standard:
+1 guest = 1 egg + 2 slices bread + 100ml milk
+```
+
+Expected:
+
+```text
+Eggs = 50 pcs
+Bread = 100 slices
+Milk = 5 litres
+```
+
+Then compare with actual stock used.
+
+---
+
+# 4. BUFFET
+
+Buffet requires an **Event Order**.
+
+Expected usage comes from:
+
+```text
+Event pax × buffet package standard
+```
+
+Example:
+
+```text
+Buffet pax = 100
+
+Standard per pax:
+Rice = 0.15kg
+Beef = 0.20kg
+Chapati = 2 pcs
+```
+
+Expected:
+
+```text
+Rice = 15kg
+Beef = 20kg
+Chapati = 200 pcs
+```
+
+Actual comes from stock issued to the buffet event.
+
+---
+
+# 5. CONFERENCE
+
+Conference also requires an **Event Order**.
+
+Expected usage:
+
+```text
+Conference pax × conference package standard
+```
+
+Example:
+
+```text
+Safaricom Training
+Pax = 80
+Lunch package
+```
+
+Standard:
+
+```text
+Beef = 0.20kg per pax
+Rice = 0.15kg per pax
+```
+
+Expected:
+
+```text
+Beef = 16kg
+Rice = 12kg
+```
+
+Then accountant compares against actual stock issued to that event.
+
+---
+
+# 6. OUTSIDE_CATERING
+
+Outside catering requires an **Event Order** because food leaves the hotel.
+
+Expected usage:
+
+```text
+Catering pax × catering package standard
+```
+
+Example:
+
+```text
+Wedding catering
+Pax = 300
+```
+
+Standard:
+
+```text
+Rice = 0.15kg per pax
+Beef = 0.20kg per pax
+Chapati = 2 pcs per pax
+```
+
+Expected:
+
+```text
+Rice = 45kg
+Beef = 60kg
+Chapati = 600 pcs
+```
+
+Actual is what storekeeper issued under OUTSIDE_CATERING.
+
+---
+
+# 7. STAFF_MEAL
+
+No Event Order needed.
+
+Expected usage:
+
+```text
+Staff meal pax × staff meal standard
+```
+
+Example:
+
+```text
+Staff fed = 30
+
+Standard:
+Rice = 0.12kg per staff
+Beans = 0.15kg per staff
+```
+
+Expected:
+
+```text
+Rice = 3.6kg
+Beans = 4.5kg
+```
+
+Staff meals have no revenue, but the food cost must still be tracked.
+
+---
+
+# 8. WASTAGE / SPOILAGE
+
+Wastage does not use POS sales or pax.
+
+It is recorded directly:
+
+```text
+Item wasted × quantity × cost = wastage cost
+```
+
+Example:
+
+```text
+Milk expired = 5 litres
+Chicken burnt = 2kg
+Rice spoiled = 3kg
+```
+
+Accountant reviews:
+
+```text
+Reason
+Responsible area
+Approval
+Recoverable or write-off
+```
+
+---
+
+# 9. TRUE_BATCH_PRODUCTION
+
+Used for items produced before sale.
+
+Examples:
+
+```text
+Juice
+Pastry
+Bakery
+Sauces
+Chapati batch
+Cake
+Mandazi
+```
+
+Expected output is calculated from production/yield standard.
+
+Example:
+
+```text
+Standard:
+10kg mangoes = 25 litres juice
+```
+
+Actual:
+
+```text
+Chef reports 22 litres produced
+```
+
+Production variance:
+
+```text
+Actual output - Expected output
+22L - 25L = -3L shortage
+```
+
+Then finished juice becomes stock.
+
+Later, POS sale deducts from finished stock using serving standard:
+
+```text
+1 glass juice = 250ml
+```
+
+So batch production has two controls:
+
+```text
+1. Raw inputs → finished output
+2. Finished output → POS serving
+```
+
+The Kitchen Sessions setup already includes the core production/stocktake tables like `kitchen_shift_items`, `kitchen_shift_production`, and `kitchen_shift_stock_take`, while recipe rows were not seeded yet, so standards must be configured before live variance calculations are active. 
+
+---
+
+# 10. Summary table
+
+| Channel                 | Expected usage comes from          |                          Event Order? |
+| ----------------------- | ---------------------------------- | ------------------------------------: |
+| POS_RESTAURANT          | POS sales × recipe standard        |                                    No |
+| ACCOMMODATION_BREAKFAST | Breakfast pax × breakfast standard |                                    No |
+| BUFFET                  | Event pax × buffet standard        |                                   Yes |
+| CONFERENCE              | Event pax × conference standard    |                                   Yes |
+| OUTSIDE_CATERING        | Catering pax × catering standard   |                                   Yes |
+| STAFF_MEAL              | Staff pax × staff meal standard    |                                    No |
+| WASTAGE                 | Recorded wastage quantity          |                                    No |
+| TRUE_BATCH_PRODUCTION   | Raw input × yield standard         | No, unless production is for an event |
+
+---
+
+# Final logic
+
+```text
+Storekeeper records actual stock movement.
+POS / pax / event orders tell the system why food was used.
+Standards tell the system what should have been used.
+Kitchen stocktake tells the system what is physically left.
+System calculates variance.
+Branch accountant reviews the variance.
+```
+
+So food control is:
+
+```text
+Expected Usage - Actual Usage - Variance - Accountant Review
+```

@@ -14,10 +14,14 @@ final _logoutIcon = PhosphorIcons.signOut();
 
 class SuperAdminTopBar extends ConsumerWidget {
   final VoidCallback? onMenuTap;
+  final VoidCallback? onToggleSidebar;
+  final bool sidebarCollapsed;
 
   const SuperAdminTopBar({
     super.key,
     this.onMenuTap,
+    this.onToggleSidebar,
+    this.sidebarCollapsed = false,
   });
 
   @override
@@ -78,6 +82,18 @@ class SuperAdminTopBar extends ConsumerWidget {
                 IconButton(
                   onPressed: onMenuTap,
                   icon: Icon(_menuIcon, color: Colors.grey.shade700),
+                ),
+              if (onToggleSidebar != null && onMenuTap == null)
+                IconButton(
+                  onPressed: onToggleSidebar,
+                  tooltip:
+                      sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar',
+                  icon: Icon(
+                    sidebarCollapsed
+                        ? Icons.keyboard_double_arrow_right
+                        : Icons.keyboard_double_arrow_left,
+                    color: Colors.grey.shade700,
+                  ),
                 ),
               if (onMenuTap != null) const SizedBox(width: 16),
 

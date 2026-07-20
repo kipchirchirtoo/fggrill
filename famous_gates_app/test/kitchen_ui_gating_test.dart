@@ -11,6 +11,12 @@ import 'package:famous_gates_app/core/router/app_router.dart';
 import 'package:go_router/go_router.dart';
 import 'package:famous_gates_app/features/kitchen/domain/providers.dart';
 import 'package:famous_gates_app/features/kitchen/domain/models.dart';
+import 'package:famous_gates_app/features/branch_storekeeper/data/branch_storekeeper_repository.dart';
+import 'package:famous_gates_app/features/branch_storekeeper/presentation/branch_storekeeper_dashboard.dart';
+import 'package:famous_gates_app/features/branch_accountant/presentation/branch_accountant_dashboard.dart';
+import 'package:famous_gates_app/features/branch_accountant/data/repository.dart';
+import 'package:famous_gates_app/core/storage/secure_storage_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 
 class FakeRef implements Ref {
@@ -41,6 +47,98 @@ class FakeKitchenRepository extends KitchenRepository {
 
   @override
   Future<List<dynamic>> getShiftProductions(String shiftId) async => [];
+
+  @override
+  Future<Map<String, dynamic>> getReconciliationReport(String shiftId) async => {};
+
+  @override
+  Future<List<Map<String, dynamic>>> getActiveBuffets() async => [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getActiveCateringEvents() async => [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getActiveConferences() async => [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getActiveEventOrders({String? eventType}) async => [];
+
+  @override
+  Future<int> getBreakfastPax() async => 0;
+
+  @override
+  Future<void> closeShift({
+    required String shiftId,
+    required List<Map<String, dynamic>> physicalCounts,
+    required List<String> outgoingWitnessIds,
+    required List<String> incomingWitnessIds,
+    String? closingNotes,
+    int? breakfastPax,
+    int? staffMealPax,
+  }) async {}
+}
+
+class FakeBranchStorekeeperRepository implements BranchStorekeeperRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    final name = invocation.memberName.toString();
+    if (name.contains('dashboard') || name.contains('enterpriseInventoryAnalytics')) {
+      return Future.value(<String, dynamic>{});
+    }
+    return Future.value(<Map<String, dynamic>>[]);
+  }
+}
+
+class FakeBranchAccountantRepository implements BranchAccountantRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    final name = invocation.memberName.toString();
+    if (name.contains('getDirectorTasks') || name.contains('tasks')) {
+      return Future.value(<Map<String, dynamic>>[]);
+    }
+    if (name.contains('getAnalytics') || name.contains('profitLoss') || name.contains('stats') || name.contains('discrepancies')) {
+      return Future.value(<String, dynamic>{});
+    }
+    return Future.value(<Map<String, dynamic>>[]);
+  }
+}
+
+class FakeSecureStorage implements FlutterSecureStorage {
+  final Map<String, String> _storage = {};
+
+  @override
+  Future<String?> read({
+    required String key,
+    dynamic iOptions,
+    dynamic aOptions,
+    dynamic lOptions,
+    dynamic webOptions,
+    dynamic mOptions,
+    dynamic wOptions,
+  }) async {
+    return _storage[key];
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    dynamic iOptions,
+    dynamic aOptions,
+    dynamic lOptions,
+    dynamic webOptions,
+    dynamic mOptions,
+    dynamic wOptions,
+  }) async {
+    if (value == null) {
+      _storage.remove(key);
+    } else {
+      _storage[key] = value;
+    }
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class FakeAuthNotifier extends AuthNotifier {
@@ -88,6 +186,8 @@ void main() {
       // Wait for future and providers to resolve
       await tester.pump();
       await tester.pump();
+      await tester.pump();
+      await tester.pump();
 
       // Check for blocked elements
       expect(find.byIcon(Icons.block), findsOneWidget);
@@ -129,11 +229,13 @@ void main() {
 
       await tester.pump();
       await tester.pump();
+      await tester.pump();
+      await tester.pump();
 
       // Check for open shift view elements
       expect(find.text('Open Kitchen Shift'), findsOneWidget);
-      // Under TWO_SHIFT, we should render the sub-shift selector
-      expect(find.text('Sub-shift (Session)'), findsOneWidget);
+      // Under TWO_SHIFT, we should render the shift selector
+      expect(find.text('Shift (Session)'), findsOneWidget);
     });
 
     testWidgets('Hides sub-shift selector when enabled is true (Mogogosiek SINGLE_SHIFT mode)', (tester) async {
@@ -170,11 +272,13 @@ void main() {
 
       await tester.pump();
       await tester.pump();
+      await tester.pump();
+      await tester.pump();
 
       // Check for open shift view elements
       expect(find.text('Open Kitchen Shift'), findsOneWidget);
-      // Under SINGLE_SHIFT, the sub-shift selector is hidden (SizedBox.shrink)
-      expect(find.text('Sub-shift (Session)'), findsNothing);
+      // Under SINGLE_SHIFT, the shift selector is hidden (SizedBox.shrink)
+      expect(find.text('Shift (Session)'), findsNothing);
     });
 
     testWidgets('Gives read-only view and hides open shift action for super_admin when activeShift is null', (tester) async {
@@ -209,6 +313,8 @@ void main() {
         ),
       );
 
+      await tester.pump();
+      await tester.pump();
       await tester.pump();
       await tester.pump();
 
@@ -266,6 +372,8 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.pump();
+      await tester.pump();
+      await tester.pump();
 
       expect(find.text('Read-Only Session View'), findsOneWidget);
       expect(find.text('Log Production'), findsNothing);
@@ -305,6 +413,8 @@ void main() {
         ),
       );
 
+      await tester.pump();
+      await tester.pump();
       await tester.pump();
       await tester.pump();
 
@@ -362,11 +472,452 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.pump();
+      await tester.pump();
+      await tester.pump();
 
       expect(find.text('Read-Only Session View'), findsOneWidget);
       expect(find.text('Log Production'), findsNothing);
       expect(find.text('Add Mid-session Stock'), findsNothing);
       expect(find.text('Close shift / Handover'), findsNothing);
+    });
+
+    testWidgets('Branch storekeeper dashboard opens KitchenSessionsScreen, not legacy _KitchenProductionSection', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const mockStorekeeper = User(
+        id: '3',
+        name: 'Test Storekeeper',
+        email: 'storekeeper@test.com',
+        role: 'branch_storekeeper',
+        branchId: '5',
+        branchName: 'Mogogoshiek',
+        roles: ['branch_storekeeper'],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(() => FakeAuthNotifier(mockStorekeeper)),
+            branchStorekeeperRepositoryProvider.overrideWithValue(FakeBranchStorekeeperRepository()),
+            secureStorageProvider.overrideWithValue(FakeSecureStorage()),
+            kitchenRepositoryProvider.overrideWithValue(
+              FakeKitchenRepository(
+                KitchenShiftConfig(
+                  enabled: true,
+                  reason: null,
+                  shiftMode: 'SINGLE_SHIFT',
+                ),
+                null,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: BranchStorekeeperDashboard(
+                initialSection: BranchStorekeeperSection.kitchenProduction,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(KitchenSessionsScreen), findsOneWidget);
+      expect(find.text('Open Kitchen Shift'), findsOneWidget);
+    });
+
+    testWidgets('Bomet branch_id 2 renders TWO_SHIFT / Shift A/B', (tester) async {
+      const mockStorekeeper = User(
+        id: '3',
+        name: 'Test Storekeeper',
+        email: 'storekeeper@test.com',
+        role: 'branch_storekeeper',
+        branchId: '2',
+        branchName: 'Bomet Town',
+        roles: ['branch_storekeeper'],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(() => FakeAuthNotifier(mockStorekeeper)),
+            kitchenRepositoryProvider.overrideWithValue(
+              FakeKitchenRepository(
+                KitchenShiftConfig(
+                  enabled: true,
+                  reason: null,
+                  shiftMode: 'TWO_SHIFT',
+                ),
+                null,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: KitchenSessionsScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Open Kitchen Shift'), findsOneWidget);
+      expect(find.text('Shift (Session)'), findsOneWidget);
+    });
+
+    testWidgets('Mogogosiek branch_id 5 renders SINGLE_SHIFT / no Shift A/B', (tester) async {
+      const mockStorekeeper = User(
+        id: '3',
+        name: 'Test Storekeeper',
+        email: 'storekeeper@test.com',
+        role: 'branch_storekeeper',
+        branchId: '5',
+        branchName: 'Mogogoshiek',
+        roles: ['branch_storekeeper'],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(() => FakeAuthNotifier(mockStorekeeper)),
+            kitchenRepositoryProvider.overrideWithValue(
+              FakeKitchenRepository(
+                KitchenShiftConfig(
+                  enabled: true,
+                  reason: null,
+                  shiftMode: 'SINGLE_SHIFT',
+                ),
+                null,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: KitchenSessionsScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Open Kitchen Shift'), findsOneWidget);
+      expect(find.text('Shift (Session)'), findsNothing);
+    });
+
+    test('Switching users/branches invalidates cached shift config', () async {
+      final container = ProviderContainer(
+        overrides: [
+          authNotifierProvider.overrideWith(() => FakeAuthNotifier(
+            const User(
+              id: '3',
+              name: 'Bomet User',
+              email: 'bomet@test.com',
+              role: 'branch_storekeeper',
+              branchId: '2',
+              branchName: 'Bomet Town',
+              roles: ['branch_storekeeper'],
+            ),
+          )),
+          kitchenRepositoryProvider.overrideWithValue(
+            FakeKitchenRepository(
+              KitchenShiftConfig(
+                enabled: true,
+                reason: null,
+                shiftMode: 'TWO_SHIFT',
+              ),
+              null,
+            ),
+          ),
+        ],
+      );
+
+      final sub = container.listen(shiftConfigProvider, (_, __) {});
+
+      final config1 = await container.read(shiftConfigProvider.future);
+      expect(config1.shiftMode, 'TWO_SHIFT');
+
+      container.updateOverrides([
+        authNotifierProvider.overrideWith(() => FakeAuthNotifier(
+          const User(
+            id: '4',
+            name: 'Mogogosiek User',
+            email: 'mogogosiek@test.com',
+            role: 'branch_storekeeper',
+            branchId: '5',
+            branchName: 'Mogogoshiek',
+            roles: ['branch_storekeeper'],
+          ),
+        )),
+        kitchenRepositoryProvider.overrideWithValue(
+          FakeKitchenRepository(
+            KitchenShiftConfig(
+              enabled: true,
+              reason: null,
+              shiftMode: 'SINGLE_SHIFT',
+            ),
+            null,
+          ),
+        ),
+      ]);
+
+      // Let the microtask queue run to apply updated overrides
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final config2 = await container.read(shiftConfigProvider.future);
+      expect(config2.shiftMode, 'SINGLE_SHIFT');
+      sub.close();
+    });
+
+    testWidgets('Branch accountant route/menu exists and is read-only', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const mockAccountant = User(
+        id: '5',
+        name: 'Test Accountant',
+        email: 'accountant@test.com',
+        role: 'branch_accountant',
+        branchId: '2',
+        branchName: 'Bomet Town',
+        roles: ['branch_accountant'],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(() => FakeAuthNotifier(mockAccountant)),
+            secureStorageProvider.overrideWithValue(FakeSecureStorage()),
+            branchAccountantRepositoryProvider.overrideWithValue(FakeBranchAccountantRepository()),
+            kitchenRepositoryProvider.overrideWithValue(
+              FakeKitchenRepository(
+                KitchenShiftConfig(
+                  enabled: true,
+                  reason: null,
+                  shiftMode: 'TWO_SHIFT',
+                ),
+                null,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: BranchAccountantDashboard(
+                initialSection: BranchAccountantSection.kitchenVariance,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(KitchenSessionsScreen), findsOneWidget);
+      expect(find.text('Open Kitchen Shift'), findsNothing);
+      expect(find.text('No Active Kitchen Session'), findsOneWidget);
+    });
+
+    testWidgets('Bomet storekeeper dashboard navigates via sidebar menu to Kitchen Sessions and renders TWO_SHIFT / Shift A/B', (tester) async {
+      tester.view.physicalSize = const Size(1920, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const mockStorekeeper = User(
+        id: '3',
+        name: 'Test Storekeeper',
+        email: 'storekeeper@test.com',
+        role: 'branch_storekeeper',
+        branchId: '2',
+        branchName: 'Bomet Town',
+        roles: ['branch_storekeeper'],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(() => FakeAuthNotifier(mockStorekeeper)),
+            branchStorekeeperRepositoryProvider.overrideWithValue(FakeBranchStorekeeperRepository()),
+            secureStorageProvider.overrideWithValue(FakeSecureStorage()),
+            kitchenRepositoryProvider.overrideWithValue(
+              FakeKitchenRepository(
+                KitchenShiftConfig(
+                  enabled: true,
+                  reason: null,
+                  shiftMode: 'TWO_SHIFT',
+                ),
+                null,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: BranchStorekeeperDashboard(
+                initialSection: BranchStorekeeperSection.overview,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.text('Kitchen Sessions'));
+      
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(KitchenSessionsScreen), findsOneWidget);
+      expect(find.text('Open Kitchen Shift'), findsOneWidget);
+      expect(find.text('Shift (Session)'), findsOneWidget);
+    });
+
+    testWidgets('Mogogosiek storekeeper dashboard navigates via sidebar menu to Kitchen Sessions and renders SINGLE_SHIFT / no Shift A/B', (tester) async {
+      tester.view.physicalSize = const Size(1920, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const mockStorekeeper = User(
+        id: '3',
+        name: 'Test Storekeeper',
+        email: 'storekeeper@test.com',
+        role: 'branch_storekeeper',
+        branchId: '5',
+        branchName: 'Mogogoshiek',
+        roles: ['branch_storekeeper'],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(() => FakeAuthNotifier(mockStorekeeper)),
+            branchStorekeeperRepositoryProvider.overrideWithValue(FakeBranchStorekeeperRepository()),
+            secureStorageProvider.overrideWithValue(FakeSecureStorage()),
+            kitchenRepositoryProvider.overrideWithValue(
+              FakeKitchenRepository(
+                KitchenShiftConfig(
+                  enabled: true,
+                  reason: null,
+                  shiftMode: 'SINGLE_SHIFT',
+                ),
+                null,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: BranchStorekeeperDashboard(
+                initialSection: BranchStorekeeperSection.overview,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.text('Kitchen Sessions'));
+      
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(KitchenSessionsScreen), findsOneWidget);
+      expect(find.text('Open Kitchen Shift'), findsOneWidget);
+      expect(find.text('Shift (Session)'), findsNothing);
+    });
+
+    testWidgets('Branch accountant dashboard navigates via sidebar menu to Kitchen Sessions and renders read-only view', (tester) async {
+      tester.view.physicalSize = const Size(1920, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const mockAccountant = User(
+        id: '5',
+        name: 'Test Accountant',
+        email: 'accountant@test.com',
+        role: 'branch_accountant',
+        branchId: '2',
+        branchName: 'Bomet Town',
+        roles: ['branch_accountant'],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(() => FakeAuthNotifier(mockAccountant)),
+            secureStorageProvider.overrideWithValue(FakeSecureStorage()),
+            branchAccountantRepositoryProvider.overrideWithValue(FakeBranchAccountantRepository()),
+            kitchenRepositoryProvider.overrideWithValue(
+              FakeKitchenRepository(
+                KitchenShiftConfig(
+                  enabled: true,
+                  reason: null,
+                  shiftMode: 'TWO_SHIFT',
+                ),
+                null,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: BranchAccountantDashboard(
+                initialSection: BranchAccountantSection.overview,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.text('Kitchen Sessions'));
+      
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(KitchenSessionsScreen), findsOneWidget);
+      expect(find.text('Open Kitchen Shift'), findsNothing);
+      expect(find.text('No Active Kitchen Session'), findsOneWidget);
     });
   });
 

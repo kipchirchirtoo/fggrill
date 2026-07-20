@@ -42,19 +42,28 @@ import '../../admin/presentation/sections/suppliers_section.dart';
 import '../../admin/presentation/sections/vehicles_section.dart';
 import '../../admin/presentation/sections/central_store_subsections.dart';
 
-class SuperAdminScreen extends ConsumerWidget {
+class SuperAdminScreen extends ConsumerStatefulWidget {
   final SuperAdminSection? initialSection;
 
   const SuperAdminScreen({super.key, this.initialSection});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SuperAdminScreen> createState() => _SuperAdminScreenState();
+}
+
+class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
+  bool _sidebarCollapsed = false;
+  bool _sidebarOverrideActive = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final initialSection = widget.initialSection;
     if (initialSection != null) {
       final selected = ref.read(superAdminSectionProvider);
       if (selected != initialSection) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!context.mounted) return;
-          ref.read(superAdminSectionProvider.notifier).state = initialSection!;
+          ref.read(superAdminSectionProvider.notifier).state = initialSection;
         });
       }
     }
@@ -62,20 +71,34 @@ class SuperAdminScreen extends ConsumerWidget {
     final isMobile = MediaQuery.of(context).size.width < 768;
     final isTablet = MediaQuery.of(context).size.width >= 768 &&
         MediaQuery.of(context).size.width < 1024;
-    final navWidth = isMobile ? 0.0 : (isTablet ? 64.0 : 240.0);
+    final effectiveSidebarCollapsed = _sidebarOverrideActive
+        ? _sidebarCollapsed
+        : (_sidebarCollapsed || isTablet);
+    final navWidth =
+        isMobile ? 0.0 : (effectiveSidebarCollapsed ? 64.0 : 240.0);
 
     return Scaffold(
       backgroundColor: AppColors.kSurface,
       body: Row(
         children: [
           if (!isMobile)
-            SuperAdminSideNav(width: navWidth, isCollapsed: isTablet),
+            SuperAdminSideNav(
+              width: navWidth,
+              isCollapsed: effectiveSidebarCollapsed,
+            ),
           Expanded(
             child: Column(
               children: [
                 SuperAdminTopBar(
                   onMenuTap:
                       isMobile ? () => _showMobileNav(context, ref) : null,
+                  onToggleSidebar: !isMobile
+                      ? () => setState(() {
+                            _sidebarOverrideActive = true;
+                            _sidebarCollapsed = !effectiveSidebarCollapsed;
+                          })
+                      : null,
+                  sidebarCollapsed: effectiveSidebarCollapsed,
                 ),
                 Expanded(
                   child: _buildSection(currentSection, ref),

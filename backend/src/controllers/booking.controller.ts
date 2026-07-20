@@ -10,6 +10,90 @@ import { bookingService, BookingRequest } from '../services/booking.service';
 import { emailService } from '../services/email.service';
 import { isGlobalRole } from '../utils/branchIsolation';
 
+const BREAKFAST_ELIGIBLE_MEAL_PLANS = [
+  'bb',
+  'hb',
+  'fb',
+  'bed_breakfast',
+  'half_board',
+  'full_board',
+  'bed & breakfast',
+  'half board',
+  'full board',
+];
+
+function todayInNairobi(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
+}
+
+function mealPlanIncludesBreakfast(value: unknown): boolean {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  if (!normalized) return false;
+  return BREAKFAST_ELIGIBLE_MEAL_PLANS.some((code) => normalized.includes(code));
+}
+
+async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
+  const { data: reservations, error } = await supabase
+    .from('reservations')
+    .select(`
+      id,
+      confirmation_number,
+      guest_id,
+      room_id,
+      adults,
+      children,
+      meal_plan,
+      check_in_date,
+      check_out_date,
+      guest:guests!guest_id(first_name,last_name)
+    `)
+    .eq('branch_id', branchId)
+    .eq('status', 'checked_in')
+    .lte('check_in_date', date)
+    .gt('check_out_date', date);
+
+  if (error) throw error;
+
+  const eligibleBookings = (reservations || [])
+    .filter((row: any) => mealPlanIncludesBreakfast(row.meal_plan))
+    .map((row: any) => ({
+      reservation_id: row.id,
+      confirmation_number: row.confirmation_number,
+      guest_name: `${row.guest?.first_name || ''} ${row.guest?.last_name || ''}`.trim(),
+      meal_plan: row.meal_plan,
+      adults: Number(row.adults || 0),
+      children: Number(row.children || 0),
+      pax: Number(row.adults || 0) + Number(row.children || 0),
+      check_in_date: row.check_in_date,
+      check_out_date: row.check_out_date,
+    }));
+
+  return {
+    calculatedPax: eligibleBookings.reduce(
+      (sum: number, row: any) => sum + Number(row.pax || 0),
+      0
+    ),
+    checkedInReservations: reservations?.length || 0,
+    eligibleReservations: eligibleBookings.length,
+    eligibleBookings,
+  };
+}
+
+async function getBreakfastPaxRecord(branchId: number, date: string) {
+  const { data, error } = await supabase
+    .from('accommodation_breakfast_pax')
+    .select('*')
+    .eq('branch_id', branchId)
+    .eq('breakfast_date', date)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 // @desc    Get all bookings
 // @route   GET /api/bookings
 // @access  Private
@@ -505,6 +589,133 @@ export const checkOutBooking = async (
     } catch (emailErr: any) {
       logger.error('Auto-send checkout invoice error:', emailErr.message);
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getDailyBreakfastPax = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const date = String(req.query.date || todayInNairobi());
+    const branchId = Number(
+      req.query.branch_id || req.query.branchId || req.user?.branch_id || 0
+    );
+    if (!branchId) {
+      throw new AppError('branch_id is required', 400);
+    }
+
+    const isGlobal = isGlobalRole(req.user?.role);
+    if (!isGlobal && Number(req.user?.branch_id || 0) !== branchId) {
+      throw new AppError('BRANCH_SCOPE_VIOLATION', 403);
+    }
+
+    const [calculated, record] = await Promise.all([
+      calculateBreakfastPaxSnapshot(branchId, date),
+      getBreakfastPaxRecord(branchId, date),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: record?.id ?? null,
+        branch_id: branchId,
+        breakfast_date: date,
+        calculated_pax: calculated.calculatedPax,
+        confirmed_pax: record?.confirmed_pax ?? calculated.calculatedPax,
+        status: record?.status ?? 'unconfirmed',
+        adjustment_reason: record?.adjustment_reason ?? null,
+        confirmed_at: record?.confirmed_at ?? null,
+        confirmed_by: record?.confirmed_by ?? null,
+        checked_in_reservations: calculated.checkedInReservations,
+        eligible_reservations: calculated.eligibleReservations,
+        eligible_bookings: calculated.eligibleBookings,
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const upsertDailyBreakfastPax = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const date = String(req.body.date || req.body.breakfast_date || todayInNairobi());
+    const branchId = Number(req.body.branch_id || req.user?.branch_id || 0);
+    if (!branchId) {
+      throw new AppError('branch_id is required', 400);
+    }
+
+    const isGlobal = isGlobalRole(req.user?.role);
+    if (!isGlobal && Number(req.user?.branch_id || 0) !== branchId) {
+      throw new AppError('BRANCH_SCOPE_VIOLATION', 403);
+    }
+
+    const status = String(req.body.status || 'draft').trim().toLowerCase();
+    if (!['draft', 'confirmed', 'locked'].includes(status)) {
+      throw new AppError('status must be draft, confirmed, or locked', 400);
+    }
+
+    const calculated = await calculateBreakfastPaxSnapshot(branchId, date);
+    const existing = await getBreakfastPaxRecord(branchId, date);
+    if (existing?.status === 'locked') {
+      throw new AppError('BREAKFAST_PAX_LOCKED: This breakfast pax record is already locked', 409);
+    }
+
+    const confirmedPax = Math.max(
+      0,
+      Number(
+        req.body.confirmed_pax ??
+          req.body.confirmedPax ??
+          existing?.confirmed_pax ??
+          calculated.calculatedPax
+      )
+    );
+
+    const payload = {
+      branch_id: branchId,
+      breakfast_date: date,
+      calculated_pax: calculated.calculatedPax,
+      confirmed_pax: confirmedPax,
+      status,
+      adjustment_reason: req.body.adjustment_reason ?? req.body.adjustmentReason ?? null,
+      source_snapshot: {
+        generated_at: new Date().toISOString(),
+        checked_in_reservations: calculated.checkedInReservations,
+        eligible_reservations: calculated.eligibleReservations,
+        eligible_bookings: calculated.eligibleBookings,
+      },
+      created_by: existing?.created_by ?? req.user?.id ?? null,
+      confirmed_by: ['confirmed', 'locked'].includes(status)
+        ? req.user?.id ?? null
+        : existing?.confirmed_by ?? null,
+      confirmed_at: ['confirmed', 'locked'].includes(status)
+        ? new Date().toISOString()
+        : existing?.confirmed_at ?? null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('accommodation_breakfast_pax')
+      .upsert(payload, { onConflict: 'branch_id,breakfast_date' })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      message: status === 'draft'
+        ? 'Breakfast pax draft saved'
+        : 'Breakfast pax confirmed successfully',
+      data,
+    });
   } catch (error) {
     next(error);
   }

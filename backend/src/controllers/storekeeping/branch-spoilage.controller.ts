@@ -151,14 +151,14 @@ export const listSpoilageRecords = async (req: Request, res: Response, next: Nex
  * @desc    Storekeeper records a spoilage entry. Sits 'pending' — no stock
  *          effect until a branch accountant approves it.
  * @route   POST /api/storekeeping/spoilage
- *          body: { branch_id, area, bar_location?, shift?, item_id, quantity,
+ *          body: { branch_id, area, bar_location?, shift?, kitchen_shift_id?, item_id, quantity,
  *                   unit?, reason, notes?, spoilage_date? }
  * @access  Branch Storekeeper, Central Storekeeper, Super Admin
  */
 export const recordSpoilage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const {
-            branch_id, area, bar_location, shift, item_id, quantity, unit, reason, notes, spoilage_date,
+            branch_id, area, bar_location, shift, kitchen_shift_id, item_id, quantity, unit, reason, notes, spoilage_date,
             responsible_staff_id, charge_to_staff,
         } = req.body || {};
 
@@ -239,6 +239,7 @@ export const recordSpoilage = async (req: Request, res: Response, next: NextFunc
             area,
             bar_location: area === 'bar' ? bar_location : null,
             shift: area === 'kitchen' ? (shift || null) : null,
+            kitchen_shift_id: area === 'kitchen' ? (kitchen_shift_id || null) : null,
             item_id: resolvedItemId,
             item_sku: itemSku,
             item_name: itemName,

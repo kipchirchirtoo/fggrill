@@ -3,7 +3,6 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { updateBranchStock, postGrnFoundationMovements } from '../../services/branch-inventory.service';
-import { recordBarStockMovement } from '../../services/unified-bar-stock.service';
 
 const toNumber = (value: any): number => {
     const parsed = Number(value);

@@ -269,8 +269,22 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         }
       }
 
-      final branchId = await repo.currentBranchId();
-      final hasExec = branchId == 1;
+      var hasExec = false;
+      if (_type == StockTakeType.bar) {
+        try {
+          final outlets = await repo.posOutlets();
+          hasExec = outlets.any((outlet) {
+            final type =
+                '${outlet['outlet_type'] ?? outlet['type'] ?? ''}'.trim();
+            return type == 'executive_bar' ||
+                type == 'kyogong_executive_bar' ||
+                type == 'sports_bar' ||
+                type == 'kyogong_sports_bar';
+          });
+        } catch (_) {
+          hasExec = false;
+        }
+      }
 
       state = state.copyWith(
         items: loadedItems,

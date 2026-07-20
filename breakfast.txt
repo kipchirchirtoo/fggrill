@@ -1,0 +1,280 @@
+# ACCOMMODATION_BREAKFAST Channel Logic
+
+Accommodation breakfast is for **hotel guests whose room/package includes breakfast**.
+
+It does **not require an Event Order** because the source is not an outside client/event. The source is the **reception/accommodation guest list**.
+
+```text id="7xd31p"
+Channel = ACCOMMODATION_BREAKFAST
+Source = Room guests / breakfast pax
+Expected usage = breakfast pax × breakfast standard
+Revenue = handled through room/accommodation billing
+```
+
+---
+
+## 1. Where does breakfast pax come from?
+
+Breakfast pax should come from the **Reception / Accommodation module**.
+
+Example:
+
+```text id="m7834l"
+Room 101: 2 guests, breakfast included
+Room 102: 1 guest, breakfast included
+Room 103: 2 guests, no breakfast
+Room 104: 3 guests, breakfast included
+```
+
+Breakfast pax:
+
+```text id="4iicpl"
+2 + 1 + 3 = 6 breakfast pax
+```
+
+So the kitchen should not manually guess the breakfast number. The system should calculate it from checked-in guests.
+
+---
+
+## 2. What screen creates the breakfast control?
+
+This should be created automatically or confirmed from:
+
+```text id="108bcf"
+Reception / Accommodation
+→ Daily Breakfast Pax
+```
+
+Then visible in:
+
+```text id="ncm7aw"
+Kitchen Sessions
+→ Channel: ACCOMMODATION_BREAKFAST
+```
+
+The storekeeper should see:
+
+```text id="tzbtf2"
+Breakfast Date: Today
+Breakfast Pax: 6
+Branch: Bomet Town
+Channel: ACCOMMODATION_BREAKFAST
+```
+
+---
+
+## 3. Does breakfast need an Event Order?
+
+No.
+
+```text id="1sh5f0"
+Accommodation breakfast does NOT need Event Order.
+```
+
+Because:
+
+```text id="eeyfc3"
+Event Order = external client/event/group.
+Accommodation breakfast = internal hotel guest entitlement from room sales.
+```
+
+So the system should not ask for Event Order when channel is:
+
+```text id="973qx2"
+ACCOMMODATION_BREAKFAST
+```
+
+---
+
+## 4. How food is issued for breakfast
+
+In Kitchen Sessions, storekeeper selects:
+
+```text id="16j8i5"
+Issue Stock / Add Stock to Kitchen
+```
+
+Then:
+
+```text id="s9rg1h"
+Channel: ACCOMMODATION_BREAKFAST
+Breakfast Date: Today
+Breakfast Pax: auto-loaded from accommodation
+```
+
+Example issue:
+
+```text id="7gycq6"
+Eggs: 50 pcs
+Bread: 100 slices
+Milk: 5 litres
+Sausage: 50 pcs
+Tea leaves: 0.5kg
+```
+
+The issue is linked to breakfast, not POS restaurant.
+
+---
+
+## 5. Who sets breakfast standards?
+
+Branch accountant/admin sets them in:
+
+```text id="uou68m"
+Branch Accountant Dashboard
+→ Food Control Standards
+→ Breakfast Standards
+```
+
+Standards are set **per branch**.
+
+Example:
+
+```text id="gg5o7p"
+Branch: Bomet Town
+Breakfast Standard Per Guest:
+
+Eggs: 1 pc
+Bread: 2 slices
+Milk: 100 ml
+Sausage: 1 pc
+Tea leaves: 10 g
+Sugar: 20 g
+```
+
+For 50 breakfast guests, expected usage becomes:
+
+```text id="myhylv"
+Eggs: 50 pcs
+Bread: 100 slices
+Milk: 5 litres
+Sausage: 50 pcs
+Tea leaves: 0.5kg
+Sugar: 1kg
+```
+
+---
+
+## 6. Daily calculation logic
+
+Formula:
+
+```text id="qtdkz8"
+Breakfast Pax × Breakfast Standard = Expected Consumption
+```
+
+Example:
+
+```text id="x8ctel"
+Breakfast pax: 50
+
+Standard:
+1 guest = 1 egg
+
+Expected eggs:
+50 × 1 = 50 eggs
+```
+
+If actual eggs used are 60:
+
+```text id="7pky8s"
+Expected: 50 eggs
+Actual: 60 eggs
+Variance: +10 eggs overused
+```
+
+Accountant reviews the variance.
+
+---
+
+## 7. What accountant sees
+
+In Daily Food Control Review:
+
+```text id="5vnyxr"
+Channel: ACCOMMODATION_BREAKFAST
+
+Pax: 50
+
+Item        Expected      Actual       Variance
+Eggs        50 pcs        60 pcs       +10 pcs
+Bread       100 slices    110 slices   +10 slices
+Milk        5 L           6 L          +1 L
+Sugar       1 kg          1.4 kg       +0.4 kg
+```
+
+Accountant can ask:
+
+```text id="7mkdvh"
+- Were more guests served than recorded?
+- Did staff eat from breakfast stock?
+- Was there wastage?
+- Were portions too large?
+- Was guest pax entered wrongly?
+```
+
+---
+
+## 8. Difference between breakfast and buffet
+
+Accommodation breakfast:
+
+```text id="6dp6po"
+Channel: ACCOMMODATION_BREAKFAST
+Source: room guests
+No Event Order
+Expected usage: breakfast pax × breakfast standard
+```
+
+Buffet:
+
+```text id="ca9vu9"
+Channel: BUFFET
+Source: external/group event
+Event Order required
+Expected usage: event pax × buffet standard
+```
+
+So even if hotel breakfast is served buffet-style, it is still:
+
+```text id="53f90w"
+ACCOMMODATION_BREAKFAST
+```
+
+not `BUFFET`, because the source is room guests.
+
+---
+
+## 9. Kitchen Session flow for breakfast
+
+```text id="ayw9zu"
+1. Guests check in.
+2. Reception marks breakfast included or not included.
+3. System calculates daily breakfast pax.
+4. Kitchen Sessions loads breakfast pax.
+5. Storekeeper issues stock under ACCOMMODATION_BREAKFAST.
+6. System calculates expected usage from breakfast standards.
+7. Physical stocktake gives actual usage.
+8. System compares expected vs actual.
+9. Branch accountant reviews breakfast variance.
+```
+
+---
+
+## 10. Simple rule
+
+```text id="67mu4q"
+Accommodation Breakfast Channel is controlled by guest pax, not POS sales and not Event Orders.
+```
+
+Final formula:
+
+```text id="a1i542"
+Breakfast pax × breakfast standard = expected breakfast consumption
+```
+
+Then:
+
+```text id="11c531"
+Actual breakfast food used - expected breakfast food = breakfast variance
+```

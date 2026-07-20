@@ -22,7 +22,7 @@ const getBranchName = async (branchId: number | null): Promise<string> => {
   }
 };
 
-type BookingInvoiceSourceType = 'room' | 'conference' | 'outside_catering';
+type BookingInvoiceSourceType = 'room' | 'conference' | 'outside_catering' | 'buffet' | 'event_order';
 
 const money = (value: any): number => {
   const n = Number(value);
@@ -60,6 +60,222 @@ const resolveBranchId = (req: Request): number | null => {
 
 const sourceReference = (sourceType: string, sourceId: string): string =>
   `${sourceType}:${sourceId}`;
+
+const CHANNEL_STANDARD_CODES = [
+  'accommodation_breakfast',
+  'staff_meal',
+  'buffet',
+  'conference_event',
+  'outside_catering',
+  'group_meal',
+];
+
+const channelRequiresNamedPackage = (channel: string): boolean =>
+  ['buffet', 'conference_event', 'outside_catering', 'group_meal'].includes(
+    String(channel || '').trim().toLowerCase()
+  );
+
+type ChannelPackageDefinitionRow = {
+  id: string;
+  branch_id: number;
+  channel: string;
+  package_name: string;
+  is_active?: boolean;
+};
+
+const resolveChannelPackageDefinition = async (
+  branchId: number,
+  channel: string,
+  {
+    packageDefinitionId,
+    packageName,
+  }: { packageDefinitionId?: string | null; packageName?: string | null }
+): Promise<ChannelPackageDefinitionRow | null> => {
+  const normalizedChannel = text(channel).toLowerCase();
+  const normalizedPackageId = text(packageDefinitionId);
+  const normalizedPackageName = text(packageName);
+
+  if (normalizedPackageId) {
+    const { data, error } = await supabase
+      .from('channel_package_definitions')
+      .select('*')
+      .eq('id', normalizedPackageId)
+      .eq('branch_id', branchId)
+      .eq('channel', normalizedChannel)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as ChannelPackageDefinitionRow | null) ?? null;
+  }
+
+  if (!normalizedPackageName) return null;
+
+  const { data, error } = await supabase
+    .from('channel_package_definitions')
+    .select('*')
+    .eq('branch_id', branchId)
+    .eq('channel', normalizedChannel)
+    .eq('package_name', normalizedPackageName)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as ChannelPackageDefinitionRow | null) ?? null;
+};
+
+const ensureChannelPackageDefinition = async (
+  branchId: number,
+  channel: string,
+  packageName: string
+): Promise<ChannelPackageDefinitionRow> => {
+  const normalizedChannel = text(channel).toLowerCase();
+  const normalizedPackageName = text(packageName);
+  if (!normalizedPackageName) {
+    throw new Error('Package / Standard Name is required');
+  }
+
+  const existing = await resolveChannelPackageDefinition(branchId, normalizedChannel, {
+    packageName: normalizedPackageName,
+  });
+  if (existing) return existing;
+
+  const { data, error } = await supabase
+    .from('channel_package_definitions')
+    .insert({
+      branch_id: branchId,
+      channel: normalizedChannel,
+      package_name: normalizedPackageName,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as ChannelPackageDefinitionRow;
+};
+
+const getConfiguredPackageCoverage = async (
+  branchId: number,
+  channel: string,
+  packageName: string,
+  packageDefinitionId?: string | null
+): Promise<{ rawItemCount: number; servedItemCount: number }> => {
+  const normalizedChannel = text(channel).toLowerCase();
+  const normalizedPackageId = text(packageDefinitionId);
+  const normalizedPackageName = text(packageName);
+  const [rawResult, servedResult] = await Promise.all([
+    (normalizedPackageId
+      ? supabase
+          .from('channel_food_standards')
+          .select('id', { count: 'exact', head: true })
+          .eq('branch_id', branchId)
+          .eq('channel', normalizedChannel)
+          .eq('package_definition_id', normalizedPackageId)
+      : supabase
+          .from('channel_food_standards')
+          .select('id', { count: 'exact', head: true })
+          .eq('branch_id', branchId)
+          .eq('channel', normalizedChannel)
+          .eq('package_name', normalizedPackageName)),
+    (normalizedPackageId
+      ? supabase
+          .from('channel_package_menu_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('branch_id', branchId)
+          .eq('channel', normalizedChannel)
+          .eq('package_definition_id', normalizedPackageId)
+      : supabase
+          .from('channel_package_menu_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('branch_id', branchId)
+          .eq('channel', normalizedChannel)
+          .eq('package_name', normalizedPackageName)),
+  ]);
+
+  if (rawResult.error) throw rawResult.error;
+  if (servedResult.error) throw servedResult.error;
+
+  return {
+    rawItemCount: rawResult.count || 0,
+    servedItemCount: servedResult.count || 0,
+  };
+};
+
+// Maps event_orders.event_type to kitchen_shift_additions.purpose_channel.
+// 'conference' is the domain term for event orders; the channel system calls it 'conference_event'.
+export const eventTypeToPurposeChannel = (eventType: string): string => {
+  const map: Record<string, string> = {
+    conference: 'conference_event',
+    buffet: 'buffet',
+    outside_catering: 'outside_catering',
+    group_meal: 'group_meal',
+  };
+  return map[eventType] ?? 'pos_restaurant';
+};
+
+const requiresEventOrderPackage = (eventType: string): boolean =>
+  ['conference', 'buffet', 'outside_catering', 'group_meal'].includes(
+    String(eventType || '').trim().toLowerCase()
+  );
+
+const eventTypeDisplayLabel = (eventType: string): string => {
+  switch (String(eventType || '').trim().toLowerCase()) {
+    case 'conference':
+      return 'Conference';
+    case 'buffet':
+      return 'Buffet';
+    case 'outside_catering':
+      return 'Outside Catering';
+    case 'group_meal':
+      return 'Group Meal';
+    default:
+      return text(eventType) || 'Event';
+  }
+};
+
+const ensureConfiguredEventOrderPackage = async (
+  branchId: number,
+  eventType: string,
+  menuPackage: string,
+  packageDefinitionId?: string | null
+): Promise<{ packageDefinitionId: string; packageName: string; channelCode: string } | null> => {
+  const normalizedPackage = text(menuPackage);
+  if (!requiresEventOrderPackage(eventType)) return null;
+  if (!normalizedPackage && !text(packageDefinitionId)) {
+    throw new Error('A configured Menu / Package is required for this Event Order type');
+  }
+
+  const channelCode = eventTypeToPurposeChannel(String(eventType).trim().toLowerCase());
+  const packageDefinition = await resolveChannelPackageDefinition(branchId, channelCode, {
+    packageDefinitionId,
+    packageName: normalizedPackage,
+  });
+  if (!packageDefinition) {
+    throw new Error(
+      normalizedPackage
+        ? `Menu / Package "${normalizedPackage}" is not configured for ${channelCode}.`
+        : 'The selected Menu / Package is not configured for this branch/channel.'
+    );
+  }
+  const coverage = await getConfiguredPackageCoverage(
+    branchId,
+    channelCode,
+    packageDefinition.package_name,
+    packageDefinition.id
+  );
+  if (coverage.rawItemCount <= 0 || coverage.servedItemCount <= 0) {
+    const missingParts: string[] = [];
+    if (coverage.servedItemCount <= 0) missingParts.push('served POS menu items');
+    if (coverage.rawItemCount <= 0) missingParts.push('raw stock items');
+    throw new Error(
+      `Menu / Package "${packageDefinition.package_name}" is incomplete in Food Control Standards for ${channelCode}. Missing ${missingParts.join(' and ')}.`
+    );
+  }
+  return {
+    packageDefinitionId: packageDefinition.id,
+    packageName: packageDefinition.package_name,
+    channelCode,
+  };
+};
 
 const normalizeInvoiceItem = (description: string, total: number, quantity = 1) => ({
   description: description || 'Service charge',
@@ -146,6 +362,60 @@ const normalizeSourceRow = (
     };
   }
 
+  if (sourceType === 'buffet') {
+    const total = money(row.amount_charged ?? row.total_amount);
+    // amount_paid column exists on buffets table; fall back to all-or-nothing only if missing (legacy rows)
+    const paid = row.amount_paid !== undefined ? money(row.amount_paid)
+      : row.payment_status === 'paid' ? total : 0;
+    return {
+      id: row.id,
+      source_type: sourceType,
+      source_label: 'Buffet Event',
+      reference: text(row.name, row.id),
+      customer_name: 'Buffet Event Customer',
+      customer_email: '',
+      customer_phone: '',
+      service_date: dateOnly(row.event_date),
+      end_date: dateOnly(row.event_date),
+      description: `Buffet: ${text(row.name)} (${row.pax} pax)`,
+      total_amount: total,
+      amount_paid: paid,
+      balance: Math.max(total - paid, 0),
+      status: row.payment_status || 'pending',
+      payment_status: row.payment_status || 'pending',
+      invoice_id: invoice?.id ?? row.invoice_id ?? null,
+      invoice_number: invoice?.invoice_number ?? null,
+      invoice_status: invoice?.status ?? null,
+      can_generate_invoice: !invoice?.id,
+    };
+  }
+
+  if (sourceType === 'event_order') {
+    const total = money(row.total_amount);
+    const paid = money(row.amount_paid ?? (row.payment_status === 'paid' ? total : 0));
+    return {
+      id: row.id,
+      source_type: sourceType,
+      source_label: `Event Order (${text(row.event_type).toUpperCase()})`,
+      reference: row.event_number,
+      customer_name: row.client_name || 'Event Customer',
+      customer_email: '',
+      customer_phone: '',
+      service_date: dateOnly(row.event_date),
+      end_date: dateOnly(row.event_date),
+      description: `Event: ${text(row.event_name)} (${row.pax} pax) - Package: ${text(row.menu_package)}`,
+      total_amount: total,
+      amount_paid: paid,
+      balance: Math.max(total - paid, 0),
+      status: row.payment_status || 'pending',
+      payment_status: row.payment_status || 'pending',
+      invoice_id: invoice?.id ?? row.invoice_id ?? null,
+      invoice_number: invoice?.invoice_number ?? null,
+      invoice_status: invoice?.status ?? null,
+      can_generate_invoice: !invoice?.id,
+    };
+  }
+
   const total = money(row.total_amount ?? row.expected_revenue ?? row.actual_revenue);
   const paid = money(row.amount_paid ?? row.paid_amount);
   return {
@@ -225,16 +495,25 @@ const bestEffortLinkInvoiceToSource = async (
   sourceId: string,
   invoiceId: string
 ) => {
-  const table =
-    sourceType === 'room'
-      ? 'reservations'
-      : sourceType === 'conference'
-        ? 'conference_hall_bookings'
-        : 'catering_bookings';
-  try {
-    await supabase.from(table).update({ invoice_id: invoiceId }).eq('id', sourceId);
-  } catch (error) {
-    logger.warn(`Invoice link skipped for ${table}.${sourceId}: ${(error as any)?.message || error}`);
+  let tables: string[] = [];
+  if (sourceType === 'room') {
+    tables = ['reservations'];
+  } else if (sourceType === 'conference') {
+    tables = ['conference_hall_bookings'];
+  } else if (sourceType === 'buffet') {
+    tables = ['buffets'];
+  } else if (sourceType === 'outside_catering') {
+    tables = ['catering_bookings', 'catering_events'];
+  } else if (sourceType === 'event_order') {
+    tables = ['event_orders'];
+  }
+
+  for (const table of tables) {
+    try {
+      await supabase.from(table).update({ invoice_id: invoiceId }).eq('id', sourceId);
+    } catch (error) {
+      logger.warn(`Invoice link skipped for ${table}.${sourceId}: ${(error as any)?.message || error}`);
+    }
   }
 };
 
@@ -732,6 +1011,1033 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
+export const getEventOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    const activeOnly =
+      `${req.query.active_only || ''}`.toLowerCase() === 'true';
+    const eventType = `${req.query.event_type || ''}`.trim().toLowerCase();
+    let query = supabase
+      .from('event_orders')
+      .select('*, conference_halls(name)')
+      .order('event_date', { ascending: false });
+
+    if (branchId) query = query.eq('branch_id', branchId);
+    if (eventType) query = query.eq('event_type', eventType);
+    if (activeOnly) query = query.in('status', ['open', 'in_progress']);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({ success: true, count: data?.length || 0, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createEventOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'Branch ID is required' });
+      return;
+    }
+
+    const {
+      event_name,
+      client_name,
+      event_type,
+      event_date,
+      pax,
+      menu_package,
+      package_definition_id,
+      charge_per_pax,
+      total_amount,
+      amount_paid,
+      payment_status,
+      payment_method,
+      credit_due_date,
+      notes,
+      conference_hall_id,
+      status
+    } = req.body;
+
+    if (!event_name || !client_name || !event_type || !event_date) {
+      res.status(400).json({ success: false, message: 'Event name, client name, event type, and date are required' });
+      return;
+    }
+
+    let resolvedPackage: Awaited<ReturnType<typeof ensureConfiguredEventOrderPackage>> = null;
+    try {
+      resolvedPackage = await ensureConfiguredEventOrderPackage(
+        branchId,
+        event_type,
+        menu_package,
+        package_definition_id
+      );
+    } catch (validationError: any) {
+      res.status(400).json({ success: false, message: validationError.message });
+      return;
+    }
+
+    const dateStr = dateOnly(event_date).replace(/-/g, '');
+
+    // Query number of event orders on this date for this branch to generate serial
+    const { count } = await supabase
+      .from('event_orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('branch_id', branchId)
+      .eq('event_date', dateOnly(event_date));
+
+    const serial = String((count || 0) + 1).padStart(3, '0');
+
+    // Look up branch code
+    const { data: branch } = await supabase
+      .from('branches')
+      .select('code, name')
+      .eq('id', branchId)
+      .maybeSingle();
+
+    const branchCode = branch?.code || branch?.name?.slice(0, 3)?.toUpperCase() || 'BR';
+    const eventNumber = `EO-${branchCode}-${dateStr}-${serial}`;
+
+    let conferenceBookingId: string | null = null;
+
+    if (event_type === 'conference' && conference_hall_id) {
+      const start_date = new Date(event_date);
+      start_date.setUTCHours(8, 0, 0, 0);
+      const end_date = new Date(event_date);
+      end_date.setUTCHours(17, 0, 0, 0);
+
+      const { data: bookingData, error: bookingError } = await supabase
+        .from('conference_hall_bookings')
+        .insert([{
+          conference_hall_id,
+          branch_id: branchId,
+          customer_name: client_name,
+          start_date: start_date.toISOString(),
+          end_date: end_date.toISOString(),
+          total_amount: Number(total_amount || 0),
+          amount_paid: payment_status === 'paid' ? Number(total_amount || 0) : 0,
+          payment_status: payment_status === 'paid' ? 'paid' : (payment_status === 'deposit_paid' ? 'deposit_paid' : 'pending'),
+          booking_status: 'confirmed',
+          notes: `Event Order: ${eventNumber}. ${notes || ''}`,
+          created_by: req.user?.id
+        }])
+        .select('id')
+        .single();
+
+      if (bookingError) throw bookingError;
+      conferenceBookingId = bookingData?.id || null;
+    }
+
+    const { data, error } = await supabase
+      .from('event_orders')
+      .insert([{
+        event_number: eventNumber,
+        event_name,
+        client_name,
+        event_type,
+        branch_id: branchId,
+        event_date: dateOnly(event_date),
+        pax: Number(pax || 0),
+        menu_package: resolvedPackage?.packageName || text(menu_package) || null,
+        package_definition_id: resolvedPackage?.packageDefinitionId || null,
+        charge_per_pax: Number(charge_per_pax || 0),
+        total_amount: Number(total_amount || 0),
+        amount_paid: Number(amount_paid || 0),
+        payment_status: payment_status || 'pending',
+        payment_method: payment_method || 'cash',
+        credit_due_date: credit_due_date ? dateOnly(credit_due_date) : null,
+        notes,
+        status: ['open', 'in_progress', 'completed', 'cancelled'].includes(String(status))
+          ? String(status)
+          : 'open',
+        conference_hall_id: event_type === 'conference' ? conference_hall_id : null,
+        conference_booking_id: conferenceBookingId
+      }])
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateEventOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const branchId = resolveBranchId(req);
+
+    // Retrieve existing event order to manage the linked booking
+    const { data: existing, error: existingError } = await supabase
+      .from('event_orders')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (existingError) throw existingError;
+    if (!existing) {
+      res.status(404).json({ success: false, message: 'Event order not found' });
+      return;
+    }
+
+    const type = req.body.event_type !== undefined ? req.body.event_type : existing.event_type;
+    const hallId = req.body.conference_hall_id !== undefined ? req.body.conference_hall_id : existing.conference_hall_id;
+    const date = req.body.event_date ? dateOnly(req.body.event_date) : existing.event_date;
+    const name = req.body.event_name !== undefined ? req.body.event_name : existing.event_name;
+    const client = req.body.client_name !== undefined ? req.body.client_name : existing.client_name;
+    const total = req.body.total_amount !== undefined ? Number(req.body.total_amount) : existing.total_amount;
+    const payStatus = req.body.payment_status !== undefined ? req.body.payment_status : existing.payment_status;
+    const noteStr = req.body.notes !== undefined ? req.body.notes : existing.notes;
+    const nextStatus =
+      req.body.status !== undefined ? String(req.body.status) : (existing.status || 'open');
+
+    if (!['open', 'in_progress', 'completed', 'cancelled'].includes(nextStatus)) {
+      res.status(400).json({ success: false, message: 'Invalid event order status' });
+      return;
+    }
+
+    const nextPackage =
+      req.body.menu_package !== undefined ? req.body.menu_package : existing.menu_package;
+    const nextPackageDefinitionId =
+      req.body.package_definition_id !== undefined
+        ? req.body.package_definition_id
+        : existing.package_definition_id;
+    let resolvedPackage: Awaited<ReturnType<typeof ensureConfiguredEventOrderPackage>> = null;
+    try {
+      resolvedPackage = await ensureConfiguredEventOrderPackage(
+        branchId || Number(existing.branch_id || 0),
+        String(type || ''),
+        String(nextPackage || ''),
+        String(nextPackageDefinitionId || '')
+      );
+    } catch (validationError: any) {
+      res.status(400).json({ success: false, message: validationError.message });
+      return;
+    }
+
+    let bookingId = existing.conference_booking_id;
+
+    if (type === 'conference' && hallId) {
+      const start_date = new Date(date);
+      start_date.setUTCHours(8, 0, 0, 0);
+      const end_date = new Date(date);
+      end_date.setUTCHours(17, 0, 0, 0);
+
+      const bookingData = {
+        conference_hall_id: hallId,
+        customer_name: client,
+        start_date: start_date.toISOString(),
+        end_date: end_date.toISOString(),
+        total_amount: Number(total || 0),
+        amount_paid: payStatus === 'paid' ? Number(total || 0) : 0,
+        payment_status: payStatus === 'paid' ? 'paid' : (payStatus === 'deposit_paid' ? 'deposit_paid' : 'pending'),
+        notes: `Event Order: ${existing.event_number}. ${noteStr || ''}`
+      };
+
+      if (bookingId) {
+        // Update existing booking
+        const { error: bookingUpdateErr } = await supabase
+          .from('conference_hall_bookings')
+          .update(bookingData)
+          .eq('id', bookingId);
+        if (bookingUpdateErr) throw bookingUpdateErr;
+      } else {
+        // Create new booking
+        const { data: newBooking, error: bookingCreateErr } = await supabase
+          .from('conference_hall_bookings')
+          .insert([{
+            ...bookingData,
+            branch_id: branchId || existing.branch_id,
+            booking_status: 'confirmed',
+            created_by: req.user?.id
+          }])
+          .select('id')
+          .single();
+        if (bookingCreateErr) throw bookingCreateErr;
+        if (newBooking) {
+          bookingId = newBooking.id;
+        }
+      }
+    } else if (bookingId) {
+      // Delete existing booking if type changed or hall is removed
+      const { error: bookingDeleteErr } = await supabase
+        .from('conference_hall_bookings')
+        .delete()
+        .eq('id', bookingId);
+      if (bookingDeleteErr) throw bookingDeleteErr;
+      bookingId = null;
+    }
+
+    let query = supabase.from('event_orders').update({
+      event_name: req.body.event_name,
+      client_name: req.body.client_name,
+      event_type: req.body.event_type,
+      event_date: req.body.event_date ? dateOnly(req.body.event_date) : undefined,
+      pax: req.body.pax !== undefined ? Number(req.body.pax) : undefined,
+      menu_package:
+        resolvedPackage?.packageName ??
+        (req.body.menu_package !== undefined ? req.body.menu_package : undefined),
+      package_definition_id:
+        resolvedPackage?.packageDefinitionId ??
+        (req.body.package_definition_id !== undefined
+          ? req.body.package_definition_id
+          : undefined),
+      charge_per_pax: req.body.charge_per_pax !== undefined ? Number(req.body.charge_per_pax) : undefined,
+      total_amount: req.body.total_amount !== undefined ? Number(req.body.total_amount) : undefined,
+      amount_paid: req.body.amount_paid !== undefined ? Number(req.body.amount_paid) : undefined,
+      payment_status: req.body.payment_status,
+      payment_method: req.body.payment_method,
+      credit_due_date: req.body.credit_due_date ? dateOnly(req.body.credit_due_date) : undefined,
+      notes: req.body.notes,
+      invoice_id: req.body.invoice_id,
+      status: nextStatus,
+      closed_at: ['completed', 'cancelled'].includes(nextStatus)
+        ? (existing.closed_at || new Date().toISOString())
+        : null,
+      closed_by: ['completed', 'cancelled'].includes(nextStatus)
+        ? (req.user?.id || null)
+        : null,
+      conference_hall_id: type === 'conference' ? hallId : null,
+      conference_booking_id: bookingId
+    }).eq('id', id);
+
+    if (branchId) query = query.eq('branch_id', branchId);
+
+    const { data, error } = await query.select('*').maybeSingle();
+    if (error) throw error;
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const downloadEventOrderPdf = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const branchId = resolveBranchId(req);
+
+    let query = supabase
+      .from('event_orders')
+      .select('*, conference_halls(name)')
+      .eq('id', id);
+
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data: eventOrder, error } = await query.maybeSingle();
+    if (error) throw error;
+    if (!eventOrder) {
+      res.status(404).json({
+        success: false,
+        message: 'Event order not found',
+      });
+      return;
+    }
+
+    const resolvedBranchId = Number(eventOrder.branch_id || branchId || 0) || null;
+    const channelCode = eventTypeToPurposeChannel(text(eventOrder.event_type).toLowerCase());
+    const normalizedPackageDefinitionId = text(eventOrder.package_definition_id);
+    const normalizedPackageName = text(eventOrder.menu_package);
+    const pax = Math.max(0, Number(eventOrder.pax || 0));
+    const chargePerPax = money(eventOrder.charge_per_pax);
+    const totalAmount = money(eventOrder.total_amount);
+    const packageChargeTotal = pax > 0 ? chargePerPax * pax : totalAmount;
+    const remainder = totalAmount - packageChargeTotal;
+
+    const [branchResult, packageMenuResult] = await Promise.all([
+      resolvedBranchId
+        ? supabase
+            .from('branches')
+            .select('id, name, address, location, phone, email')
+            .eq('id', resolvedBranchId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null } as any),
+      normalizedPackageDefinitionId
+        ? supabase
+            .from('channel_package_menu_items')
+            .select(
+              'id, pos_item_name, pos_item_sku, quantity_per_pax, unit, package_name, package_definition_id'
+            )
+            .eq('branch_id', resolvedBranchId)
+            .eq('channel', channelCode)
+            .eq('package_definition_id', normalizedPackageDefinitionId)
+            .order('pos_item_name')
+        : normalizedPackageName
+          ? supabase
+              .from('channel_package_menu_items')
+              .select(
+                'id, pos_item_name, pos_item_sku, quantity_per_pax, unit, package_name, package_definition_id'
+              )
+              .eq('branch_id', resolvedBranchId)
+              .eq('channel', channelCode)
+              .eq('package_name', normalizedPackageName)
+              .order('pos_item_name')
+          : Promise.resolve({ data: [], error: null } as any),
+    ]);
+
+    if (branchResult?.error) throw branchResult.error;
+    if (packageMenuResult?.error) throw packageMenuResult.error;
+
+    const branch = branchResult?.data || null;
+    const packageMenuItems = Array.isArray(packageMenuResult?.data)
+      ? packageMenuResult.data
+      : [];
+
+    const pricingItems: Array<Record<string, any>> = [];
+    if (pax > 0 || chargePerPax > 0 || totalAmount > 0) {
+      pricingItems.push({
+        description:
+          normalizedPackageName ||
+          `${eventTypeDisplayLabel(eventOrder.event_type)} package`,
+        unit: 'pax',
+        quantity: pax || 1,
+        unit_price: chargePerPax || totalAmount,
+        total: packageChargeTotal || totalAmount,
+      });
+    }
+    if (Math.abs(remainder) > 0.01) {
+      pricingItems.push({
+        description: remainder > 0
+          ? 'Additional Charges'
+          : 'Package Discount / Adjustment',
+        unit: 'lot',
+        quantity: 1,
+        unit_price: remainder,
+        total: remainder,
+      });
+    }
+
+    const payload = {
+      id: eventOrder.id,
+      event_number: eventOrder.event_number,
+      event_name: eventOrder.event_name,
+      client_name: eventOrder.client_name,
+      event_type: eventOrder.event_type,
+      event_type_label: eventTypeDisplayLabel(eventOrder.event_type),
+      event_date: dateOnly(eventOrder.event_date),
+      pax,
+      menu_package: normalizedPackageName,
+      package_definition_id: normalizedPackageDefinitionId || null,
+      charge_per_pax: chargePerPax,
+      total_amount: totalAmount,
+      amount_paid: money(eventOrder.amount_paid),
+      payment_status: text(eventOrder.payment_status) || 'pending',
+      payment_method: text(eventOrder.payment_method) || 'cash',
+      credit_due_date: eventOrder.credit_due_date
+        ? dateOnly(eventOrder.credit_due_date)
+        : null,
+      notes: text(eventOrder.notes) || null,
+      branch_name: text(branch?.name) || 'FamousGate Hotels',
+      branch_address: text(branch?.address, branch?.location) || 'FamousGate Hotels',
+      branch_phone: text(branch?.phone) || '+254 706 782 828',
+      branch_email: text(branch?.email) || 'info@famousgatehotels.com',
+      created_by_name: text(
+        req.user?.full_name,
+        req.user?.name,
+        req.user?.email,
+      ) || 'Branch Accountant',
+      conference_halls: eventOrder.conference_halls || null,
+      menu_lines: packageMenuItems.map((row: any) => {
+        const quantityPerPax = money(row.quantity_per_pax);
+        return {
+          description: text(row.pos_item_name, row.pos_item_sku) || 'Menu item',
+          sku: text(row.pos_item_sku) || null,
+          unit: text(row.unit) || 'pcs',
+          quantity_per_pax: quantityPerPax,
+          planned_total: quantityPerPax * pax,
+        };
+      }),
+      items: pricingItems,
+    };
+
+    const pythonResponse = await axios.post(
+      `${PYTHON_SERVICE_URL}/api/accounting/event-orders/render/pdf`,
+      payload,
+      { responseType: 'arraybuffer' }
+    );
+
+    const safeNumber = text(eventOrder.event_number, 'EO').replace(/[^\w.-]+/g, '_');
+    const filename = `${safeNumber}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader(
+      'Content-Length',
+      Buffer.from(pythonResponse.data).length.toString()
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(Buffer.from(pythonResponse.data));
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      logger.error('Failed to generate Event Order PDF', error);
+      res.status(502).json({
+        success: false,
+        message: 'Unable to generate Event Order PDF at this time',
+      });
+      return;
+    }
+    next(error);
+  }
+};
+
+export const getChannelFoodStandards = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'branch_id is required' });
+      return;
+    }
+
+    let query = supabase
+      .from('channel_food_standards')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('channel')
+      .order('package_name', { ascending: true, nullsFirst: true })
+      .order('raw_item_name');
+
+    const channel = text(req.query.channel);
+    if (channel) {
+      query = query.eq('channel', channel);
+    }
+
+    const packageName = text(req.query.package_name, req.query.packageName);
+    if (packageName) {
+      query = query.eq('package_name', packageName);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.status(200).json({ success: true, data: data || [] });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getChannelPackageMenuItems = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'branch_id is required' });
+      return;
+    }
+
+    let query = supabase
+      .from('channel_package_menu_items')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('channel')
+      .order('package_name')
+      .order('pos_item_name');
+
+    const channel = text(req.query.channel);
+    if (channel) {
+      query = query.eq('channel', channel);
+    }
+
+    const packageName = text(req.query.package_name, req.query.packageName);
+    if (packageName) {
+      query = query.eq('package_name', packageName);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({ success: true, data: data || [] });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getChannelPackages = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'branch_id is required' });
+      return;
+    }
+
+    const channel = text(req.query.channel).toLowerCase();
+    const completeOnly = String(req.query.complete_only || req.query.completeOnly || 'false').toLowerCase() === 'true';
+
+    let query = supabase
+      .from('channel_package_definitions')
+      .select('*')
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .order('channel')
+      .order('package_name');
+
+    if (channel) {
+      query = query.eq('channel', channel);
+    }
+
+    const { data: packages, error } = await query;
+    if (error) throw error;
+
+    const definitions = (packages || []) as ChannelPackageDefinitionRow[];
+    if (!definitions.length) {
+      res.status(200).json({ success: true, data: [] });
+      return;
+    }
+
+    const packageIds = definitions.map((row) => row.id);
+    const [rawRows, servedRows] = await Promise.all([
+      supabase
+        .from('channel_food_standards')
+        .select('package_definition_id')
+        .in('package_definition_id', packageIds),
+      supabase
+        .from('channel_package_menu_items')
+        .select('package_definition_id')
+        .in('package_definition_id', packageIds),
+    ]);
+
+    if (rawRows.error) throw rawRows.error;
+    if (servedRows.error) throw servedRows.error;
+
+    const rawCounts = new Map<string, number>();
+    for (const row of rawRows.data || []) {
+      const id = text((row as any).package_definition_id);
+      if (!id) continue;
+      rawCounts.set(id, (rawCounts.get(id) || 0) + 1);
+    }
+
+    const servedCounts = new Map<string, number>();
+    for (const row of servedRows.data || []) {
+      const id = text((row as any).package_definition_id);
+      if (!id) continue;
+      servedCounts.set(id, (servedCounts.get(id) || 0) + 1);
+    }
+
+    const payload = definitions
+      .map((row) => {
+        const rawItemCount = rawCounts.get(row.id) || 0;
+        const servedItemCount = servedCounts.get(row.id) || 0;
+        return {
+          ...row,
+          raw_item_count: rawItemCount,
+          served_item_count: servedItemCount,
+          is_complete: rawItemCount > 0 && servedItemCount > 0,
+        };
+      })
+      .filter((row) => !completeOnly || row.is_complete);
+
+    res.status(200).json({ success: true, data: payload });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createChannelFoodStandard = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req) ?? Number(req.body.branch_id || 0);
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'branch_id is required' });
+      return;
+    }
+
+    const channel = text(req.body.channel).toLowerCase();
+    if (!CHANNEL_STANDARD_CODES.includes(channel)) {
+      res.status(400).json({ success: false, message: 'Invalid channel' });
+      return;
+    }
+
+    const packageName = text(req.body.package_name, req.body.packageName) || null;
+    const packageDefinition = packageName
+      ? await ensureChannelPackageDefinition(branchId, channel, packageName)
+      : null;
+
+    const payload = {
+      branch_id: branchId,
+      channel,
+      package_name: packageName,
+      package_definition_id: packageDefinition?.id || null,
+      event_id: text(req.body.event_id, req.body.eventId) || null,
+      raw_item_sku: text(req.body.raw_item_sku, req.body.rawItemSku),
+      raw_item_name: text(req.body.raw_item_name, req.body.rawItemName),
+      quantity_per_pax: Number(req.body.quantity_per_pax ?? req.body.quantityPerPax ?? 0),
+      unit: text(req.body.unit),
+    };
+
+    if (channelRequiresNamedPackage(channel) && !payload.package_name) {
+      res.status(400).json({
+        success: false,
+        message: 'Package / Standard Name is required for event-backed channels',
+      });
+      return;
+    }
+
+    if (!payload.raw_item_sku || !payload.raw_item_name || !payload.unit) {
+      res.status(400).json({ success: false, message: 'SKU, item name, quantity, and unit are required' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('channel_food_standards')
+      .insert(payload)
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createChannelPackageMenuItem = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req) ?? Number(req.body.branch_id || 0);
+    if (!branchId) {
+      res.status(400).json({ success: false, message: 'branch_id is required' });
+      return;
+    }
+
+    const channel = text(req.body.channel).toLowerCase();
+    if (!CHANNEL_STANDARD_CODES.includes(channel)) {
+      res.status(400).json({ success: false, message: 'Invalid channel' });
+      return;
+    }
+
+    const packageName = text(req.body.package_name, req.body.packageName);
+    if (!packageName) {
+      res.status(400).json({
+        success: false,
+        message: 'Package / Standard Name is required for served menu items',
+      });
+      return;
+    }
+
+    const posOutletItemId = text(
+      req.body.pos_outlet_item_id,
+      req.body.posOutletItemId,
+    );
+    if (!posOutletItemId) {
+      res.status(400).json({
+        success: false,
+        message: 'pos_outlet_item_id is required',
+      });
+      return;
+    }
+
+    const { data: outletItem, error: outletError } = await supabase
+      .from('pos_outlet_items')
+      .select('id, name, sku, unit, branch_id, is_active')
+      .eq('id', posOutletItemId)
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (outletError) throw outletError;
+    if (!outletItem) {
+      res.status(404).json({
+        success: false,
+        message: 'Selected POS outlet item was not found for this branch',
+      });
+      return;
+    }
+
+    const packageDefinition = await ensureChannelPackageDefinition(
+      branchId,
+      channel,
+      packageName
+    );
+
+    const payload = {
+      branch_id: branchId,
+      channel,
+      package_name: packageName,
+      package_definition_id: packageDefinition.id,
+      pos_outlet_item_id: outletItem.id,
+      pos_item_sku: text(outletItem.sku),
+      pos_item_name: text(outletItem.name, outletItem.sku),
+      quantity_per_pax: Number(
+        req.body.quantity_per_pax ?? req.body.quantityPerPax ?? 0
+      ),
+      unit: text(req.body.unit, outletItem.unit) || 'pcs',
+    };
+
+    if (!payload.pos_item_sku || !payload.pos_item_name || !payload.unit) {
+      res.status(400).json({
+        success: false,
+        message: 'The selected POS outlet item is missing name, SKU, or unit',
+      });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('channel_package_menu_items')
+      .insert(payload)
+      .select()
+      .single();
+    if (error) throw error;
+
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateChannelFoodStandard = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    const id = req.params.id;
+    if (!branchId || !id) {
+      res.status(400).json({ success: false, message: 'branch_id and id are required' });
+      return;
+    }
+
+    const updates: Record<string, any> = {};
+    const { data: existing } = await supabase
+      .from('channel_food_standards')
+      .select('*')
+      .eq('id', id)
+      .eq('branch_id', branchId)
+      .maybeSingle();
+    if (!existing) {
+      res.status(404).json({ success: false, message: 'Channel food standard not found' });
+      return;
+    }
+
+    if (req.body.channel != null) {
+      const channel = text(req.body.channel).toLowerCase();
+      if (!CHANNEL_STANDARD_CODES.includes(channel)) {
+        res.status(400).json({ success: false, message: 'Invalid channel' });
+        return;
+      }
+      updates.channel = channel;
+    }
+    if (req.body.package_name != null || req.body.packageName != null) {
+      updates.package_name = text(req.body.package_name, req.body.packageName) || null;
+    }
+    if (req.body.event_id != null || req.body.eventId != null) {
+      updates.event_id = text(req.body.event_id, req.body.eventId) || null;
+    }
+    if (req.body.raw_item_sku != null || req.body.rawItemSku != null) {
+      updates.raw_item_sku = text(req.body.raw_item_sku, req.body.rawItemSku);
+    }
+    if (req.body.raw_item_name != null || req.body.rawItemName != null) {
+      updates.raw_item_name = text(req.body.raw_item_name, req.body.rawItemName);
+    }
+    if (req.body.quantity_per_pax != null || req.body.quantityPerPax != null) {
+      updates.quantity_per_pax = Number(req.body.quantity_per_pax ?? req.body.quantityPerPax ?? 0);
+    }
+    if (req.body.unit != null) {
+      updates.unit = text(req.body.unit);
+    }
+
+    const finalChannel = text(updates.channel, existing.channel).toLowerCase();
+    const finalPackageName = text(
+      updates.package_name,
+      existing.package_name
+    );
+    if (channelRequiresNamedPackage(finalChannel)) {
+      if (!finalPackageName) {
+        res.status(400).json({
+          success: false,
+          message: 'Package / Standard Name is required for event-backed channels',
+        });
+        return;
+      }
+      const packageDefinition = await ensureChannelPackageDefinition(
+        branchId,
+        finalChannel,
+        finalPackageName
+      );
+      updates.package_definition_id = packageDefinition.id;
+      updates.package_name = packageDefinition.package_name;
+    } else {
+      updates.package_definition_id = null;
+      updates.package_name = finalPackageName || null;
+    }
+
+    const { data, error } = await supabase
+      .from('channel_food_standards')
+      .update(updates)
+      .eq('id', id)
+      .eq('branch_id', branchId)
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteChannelPackageMenuItem = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    const id = req.params.id;
+    if (!branchId || !id) {
+      res.status(400).json({ success: false, message: 'branch_id and id are required' });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('channel_package_menu_items')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', branchId);
+    if (error) throw error;
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteChannelFoodStandard = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const branchId = resolveBranchId(req);
+    const id = req.params.id;
+    if (!branchId || !id) {
+      res.status(400).json({ success: false, message: 'branch_id and id are required' });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('channel_food_standards')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', branchId);
+    if (error) throw error;
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const completeEventOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const branchId = resolveBranchId(req);
+    let query = supabase
+      .from('event_orders')
+      .update({
+        status: 'completed',
+        closed_at: new Date().toISOString(),
+        closed_by: req.user?.id || null,
+      })
+      .eq('id', id);
+
+    if (branchId) query = query.eq('branch_id', branchId);
+
+    const { data, error } = await query.select('*').maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      res.status(404).json({ success: false, message: 'Event order not found' });
+      return;
+    }
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteEventOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const branchId = resolveBranchId(req);
+
+    // Fetch with branch scope so a branch accountant cannot cascade-delete
+    // a conference_hall_booking that belongs to a different branch.
+    let fetchQuery = supabase
+      .from('event_orders')
+      .select('conference_booking_id, branch_id')
+      .eq('id', id);
+    if (branchId) fetchQuery = fetchQuery.eq('branch_id', branchId);
+
+    const { data: existing } = await fetchQuery.maybeSingle();
+
+    if (!existing) {
+      res.status(404).json({ success: false, message: 'Event order not found' });
+      return;
+    }
+
+    if (existing.conference_booking_id) {
+      await supabase
+        .from('conference_hall_bookings')
+        .delete()
+        .eq('id', existing.conference_booking_id);
+    }
+
+    const { error } = await supabase
+      .from('event_orders')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', existing.branch_id);
+    if (error) throw error;
+
+    res.status(200).json({ success: true, message: 'Event order deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getBookingInvoiceQueue = async (
   req: Request,
   res: Response,
@@ -845,6 +2151,58 @@ export const getBookingInvoiceQueue = async (
       }
     };
 
+    const loadCateringEvents = async () => {
+      let query = supabase
+        .from('catering_events')
+        .select('*')
+        .order('event_date', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('outside_catering', row.id);
+        sources.push(normalizeSourceRow('outside_catering', {
+          ...row,
+          booking_number: row.event_name,
+          customer_name: row.client_name,
+          total_amount: row.amount_charged,
+          amount_paid: row.amount_paid || 0,
+          booking_status: row.payment_status || 'pending'
+        }, invoiceByReference.get(ref)));
+      }
+    };
+
+    const loadBuffets = async () => {
+      let query = supabase
+        .from('buffets')
+        .select('*')
+        .order('event_date', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('buffet', row.id);
+        sources.push(normalizeSourceRow('buffet', row, invoiceByReference.get(ref)));
+      }
+    };
+
+    const loadEventOrders = async () => {
+      let query = supabase
+        .from('event_orders')
+        .select('*')
+        .order('event_date', { ascending: false })
+        .limit(200);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      for (const row of ((data || []) as any[])) {
+        const ref = sourceReference('event_order', row.id);
+        sources.push(normalizeSourceRow('event_order', row, invoiceByReference.get(ref)));
+      }
+    };
+
     const loaders: Array<[string, () => Promise<void>]> = [
       ['room', async () => {
         await loadRooms();
@@ -854,7 +2212,12 @@ export const getBookingInvoiceQueue = async (
         await loadConference();
         await loadConferenceBookings();
       }],
-      ['outside_catering', loadCatering],
+      ['outside_catering', async () => {
+        await loadCatering();
+        await loadCateringEvents();
+      }],
+      ['buffet', loadBuffets],
+      ['event_order', loadEventOrders]
     ];
     for (const [key, loader] of loaders) {
       if (sourceFilter && sourceFilter !== 'all' && sourceFilter !== key) continue;
@@ -932,7 +2295,7 @@ export const createInvoiceFromBookingSource = async (
     const sourceId = String(req.params.sourceId || req.body.source_id || '');
     const branchId = resolveBranchId(req);
 
-    if (!['room', 'conference', 'outside_catering'].includes(sourceType) || !sourceId) {
+    if (!['room', 'conference', 'outside_catering', 'buffet', 'event_order'].includes(sourceType) || !sourceId) {
       res.status(400).json({ success: false, message: 'Valid source type and source id are required' });
       return;
     }
@@ -961,14 +2324,51 @@ export const createInvoiceFromBookingSource = async (
         .maybeSingle();
       if (error) throw error;
       row = data;
-    } else {
+    } else if (sourceType === 'buffet') {
       const { data, error } = await supabase
-        .from('catering_bookings')
+        .from('buffets')
         .select('*')
         .eq('id', sourceId)
         .maybeSingle();
       if (error) throw error;
       row = data;
+    } else if (sourceType === 'event_order') {
+      const { data, error } = await supabase
+        .from('event_orders')
+        .select('*')
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (error) throw error;
+      row = data;
+    } else {
+      // First try catering_bookings
+      const { data: book, error: errBook } = await supabase
+        .from('catering_bookings')
+        .select('*')
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (errBook) throw errBook;
+      if (book) {
+        row = book;
+      } else {
+        // Fallback to catering_events
+        const { data: evt, error: errEvt } = await supabase
+          .from('catering_events')
+          .select('*')
+          .eq('id', sourceId)
+          .maybeSingle();
+        if (errEvt) throw errEvt;
+        if (evt) {
+          row = {
+            ...evt,
+            booking_number: evt.event_name,
+            customer_name: evt.client_name,
+            total_amount: evt.amount_charged,
+            amount_paid: evt.amount_paid || 0,
+            booking_status: evt.payment_status || 'pending'
+          };
+        }
+      }
     }
 
     if (!row) {
@@ -1005,7 +2405,7 @@ export const createInvoiceFromBookingSource = async (
         reference,
         notes: req.body.notes || `${source.source_label} ${source.reference}`,
         items,
-        type: sourceType === 'room' ? 'ROOM_BOOKING' : sourceType === 'conference' ? 'CONFERENCE' : 'OUTSIDE_CATERING',
+        type: sourceType === 'room' ? 'ROOM_BOOKING' : (sourceType === 'conference' || (sourceType === 'event_order' && row.event_type === 'conference')) ? 'CONFERENCE' : 'OUTSIDE_CATERING',
         created_by: req.user?.id,
         branch_id: branchId,
       }])

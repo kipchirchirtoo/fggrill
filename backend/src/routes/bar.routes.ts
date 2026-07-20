@@ -38,15 +38,15 @@ router.put('/orders/:id/status', orderController.updateOrderStatus);
 // MENU (Categories & Drinks)
 // ====================
 router.get('/categories', menuController.getCategories);
-router.post('/categories', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.createCategory);
+router.post('/categories', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), menuController.createCategory);
 
 router.get('/drinks', menuController.getDrinks);
 router.get('/drinks/:id', menuController.getDrink);
-router.post('/drinks', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_STOREKEEPER, UserRole.CENTRAL_STOREKEEPER]), menuController.createDrink);
-router.put('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_STOREKEEPER, UserRole.CENTRAL_STOREKEEPER]), menuController.updateDrink);
-router.delete('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.deleteDrink);
+router.post('/drinks', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_STOREKEEPER, UserRole.CENTRAL_STOREKEEPER]), menuController.createDrink);
+router.put('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT, UserRole.BRANCH_STOREKEEPER, UserRole.CENTRAL_STOREKEEPER]), menuController.updateDrink);
+router.delete('/drinks/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), menuController.deleteDrink);
 router.put('/drinks/:id/toggle', menuController.toggleDrinkAvailability);
-router.post('/drinks/:id/image', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), menuController.uploadDrinkImage);
+router.post('/drinks/:id/image', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.BRANCH_ACCOUNTANT]), menuController.uploadDrinkImage);
 
 // ====================
 // TABS

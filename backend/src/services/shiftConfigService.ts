@@ -16,9 +16,25 @@ export async function getActiveShiftMode(branchId: number, businessDate?: string
     .limit(1)
     .maybeSingle();
 
-  if (error || !data) {
-    return null; // hard block fallback
+  if (data?.shift_mode) {
+    return data.shift_mode as 'SINGLE_SHIFT' | 'TWO_SHIFT';
   }
 
-  return data.shift_mode as 'SINGLE_SHIFT' | 'TWO_SHIFT';
+  if (error) {
+    return null;
+  }
+
+  const { data: latestConfig, error: latestError } = await supabase
+    .from('branch_shift_config')
+    .select('shift_mode')
+    .eq('branch_id', branchId)
+    .order('effective_from_business_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestError || !latestConfig?.shift_mode) {
+    return null;
+  }
+
+  return latestConfig.shift_mode as 'SINGLE_SHIFT' | 'TWO_SHIFT';
 }

@@ -492,7 +492,13 @@ export const login = async (
       logger.warn('Failed to update last login:', updateError);
     }
 
-    const { secretSource, sessionId, session } = issueLocalSession(userId, userProfile.email, userProfile.role);
+    const { secretSource, sessionId, session } = issueLocalSession(
+      userId,
+      userProfile.email,
+      userProfile.role,
+      userProfile.role,
+      userProfile.branch_id
+    );
 
     await registerManagedSession({
       userId,
@@ -584,7 +590,7 @@ export const refreshToken = async (
         if (decoded?.sub && decoded?.type === 'refresh') {
           const { data: user, error: userError } = await supabase
             .from('users')
-            .select('id, email, role')
+            .select('id, email, role, branch_id')
             .eq('id', decoded.sub)
             .single();
 
@@ -600,7 +606,13 @@ export const refreshToken = async (
             await revokeManagedSession(decoded.sid);
           }
 
-          const { sessionId, session } = issueLocalSession(user.id, user.email, user.role);
+          const { sessionId, session } = issueLocalSession(
+            user.id,
+            user.email,
+            user.role,
+            user.role,
+            user.branch_id
+          );
 
           await registerManagedSession({
             userId: user.id,

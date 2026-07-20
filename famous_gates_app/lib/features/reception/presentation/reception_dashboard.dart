@@ -19,6 +19,7 @@ enum ReceptionSection {
   overview,
   reservations,
   checkInOut,
+  breakfastPax,
   rooms,
   guests,
   guestProfile,
@@ -235,6 +236,11 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
             icon: Icons.login_outlined,
             group: 'Front Desk'),
         MasterNavItem(
+            section: ReceptionSection.breakfastPax,
+            label: 'Breakfast Pax',
+            icon: Icons.free_breakfast_outlined,
+            group: 'Front Desk'),
+        MasterNavItem(
             section: ReceptionSection.rooms,
             label: 'Rooms',
             icon: Icons.bed_outlined,
@@ -317,6 +323,8 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
         );
       case ReceptionSection.checkInOut:
         return _CheckInOutSection(data: data, onRefresh: _refresh);
+      case ReceptionSection.breakfastPax:
+        return const _BreakfastPaxSection();
       case ReceptionSection.rooms:
         return _RoomsSection(
           data: data,
@@ -435,85 +443,347 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
       return row;
     }).toList();
   }
+}
 
-  // ── Navigation helpers for new screens ──────────────────────────────────────
+class _BreakfastPaxSection extends ConsumerStatefulWidget {
+  const _BreakfastPaxSection();
 
-  Future<void> navigateToCreateReservation() async {
-    final result = await Navigator.of(context).push<Booking>(
-      MaterialPageRoute(builder: (_) => const CreateReservationScreen()),
+  @override
+  ConsumerState<_BreakfastPaxSection> createState() =>
+      _BreakfastPaxSectionState();
+}
+
+class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
+  late final TextEditingController _dateController;
+  final TextEditingController _confirmedController = TextEditingController();
+  final TextEditingController _reasonController = TextEditingController();
+  bool _saving = false;
+  late Future<Map<String, dynamic>> _future;
+
+  ReceptionRepository get _repo => ref.read(receptionRepositoryProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    final today = DateTime.now();
+    _dateController = TextEditingController(
+      text:
+          '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}',
     );
-    if (result != null && mounted) {
-      setState(() {
-        _future = _load();
-      });
+    _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _dateController.dispose();
+    _confirmedController.dispose();
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<Map<String, dynamic>> _load() async {
+    final data = await _repo.getDailyBreakfastPax(date: _dateController.text);
+    _confirmedController.text =
+        '${(data['confirmed_pax'] as num?)?.toInt() ?? 0}';
+    _reasonController.text = data['adjustment_reason']?.toString() ?? '';
+    return data;
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  Future<void> _save(String status) async {
+    setState(() => _saving = true);
+    try {
+      await _repo.saveDailyBreakfastPax(
+        date: _dateController.text,
+        confirmedPax: int.tryParse(_confirmedController.text.trim()) ?? 0,
+        status: status,
+        adjustmentReason: _reasonController.text,
+      );
+      _refresh();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Reservation created: ${result.confirmationNumber}')),
+          content: Text(status == 'draft'
+              ? 'Breakfast pax draft saved.'
+              : 'Breakfast pax confirmed. Kitchen can now issue Accommodation Breakfast stock.'),
+        ),
       );
-    }
-  }
-
-  Future<void> navigateToCheckIn([Booking? booking]) async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => CheckInScreen(booking: booking)),
-    );
-    if (result == true && mounted) {
-      setState(() {
-        _future = _load();
-      });
+    } catch (error) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Guest checked in successfully')),
+        SnackBar(content: Text(apiErrorMessage(error))),
       );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> navigateToCheckOut([Booking? booking]) async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => CheckOutScreen(booking: booking)),
-    );
-    if (result == true && mounted) {
-      setState(() {
-        _future = _load();
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Guest checked out successfully')),
-      );
-    }
-  }
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: FutureBuilder<Map<String, dynamic>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const LoadingSkeleton(type: SkeletonType.list);
+          }
+          if (snapshot.hasError) {
+            return ErrorState(
+              message: apiErrorMessage(snapshot.error ?? 'Unknown error'),
+              onRetry: _refresh,
+            );
+          }
 
-  Future<void> navigateToGuestManagement() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const GuestManagementScreen()),
-    );
-    if (mounted) {
-      setState(() {
-        _future = _load();
-      });
-    }
-  }
+          final data = snapshot.data ?? const <String, dynamic>{};
+          final calculated = (data['calculated_pax'] as num?)?.toInt() ?? 0;
+          final confirmed = (data['confirmed_pax'] as num?)?.toInt() ?? 0;
+          final checkedIn =
+              (data['checked_in_reservations'] as num?)?.toInt() ?? 0;
+          final eligible =
+              (data['eligible_reservations'] as num?)?.toInt() ?? 0;
+          final status =
+              (data['status']?.toString() ?? 'unconfirmed').toLowerCase();
+          final bookings =
+              (data['eligible_bookings'] as List?)?.whereType<Map>().toList() ??
+                  const <Map>[];
 
-  Future<void> navigateToRoomManagement() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RoomManagementScreen()),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Daily Breakfast Pax',
+                            style: TextStyle(
+                                fontSize: 24, fontWeight: FontWeight.w800)),
+                        SizedBox(height: 4),
+                        Text(
+                          'Reception confirms accommodation breakfast pax for the kitchen session and closing reconciliation.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 180,
+                    child: TextFormField(
+                      controller: _dateController,
+                      decoration: const InputDecoration(
+                        labelText: 'Breakfast date',
+                        border: OutlineInputBorder(),
+                      ),
+                      onFieldSubmitted: (_) => _refresh(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reload'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
+                  _ReceptionMetricCard(
+                    label: 'Checked-in bookings',
+                    value: '$checkedIn',
+                    icon: Icons.hotel_outlined,
+                  ),
+                  _ReceptionMetricCard(
+                    label: 'Breakfast-eligible stays',
+                    value: '$eligible',
+                    icon: Icons.people_alt_outlined,
+                  ),
+                  _ReceptionMetricCard(
+                    label: 'Calculated pax',
+                    value: '$calculated',
+                    icon: Icons.calculate_outlined,
+                  ),
+                  _ReceptionMetricCard(
+                    label: 'Confirmed pax',
+                    value: '$confirmed',
+                    icon: Icons.verified_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: status == 'confirmed' || status == 'locked'
+                      ? Colors.green.shade50
+                      : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: status == 'confirmed' || status == 'locked'
+                        ? Colors.green.shade200
+                        : Colors.orange.shade200,
+                  ),
+                ),
+                child: Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text('Status: ${status.replaceAll('_', ' ')}',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    SizedBox(
+                      width: 180,
+                      child: TextFormField(
+                        controller: _confirmedController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Confirmed pax',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 320,
+                      child: TextFormField(
+                        controller: _reasonController,
+                        decoration: const InputDecoration(
+                          labelText: 'Adjustment reason',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    FilledButton(
+                      onPressed: _saving ? null : () => _save('draft'),
+                      child: const Text('Save Draft'),
+                    ),
+                    FilledButton.tonal(
+                      onPressed: _saving ? null : () => _save('confirmed'),
+                      child: const Text('Confirm for Kitchen'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: bookings.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No checked-in breakfast-eligible stays for this date.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemBuilder: (context, index) {
+                            final row =
+                                Map<String, dynamic>.from(bookings[index]);
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    AppColors.kPrimary.withOpacity(.08),
+                                child: const Icon(Icons.person_outline),
+                              ),
+                              title: Text(
+                                (row['guest_name']
+                                            ?.toString()
+                                            .trim()
+                                            .isNotEmpty ??
+                                        false)
+                                    ? row['guest_name'].toString()
+                                    : (row['confirmation_number']?.toString() ??
+                                        'Guest stay'),
+                              ),
+                              subtitle: Text(
+                                  '${row['confirmation_number'] ?? '-'} • ${row['meal_plan'] ?? '-'} • ${row['check_in_date'] ?? '-'} to ${row['check_out_date'] ?? '-'}'),
+                              trailing: Text(
+                                '${row['pax'] ?? 0} pax',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            );
+                          },
+                          separatorBuilder: (_, __) =>
+                              Divider(color: Colors.grey.shade200, height: 1),
+                          itemCount: bookings.length,
+                        ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
-    if (mounted) {
-      setState(() {
-        _future = _load();
-      });
-    }
-  }
-
-  Future<void> navigateToHousekeeping() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const HousekeepingScreen()),
-    );
-    if (mounted) {
-      setState(() {
-        _future = _load();
-      });
-    }
   }
 }
+
+class _ReceptionMetricCard extends StatelessWidget {
+  const _ReceptionMetricCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: AppColors.kPrimary.withOpacity(.08),
+            child: Icon(icon, color: AppColors.kPrimary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        color: Colors.grey, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Navigation helpers for new screens ──────────────────────────────────────
 
 class _OverviewSection extends ConsumerWidget {
   const _OverviewSection({
@@ -2081,13 +2351,12 @@ class _EmailAutomationSection extends ConsumerWidget {
               runSpacing: 8,
               children: [
                 for (final booking in data.bookings.where((b) =>
-                    b.status == 'confirmed' &&
-                    (b.guestEmail ?? '').isNotEmpty))
+                    b.status == 'confirmed' && (b.guestEmail ?? '').isNotEmpty))
                   ActionChip(
                     avatar: const Icon(Icons.email_outlined, size: 16),
                     label: Text('Confirm: ${booking.guestName ?? 'Guest'}'),
-                    onPressed: () => _sendBookingEmail(
-                        context, ref, booking, onRefresh),
+                    onPressed: () =>
+                        _sendBookingEmail(context, ref, booking, onRefresh),
                   ),
                 for (final booking in data.bookings.where((b) =>
                     b.status == 'checked_in' &&
@@ -2095,8 +2364,8 @@ class _EmailAutomationSection extends ConsumerWidget {
                   ActionChip(
                     avatar: const Icon(Icons.receipt_outlined, size: 16),
                     label: Text('Invoice: ${booking.guestName ?? 'Guest'}'),
-                    onPressed: () => _sendBookingInvoice(
-                        context, ref, booking, onRefresh),
+                    onPressed: () =>
+                        _sendBookingInvoice(context, ref, booking, onRefresh),
                   ),
               ],
             ),
@@ -2108,9 +2377,8 @@ class _EmailAutomationSection extends ConsumerWidget {
                 ? const EmptyState(message: 'No recent activity')
                 : _SimpleRows(
                     rows: data.bookingRows
-                        .where((b) =>
-                            (_text(b, ['guest_email', 'email']) ?? '')
-                                .isNotEmpty)
+                        .where((b) => (_text(b, ['guest_email', 'email']) ?? '')
+                            .isNotEmpty)
                         .take(20)
                         .toList(),
                     fields: const [
@@ -2124,39 +2392,40 @@ class _EmailAutomationSection extends ConsumerWidget {
                       final email = _text(row, ['guest_email', 'email']) ?? '';
                       if (id.isEmpty || email.isEmpty) return const SizedBox();
                       return Wrap(spacing: 6, children: [
-                        _SmallAction(
-                            'Confirm', Icons.email_outlined,
+                        _SmallAction('Confirm', Icons.email_outlined, () async {
+                          try {
+                            await ref
+                                .read(receptionRepositoryProvider)
+                                .sendBookingConfirmationEmail(id);
+                            _snack(context, 'Confirmation sent to $email');
+                          } catch (e) {
+                            _snack(context, 'Failed: ${apiErrorMessage(e)}',
+                                error: true);
+                          }
+                        }),
+                        _SmallAction('Invoice', Icons.receipt_outlined,
                             () async {
-                              try {
-                                await ref.read(receptionRepositoryProvider)
-                                    .sendBookingConfirmationEmail(id);
-                                _snack(context, 'Confirmation sent to $email');
-                              } catch (e) {
-                                _snack(context, 'Failed: ${apiErrorMessage(e)}', error: true);
-                              }
-                            }),
-                        _SmallAction(
-                            'Invoice', Icons.receipt_outlined,
-                            () async {
-                              try {
-                                await ref.read(receptionRepositoryProvider)
-                                    .sendInvoiceEmail(id);
-                                _snack(context, 'Invoice sent to $email');
-                              } catch (e) {
-                                _snack(context, 'Failed: ${apiErrorMessage(e)}', error: true);
-                              }
-                            }),
-                        _SmallAction(
-                            'Cancel', Icons.cancel_outlined,
-                            () async {
-                              try {
-                                await ref.read(receptionRepositoryProvider)
-                                    .sendCancellationEmail(id);
-                                _snack(context, 'Cancellation sent to $email');
-                              } catch (e) {
-                                _snack(context, 'Failed: ${apiErrorMessage(e)}', error: true);
-                              }
-                            }),
+                          try {
+                            await ref
+                                .read(receptionRepositoryProvider)
+                                .sendInvoiceEmail(id);
+                            _snack(context, 'Invoice sent to $email');
+                          } catch (e) {
+                            _snack(context, 'Failed: ${apiErrorMessage(e)}',
+                                error: true);
+                          }
+                        }),
+                        _SmallAction('Cancel', Icons.cancel_outlined, () async {
+                          try {
+                            await ref
+                                .read(receptionRepositoryProvider)
+                                .sendCancellationEmail(id);
+                            _snack(context, 'Cancellation sent to $email');
+                          } catch (e) {
+                            _snack(context, 'Failed: ${apiErrorMessage(e)}',
+                                error: true);
+                          }
+                        }),
                       ]);
                     },
                   ),
@@ -2187,7 +2456,8 @@ class _AutoSendTile extends StatelessWidget {
     return SwitchListTile(
       secondary: Icon(icon, color: AppColors.kPrimary),
       title: Text(label),
-      subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      subtitle: Text(subtitle,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
       value: value,
       onChanged: onChanged,
     );
@@ -4358,8 +4628,8 @@ Future<void> _sendBookingEmail(BuildContext context, WidgetRef ref,
     _snack(context, 'Guest has no email address', error: true);
     return;
   }
-  final confirmed = await _confirm(context,
-      'Send booking confirmation email to\n$guestEmail?');
+  final confirmed = await _confirm(
+      context, 'Send booking confirmation email to\n$guestEmail?');
   if (!confirmed) return;
   try {
     final result = await ref
@@ -4371,29 +4641,27 @@ Future<void> _sendBookingEmail(BuildContext context, WidgetRef ref,
     }
   } catch (e) {
     if (context.mounted) {
-      _snack(context,
-          apiErrorMessage(e, fallback: 'Failed to send email'), error: true);
+      _snack(context, apiErrorMessage(e, fallback: 'Failed to send email'),
+          error: true);
     }
   }
 }
 
 Future<void> _testSmtpConnection(BuildContext context, WidgetRef ref) async {
   try {
-    final result = await ref
-        .read(receptionRepositoryProvider)
-        .testEmailConnection();
+    final result =
+        await ref.read(receptionRepositoryProvider).testEmailConnection();
     final status = result['connection_status'] ?? 'Unknown';
     final from = result['from_email'] ?? '';
     final usingEthereal = result['using_ethereal'] == true;
     if (context.mounted) {
       final statusText = usingEthereal ? 'Connected (Ethereal Dev)' : status;
-      _snack(context,
-          'SMTP $statusText${from.isNotEmpty ? ' ($from)' : ''}');
+      _snack(context, 'SMTP $statusText${from.isNotEmpty ? ' ($from)' : ''}');
     }
   } catch (e) {
     if (context.mounted) {
-      _snack(context,
-          apiErrorMessage(e, fallback: 'SMTP test failed'), error: true);
+      _snack(context, apiErrorMessage(e, fallback: 'SMTP test failed'),
+          error: true);
     }
   }
 }
@@ -4405,8 +4673,8 @@ Future<void> _sendBookingInvoice(BuildContext context, WidgetRef ref,
     _snack(context, 'Guest has no email address', error: true);
     return;
   }
-  final confirmed = await _confirm(context,
-      'Send invoice email to\n$guestEmail?');
+  final confirmed =
+      await _confirm(context, 'Send invoice email to\n$guestEmail?');
   if (!confirmed) return;
   try {
     final result = await ref
@@ -4418,8 +4686,8 @@ Future<void> _sendBookingInvoice(BuildContext context, WidgetRef ref,
     }
   } catch (e) {
     if (context.mounted) {
-      _snack(context,
-          apiErrorMessage(e, fallback: 'Failed to send invoice'), error: true);
+      _snack(context, apiErrorMessage(e, fallback: 'Failed to send invoice'),
+          error: true);
     }
   }
 }
@@ -4441,8 +4709,8 @@ Future<void> _sendCheckInReminder(BuildContext context, WidgetRef ref,
     }
   } catch (e) {
     if (context.mounted) {
-      _snack(context,
-          apiErrorMessage(e, fallback: 'Failed to send reminder'), error: true);
+      _snack(context, apiErrorMessage(e, fallback: 'Failed to send reminder'),
+          error: true);
     }
   }
 }
@@ -4464,8 +4732,8 @@ Future<void> _sendCheckOutReminder(BuildContext context, WidgetRef ref,
     }
   } catch (e) {
     if (context.mounted) {
-      _snack(context,
-          apiErrorMessage(e, fallback: 'Failed to send reminder'), error: true);
+      _snack(context, apiErrorMessage(e, fallback: 'Failed to send reminder'),
+          error: true);
     }
   }
 }

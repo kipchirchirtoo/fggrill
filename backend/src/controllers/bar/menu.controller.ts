@@ -116,13 +116,19 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
   try {
     const {
       category_id, name, description, price, cost_price,
-      unit, branch_id, image_url
+      unit, branch_id, image_url, sku
     } = req.body;
+
+    const categoryName = req.body.category || req.body.category_name;
+    let resolvedCategoryId = category_id;
+    if (!resolvedCategoryId && categoryName) {
+      resolvedCategoryId = await resolveBarCategoryId(categoryName) || null;
+    }
 
     const { data, error } = await supabase
       .from('bar_drinks')
       .insert([{
-        category_id,
+        category_id: resolvedCategoryId,
         name,
         description,
         price,
@@ -130,6 +136,7 @@ export const createDrink = async (req: Request, res: Response, next: NextFunctio
         unit: unit || 'bottle',
         branch_id: branch_id || null,
         image_url,
+        sku: sku || null,
         is_available: true
       }])
       .select()
@@ -161,12 +168,21 @@ export const updateDrink = async (req: Request, res: Response, next: NextFunctio
       branch_id,
       image_url,
       is_available,
+      sku
     } = updates;
     const validUpdates: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
 
-    if (category_id !== undefined) validUpdates.category_id = category_id || null;
+    if (category_id !== undefined) {
+      validUpdates.category_id = category_id || null;
+    } else {
+      const categoryName = updates.category || updates.category_name;
+      if (categoryName !== undefined) {
+        validUpdates.category_id = await resolveBarCategoryId(categoryName) || null;
+      }
+    }
+
     if (name !== undefined) validUpdates.name = name;
     if (description !== undefined) validUpdates.description = description;
     if (price !== undefined) validUpdates.price = price;
@@ -175,6 +191,7 @@ export const updateDrink = async (req: Request, res: Response, next: NextFunctio
     if (branch_id !== undefined) validUpdates.branch_id = branch_id || null;
     if (image_url !== undefined) validUpdates.image_url = image_url;
     if (is_available !== undefined) validUpdates.is_available = is_available;
+    if (sku !== undefined) validUpdates.sku = sku || null;
 
     const { data, error } = await supabase
       .from('bar_drinks')
@@ -270,3 +287,34 @@ export const uploadDrinkImage = async (req: Request, res: Response, next: NextFu
     next(error);
   }
 };
+
+async function resolveBarCategoryId(categoryName: string | undefined): Promise<string | null> {
+  if (!categoryName) return null;
+  const name = categoryName.trim();
+  if (!name) return null;
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(name)) return name;
+
+  const { data } = await supabase
+    .from('bar_drink_categories')
+    .select('id')
+    .ilike('name', name)
+    .limit(1);
+
+  if (data && data.length > 0) {
+    return data[0].id;
+  }
+
+  const { data: newCat, error } = await supabase
+    .from('bar_drink_categories')
+    .insert([{ name }])
+    .select('id')
+    .single();
+
+  if (error || !newCat) {
+    logger.error('Error creating bar category from name:', error);
+    return null;
+  }
+  return newCat.id;
+}

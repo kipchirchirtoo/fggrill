@@ -1,21 +1,107 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
 import '../domain/session_models.dart';
 import '../domain/session_providers.dart';
 import '../data/repository.dart';
 import '../../auth/domain/auth_notifier.dart';
+import '../../branch_storekeeper/presentation/kitchen_production_logging_screen.dart';
+import '../../branch_storekeeper/presentation/kitchen_stocktake_screen.dart';
+import '../../branch_storekeeper/presentation/record_spoilage_screen.dart';
+import 'kitchen_prep_batches_screen.dart';
 
 class KitchenSessionsScreen extends ConsumerStatefulWidget {
   const KitchenSessionsScreen({super.key});
 
   @override
-  ConsumerState<KitchenSessionsScreen> createState() => _KitchenSessionsScreenState();
+  ConsumerState<KitchenSessionsScreen> createState() =>
+      _KitchenSessionsScreenState();
 }
 
 class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
   final _uuid = const Uuid();
   bool _isSubmitting = false;
+
+  String _kitchenShiftLabel(KitchenShift shift) {
+    final subShift = shift.subShiftType?.trim();
+    if (subShift != null && subShift.isNotEmpty) {
+      return subShift;
+    }
+    return 'A';
+  }
+
+  String? _eventTypeForChannel(String channelCode) {
+    switch (channelCode) {
+      case 'conference_event':
+        return 'conference';
+      case 'buffet':
+        return 'buffet';
+      case 'outside_catering':
+        return 'outside_catering';
+      case 'group_meal':
+        return 'group_meal';
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _openKitchenSpoilage(KitchenShift shift) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RecordSpoilageScreen(
+          initialArea: 'kitchen',
+          initialShift: _kitchenShiftLabel(shift),
+          initialKitchenShiftId: shift.id,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openKitchenStocktake() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const KitchenStocktakeScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openProductionLogging() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const KitchenProductionLoggingScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openPrepBatches(KitchenShift shift) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => KitchenPrepBatchesScreen(shift: shift),
+      ),
+    );
+  }
+
+  Future<void> _openSessionHistory() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const _KitchenSessionHistoryScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openIssueStockScreen(KitchenShift shift,
+      {required String channelCode}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _KitchenIssueStockScreen(
+          shift: shift,
+          channelCode: channelCode,
+        ),
+      ),
+    );
+    ref.invalidate(shiftDetailsProvider(shift.id));
+  }
 
   @override
   @override
@@ -23,17 +109,32 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
     final configAsync = ref.watch(shiftConfigProvider);
     final user = ref.watch(authNotifierProvider).valueOrNull;
     final userRole = user?.role ?? '';
-    const writeRoles = {'kitchen_operations', 'branch_storekeeper', 'storekeeper'};
-    final isWriteUser = writeRoles.contains(userRole) || user?.roles.any(writeRoles.contains) == true;
+    const writeRoles = {
+      'kitchen_operations',
+      'branch_storekeeper',
+      'storekeeper'
+    };
+    final isWriteUser = writeRoles.contains(userRole) ||
+        user?.roles.any(writeRoles.contains) == true;
+    const accountantRoles = {
+      'branch_accountant',
+      'super_admin',
+      'director',
+      'general_manager'
+    };
+    final isAccountant = accountantRoles.contains(userRole) ||
+        user?.roles.any(accountantRoles.contains) == true;
 
     return configAsync.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, stack) => Scaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Error loading shift configuration: $error', style: const TextStyle(color: Colors.red)),
+              Text('Error loading shift configuration: $error',
+                  style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => ref.invalidate(shiftConfigProvider),
@@ -57,14 +158,64 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                     const SizedBox(height: 16),
                     const Text(
                       'Kitchen Sessions Disabled',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'This branch is not configured for Kitchen Sessions pilot operations.\nReason: ${config.reason ?? "KITCHEN_SESSIONS_NOT_CONFIGURED"}',
+                      isAccountant
+                          ? 'Kitchen Sessions has not been configured for this branch yet. Set the branch shift mode below to enable storekeeper operations.\nReason: ${config.reason ?? "KITCHEN_SESSIONS_NOT_CONFIGURED"}'
+                          : 'Kitchen Sessions has not been configured for this branch yet. Branch Accountant must configure the kitchen session shift mode before the storekeeper can open a session.\nReason: ${config.reason ?? "KITCHEN_SESSIONS_NOT_CONFIGURED"}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey),
                     ),
+                    if (isAccountant) ...[
+                      const SizedBox(height: 48),
+                      const Text(
+                        'Branch Accountant Setup',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.looks_one),
+                            label: const Text('Single Shift (All Day)'),
+                            onPressed: () async {
+                              try {
+                                await ref
+                                    .read(kitchenRepositoryProvider)
+                                    .configureShiftMode('SINGLE_SHIFT');
+                                ref.invalidate(shiftConfigProvider);
+                              } catch (e) {
+                                if (context.mounted)
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $e')));
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 16),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.looks_two),
+                            label: const Text('Two Shifts (Shift A / Shift B)'),
+                            onPressed: () async {
+                              try {
+                                await ref
+                                    .read(kitchenRepositoryProvider)
+                                    .configureShiftMode('TWO_SHIFT');
+                                ref.invalidate(shiftConfigProvider);
+                              } catch (e) {
+                                if (context.mounted)
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $e')));
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -78,6 +229,18 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
           appBar: AppBar(
             title: const Text('Kitchen Shift Sessions'),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.history_outlined),
+                tooltip: 'Kitchen Session History',
+                onPressed: _openSessionHistory,
+              ),
+              if (isAccountant)
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  tooltip: 'Configure Kitchen Sessions',
+                  onPressed: () =>
+                      _showConfigDialog(context, ref, config.shiftMode),
+                ),
               IconButton(
                 icon: const Icon(Icons.refresh),
                 onPressed: () {
@@ -93,10 +256,12 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Error: $error', style: const TextStyle(color: Colors.red)),
+                  Text('Error: $error',
+                      style: const TextStyle(color: Colors.red)),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => ref.read(activeKitchenShiftProvider.notifier).refresh(),
+                    onPressed: () =>
+                        ref.read(activeKitchenShiftProvider.notifier).refresh(),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -114,11 +279,13 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.info_outline, size: 48, color: Colors.blue.shade700),
+                            Icon(Icons.info_outline,
+                                size: 48, color: Colors.blue.shade700),
                             const SizedBox(height: 16),
                             const Text(
                               'No Active Kitchen Session',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
                             const Text(
@@ -146,13 +313,22 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
   Widget _buildOpenShiftView(KitchenShiftConfig config) {
     final staffAsync = ref.watch(staffProfilesProvider);
 
-    String selectedShiftType = 'breakfast';
-    String? selectedSubShiftType;
+    String selectedShiftType = 'morning';
+    final String? selectedSubShiftType =
+        config.shiftMode == 'TWO_SHIFT' ? 'A' : null;
     List<String> selectedChefIds = [];
+    List<String> selectedDispenseIds = [];
+    final chefSearchController = TextEditingController();
+    final dispenseSearchController = TextEditingController();
     String selectedDept = 'KITCHEN';
 
     return StatefulBuilder(
       builder: (context, setLocalState) {
+        final requiresOpeningStocktake = config.openingStocktakeRequired &&
+            (config.shiftMode == 'SINGLE_SHIFT' || selectedSubShiftType == 'A');
+        final canOpenNow =
+            !requiresOpeningStocktake || config.openingStocktakeReady;
+
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Center(
@@ -160,7 +336,8 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
               constraints: const BoxConstraints(maxWidth: 600),
               child: Card(
                 elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
                 child: Padding(
                   padding: const EdgeInsets.all(32.0),
                   child: Column(
@@ -172,127 +349,240 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                           SizedBox(width: 12),
                           Text(
                             'Open Kitchen Shift',
-                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 24, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'Morning shifts must have the morning stocktake submitted before opening. Afternoon shifts (Sub-shift B) will carry forward closing counts.',
-                        style: TextStyle(color: Colors.grey),
+                      Text(
+                        config.shiftMode == 'TWO_SHIFT'
+                            ? 'Shift A requires Kitchen Stocktake Shift A to be submitted. Shift B carries forward the witnessed closing counts from Shift A.'
+                            : 'This branch uses a single kitchen session. Kitchen Stocktake Shift A must be submitted before the session can open.',
+                        style: const TextStyle(color: Colors.grey),
                       ),
                       const Divider(height: 32),
 
-                      // Shift Type
-                      const Text('Shift Type', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedShiftType,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      // Shift Selection / Lock
+                      if (config.shiftMode == 'TWO_SHIFT') ...[
+                        const Text('Shift (Session)',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: 'Shift A',
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                            suffixIcon: const Icon(Icons.lock_outline),
+                            helperText:
+                                'Shift B is opened automatically after Shift A handover.',
+                          ),
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'breakfast', child: Text('Breakfast')),
-                          DropdownMenuItem(value: 'lunch', child: Text('Lunch')),
-                          DropdownMenuItem(value: 'dinner', child: Text('Dinner')),
-                          DropdownMenuItem(value: 'overnight', child: Text('Overnight')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setLocalState(() => selectedShiftType = val);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 20),
+                      ] else ...[
+                        const Text('Session',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: 'Single Shift',
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                            suffixIcon: const Icon(Icons.lock_outline),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
 
-                      // Sub Shift Type (if enabled by branch shift config)
-                      () {
-                        if (config.shiftMode == 'SINGLE_SHIFT') {
-                          selectedSubShiftType = null;
-                          return const SizedBox.shrink();
-                        }
-                        selectedSubShiftType ??= 'A';
-                          return Column(
+                      if (requiresOpeningStocktake) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: canOpenNow
+                                ? Colors.green.shade50
+                                : Colors.orange.shade50,
+                            border: Border.all(
+                              color: canOpenNow
+                                  ? Colors.green.shade200
+                                  : Colors.orange.shade200,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Sub-shift (Session)', style: TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              DropdownButtonFormField<String>(
-                                initialValue: selectedSubShiftType,
-                                decoration: InputDecoration(
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                items: const [
-                                  DropdownMenuItem(value: 'A', child: Text('Sub-shift A (Morning)')),
-                                  DropdownMenuItem(value: 'B', child: Text('Sub-shift B (Afternoon)')),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setLocalState(() => selectedSubShiftType = val);
-                                  }
-                                },
+                              Icon(
+                                canOpenNow
+                                    ? Icons.check_circle_outline
+                                    : Icons.warning_amber_rounded,
+                                color: canOpenNow
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade800,
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      canOpenNow
+                                          ? 'Kitchen stocktake ready'
+                                          : 'Kitchen stocktake required',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: canOpenNow
+                                            ? Colors.green.shade800
+                                            : Colors.orange.shade900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      canOpenNow
+                                          ? 'Kitchen Stocktake Shift ${config.openingStocktakeShift ?? 'A'} has been submitted and the opening session can proceed.'
+                                          : (config.openingStocktakeMessage
+                                                      ?.isNotEmpty ==
+                                                  true
+                                              ? config.openingStocktakeMessage!
+                                              : 'Storekeeper must submit Kitchen Stocktake Shift ${config.openingStocktakeShift ?? 'A'} before opening this session.'),
+                                      style: TextStyle(
+                                        color: canOpenNow
+                                            ? Colors.green.shade900
+                                            : Colors.orange.shade900,
+                                      ),
+                                    ),
+                                    if ((config.openingStocktakeStatus ?? '')
+                                        .isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Current stocktake status: ${config.openingStocktakeStatus}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: canOpenNow
+                                              ? Colors.green.shade800
+                                              : Colors.orange.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ],
-                          );
-                        }(),
-
-                      // Department
-                      const Text('Department', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedDept,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'KITCHEN', child: Text('Kitchen')),
-                          DropdownMenuItem(value: 'PASTRY', child: Text('Pastry')),
-                          DropdownMenuItem(value: 'BUTCHERY', child: Text('Butchery')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setLocalState(() => selectedDept = val);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 20),
+                      ],
 
                       // Staff Assignment
-                      const Text('Assigned Chef(s)', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('Assigned Chef(s)',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       staffAsync.when(
                         loading: () => const CircularProgressIndicator(),
                         error: (err, _) => Text('Error loading staff: $err'),
                         data: (staffList) {
-                          return Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            constraints: const BoxConstraints(maxHeight: 150),
-                            child: ListView(
-                              shrinkWrap: true,
-                              children: staffList.map((staff) {
-                                final id = staff['id']?.toString() ?? '';
-                                final name = '${staff['first_name'] ?? ''} ${staff['last_name'] ?? ''}'.trim();
-                                final isSelected = selectedChefIds.contains(id);
-
-                                return CheckboxListTile(
-                                  value: isSelected,
-                                  title: Text(name.isNotEmpty ? name : id),
-                                  onChanged: (checked) {
-                                    setLocalState(() {
-                                      if (checked == true) {
-                                        selectedChefIds.add(id);
-                                      } else {
-                                        selectedChefIds.remove(id);
-                                      }
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
+                          final allSelectedIds = {
+                            ...selectedChefIds,
+                            ...selectedDispenseIds,
+                          };
+                          final selectedChefs = staffList
+                              .where((staff) => selectedChefIds
+                                  .contains(staff['id']?.toString() ?? ''))
+                              .toList();
+                          final selectedDispensers = staffList
+                              .where((staff) => selectedDispenseIds
+                                  .contains(staff['id']?.toString() ?? ''))
+                              .toList();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StaffAutocompleteField(
+                                label: 'Search and add chef',
+                                controller: chefSearchController,
+                                staffList: staffList,
+                                selectedIds: allSelectedIds,
+                                onSelected: (staff) {
+                                  final id = staff['id']?.toString() ?? '';
+                                  if (id.isEmpty || allSelectedIds.contains(id))
+                                    return;
+                                  setLocalState(() {
+                                    selectedChefIds = [...selectedChefIds, id];
+                                    chefSearchController.clear();
+                                  });
+                                },
+                              ),
+                              if (selectedChefs.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: selectedChefs.map((staff) {
+                                    final id = staff['id']?.toString() ?? '';
+                                    return Chip(
+                                      label: Text(_staffDisplayName(staff)),
+                                      deleteIcon:
+                                          const Icon(Icons.close, size: 18),
+                                      onDeleted: () {
+                                        setLocalState(() {
+                                          selectedChefIds = selectedChefIds
+                                              .where((chefId) => chefId != id)
+                                              .toList();
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                              const SizedBox(height: 20),
+                              const Text('Assigned Dispense',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              _StaffAutocompleteField(
+                                label: 'Search and add dispense staff',
+                                controller: dispenseSearchController,
+                                staffList: staffList,
+                                selectedIds: allSelectedIds,
+                                onSelected: (staff) {
+                                  final id = staff['id']?.toString() ?? '';
+                                  if (id.isEmpty || allSelectedIds.contains(id))
+                                    return;
+                                  setLocalState(() {
+                                    selectedDispenseIds = [
+                                      ...selectedDispenseIds,
+                                      id
+                                    ];
+                                    dispenseSearchController.clear();
+                                  });
+                                },
+                              ),
+                              if (selectedDispensers.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: selectedDispensers.map((staff) {
+                                    final id = staff['id']?.toString() ?? '';
+                                    return Chip(
+                                      label: Text(_staffDisplayName(staff)),
+                                      deleteIcon:
+                                          const Icon(Icons.close, size: 18),
+                                      onDeleted: () {
+                                        setLocalState(() {
+                                          selectedDispenseIds =
+                                              selectedDispenseIds
+                                                  .where((staffId) =>
+                                                      staffId != id)
+                                                  .toList();
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ],
                           );
                         },
                       ),
@@ -303,20 +593,27 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _isSubmitting
+                          onPressed: !canOpenNow || _isSubmitting
                               ? null
                               : () async {
                                   setLocalState(() => _isSubmitting = true);
                                   try {
-                                    await ref.read(activeKitchenShiftProvider.notifier).openShift(
+                                    await ref
+                                        .read(
+                                            activeKitchenShiftProvider.notifier)
+                                        .openShift(
                                           shiftType: selectedShiftType,
                                           assignedChefIds: selectedChefIds,
+                                          assignedDispenseIds:
+                                              selectedDispenseIds,
                                           subShiftType: selectedSubShiftType,
                                           department: selectedDept,
                                         );
                                     if (!context.mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Kitchen shift opened successfully.')),
+                                      const SnackBar(
+                                          content: Text(
+                                              'Kitchen shift opened successfully.')),
                                     );
                                   } catch (e) {
                                     if (!context.mounted) return;
@@ -335,18 +632,23 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                                     );
                                   } finally {
                                     if (mounted) {
-                                      setLocalState(() => _isSubmitting = false);
+                                      setLocalState(
+                                          () => _isSubmitting = false);
                                     }
                                   }
                                 },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.amber.shade700,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
                           ),
                           child: _isSubmitting
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text('OPEN KITCHEN SESSION', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white)
+                              : const Text('OPEN KITCHEN SESSION',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
@@ -361,49 +663,60 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
   }
 
   // ── ACTIVE SHIFT DASHBOARD ──────────────────────────────────────────────────
-  Widget _buildActiveShiftDashboard(KitchenShift activeShift, bool isWriteUser) {
+  Widget _buildActiveShiftDashboard(
+      KitchenShift activeShift, bool isWriteUser) {
     final detailsAsync = ref.watch(shiftDetailsProvider(activeShift.id));
+    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final userRole = user?.role ?? '';
+    const accountantRoles = {
+      'branch_accountant',
+      'super_admin',
+      'director',
+      'general_manager'
+    };
+    final isAccountant = accountantRoles.contains(userRole) ||
+        user?.roles.any(accountantRoles.contains) == true;
 
     return detailsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(child: Text('Error loading shift details: $error')),
+      error: (error, _) =>
+          Center(child: Text('Error loading shift details: $error')),
       data: (details) {
         final List<KitchenShiftItem> items = (details['items'] as List? ?? [])
-            .map((json) => KitchenShiftItem.fromJson(Map<String, dynamic>.from(json)))
+            .map((json) =>
+                KitchenShiftItem.fromJson(Map<String, dynamic>.from(json)))
             .toList();
 
-        final List<dynamic> rawProductions = details['productions'] as List? ?? [];
-
-        return DefaultTabController(
-          length: 3,
-          child: Column(
+        if (isAccountant) {
+          return Column(
             children: [
-              // Header Shift details card
               _buildHeaderCard(activeShift, items, isWriteUser),
-              const TabBar(
-                tabs: [
-                  Tab(icon: Icon(Icons.inventory), text: 'Active Stock items'),
-                  Tab(icon: Icon(Icons.restaurant), text: 'Production Events'),
-                  Tab(icon: Icon(Icons.history), text: 'Mid-session Additions'),
-                ],
-              ),
               Expanded(
-                child: TabBarView(
-                  children: [
-                    _buildItemsTab(activeShift, items),
-                    _buildProductionsTab(activeShift, rawProductions),
-                    _buildAdditionsTab(activeShift),
-                  ],
+                child: _buildChannelStockIssuanceDashboard(
+                  activeShift,
+                  items,
+                  isWriteUser: false,
                 ),
               ),
             ],
-          ),
+          );
+        }
+
+        return Column(
+          children: [
+            _buildHeaderCard(activeShift, items, isWriteUser),
+            Expanded(
+              child: _buildChannelStockIssuanceDashboard(activeShift, items,
+                  isWriteUser: isWriteUser),
+            ),
+          ],
         );
       },
     );
   }
 
-  Widget _buildHeaderCard(KitchenShift shift, List<KitchenShiftItem> items, bool isWriteUser) {
+  Widget _buildHeaderCard(
+      KitchenShift shift, List<KitchenShiftItem> items, bool isWriteUser) {
     return Card(
       margin: const EdgeInsets.all(16),
       elevation: 2,
@@ -419,11 +732,12 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                   children: [
                     Text(
                       'Shift: ${shift.shiftNumber}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Date: ${shift.shiftDate} | Type: ${shift.shiftType.toUpperCase()} ${shift.subShiftType != null ? '(Sub-shift ${shift.subShiftType})' : ''}',
+                      'Date: ${shift.shiftDate} | Type: ${shift.shiftType.toUpperCase()} ${shift.subShiftType != null ? '(Shift ${shift.subShiftType})' : ''}',
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
                   ],
@@ -431,34 +745,59 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                 Chip(
                   label: Text(
                     shift.status.toUpperCase(),
-                    style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.bold),
                   ),
                   backgroundColor: Colors.green.shade100,
                 ),
               ],
             ),
-            if (isWriteUser) ...[
+            if (isWriteUser && shift.status == 'open') ...[
               const SizedBox(height: 16),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: () => _showLogProductionDialog(shift, items),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Log Production'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddStockDialog(shift),
-                    icon: const Icon(Icons.add_shopping_cart),
-                    label: const Text('Add Mid-session Stock'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                  ),
                   ElevatedButton.icon(
                     onPressed: () => _showCloseShiftDialog(shift, items),
                     icon: const Icon(Icons.close),
                     label: const Text('Close shift / Handover'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _openPrepBatches(shift),
+                    icon: const Icon(Icons.move_down_outlined),
+                    label: const Text('Prep Returns'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _openProductionLogging,
+                    icon: const Icon(Icons.blender_outlined),
+                    label: const Text('Production Logging'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _openKitchenSpoilage(shift),
+                    icon: const Icon(Icons.report_problem_outlined),
+                    label: const Text('Record Spoilage'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _openKitchenStocktake,
+                    icon: const Icon(Icons.kitchen_outlined),
+                    label: const Text('Kitchen Stocktake'),
                   ),
                 ],
               ),
@@ -478,7 +817,8 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                     children: [
                       Icon(Icons.lock_outline, size: 16, color: Colors.grey),
                       SizedBox(width: 4),
-                      Text('Read-Only Session View', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      Text('Read-Only Session View',
+                          style: TextStyle(color: Colors.grey, fontSize: 12)),
                     ],
                   ),
                 Text(
@@ -493,32 +833,300 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
     );
   }
 
-  // ── ACTIVE STOCK ITEMS TAB ──────────────────────────────────────────────────
-  Widget _buildItemsTab(KitchenShift shift, List<KitchenShiftItem> items) {
-    if (items.isEmpty) {
-      return const Center(child: Text('No items in this shift.'));
-    }
-    return ListView.builder(
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final balance = item.openingStock + item.additions - item.soldQuantity - item.spoilageQuantity;
+  Widget _buildChannelStockIssuanceDashboard(
+      KitchenShift shift, List<KitchenShiftItem> items,
+      {required bool isWriteUser}) {
+    final additionsAsync = ref.watch(shiftAdditionsProvider(shift.id));
+    final numberFmt = NumberFormat('#,##0.00');
 
-        return ListTile(
-          title: Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('SKU: ${item.itemSku}'),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
+    return additionsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(child: Text('Error loading additions: $err')),
+      data: (additions) {
+        final channels = [
+          {
+            'code': 'pos_restaurant',
+            'name': 'POS Restaurant',
+            'icon': Icons.restaurant,
+            'color': Colors.orange
+          },
+          {
+            'code': 'accommodation_breakfast',
+            'name': 'Accommodation Breakfast',
+            'icon': Icons.free_breakfast,
+            'color': Colors.blue
+          },
+          {
+            'code': 'buffet',
+            'name': 'Buffet',
+            'icon': Icons.brunch_dining,
+            'color': Colors.purple
+          },
+          {
+            'code': 'conference_event',
+            'name': 'Conference',
+            'icon': Icons.meeting_room,
+            'color': Colors.teal
+          },
+          {
+            'code': 'outside_catering',
+            'name': 'Outside Catering',
+            'icon': Icons.local_shipping,
+            'color': Colors.indigo
+          },
+          {
+            'code': 'group_meal',
+            'name': 'Group Meal',
+            'icon': Icons.groups_outlined,
+            'color': Colors.cyan
+          },
+          {
+            'code': 'staff_meal',
+            'name': 'Staff Meals',
+            'icon': Icons.badge,
+            'color': Colors.green
+          },
+          {
+            'code': 'wastage',
+            'name': 'Wastage / Spoilage',
+            'icon': Icons.delete_outline,
+            'color': Colors.red
+          },
+        ];
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${balance.toStringAsFixed(2)} ${item.unitOfMeasure}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              const Text(
+                'Issue Stock to Channels',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              Text(
-                'Open: ${item.openingStock} | Add: ${item.additions} | Sold: ${item.soldQuantity}',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a channel below to issue stock into the active kitchen session, or jump straight to spoilage logging.',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final crossAxisCount = constraints.maxWidth > 1100
+                      ? 4
+                      : constraints.maxWidth > 800
+                          ? 3
+                          : constraints.maxWidth > 550
+                              ? 2
+                              : 1;
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      mainAxisExtent: 180,
+                    ),
+                    itemCount: channels.length,
+                    itemBuilder: (context, idx) {
+                      final ch = channels[idx];
+                      final code = ch['code'] as String;
+                      final name = ch['name'] as String;
+                      final icon = ch['icon'] as IconData;
+                      final color = ch['color'] as MaterialColor;
+
+                      // Count additions for this channel
+                      final channelAdds = additions
+                          .where((a) => a.purposeChannel == code)
+                          .toList();
+                      final totalQty = channelAdds.fold<double>(
+                          0, (sum, a) => sum + a.quantity);
+
+                      return Card(
+                        elevation: 1,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    backgroundColor: color.shade50,
+                                    radius: 20,
+                                    child: Icon(icon,
+                                        color: color.shade700, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${channelAdds.length} issue(s) logged',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 13),
+                              ),
+                              if (totalQty > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2.0),
+                                  child: Text(
+                                    'Total Qty: ${numberFmt.format(totalQty)}',
+                                    style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12),
+                                  ),
+                                ),
+                              const Spacer(),
+                              if (isWriteUser && shift.status == 'open')
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () {
+                                      if (code == 'wastage') {
+                                        _openKitchenSpoilage(shift);
+                                        return;
+                                      }
+                                      _openIssueStockScreen(shift,
+                                          channelCode: code);
+                                    },
+                                    icon: Icon(
+                                      code == 'wastage'
+                                          ? Icons.open_in_new
+                                          : Icons.add,
+                                      size: 16,
+                                    ),
+                                    label: Text(
+                                      code == 'wastage'
+                                          ? 'Open Spoilage'
+                                          : 'Issue Stock',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: color.shade700,
+                                      side: BorderSide(color: color.shade200),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 8),
+                                    ),
+                                  ),
+                                )
+                              else
+                                const SizedBox(height: 32),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Recent Stock Issues',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              if (additions.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Center(
+                      child: Text('No stock issues logged yet for this shift.',
+                          style: TextStyle(color: Colors.grey)),
+                    ),
+                  ),
+                )
+              else
+                Card(
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.grey.shade200)),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: additions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, idx) {
+                      final add = additions[idx];
+                      final channelName = channels.firstWhere(
+                          (c) => c['code'] == add.purposeChannel,
+                          orElse: () => {'name': add.purposeChannel})['name'];
+                      final staffName = add.responsibleStaffIds.join(', ');
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        title: Row(
+                          children: [
+                            Text(
+                              add.itemName ?? add.itemSku,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                add.itemSku,
+                                style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 11,
+                                    color: Colors.grey.shade700),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Channel: $channelName | Staff: $staffName'),
+                              if (add.notes != null ||
+                                  add.wastageReason != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2.0),
+                                  child: Text(
+                                    'Notes: ${add.notes ?? add.wastageReason}',
+                                    style: const TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                        fontSize: 12),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        trailing: Text(
+                          '${numberFmt.format(add.quantity)} ${add.unit ?? "pcs"}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      );
+                    },
+                  ),
+                ),
             ],
           ),
         );
@@ -526,70 +1134,250 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
     );
   }
 
-  // ── PRODUCTION EVENTS TAB ───────────────────────────────────────────────────
-  Widget _buildProductionsTab(KitchenShift shift, List<dynamic> rawProductions) {
-    if (rawProductions.isEmpty) {
-      return const Center(child: Text('No production logged yet.'));
-    }
-    return ListView.builder(
-      itemCount: rawProductions.length,
-      itemBuilder: (context, index) {
-        final p = rawProductions[index];
-        final rawUsed = (p['raw_quantity_used'] as num?)?.toDouble() ?? 0.0;
-        final rawUnit = p['raw_unit']?.toString() ?? 'units';
-        final prodQty = (p['produced_quantity'] as num?)?.toDouble() ?? 0.0;
-        final prodUnit = p['produced_unit']?.toString() ?? 'portions';
+  // ── FOOD CONTROL REVIEW TAB ────────────────────────────────────────────────
+  Widget _buildFoodControlReviewTab(KitchenShift shift) {
+    final currencyFmt = NumberFormat.currency(symbol: 'KES ', decimalDigits: 2);
+    final numberFmt = NumberFormat('#,##0.00');
 
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: ListTile(
-            title: Text('Produced: ${p['produced_item_name']} ($prodQty $prodUnit)'),
-            subtitle: Text(
-              'Used: ${p['raw_item_name']} ($rawUsed $rawUnit)\nIdempotency Key: ${p['idempotency_key'] ?? ''}',
+    return FutureBuilder<Map<String, dynamic>>(
+      future:
+          ref.read(kitchenRepositoryProvider).getReconciliationReport(shift.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError || snapshot.data == null) {
+          return Center(
+            child: Text(
+              'Error loading report: ${snapshot.error ?? "No data available"}',
+              style: const TextStyle(color: Colors.red),
             ),
-            trailing: p['variance_flagged'] == true
-                ? const Icon(Icons.warning, color: Colors.amber)
-                : const Icon(Icons.check_circle, color: Colors.green),
+          );
+        }
+
+        final report = snapshot.data!;
+        final double totalExpected =
+            (report['total_expected_cost'] as num?)?.toDouble() ?? 0.0;
+        final double totalActual =
+            (report['total_actual_cost'] as num?)?.toDouble() ?? 0.0;
+        final double totalVariance =
+            (report['total_variance_cost'] as num?)?.toDouble() ?? 0.0;
+        final channels = report['channels'] as List? ?? [];
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Summary cards Row
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildReviewSummaryCard(
+                      'Expected Cost',
+                      currencyFmt.format(totalExpected),
+                      Colors.amber.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildReviewSummaryCard(
+                      'Actual Cost',
+                      currencyFmt.format(totalActual),
+                      Colors.blue.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildReviewSummaryCard(
+                      'Variance Cost',
+                      currencyFmt.format(totalVariance),
+                      totalVariance > 0
+                          ? Colors.red.shade700
+                          : Colors.green.shade700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Channel Breakdown',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              if (channels.isEmpty)
+                const Center(
+                    child: Text('No channel consumption records logged.'))
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: channels.length,
+                  itemBuilder: (context, idx) {
+                    final ch = channels[idx];
+                    final double chExpected =
+                        (ch['expected_cost'] as num?)?.toDouble() ?? 0.0;
+                    final double chActual =
+                        (ch['actual_cost'] as num?)?.toDouble() ?? 0.0;
+                    final double chVariance =
+                        (ch['variance_cost'] as num?)?.toDouble() ?? 0.0;
+                    final chItems = ch['items'] as List? ?? [];
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 6.0),
+                      child: ExpansionTile(
+                        title: Text(
+                          ch['channel_name'] ?? 'Unnamed Channel',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          'Expected: ${currencyFmt.format(chExpected)} | Actual: ${currencyFmt.format(chActual)} | Var: ${currencyFmt.format(chVariance)}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: chVariance > 0
+                                ? Colors.red.shade600
+                                : Colors.green.shade600,
+                          ),
+                        ),
+                        children: [
+                          if (chItems.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text(
+                                  'No item transactions logged for this channel.'),
+                            )
+                          else
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: DataTable(
+                                columns: const [
+                                  DataColumn(label: Text('Item / SKU')),
+                                  DataColumn(label: Text('Expected Qty')),
+                                  DataColumn(label: Text('Actual Qty')),
+                                  DataColumn(label: Text('Variance Qty')),
+                                  DataColumn(label: Text('Cost Price')),
+                                  DataColumn(label: Text('Variance Cost')),
+                                ],
+                                rows: chItems.map<DataRow>((it) {
+                                  final double expectedQty =
+                                      (it['expected_qty'] as num?)
+                                              ?.toDouble() ??
+                                          0.0;
+                                  final double actualQty =
+                                      (it['actual_qty'] as num?)?.toDouble() ??
+                                          0.0;
+                                  final double varianceQty =
+                                      (it['variance_qty'] as num?)
+                                              ?.toDouble() ??
+                                          0.0;
+                                  final double costPrice =
+                                      (it['cost_price'] as num?)?.toDouble() ??
+                                          0.0;
+                                  final double varianceCost =
+                                      (it['variance_cost'] as num?)
+                                              ?.toDouble() ??
+                                          0.0;
+
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(it['item_name'] ?? '',
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold)),
+                                            Text(it['sku'] ?? '',
+                                                style: const TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 11)),
+                                          ],
+                                        ),
+                                      ),
+                                      DataCell(Text(
+                                          '${numberFmt.format(expectedQty)} ${it['unit'] ?? ""}')),
+                                      DataCell(Text(
+                                          '${numberFmt.format(actualQty)} ${it['unit'] ?? ""}')),
+                                      DataCell(
+                                        Text(
+                                          '${varianceQty > 0 ? "+" : ""}${numberFmt.format(varianceQty)}',
+                                          style: TextStyle(
+                                            color: varianceQty > 0
+                                                ? Colors.red.shade600
+                                                : (varianceQty < 0
+                                                    ? Colors.green.shade600
+                                                    : Colors.black),
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                          Text(currencyFmt.format(costPrice))),
+                                      DataCell(
+                                        Text(
+                                          currencyFmt.format(varianceCost),
+                                          style: TextStyle(
+                                            color: varianceCost > 0
+                                                ? Colors.red.shade600
+                                                : (varianceCost < 0
+                                                    ? Colors.green.shade600
+                                                    : Colors.black),
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
           ),
         );
       },
     );
   }
 
-  // ── MID-SESSION ADDITIONS TAB ───────────────────────────────────────────────
-  Widget _buildAdditionsTab(KitchenShift shift) {
-    final additionsAsync = ref.watch(shiftAdditionsProvider(shift.id));
-
-    return additionsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Error loading additions: $err')),
-      data: (additions) {
-        if (additions.isEmpty) {
-          return const Center(child: Text('No additions logged yet.'));
-        }
-        return ListView.builder(
-          itemCount: additions.length,
-          itemBuilder: (context, index) {
-            final add = additions[index];
-            return ListTile(
-              leading: const Icon(Icons.add_shopping_cart, color: Colors.blue),
-              title: Text('${add.itemName ?? add.itemSku} (+${add.quantity} ${add.unit ?? ''})'),
-              subtitle: Text(
-                'Type: ${add.foodControlType}\nResponsibility: ${add.responsibleStaffIds.join(", ")}',
-              ),
-              trailing: Text(
-                add.addedAt.length > 10 ? add.addedAt.substring(11, 16) : add.addedAt,
-                style: const TextStyle(color: Colors.grey),
-              ),
-            );
-          },
-        );
-      },
+  Widget _buildReviewSummaryCard(
+      String label, String value, Color accentColor) {
+    return Card(
+      elevation: 2,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: accentColor, width: 4)),
+        ),
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   // ── LOG PRODUCTION DIALOG ──────────────────────────────────────────────────
-  void _showLogProductionDialog(KitchenShift shift, List<KitchenShiftItem> items) {
+  void _showLogProductionDialog(
+      KitchenShift shift, List<KitchenShiftItem> items) {
     final recipesAsync = ref.watch(recipesListProvider);
     final staffAsync = ref.watch(staffProfilesProvider);
 
@@ -645,7 +1433,8 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                       TextFormField(
                         initialValue: actualProducedQty.toString(),
                         decoration: InputDecoration(
-                          labelText: 'Actual Produced Quantity (${selectedRecipe!.producedUnit})',
+                          labelText:
+                              'Actual Produced Quantity (${selectedRecipe!.producedUnit})',
                         ),
                         keyboardType: TextInputType.number,
                         onChanged: (val) {
@@ -658,7 +1447,8 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                       TextFormField(
                         initialValue: rawQtyUsed.toString(),
                         decoration: InputDecoration(
-                          labelText: 'Raw Material Used (${selectedRecipe!.rawUnit})',
+                          labelText:
+                              'Raw Material Used (${selectedRecipe!.rawUnit})',
                         ),
                         keyboardType: TextInputType.number,
                         onChanged: (val) {
@@ -677,10 +1467,14 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                           hint: const Text('Select Chef / Cook'),
                           initialValue: selectedChefId,
                           items: staffList.map((s) {
-                            final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
+                            final name =
+                                '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                    .trim();
                             return DropdownMenuItem(
                               value: s['id']?.toString(),
-                              child: Text(name.isNotEmpty ? name : (s['id']?.toString() ?? '')),
+                              child: Text(name.isNotEmpty
+                                  ? name
+                                  : (s['id']?.toString() ?? '')),
                             );
                           }).toList(),
                           onChanged: (val) {
@@ -709,9 +1503,14 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                   onPressed: isSubmitting
                       ? null
                       : () async {
-                          if (selectedRecipe == null || actualProducedQty <= 0 || rawQtyUsed <= 0 || selectedChefId == null) {
+                          if (selectedRecipe == null ||
+                              actualProducedQty <= 0 ||
+                              rawQtyUsed <= 0 ||
+                              selectedChefId == null) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Please select recipe, quantities, and chef.')),
+                              const SnackBar(
+                                  content: Text(
+                                      'Please select recipe, quantities, and chef.')),
                             );
                             return;
                           }
@@ -742,7 +1541,9 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                             if (!context.mounted) return;
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Production event successfully logged.')),
+                              const SnackBar(
+                                  content: Text(
+                                      'Production event successfully logged.')),
                             );
                           } catch (e) {
                             if (!context.mounted) return;
@@ -752,7 +1553,9 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                                 title: const Text('Logging Failed'),
                                 content: Text(e.toString()),
                                 actions: [
-                                  TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+                                  TextButton(
+                                      onPressed: () => Navigator.pop(c),
+                                      child: const Text('OK')),
                                 ],
                               ),
                             );
@@ -771,7 +1574,7 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
   }
 
   // ── ADD STOCK DIALOG ────────────────────────────────────────────────────────
-  void _showAddStockDialog(KitchenShift shift) {
+  void _showAddStockDialog(KitchenShift shift, {String? defaultChannel}) {
     showDialog(
       context: context,
       builder: (ctx) {
@@ -779,87 +1582,378 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
         final qtyController = TextEditingController();
         final unitController = TextEditingController();
         final nameController = TextEditingController();
+        final staffSearchController = TextEditingController();
+        String selectedPurposeChannel = defaultChannel ?? 'pos_restaurant';
+        String? selectedReferenceId;
         String? selectedStaffId;
         bool isSubmitting = false;
 
         final staffAsync = ref.watch(staffProfilesProvider);
+        final repo = ref.read(kitchenRepositoryProvider);
+
+        final channelChoices = [
+          {'code': 'pos_restaurant', 'name': 'POS Restaurant'},
+          {
+            'code': 'accommodation_breakfast',
+            'name': 'Accommodation Breakfast'
+          },
+          {'code': 'buffet', 'name': 'Buffet'},
+          {'code': 'conference_event', 'name': 'Conference'},
+          {'code': 'outside_catering', 'name': 'Outside Catering'},
+          {'code': 'group_meal', 'name': 'Group Meal'},
+          {'code': 'staff_meal', 'name': 'Staff Meals'},
+        ];
 
         return StatefulBuilder(
           builder: (context, setLocalState) {
+            final showReferenceDropdown = [
+              'buffet',
+              'conference_event',
+              'outside_catering',
+              'group_meal',
+            ].contains(selectedPurposeChannel);
+            final showBreakfastControl =
+                selectedPurposeChannel == 'accommodation_breakfast';
+            final eventType = _eventTypeForChannel(selectedPurposeChannel);
+
             return AlertDialog(
-              title: const Text('Issue Mid-session Stock to Kitchen'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: skuController,
-                    decoration: const InputDecoration(labelText: 'Item SKU'),
-                  ),
-                  TextFormField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: 'Item Name'),
-                  ),
-                  TextFormField(
-                    controller: qtyController,
-                    decoration: const InputDecoration(labelText: 'Quantity to Add'),
-                    keyboardType: TextInputType.number,
-                  ),
-                  TextFormField(
-                    controller: unitController,
-                    decoration: const InputDecoration(labelText: 'Unit (e.g. kg, pcs)'),
-                  ),
-                  const SizedBox(height: 16),
-                  staffAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                    data: (staffList) {
-                      return DropdownButtonFormField<String>(
-                        hint: const Text('Responsible Staff'),
-                        initialValue: selectedStaffId,
-                        items: staffList.map((s) {
-                          final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
-                          return DropdownMenuItem(
-                            value: s['id']?.toString(),
-                            child: Text(name.isNotEmpty ? name : (s['id']?.toString() ?? '')),
+              title: const Text('Issue Stock to Active Kitchen Session'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: skuController,
+                      decoration: const InputDecoration(labelText: 'Item SKU'),
+                    ),
+                    TextFormField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Item Name'),
+                    ),
+                    TextFormField(
+                      controller: qtyController,
+                      decoration:
+                          const InputDecoration(labelText: 'Quantity to Add'),
+                      keyboardType: TextInputType.number,
+                    ),
+                    TextFormField(
+                      controller: unitController,
+                      decoration: const InputDecoration(
+                          labelText: 'Unit (e.g. kg, pcs)'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedPurposeChannel,
+                      decoration:
+                          const InputDecoration(labelText: 'Purpose / Channel'),
+                      items: channelChoices.map((c) {
+                        return DropdownMenuItem(
+                          value: c['code'],
+                          child: Text(c['name']!),
+                        );
+                      }).toList(),
+                      onChanged: defaultChannel != null
+                          ? null
+                          : (val) {
+                              if (val != null) {
+                                setLocalState(() {
+                                  selectedPurposeChannel = val;
+                                  selectedReferenceId = null;
+                                });
+                              }
+                            },
+                    ),
+                    if (showReferenceDropdown) ...[
+                      const SizedBox(height: 12),
+                      FutureBuilder<List<Map<String, dynamic>>>(
+                        future: repo.getActiveEventOrders(eventType: eventType),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0),
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          final list = snapshot.data ?? [];
+                          if (list.isEmpty) {
+                            return const Text(
+                                'No active event orders found for this channel. Close completed event orders from Branch Accountant so only active ones remain here.',
+                                style: TextStyle(
+                                    color: Colors.redAccent, fontSize: 13));
+                          }
+                          return DropdownButtonFormField<String>(
+                            value: selectedReferenceId,
+                            decoration: InputDecoration(
+                              labelText: 'Select Event Order',
+                            ),
+                            items: list.map((item) {
+                              final eventNumber =
+                                  item['event_number']?.toString() ?? 'EO';
+                              final name = item['event_name']?.toString() ??
+                                  'Unnamed Event';
+                              final client = item['client_name']?.toString() ??
+                                  'Unknown Client';
+                              final display = '$eventNumber - $name ($client)';
+                              return DropdownMenuItem(
+                                value: item['id']?.toString(),
+                                child: Text(display,
+                                    overflow: TextOverflow.ellipsis),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setLocalState(() {
+                                selectedReferenceId = val;
+                              });
+                            },
                           );
-                        }).toList(),
-                        onChanged: (val) {
-                          selectedStaffId = val;
                         },
-                      );
-                    },
-                  ),
-                ],
+                      ),
+                      FutureBuilder<List<Map<String, dynamic>>>(
+                        future: repo.getActiveEventOrders(eventType: eventType),
+                        builder: (context, snapshot) {
+                          final list = snapshot.data ?? const [];
+                          Map<String, dynamic>? selectedEvent;
+                          for (final item in list) {
+                            if (item['id']?.toString() == selectedReferenceId) {
+                              selectedEvent = item;
+                              break;
+                            }
+                          }
+                          if (selectedEvent == null) {
+                            return const SizedBox.shrink();
+                          }
+                          return Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  selectedEvent['event_number']?.toString() ??
+                                      'Event Order',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                    'Event: ${selectedEvent['event_name'] ?? '-'}'),
+                                Text(
+                                    'Client: ${selectedEvent['client_name'] ?? '-'}'),
+                                Text(
+                                    'Date: ${selectedEvent['event_date'] ?? '-'}'),
+                                Text(
+                                    'Pax: ${selectedEvent['pax']?.toString() ?? '0'}'),
+                                if ((selectedEvent['menu_package'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
+                                  Text(
+                                      'Menu / Package: ${selectedEvent['menu_package']}'),
+                                Text(
+                                    'Payment: ${selectedEvent['payment_status'] ?? 'pending'}'),
+                                Text(
+                                    'Amount: KES ${selectedEvent['total_amount'] ?? 0}'),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                    if (showBreakfastControl) ...[
+                      const SizedBox(height: 12),
+                      FutureBuilder<Map<String, dynamic>>(
+                        future:
+                            repo.getBreakfastPaxSnapshot(date: shift.shiftDate),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: LinearProgressIndicator(),
+                            );
+                          }
+                          final data = snapshot.data ?? const {};
+                          final status =
+                              (data['status']?.toString() ?? 'unconfirmed')
+                                  .toLowerCase();
+                          final confirmed =
+                              (data['confirmed_pax'] as num?)?.toInt() ?? 0;
+                          final calculated =
+                              (data['calculated_pax'] as num?)?.toInt() ?? 0;
+                          final ready =
+                              status == 'confirmed' || status == 'locked';
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: ready
+                                  ? Colors.green.shade50
+                                  : Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: ready
+                                    ? Colors.green.shade200
+                                    : Colors.orange.shade200,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ready
+                                      ? 'Daily Breakfast Pax confirmed'
+                                      : 'Daily Breakfast Pax not yet confirmed',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: ready
+                                        ? Colors.green.shade900
+                                        : Colors.orange.shade900,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                    'Date: ${data['breakfast_date'] ?? shift.shiftDate}'),
+                                Text('Calculated pax: $calculated'),
+                                Text('Confirmed pax: $confirmed'),
+                                Text('Status: ${status.replaceAll('_', ' ')}'),
+                                if (!ready)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      'Reception must confirm Daily Breakfast Pax before stock can be issued to this channel.',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    staffAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                      data: (staffList) {
+                        Map<String, dynamic>? selectedStaff;
+                        for (final staff in staffList) {
+                          if (staff['id']?.toString() == selectedStaffId) {
+                            selectedStaff = staff;
+                            break;
+                          }
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _StaffAutocompleteField(
+                              label: 'Search responsible staff',
+                              controller: staffSearchController,
+                              staffList: staffList,
+                              selectedIds: selectedStaffId == null
+                                  ? const {}
+                                  : {selectedStaffId!},
+                              onSelected: (staff) {
+                                setLocalState(() {
+                                  selectedStaffId = staff['id']?.toString();
+                                  staffSearchController.text =
+                                      _staffDisplayName(staff);
+                                });
+                              },
+                            ),
+                            if (selectedStaff != null) ...[
+                              const SizedBox(height: 12),
+                              Chip(
+                                label: Text(_staffDisplayName(selectedStaff)),
+                                deleteIcon: const Icon(Icons.close, size: 18),
+                                onDeleted: () {
+                                  setLocalState(() {
+                                    selectedStaffId = null;
+                                    staffSearchController.clear();
+                                  });
+                                },
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: isSubmitting
                       ? null
                       : () async {
-                          if (skuController.text.isEmpty || qtyController.text.isEmpty || selectedStaffId == null) {
+                          if (selectedPurposeChannel ==
+                              'accommodation_breakfast') {
+                            final breakfastSnapshot = await repo
+                                .getBreakfastPaxSnapshot(date: shift.shiftDate);
+                            final status =
+                                (breakfastSnapshot['status']?.toString() ??
+                                        'unconfirmed')
+                                    .toLowerCase();
+                            if (!(status == 'confirmed' ||
+                                status == 'locked')) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Reception must confirm Daily Breakfast Pax before issuing Accommodation Breakfast stock.'),
+                                ),
+                              );
+                              return;
+                            }
+                          }
+                          if (skuController.text.isEmpty ||
+                              qtyController.text.isEmpty ||
+                              selectedStaffId == null) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('SKU, Quantity, and Staff are required.')),
+                              const SnackBar(
+                                  content: Text(
+                                      'SKU, Quantity, and Staff are required.')),
+                            );
+                            return;
+                          }
+                          if (showReferenceDropdown &&
+                              selectedReferenceId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      'Please select an active event booking.')),
                             );
                             return;
                           }
                           setLocalState(() => isSubmitting = true);
                           try {
-                            final repo = ref.read(kitchenRepositoryProvider);
                             await repo.addStock(shift.id, [
                               {
                                 'sku': skuController.text,
                                 'name': nameController.text,
-                                'quantity': double.tryParse(qtyController.text) ?? 0.0,
+                                'quantity':
+                                    double.tryParse(qtyController.text) ?? 0.0,
                                 'unit': unitController.text,
                                 'responsible_staff_ids': [selectedStaffId],
+                                'purpose_channel': selectedPurposeChannel,
+                                'reference_id': selectedReferenceId,
                               }
                             ]);
                             ref.invalidate(shiftDetailsProvider(shift.id));
                             if (!context.mounted) return;
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Stock successfully issued.')),
+                              const SnackBar(
+                                  content: Text('Stock successfully issued.')),
                             );
                           } catch (e) {
                             if (!context.mounted) return;
@@ -892,12 +1986,21 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
         List<String> outgoingWitnesses = [];
         List<String> incomingWitnesses = [];
         final notesController = TextEditingController();
+        final breakfastPaxController = TextEditingController(text: '0');
+        final staffMealPaxController = TextEditingController(text: '0');
         bool isSubmitting = false;
+
+        ref.read(kitchenRepositoryProvider).getBreakfastPax().then((pax) {
+          breakfastPaxController.text = pax.toString();
+        }).catchError((_) {});
 
         final staffAsync = ref.watch(staffProfilesProvider);
 
         for (final it in items) {
-          final balance = it.openingStock + it.additions - it.soldQuantity - it.spoilageQuantity;
+          final balance = it.openingStock +
+              it.additions -
+              it.soldQuantity -
+              it.spoilageQuantity;
           countsMap[it.itemSku] = balance;
         }
 
@@ -917,19 +2020,26 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                       ),
                       const SizedBox(height: 16),
                       ...items.map((it) {
-                        final sysClose = it.openingStock + it.additions - it.soldQuantity - it.spoilageQuantity;
+                        final sysClose = it.openingStock +
+                            it.additions -
+                            it.soldQuantity -
+                            it.spoilageQuantity;
                         return Row(
                           children: [
-                            Expanded(child: Text('${it.itemName} ($sysClose ${it.unitOfMeasure})')),
+                            Expanded(
+                                child: Text(
+                                    '${it.itemName} ($sysClose ${it.unitOfMeasure})')),
                             const SizedBox(width: 12),
                             SizedBox(
                               width: 80,
                               child: TextFormField(
                                 initialValue: sysClose.toString(),
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(labelText: 'Physical'),
+                                decoration: const InputDecoration(
+                                    labelText: 'Physical'),
                                 onChanged: (val) {
-                                  countsMap[it.itemSku] = double.tryParse(val) ?? 0.0;
+                                  countsMap[it.itemSku] =
+                                      double.tryParse(val) ?? 0.0;
                                 },
                               ),
                             ),
@@ -937,7 +2047,8 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                             SizedBox(
                               width: 120,
                               child: TextFormField(
-                                decoration: const InputDecoration(labelText: 'Notes'),
+                                decoration:
+                                    const InputDecoration(labelText: 'Notes'),
                                 onChanged: (val) {
                                   notesMap[it.itemSku] = val;
                                 },
@@ -948,12 +2059,49 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                       }),
                       const Divider(height: 32),
 
+                      // Pax Inputs
+                      const Text('Shift Pax Counts',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: breakfastPaxController,
+                              decoration: const InputDecoration(
+                                labelText: 'Breakfast Pax',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextFormField(
+                              controller: staffMealPaxController,
+                              decoration: const InputDecoration(
+                                labelText: 'Staff Meal Pax',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
                       // Witness Selectors
-                      const Text('Shift Handover Witnesses', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('Shift Handover Witnesses',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       staffAsync.when(
                         loading: () => const CircularProgressIndicator(),
-                        error: (err, _) => Text('Error loading witnesses: $err'),
+                        error: (err, _) =>
+                            Text('Error loading witnesses: $err'),
                         data: (staffList) {
                           return Column(
                             children: [
@@ -961,10 +2109,14 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                               DropdownButtonFormField<String>(
                                 hint: const Text('Select Outgoing Witness'),
                                 items: staffList.map((s) {
-                                  final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
+                                  final name =
+                                      '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                          .trim();
                                   return DropdownMenuItem(
                                     value: s['id']?.toString(),
-                                    child: Text(name.isNotEmpty ? name : (s['id']?.toString() ?? '')),
+                                    child: Text(name.isNotEmpty
+                                        ? name
+                                        : (s['id']?.toString() ?? '')),
                                   );
                                 }).toList(),
                                 onChanged: (val) {
@@ -980,10 +2132,14 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                               DropdownButtonFormField<String>(
                                 hint: const Text('Select Incoming Witness'),
                                 items: staffList.map((s) {
-                                  final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'.trim();
+                                  final name =
+                                      '${s['first_name'] ?? ''} ${s['last_name'] ?? ''}'
+                                          .trim();
                                   return DropdownMenuItem(
                                     value: s['id']?.toString(),
-                                    child: Text(name.isNotEmpty ? name : (s['id']?.toString() ?? '')),
+                                    child: Text(name.isNotEmpty
+                                        ? name
+                                        : (s['id']?.toString() ?? '')),
                                   );
                                 }).toList(),
                                 onChanged: (val) {
@@ -1001,32 +2157,41 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: notesController,
-                        decoration: const InputDecoration(labelText: 'Closing summary notes'),
+                        decoration: const InputDecoration(
+                            labelText: 'Closing summary notes'),
                       ),
                     ],
                   ),
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: isSubmitting
                       ? null
                       : () async {
-                          if (shift.subShiftType != null && (outgoingWitnesses.isEmpty || incomingWitnesses.isEmpty)) {
+                          if (shift.subShiftType != null &&
+                              (outgoingWitnesses.isEmpty ||
+                                  incomingWitnesses.isEmpty)) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Both outgoing and incoming witnesses are required.')),
+                              const SnackBar(
+                                  content: Text(
+                                      'Both outgoing and incoming witnesses are required.')),
                             );
                             return;
                           }
 
                           setLocalState(() => isSubmitting = true);
                           try {
-                            final physicalCounts = countsMap.entries.map((e) => {
-                                  'sku': e.key,
-                                  'quantity': e.value,
-                                  'notes': notesMap[e.key] ?? '',
-                                }).toList();
+                            final physicalCounts = countsMap.entries
+                                .map((e) => {
+                                      'sku': e.key,
+                                      'quantity': e.value,
+                                      'notes': notesMap[e.key] ?? '',
+                                    })
+                                .toList();
 
                             final repo = ref.read(kitchenRepositoryProvider);
                             await repo.closeShift(
@@ -1035,14 +2200,24 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                               outgoingWitnessIds: outgoingWitnesses,
                               incomingWitnessIds: incomingWitnesses,
                               closingNotes: notesController.text,
+                              breakfastPax:
+                                  int.tryParse(breakfastPaxController.text) ??
+                                      0,
+                              staffMealPax:
+                                  int.tryParse(staffMealPaxController.text) ??
+                                      0,
                             );
-
-                            ref.read(activeKitchenShiftProvider.notifier).clearActiveShift();
+                            await ref
+                                .read(activeKitchenShiftProvider.notifier)
+                                .refresh();
                             ref.invalidate(shiftDetailsProvider(shift.id));
                             if (!context.mounted) return;
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Kitchen shift closed successfully.')),
+                              SnackBar(
+                                  content: Text(shift.subShiftType == 'A'
+                                      ? 'Shift A closed. Shift B has been opened automatically.'
+                                      : 'Kitchen shift closed successfully.')),
                             );
                           } catch (e) {
                             if (!context.mounted) return;
@@ -1052,7 +2227,9 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                                 title: const Text('Closure Failed'),
                                 content: Text(e.toString()),
                                 actions: [
-                                  TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+                                  TextButton(
+                                      onPressed: () => Navigator.pop(c),
+                                      child: const Text('OK')),
                                 ],
                               ),
                             );
@@ -1077,7 +2254,8 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
       await repo.retrySync(shiftId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sync report retry successfully triggered.')),
+        const SnackBar(
+            content: Text('Sync report retry successfully triggered.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -1085,5 +2263,2095 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
         SnackBar(content: Text('Sync retry failed: $e')),
       );
     }
+  }
+
+  void _showConfigDialog(
+      BuildContext context, WidgetRef ref, String? currentMode) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String selected = currentMode ?? 'SINGLE_SHIFT';
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Configure Shift Mode'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<String>(
+                    title: const Text('Single Shift (All Day)'),
+                    value: 'SINGLE_SHIFT',
+                    groupValue: selected,
+                    onChanged: (v) => setState(() => selected = v!),
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Two Shifts (Shift A / Shift B)'),
+                    value: 'TWO_SHIFT',
+                    groupValue: selected,
+                    onChanged: (v) => setState(() => selected = v!),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    try {
+                      await ref
+                          .read(kitchenRepositoryProvider)
+                          .configureShiftMode(selected);
+                      ref.invalidate(shiftConfigProvider);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content:
+                                    Text('Shift mode updated successfully.')));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
+                  },
+                  child: const Text('Save Changes'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _KitchenIssueStockScreen extends ConsumerStatefulWidget {
+  const _KitchenIssueStockScreen({
+    required this.shift,
+    required this.channelCode,
+  });
+
+  final KitchenShift shift;
+  final String channelCode;
+
+  @override
+  ConsumerState<_KitchenIssueStockScreen> createState() =>
+      _KitchenIssueStockScreenState();
+}
+
+class _KitchenIssueStockScreenState
+    extends ConsumerState<_KitchenIssueStockScreen> {
+  final List<_KitchenIssueLine> _lines = [];
+  final ScrollController _tableScrollController = ScrollController();
+  bool _isLoading = true;
+  bool _isSaving = false;
+  List<Map<String, dynamic>> _inventoryItems = const [];
+  List<Map<String, dynamic>> _eventOrders = const [];
+  Map<String, dynamic> _breakfastSnapshot = const {};
+  String? _selectedReferenceId;
+
+  bool get _requiresEventOrder => const {
+        'buffet',
+        'conference_event',
+        'outside_catering',
+        'group_meal',
+      }.contains(widget.channelCode);
+
+  bool get _isBreakfast => widget.channelCode == 'accommodation_breakfast';
+
+  String get _channelLabel {
+    switch (widget.channelCode) {
+      case 'pos_restaurant':
+        return 'POS Restaurant';
+      case 'accommodation_breakfast':
+        return 'Accommodation Breakfast';
+      case 'buffet':
+        return 'Buffet';
+      case 'conference_event':
+        return 'Conference';
+      case 'outside_catering':
+        return 'Outside Catering';
+      case 'group_meal':
+        return 'Group Meal';
+      case 'staff_meal':
+        return 'Staff Meals';
+      default:
+        return widget.channelCode.replaceAll('_', ' ');
+    }
+  }
+
+  String get _shiftLabel {
+    if ((widget.shift.subShiftType ?? '').isNotEmpty) {
+      return 'Shift ${widget.shift.subShiftType}';
+    }
+    return 'Single Shift';
+  }
+
+  String? get _eventType {
+    switch (widget.channelCode) {
+      case 'conference_event':
+        return 'conference';
+      case 'buffet':
+        return 'buffet';
+      case 'outside_catering':
+        return 'outside_catering';
+      case 'group_meal':
+        return 'group_meal';
+      default:
+        return null;
+    }
+  }
+
+  Map<String, dynamic>? get _selectedEventOrder {
+    for (final item in _eventOrders) {
+      if (item['id']?.toString() == _selectedReferenceId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _lines.add(_KitchenIssueLine());
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tableScrollController.dispose();
+    for (final line in _lines) {
+      line.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    final repo = ref.read(kitchenRepositoryProvider);
+    try {
+      final futures = await Future.wait([
+        repo.getStoreInventoryItems(limit: 500),
+        _requiresEventOrder
+            ? repo.getActiveEventOrders(eventType: _eventType)
+            : Future.value(<Map<String, dynamic>>[]),
+        _isBreakfast
+            ? repo.getBreakfastPaxSnapshot(date: widget.shift.shiftDate)
+            : Future.value(<String, dynamic>{}),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _inventoryItems = List<Map<String, dynamic>>.from(futures[0] as List);
+        _eventOrders = List<Map<String, dynamic>>.from(futures[1] as List);
+        _breakfastSnapshot = Map<String, dynamic>.from(futures[2] as Map);
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _addLine() {
+    setState(() {
+      _lines.add(_KitchenIssueLine());
+    });
+  }
+
+  void _removeLine(int index) {
+    setState(() {
+      if (_lines.length == 1) {
+        _lines.first.clear();
+        return;
+      }
+      final line = _lines.removeAt(index);
+      line.dispose();
+    });
+  }
+
+  Set<String> _selectedSkusExcluding(int index) {
+    final skus = <String>{};
+    for (var i = 0; i < _lines.length; i++) {
+      if (i == index) continue;
+      final sku = _lines[i].selectedItem?['sku']?.toString();
+      if (sku != null && sku.isNotEmpty) {
+        skus.add(sku);
+      }
+    }
+    return skus;
+  }
+
+  List<String> _responsibleStaffIds() {
+    final ids = widget.shift.assignedDispenseIds.isNotEmpty
+        ? widget.shift.assignedDispenseIds
+        : widget.shift.assignedChefIds.isNotEmpty
+            ? widget.shift.assignedChefIds
+            : <String>[
+                ref.watch(authNotifierProvider).valueOrNull?.id ?? '',
+              ];
+    return ids.where((e) => e.trim().isNotEmpty).toList();
+  }
+
+  Future<void> _saveBatch() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final responsibleStaffIds = _responsibleStaffIds();
+    if (responsibleStaffIds.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+              'No assigned dispense or chef staff found on this shift. Reopen the shift with assigned staff first.'),
+        ),
+      );
+      return;
+    }
+
+    if (_requiresEventOrder && (_selectedReferenceId ?? '').isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Select an active Event Order for this channel.'),
+        ),
+      );
+      return;
+    }
+
+    if (_isBreakfast) {
+      final status = (_breakfastSnapshot['status']?.toString() ?? 'unconfirmed')
+          .toLowerCase();
+      if (!(status == 'confirmed' || status == 'locked')) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Reception must confirm Daily Breakfast Pax before stock can be issued to Accommodation Breakfast.'),
+          ),
+        );
+        return;
+      }
+    }
+
+    final payload = <Map<String, dynamic>>[];
+    for (final line in _lines) {
+      final item = line.selectedItem;
+      if (item == null) continue;
+
+      final qty = double.tryParse(line.quantityController.text.trim()) ?? 0.0;
+      final available = ((item['quantity'] as num?) ?? 0).toDouble();
+      final unit = (item['unit_of_measure'] ??
+              item['unit'] ??
+              item['unit_of_measure'] ??
+              '')
+          .toString()
+          .trim();
+
+      if (qty <= 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+                'Issue quantity must be greater than 0 for ${item['item_name'] ?? item['sku']}.'),
+          ),
+        );
+        return;
+      }
+      if (qty > available) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+                'Issue quantity cannot exceed available stock for ${item['item_name'] ?? item['sku']}.'),
+          ),
+        );
+        return;
+      }
+      if (unit.isEmpty) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+                'Unit is missing for ${item['item_name'] ?? item['sku']}.'),
+          ),
+        );
+        return;
+      }
+
+      payload.add({
+        'sku': item['sku'],
+        'name': item['item_name'] ?? item['description'] ?? item['sku'],
+        'quantity': qty,
+        'unit': unit,
+        'cost_price': item['cost_price'] ?? item['default_unit_cost'] ?? 0,
+        'notes': line.notesController.text.trim(),
+        'responsible_staff_ids': responsibleStaffIds,
+        'purpose_channel': widget.channelCode,
+        if (_selectedReferenceId != null) 'reference_id': _selectedReferenceId,
+      });
+    }
+
+    if (payload.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Add at least one valid item line to issue stock.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await ref
+          .read(kitchenRepositoryProvider)
+          .addStock(widget.shift.id, payload);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Stock successfully issued to kitchen.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = ref.watch(authNotifierProvider).valueOrNull;
+    final dateFmt = DateFormat('yyyy-MM-dd');
+    final selectedEvent = _selectedEventOrder;
+    final rawBranchName = (user?.branchName ?? '').trim();
+    final branchName = rawBranchName.isEmpty ? 'Branch' : rawBranchName;
+    final rawStorekeeperName =
+        (user?.name ?? user?.email ?? widget.shift.openedBy).trim();
+    final storekeeperName =
+        rawStorekeeperName.isEmpty ? widget.shift.openedBy : rawStorekeeperName;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Issue Stock to $_channelLabel',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F2E5E),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Select inventory items from the database and issue them against the active kitchen shift.',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back, size: 18),
+                        label: const Text('Back to Shift Sessions'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Wrap(
+                        spacing: 24,
+                        runSpacing: 16,
+                        children: [
+                          _IssueSummaryTile(
+                            icon: Icons.storefront_outlined,
+                            iconBg: const Color(0xFFF4F7FB),
+                            iconColor: const Color(0xFF0F2E5E),
+                            label: 'Branch',
+                            value: branchName,
+                          ),
+                          _IssueSummaryTile(
+                            icon: Icons.widgets_outlined,
+                            iconBg: const Color(0xFFFFF1E9),
+                            iconColor: const Color(0xFFFF8A3D),
+                            label: 'Channel',
+                            value: _channelLabel,
+                          ),
+                          _IssueSummaryTile(
+                            icon: Icons.hub_outlined,
+                            iconBg: const Color(0xFFF4F7FB),
+                            iconColor: const Color(0xFF0F2E5E),
+                            label: 'Shift',
+                            value: widget.shift.shiftNumber,
+                            trailing: _shiftLabel.toUpperCase(),
+                          ),
+                          _IssueSummaryTile(
+                            icon: Icons.calendar_today_outlined,
+                            iconBg: const Color(0xFFF4F7FB),
+                            iconColor: const Color(0xFF0F2E5E),
+                            label: 'Date',
+                            value: dateFmt
+                                .format(DateTime.parse(widget.shift.shiftDate)),
+                          ),
+                          _IssueSummaryTile(
+                            icon: Icons.apartment_outlined,
+                            iconBg: const Color(0xFFF4F7FB),
+                            iconColor: const Color(0xFF0F2E5E),
+                            label: 'Department',
+                            value: widget.shift.department ?? 'KITCHEN',
+                          ),
+                          _IssueSummaryTile(
+                            icon: Icons.person_outline,
+                            iconBg: const Color(0xFFF4F7FB),
+                            iconColor: const Color(0xFF0F2E5E),
+                            label: 'Storekeeper',
+                            value: storekeeperName,
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE7F7E6),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'OPEN',
+                              style: TextStyle(
+                                color: Color(0xFF2E7D32),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_requiresEventOrder) ...[
+                    Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: Colors.grey.shade200),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Event Order Selection',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                                color: Color(0xFF0F2E5E),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (_eventOrders.isEmpty)
+                              const Text(
+                                'No active event orders found for this channel. Close completed ones from Branch Accountant so only active event orders remain selectable here.',
+                                style: TextStyle(color: Colors.redAccent),
+                              )
+                            else ...[
+                              DropdownButtonFormField<String>(
+                                value: _selectedReferenceId,
+                                decoration: const InputDecoration(
+                                  labelText: 'Select Event Order',
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: _eventOrders.map((item) {
+                                  final eventNumber =
+                                      item['event_number']?.toString() ?? 'EO';
+                                  final eventName =
+                                      item['event_name']?.toString() ??
+                                          'Unnamed Event';
+                                  final client =
+                                      item['client_name']?.toString() ??
+                                          'Unknown Client';
+                                  return DropdownMenuItem(
+                                    value: item['id']?.toString(),
+                                    child: Text(
+                                      '$eventNumber - $eventName ($client)',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() => _selectedReferenceId = value);
+                                },
+                              ),
+                              if (selectedEvent != null) ...[
+                                const SizedBox(height: 14),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: [
+                                    _IssueMetaChip('Client',
+                                        '${selectedEvent['client_name'] ?? '-'}'),
+                                    _IssueMetaChip('Pax',
+                                        '${selectedEvent['pax'] ?? '0'}'),
+                                    _IssueMetaChip('Payment',
+                                        '${selectedEvent['payment_status'] ?? 'pending'}'),
+                                    if ((selectedEvent['menu_package'] ?? '')
+                                        .toString()
+                                        .isNotEmpty)
+                                      _IssueMetaChip('Package',
+                                          '${selectedEvent['menu_package']}'),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_isBreakfast) ...[
+                    _BreakfastStatusCard(snapshot: _breakfastSnapshot),
+                    const SizedBox(height: 16),
+                  ],
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minWidth: 1280),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20, vertical: 16),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF0F2E5E),
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: Radius.circular(16),
+                                        topRight: Radius.circular(16),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        _IssueHeaderCell('#', 56),
+                                        _IssueHeaderCell(
+                                            'Item Search (from DB)', 360),
+                                        _IssueHeaderCell('Item Name', 300),
+                                        _IssueHeaderCell('Unit', 110),
+                                        _IssueHeaderCell(
+                                            'Quantity to Issue', 190),
+                                        _IssueHeaderCell(
+                                            'Current Available Stock', 200),
+                                        _IssueHeaderCell('Remove', 100),
+                                      ],
+                                    ),
+                                  ),
+                                  ...List.generate(_lines.length, (index) {
+                                    final line = _lines[index];
+                                    final selectedItem = line.selectedItem;
+                                    final itemName =
+                                        (selectedItem?['item_name'] ??
+                                                selectedItem?['description'] ??
+                                                '–')
+                                            .toString();
+                                    final unit = (selectedItem?[
+                                                    'unit_of_measure'] ??
+                                                selectedItem?['unit'] ??
+                                                '–')
+                                            .toString()
+                                            .isEmpty
+                                        ? '–'
+                                        : (selectedItem?['unit_of_measure'] ??
+                                                selectedItem?['unit'])
+                                            .toString();
+                                    final availableQty = selectedItem == null
+                                        ? '–'
+                                        : NumberFormat('#,##0.00').format(
+                                            ((selectedItem['quantity']
+                                                        as num?) ??
+                                                    0)
+                                                .toDouble(),
+                                          );
+                                    return Container(
+                                      decoration: BoxDecoration(
+                                        color: index.isEven
+                                            ? Colors.white
+                                            : const Color(0xFFF9FBFE),
+                                        border: Border(
+                                          bottom: BorderSide(
+                                              color: Colors.grey.shade200),
+                                        ),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 20, vertical: 18),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 56,
+                                            child: Text(
+                                              '${index + 1}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 18,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(
+                                            width: 360,
+                                            child: _InventoryAutocompleteField(
+                                              line: line,
+                                              items: _inventoryItems,
+                                              selectedSkus:
+                                                  _selectedSkusExcluding(index),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 18),
+                                          SizedBox(
+                                            width: 300,
+                                            child: Text(
+                                              itemName == 'â€“' ||
+                                                      itemName.isEmpty
+                                                  ? 'Select an item from search'
+                                                  : itemName,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 15,
+                                                color: (itemName == 'â€“' ||
+                                                        itemName.isEmpty)
+                                                    ? const Color(0xFF64748B)
+                                                    : const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 18),
+                                          SizedBox(
+                                            width: 110,
+                                            child: _IssuePill(value: unit),
+                                          ),
+                                          const SizedBox(width: 18),
+                                          SizedBox(
+                                            width: 190,
+                                            child: TextFormField(
+                                              controller:
+                                                  line.quantityController,
+                                              keyboardType: const TextInputType
+                                                  .numberWithOptions(
+                                                  decimal: true),
+                                              decoration: const InputDecoration(
+                                                border: OutlineInputBorder(),
+                                                isDense: true,
+                                                hintText: '0.00',
+                                                contentPadding:
+                                                    EdgeInsets.symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 18),
+                                              ),
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 18),
+                                          SizedBox(
+                                            width: 200,
+                                            child: Text(
+                                              availableQty == 'â€“'
+                                                  ? '-'
+                                                  : availableQty,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 15,
+                                                color: Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 18),
+                                          SizedBox(
+                                            width: 100,
+                                            child: Align(
+                                              alignment: Alignment.center,
+                                              child: IconButton(
+                                                onPressed: () =>
+                                                    _removeLine(index),
+                                                style: IconButton.styleFrom(
+                                                  foregroundColor: Colors.red,
+                                                  side: BorderSide(
+                                                      color:
+                                                          Colors.grey.shade300),
+                                                  minimumSize:
+                                                      const Size(52, 52),
+                                                ),
+                                                icon: const Icon(
+                                                    Icons.delete_outline),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                  if (_lines.isEmpty ||
+                                      _lines.last.selectedItem != null)
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFCFDFF),
+                                        border: Border(
+                                          bottom: BorderSide(
+                                              color: Colors.grey.shade200),
+                                        ),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 20, vertical: 18),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 56,
+                                            child: Text(
+                                              '${_lines.length + 1}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 18,
+                                                color: Color(0xFF94A3B8),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(
+                                            width: 360,
+                                            child: Text(
+                                              'Add another issue line below when you need more items.',
+                                              style: TextStyle(
+                                                color: Color(0xFF64748B),
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 318),
+                                          const SizedBox(width: 128),
+                                          const SizedBox(width: 208),
+                                          const SizedBox(width: 218),
+                                          const SizedBox(width: 100),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              border:
+                                  Border.all(color: const Color(0xFFD7E3F7)),
+                              color: Colors.white,
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: _addLine,
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 18),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: Color(0xFFF2F7FF),
+                                      child: Icon(Icons.add,
+                                          color: Color(0xFF1E5CC6)),
+                                    ),
+                                    SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Add Item Row',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF1E5CC6),
+                                          ),
+                                        ),
+                                        SizedBox(height: 2),
+                                        Text(
+                                          'Search and select an inventory item to add to this issue',
+                                          style: TextStyle(
+                                            color: Color(0xFF51627A),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                        label: const Text('Cancel'),
+                      ),
+                      const Spacer(),
+                      OutlinedButton.icon(
+                        onPressed: null,
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Save as Draft'),
+                      ),
+                      const SizedBox(width: 16),
+                      FilledButton.icon(
+                        onPressed: _isSaving ? null : _saveBatch,
+                        icon: _isSaving
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.check),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF9800),
+                          foregroundColor: Colors.white,
+                        ),
+                        label:
+                            Text(_isSaving ? 'Submitting...' : 'Submit Issue'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _KitchenIssueLine {
+  _KitchenIssueLine();
+
+  Map<String, dynamic>? selectedItem;
+  final TextEditingController searchController = TextEditingController();
+  final TextEditingController quantityController = TextEditingController();
+  final TextEditingController notesController = TextEditingController();
+  final FocusNode focusNode = FocusNode();
+
+  void clear() {
+    selectedItem = null;
+    searchController.clear();
+    quantityController.clear();
+    notesController.clear();
+  }
+
+  void dispose() {
+    searchController.dispose();
+    quantityController.dispose();
+    notesController.dispose();
+    focusNode.dispose();
+  }
+}
+
+class _IssueMetaChip extends StatelessWidget {
+  const _IssueMetaChip(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IssueSummaryTile extends StatelessWidget {
+  const _IssueSummaryTile({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String label;
+  final String value;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(
+          radius: 22,
+          backgroundColor: iconBg,
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F2E5E),
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    trailing!,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E5CC6),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _IssueHeaderCell extends StatelessWidget {
+  const _IssueHeaderCell(this.label, this.width);
+
+  final String label;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+}
+
+class _IssuePill extends StatelessWidget {
+  const _IssuePill({required this.value});
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayValue = value.trim().isEmpty ||
+            value.trim().toLowerCase() == 'null' ||
+            value.trim() == 'â€“'
+        ? '-'
+        : value.trim();
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF2F5FA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          displayValue,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF334155),
+            fontSize: 15,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BreakfastStatusCard extends StatelessWidget {
+  const _BreakfastStatusCard({required this.snapshot});
+
+  final Map<String, dynamic> snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final status =
+        (snapshot['status']?.toString() ?? 'unconfirmed').toLowerCase();
+    final ready = status == 'confirmed' || status == 'locked';
+    final confirmed = (snapshot['confirmed_pax'] as num?)?.toInt() ?? 0;
+    final calculated = (snapshot['calculated_pax'] as num?)?.toInt() ?? 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: ready ? Colors.green.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: ready ? Colors.green.shade200 : Colors.orange.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            ready
+                ? 'Daily Breakfast Pax confirmed'
+                : 'Daily Breakfast Pax not yet confirmed',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: ready ? Colors.green.shade900 : Colors.orange.shade900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Calculated pax: $calculated'),
+          Text('Confirmed pax: $confirmed'),
+          Text('Status: ${status.replaceAll('_', ' ')}'),
+          if (!ready)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Reception must confirm Daily Breakfast Pax before stock can be issued to this channel.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InventoryAutocompleteField extends StatelessWidget {
+  const _InventoryAutocompleteField({
+    required this.line,
+    required this.items,
+    required this.selectedSkus,
+  });
+
+  final _KitchenIssueLine line;
+  final List<Map<String, dynamic>> items;
+  final Set<String> selectedSkus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Autocomplete<Map<String, dynamic>>(
+      textEditingController: line.searchController,
+      focusNode: line.focusNode,
+      displayStringForOption: (item) =>
+          '${item['item_name'] ?? item['description'] ?? item['sku']}',
+      optionsBuilder: (textEditingValue) {
+        final query = textEditingValue.text.trim().toLowerCase();
+        if (query.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+        return items.where((item) {
+          final sku = item['sku']?.toString() ?? '';
+          if (selectedSkus.contains(sku)) return false;
+          final haystack = [
+            item['sku']?.toString() ?? '',
+            item['item_name']?.toString() ?? '',
+            item['description']?.toString() ?? '',
+            item['category']?.toString() ?? '',
+          ].join(' ').toLowerCase();
+          return haystack.contains(query);
+        }).take(12);
+      },
+      onSelected: (item) {
+        line.selectedItem = item;
+        line.searchController.text =
+            '${item['sku']} - ${item['item_name'] ?? item['description'] ?? ''}';
+      },
+      fieldViewBuilder: (context, textEditingController, focusNode, _) {
+        if (textEditingController.text != line.searchController.text) {
+          textEditingController.value = line.searchController.value;
+        }
+
+        return TextFormField(
+          controller: textEditingController,
+          focusNode: focusNode,
+          decoration: const InputDecoration(
+            hintText: 'Search item by SKU, name, or category',
+            isDense: true,
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.search, size: 18),
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          ),
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF0F172A),
+          ),
+          onChanged: (value) {
+            if (line.searchController.text != value) {
+              line.searchController.value = textEditingController.value;
+            }
+            if (line.selectedItem != null) {
+              final selectedLabel =
+                  '${line.selectedItem!['sku']} - ${line.selectedItem!['item_name'] ?? line.selectedItem!['description'] ?? ''}';
+              if (value != selectedLabel) {
+                line.selectedItem = null;
+              }
+            }
+          },
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        final list = options.toList();
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520, maxHeight: 260),
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: list.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = list[index];
+                  final qty =
+                      NumberFormat('#,##0.###').format(item['quantity'] ?? 0);
+                  final unit = item['unit_of_measure'] ?? item['unit'] ?? '';
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      '${item['item_name'] ?? item['description'] ?? item['sku']}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '${item['sku']}  |  ${item['category'] ?? 'Uncategorised'}  |  $qty $unit',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => onSelected(item),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _staffDisplayName(Map<String, dynamic> staff) {
+  final first = (staff['first_name'] ?? '').toString().trim();
+  final last = (staff['last_name'] ?? '').toString().trim();
+  final fullName = '$first $last'.trim();
+  if (fullName.isNotEmpty) return fullName;
+  return (staff['name'] ?? staff['id'] ?? 'Unknown Staff').toString();
+}
+
+class _KitchenSessionHistoryScreen extends ConsumerStatefulWidget {
+  const _KitchenSessionHistoryScreen();
+
+  @override
+  ConsumerState<_KitchenSessionHistoryScreen> createState() =>
+      _KitchenSessionHistoryScreenState();
+}
+
+class _KitchenSessionHistoryScreenState
+    extends ConsumerState<_KitchenSessionHistoryScreen> {
+  String? _selectedShiftId;
+
+  @override
+  Widget build(BuildContext context) {
+    final closedShiftsAsync = ref.watch(closedKitchenShiftsProvider);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text('Kitchen Sessions History'),
+        actions: [
+          IconButton(
+            onPressed: () => ref.invalidate(closedKitchenShiftsProvider),
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: closedShiftsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => Center(
+          child: Text('Failed to load kitchen history: $error'),
+        ),
+        data: (shifts) {
+          if (shifts.isEmpty) {
+            return const Center(
+              child: Text('No past kitchen sessions found.'),
+            );
+          }
+
+          final selectedShiftId =
+              shifts.any((shift) => shift.id == _selectedShiftId)
+                  ? _selectedShiftId
+                  : shifts.first.id;
+          final selectedShift =
+              shifts.firstWhere((shift) => shift.id == selectedShiftId);
+
+          return Row(
+            children: [
+              Container(
+                width: 320,
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: shifts.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final shift = shifts[index];
+                    final isSelected = shift.id == selectedShift.id;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => setState(() => _selectedShiftId = shift.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFFEAF2FF)
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFF1E5CC6)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              shift.shiftNumber,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${shift.shiftDate} | ${shift.shiftType.toUpperCase()}${shift.subShiftType != null ? ' (Shift ${shift.subShiftType})' : ''}',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Department: ${shift.department ?? 'KITCHEN'}',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                  child: _KitchenSessionHistoryDetail(shift: selectedShift),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _KitchenSessionHistoryDetail extends ConsumerWidget {
+  const _KitchenSessionHistoryDetail({required this.shift});
+
+  final KitchenShift shift;
+
+  String _historyChannelLabel(String channelCode) {
+    switch (channelCode) {
+      case 'pos_restaurant':
+        return 'POS Restaurant';
+      case 'accommodation_breakfast':
+        return 'Accommodation Breakfast';
+      case 'conference_event':
+        return 'Conference';
+      case 'outside_catering':
+        return 'Outside Catering';
+      case 'group_meal':
+        return 'Group Meal';
+      case 'staff_meal':
+        return 'Staff Meal';
+      case 'wastage':
+      case 'wastage_spoilage':
+        return 'Wastage / Spoilage';
+      default:
+        return channelCode
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map((part) => part.isEmpty
+                ? part
+                : '${part[0].toUpperCase()}${part.substring(1)}')
+            .join(' ');
+    }
+  }
+
+  double _closingQty(Map<String, dynamic> item) {
+    final physical = (item['physical_count'] as num?)?.toDouble();
+    if (physical != null) return physical;
+    final systemClosing = (item['system_closing_stock'] as num?)?.toDouble();
+    if (systemClosing != null) return systemClosing;
+    final opening = (item['opening_stock'] as num?)?.toDouble() ?? 0;
+    final additions = (item['additions'] as num?)?.toDouble() ?? 0;
+    final sold = (item['sold_quantity'] as num?)?.toDouble() ?? 0;
+    final spoilage = (item['spoilage_quantity'] as num?)?.toDouble() ?? 0;
+    return opening + additions - sold - spoilage;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailsAsync = ref.watch(shiftDetailsProvider(shift.id));
+    final additionsAsync = ref.watch(shiftAdditionsProvider(shift.id));
+    final numberFmt = NumberFormat('#,##0.00');
+
+    return detailsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Center(
+        child: Text('Failed to load session detail: $error'),
+      ),
+      data: (details) {
+        final itemRows = ((details['items'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList()
+          ..sort((a, b) => ((a['item_name'] ?? '') as String)
+              .compareTo((b['item_name'] ?? '') as String));
+        final shiftStaff = ((details['shift_staff'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((staff) => Map<String, dynamic>.from(staff))
+            .toList();
+        final summary = Map<String, dynamic>.from(
+          details['summary'] is Map ? details['summary'] as Map : const {},
+        );
+        final totalOpening = itemRows.fold<double>(
+          0,
+          (sum, item) =>
+              sum + ((item['opening_stock'] as num?)?.toDouble() ?? 0),
+        );
+        final totalAdditions = itemRows.fold<double>(
+          0,
+          (sum, item) => sum + ((item['additions'] as num?)?.toDouble() ?? 0),
+        );
+        final totalClosing = itemRows.fold<double>(
+          0,
+          (sum, item) => sum + _closingQty(item),
+        );
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Session ${shift.shiftNumber}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${shift.shiftDate} | ${shift.shiftType.toUpperCase()}${shift.subShiftType != null ? ' (Shift ${shift.subShiftType})' : ''} | ${shift.status.toUpperCase()}',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Read-only kitchen ledger view showing opening, additions during the session, and closing balances.',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          _HistorySummaryChip(
+                            label: 'Items',
+                            value: '${itemRows.length}',
+                            icon: Icons.inventory_2_outlined,
+                          ),
+                          _HistorySummaryChip(
+                            label: 'Opening Total',
+                            value: numberFmt.format(totalOpening),
+                            icon: Icons.lock_open_outlined,
+                          ),
+                          _HistorySummaryChip(
+                            label: 'Additions Total',
+                            value: numberFmt.format(totalAdditions),
+                            icon: Icons.add_box_outlined,
+                          ),
+                          _HistorySummaryChip(
+                            label: 'Closing Total',
+                            value: numberFmt.format(totalClosing),
+                            icon: Icons.fact_check_outlined,
+                          ),
+                          _HistorySummaryChip(
+                            label: 'Variance Value',
+                            value: numberFmt.format(
+                              (summary['variance_value'] as num?)?.toDouble() ??
+                                  0,
+                            ),
+                            icon: Icons.assessment_outlined,
+                          ),
+                        ],
+                      ),
+                      if (shiftStaff.isNotEmpty) ...[
+                        const SizedBox(height: 18),
+                        Text(
+                          'Shift Staff',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: shiftStaff
+                              .map(
+                                (staff) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _staffDisplayName(staff),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      Text(
+                        'Stock Ledger',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                      ),
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 980),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 14,
+                                  ),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF0F2E5E),
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(14),
+                                      topRight: Radius.circular(14),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      _IssueHeaderCell('#', 50),
+                                      _IssueHeaderCell('Item', 280),
+                                      _IssueHeaderCell('Unit', 90),
+                                      _IssueHeaderCell('Opening', 140),
+                                      _IssueHeaderCell('Additions', 140),
+                                      _IssueHeaderCell('Closing', 140),
+                                      _IssueHeaderCell('Variance', 120),
+                                    ],
+                                  ),
+                                ),
+                                if (itemRows.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(24),
+                                    child: Text(
+                                      'No stock rows were captured for this session.',
+                                    ),
+                                  )
+                                else
+                                  ...List.generate(itemRows.length, (index) {
+                                    final item = itemRows[index];
+                                    final opening =
+                                        (item['opening_stock'] as num?)
+                                                ?.toDouble() ??
+                                            0;
+                                    final additions =
+                                        (item['additions'] as num?)
+                                                ?.toDouble() ??
+                                            0;
+                                    final closing = _closingQty(item);
+                                    final variance = (item['variance'] as num?)
+                                            ?.toDouble() ??
+                                        0;
+
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 18,
+                                        vertical: 16,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: index.isEven
+                                            ? Colors.white
+                                            : const Color(0xFFF8FAFC),
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: Colors.grey.shade200,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 50,
+                                            child: Text('${index + 1}'),
+                                          ),
+                                          SizedBox(
+                                            width: 280,
+                                            child: Text(
+                                              (item['item_name'] ??
+                                                      'Unnamed Item')
+                                                  .toString(),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(
+                                            width: 90,
+                                            child: Text(
+                                              (item['unit_of_measure'] ?? '-')
+                                                  .toString(),
+                                            ),
+                                          ),
+                                          SizedBox(
+                                            width: 140,
+                                            child:
+                                                Text(numberFmt.format(opening)),
+                                          ),
+                                          SizedBox(
+                                            width: 140,
+                                            child: Text(
+                                                numberFmt.format(additions)),
+                                          ),
+                                          SizedBox(
+                                            width: 140,
+                                            child:
+                                                Text(numberFmt.format(closing)),
+                                          ),
+                                          SizedBox(
+                                            width: 120,
+                                            child: Text(
+                                              numberFmt.format(variance),
+                                              style: TextStyle(
+                                                color: variance < 0
+                                                    ? Colors.red.shade700
+                                                    : variance > 0
+                                                        ? Colors.green.shade700
+                                                        : const Color(
+                                                            0xFF0F172A),
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Session Additions',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                      ),
+                      const SizedBox(height: 10),
+                      additionsAsync.when(
+                        loading: () => const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 32),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                        error: (error, _) => Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7ED),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFFFED7AA),
+                            ),
+                          ),
+                          child:
+                              Text('Failed to load additions ledger: $error'),
+                        ),
+                        data: (additions) {
+                          if (additions.isEmpty) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: const Text(
+                                'No mid-session additions were logged for this shift.',
+                              ),
+                            );
+                          }
+
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minWidth: 980),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 18,
+                                        vertical: 14,
+                                      ),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF1E3A5F),
+                                        borderRadius: BorderRadius.only(
+                                          topLeft: Radius.circular(14),
+                                          topRight: Radius.circular(14),
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          _IssueHeaderCell('Time', 170),
+                                          _IssueHeaderCell('Item', 240),
+                                          _IssueHeaderCell('Qty', 120),
+                                          _IssueHeaderCell('Unit', 90),
+                                          _IssueHeaderCell('Channel', 160),
+                                          _IssueHeaderCell('Type', 140),
+                                          _IssueHeaderCell('Notes', 250),
+                                        ],
+                                      ),
+                                    ),
+                                    ...List.generate(additions.length, (index) {
+                                      final row = additions[index];
+                                      final addedAt = row.addedAt.contains('T')
+                                          ? row.addedAt
+                                              .replaceFirst('T', ' ')
+                                              .split('.')
+                                              .first
+                                          : row.addedAt;
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 18,
+                                          vertical: 16,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: index.isEven
+                                              ? Colors.white
+                                              : const Color(0xFFF8FAFC),
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: Colors.grey.shade200,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 170,
+                                              child: Text(addedAt),
+                                            ),
+                                            SizedBox(
+                                              width: 240,
+                                              child: Text(
+                                                row.itemName ?? row.itemSku,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 120,
+                                              child: Text(
+                                                numberFmt.format(row.quantity),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 90,
+                                              child: Text(row.unit ?? '-'),
+                                            ),
+                                            SizedBox(
+                                              width: 160,
+                                              child: Text(
+                                                _historyChannelLabel(
+                                                    row.purposeChannel),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 140,
+                                              child: Text(row.foodControlType),
+                                            ),
+                                            SizedBox(
+                                              width: 250,
+                                              child: Text(
+                                                row.notes?.trim().isNotEmpty ==
+                                                        true
+                                                    ? row.notes!
+                                                    : '-',
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HistorySummaryChip extends StatelessWidget {
+  const _HistorySummaryChip({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 180,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF2FF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: const Color(0xFF1E5CC6)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StaffAutocompleteField extends StatelessWidget {
+  const _StaffAutocompleteField({
+    required this.label,
+    required this.controller,
+    required this.staffList,
+    required this.onSelected,
+    this.selectedIds = const {},
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final List<Map<String, dynamic>> staffList;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+  final Set<String> selectedIds;
+
+  @override
+  Widget build(BuildContext context) {
+    return Autocomplete<Map<String, dynamic>>(
+      displayStringForOption: _staffDisplayName,
+      optionsBuilder: (textEditingValue) {
+        final query = textEditingValue.text.trim().toLowerCase();
+        if (query.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+
+        return staffList.where((staff) {
+          final id = staff['id']?.toString() ?? '';
+          if (selectedIds.contains(id)) return false;
+
+          final haystack = [
+            _staffDisplayName(staff),
+            staff['email']?.toString() ?? '',
+            staff['employee_id']?.toString() ?? '',
+          ].join(' ').toLowerCase();
+
+          return haystack.contains(query);
+        }).take(8);
+      },
+      onSelected: onSelected,
+      fieldViewBuilder:
+          (context, textEditingController, focusNode, onFieldSubmitted) {
+        if (textEditingController.text != controller.text) {
+          textEditingController.value = controller.value;
+        }
+
+        return TextFormField(
+          controller: textEditingController,
+          focusNode: focusNode,
+          onChanged: (value) {
+            if (controller.text != value) {
+              controller.value = textEditingController.value;
+            }
+          },
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: const Icon(Icons.search),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        final matches = options.toList();
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560, maxHeight: 240),
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: matches.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final staff = matches[index];
+                  final subtitleParts = [
+                    staff['employee_id']?.toString(),
+                    staff['email']?.toString(),
+                  ]
+                      .where((value) => value != null && value.isNotEmpty)
+                      .join('  |  ');
+
+                  return ListTile(
+                    dense: true,
+                    title: Text(_staffDisplayName(staff)),
+                    subtitle: subtitleParts.isEmpty
+                        ? null
+                        : Text(subtitleParts, overflow: TextOverflow.ellipsis),
+                    onTap: () => onSelected(staff),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

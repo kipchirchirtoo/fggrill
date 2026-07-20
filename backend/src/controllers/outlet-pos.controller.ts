@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
+import db from '../db';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import notificationService from '../services/notification.service';
@@ -1898,6 +1899,52 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
           })
         };
       }).filter((order: any) => captainOrderActiveStatuses.has(captainOrderNormalizeStatus(order.status)));
+    }
+
+    if (barOrders.length) {
+      for (const order of barOrders) {
+        if (!order.captain_order_already_printed) {
+          const orderItems = order.items;
+          const latestRecalledAt = orderItems
+            .filter((item: any) => item?.is_recalled_item)
+            .map((item: any) => new Date(item?.recalled_at || 0).getTime())
+            .filter((time: number) => Number.isFinite(time))
+            .reduce((max: number, time: number) => Math.max(max, time), 0);
+
+          const latestRecalledAtDate = latestRecalledAt > 0 ? new Date(latestRecalledAt) : null;
+
+          try {
+            const queryText = latestRecalledAtDate
+              ? `UPDATE pos_shift_orders 
+                 SET captain_printed_at = NOW() 
+                 WHERE id = $1 
+                   AND (captain_printed_at IS NULL OR captain_printed_at < $2)
+                 RETURNING id`
+              : `UPDATE pos_shift_orders 
+                 SET captain_printed_at = NOW() 
+                 WHERE id = $1 
+                   AND captain_printed_at IS NULL
+                 RETURNING id`;
+
+            const queryParams = latestRecalledAtDate
+              ? [order.source_id, latestRecalledAtDate.toISOString()]
+              : [order.source_id];
+
+            const updateResult = await db.query(queryText, queryParams);
+
+            if (updateResult.rowCount && updateResult.rowCount > 0) {
+              logger.info(`getBarCaptainOrders - Won print lock for order ${order.order_number} (${order.source_id})`);
+              order.captain_order_already_printed = false;
+            } else {
+              logger.info(`getBarCaptainOrders - Lost print lock for order ${order.order_number} (${order.source_id})`);
+              order.captain_order_already_printed = true;
+            }
+          } catch (updateError) {
+            logger.error(`getBarCaptainOrders - Error securing print lock for order ${order.order_number}:`, updateError);
+            order.captain_order_already_printed = true;
+          }
+        }
+      }
     }
 
     logger.info(`getBarCaptainOrders - Returning ${barOrders.length} orders after filtering`);

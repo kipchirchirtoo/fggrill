@@ -21,6 +21,7 @@ const toNumber = (value: unknown): number => {
 const BAR_OUTLET_TYPES = new Set([
   'main_bar',
   'executive_bar',
+  'sports_bar',
   'kyogong_executive_bar',
   'kyogong_sports_bar'
 ]);
@@ -127,7 +128,7 @@ async function resolveBarOutletLocation(
 ): Promise<{ locationId: string | null; outletId: string | null }> {
   let query = supabase
     .from('pos_outlets')
-    .select('id, inventory_location_id')
+    .select('id, inventory_location_id, outlet_type')
     .eq('branch_id', branchId)
     .in('outlet_type', Array.from(BAR_OUTLET_TYPES));
 
@@ -135,25 +136,53 @@ async function resolveBarOutletLocation(
     query = query.eq('id', outletId);
   }
 
-  const { data: outlet } = await query.maybeSingle();
+  if (outletId) {
+    const { data: outlet } = await query.maybeSingle();
 
-  if (outlet?.inventory_location_id) {
-    return { locationId: outlet.inventory_location_id, outletId: outlet.id };
+    if (outlet?.inventory_location_id) {
+      return { locationId: outlet.inventory_location_id, outletId: outlet.id };
+    }
+
+    if (outlet?.id && outlet?.outlet_type) {
+      const locationCode = `BAR-${outlet.outlet_type}-${branchId}`;
+      const { data: existingLoc } = await supabase
+        .from('inventory_locations')
+        .select('id')
+        .eq('branch_id', branchId)
+        .eq('location_code', locationCode)
+        .maybeSingle();
+
+      if (existingLoc?.id) {
+        return { locationId: existingLoc.id, outletId: outlet.id };
+      }
+    }
+
+    return { locationId: null, outletId: outlet?.id || outletId };
   }
 
-  // Fallback: create a location on-the-fly if missing
-  const { data: existingLoc } = await supabase
-    .from('inventory_locations')
-    .select('id')
-    .eq('branch_id', branchId)
-    .eq('location_type', 'pos_outlet')
-    .maybeSingle();
+  const { data: outlets } = await query;
+  if ((outlets || []).length === 1) {
+    const outlet = outlets![0];
+    if (outlet?.inventory_location_id) {
+      return { locationId: outlet.inventory_location_id, outletId: outlet.id };
+    }
 
-  if (existingLoc) {
-    return { locationId: existingLoc.id, outletId: outlet?.id || null };
+    if (outlet?.id && outlet?.outlet_type) {
+      const locationCode = `BAR-${outlet.outlet_type}-${branchId}`;
+      const { data: existingLoc } = await supabase
+        .from('inventory_locations')
+        .select('id')
+        .eq('branch_id', branchId)
+        .eq('location_code', locationCode)
+        .maybeSingle();
+
+      if (existingLoc?.id) {
+        return { locationId: existingLoc.id, outletId: outlet.id };
+      }
+    }
   }
 
-  return { locationId: null, outletId: outlet?.id || null };
+  return { locationId: null, outletId: null };
 }
 
 /**
@@ -308,12 +337,17 @@ export async function recordBarStockMovement(
   // or later step (inventory_balances, audit log, ledger) has a problem.
   if (drinkId) {
     try {
-      const { data: barStock } = await supabase
+      let barQuery = supabase
         .from('bar_stock')
-        .select('id, current_stock')
+        .select('id, current_stock, outlet_id')
         .eq('branch_id', branchId)
-        .eq('drink_id', drinkId)
-        .maybeSingle();
+        .eq('drink_id', drinkId);
+
+      if (outletId) {
+        barQuery = barQuery.eq('outlet_id', outletId);
+      }
+
+      const { data: barStock } = await barQuery.maybeSingle();
 
       if (barStock?.id) {
         const barNewStock = Math.max(0, toNumber(barStock.current_stock) + quantityDelta);
@@ -331,6 +365,7 @@ export async function recordBarStockMovement(
           .from('bar_stock')
           .insert({
             branch_id: branchId,
+            outlet_id: outletId,
             drink_id: drinkId,
             item_sku: sku,
             item_name: sku,
@@ -552,14 +587,9 @@ export async function getBarStock(
   branchId: number,
   outletId?: string | null
 ): Promise<BarStockResult[]> {
-  const { data: location } = await supabase
-    .from('inventory_locations')
-    .select('id')
-    .eq('branch_id', branchId)
-    .eq('location_type', 'pos_outlet')
-    .maybeSingle();
-
-  const locationId = location?.id;
+  const resolvedLocation = await resolveBarOutletLocation(branchId, outletId);
+  const locationId = resolvedLocation.locationId;
+  const resolvedOutletId = resolvedLocation.outletId;
 
   // Get all bar drinks for this branch (global + branch-specific)
   const { data: drinks, error: drinksError } = await supabase
@@ -606,11 +636,16 @@ export async function getBarStock(
   }
 
   // Get bar_stock fallback
-  const { data: barStockRows } = await supabase
-    .from('bar_stock')
-    .select('drink_id, current_stock, par_level, last_updated')
-    .eq('branch_id', branchId)
-    .in('drink_id', drinkIds);
+  let barStockRows: any[] = [];
+  if (resolvedOutletId) {
+    const { data } = await supabase
+      .from('bar_stock')
+      .select('drink_id, current_stock, par_level, last_updated, outlet_id')
+      .eq('branch_id', branchId)
+      .eq('outlet_id', resolvedOutletId)
+      .in('drink_id', drinkIds);
+    barStockRows = data || [];
+  }
 
   const barStockByDrinkId = Object.fromEntries(
     (barStockRows || []).map((s: any) => [s.drink_id, s])
@@ -618,11 +653,11 @@ export async function getBarStock(
 
   // Get pos_outlet_items fallback
   let posItemsBySku: Record<string, { current_stock: number; selling_price: number }> = {};
-  if (outletId) {
+  if (resolvedOutletId) {
     const { data: posItems } = await supabase
       .from('pos_outlet_items')
       .select('sku, current_stock, selling_price')
-      .eq('outlet_id', outletId)
+      .eq('outlet_id', resolvedOutletId)
       .in('sku', skus);
 
     posItemsBySku = Object.fromEntries(

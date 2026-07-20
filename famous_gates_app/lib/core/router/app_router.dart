@@ -1367,6 +1367,8 @@ const _branchStorekeeperSectionRouteSpecs =
   MapEntry('/store/food-stuffs-stock', BranchStorekeeperSection.foodStuffsStock),
   MapEntry('/store/receive', BranchStorekeeperSection.receive),
   MapEntry('/store/receive-goods', BranchStorekeeperSection.receive),
+  MapEntry('/branch-store/transfers', BranchStorekeeperSection.internalTransfers),
+  MapEntry('/store/transfers', BranchStorekeeperSection.internalTransfers),
   MapEntry('/branch-store/suppliers', BranchStorekeeperSection.suppliers),
   MapEntry('/store/branch-suppliers', BranchStorekeeperSection.suppliers),
   MapEntry(

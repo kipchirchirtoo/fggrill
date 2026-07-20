@@ -6633,11 +6633,26 @@ export const getLogbooksForAudit = async (req: Request, res: Response, next: Nex
             const breakdown = logbook.sales_breakdown && typeof logbook.sales_breakdown === 'object'
                 ? logbook.sales_breakdown
                 : {};
+            // Build a synthetic payment_breakdown so the Flutter list view can
+            // show Cash/MPESA badges without a separate detail fetch.
+            const cashAmt = logbookNumber(logbook.total_cash) || logbookNumber(breakdown.total_cash);
+            const mpesaAmt = logbookNumber(logbook.total_mpesa) || logbookNumber(breakdown.total_mpesa);
+            const cardAmt = logbookNumber(logbook.total_swipe) || logbookNumber(breakdown.total_card);
+            const syntheticPaymentBreakdown = [
+                { method: 'cash', amount: cashAmt, count: 0 },
+                { method: 'mpesa', amount: mpesaAmt, count: 0 },
+                { method: 'card', amount: cardAmt, count: 0 },
+            ].filter(r => r.amount > 0);
+
             return {
                 ...logbook,
                 variance: logbookNumber(breakdown.variance),
                 expected_closing_float: logbookNumber(breakdown.expected_closing_float),
                 total_sales: logbookNumber(logbook.total_sales) || logbookNumber(breakdown.total_sales),
+                total_cash: cashAmt,
+                total_mpesa: mpesaAmt,
+                total_card: cardAmt,
+                payment_breakdown: syntheticPaymentBreakdown,
                 lines: linesByLogbookId.get(String(logbook.id || '')) || [],
                 cashier: usersById.get(String(logbook.cashier_id || '')) || null,
                 branch: branchById.get(String(logbook.branch_id || '')) || null
@@ -6827,17 +6842,86 @@ function normalizeLogbookLine(line: any, fallbackSection = 'transaction'): any {
 }
 
 function dedupeLogbookLines(lines: any[]): any[] {
-    const seen = new Set<string>();
     const unique: any[] = [];
 
-    for (const line of lines) {
-        const key = line.source_table && line.source_id
-            ? `${line.source_table}:${line.source_id}:${line.section}`
-            : `${line.section}:${line.reference}:${line.amount}:${line.created_at || ''}`;
+    // Helper to clean references
+    const cleanRef = (ref: string) => {
+        if (!ref) return '';
+        let r = ref.trim().toLowerCase();
+        if (r === 'linked record' || r === '—' || r === '-' || r === 'recorded' || r === 'paid') return '';
+        // remove common prefixes
+        r = r.replace(/^(cash|mpesa|card|pos|order|ref)[\s\-_:]*/, '');
+        return r;
+    };
 
-        if (seen.has(key)) continue;
-        seen.add(key);
-        unique.push(line);
+    const mergeFields = (existingLine: any, duplicateLine: any) => {
+        if (!existingLine.revenue_bucket && duplicateLine.revenue_bucket) {
+            existingLine.revenue_bucket = duplicateLine.revenue_bucket;
+        }
+        if (!existingLine.revenue_type && duplicateLine.revenue_type) {
+            existingLine.revenue_type = duplicateLine.revenue_type;
+        }
+        if (!existingLine.outlet_type && duplicateLine.outlet_type) {
+            existingLine.outlet_type = duplicateLine.outlet_type;
+        }
+        if (!existingLine.customer_name || existingLine.customer_name === 'Walk-in customer') {
+            if (duplicateLine.customer_name && duplicateLine.customer_name !== 'Walk-in customer') {
+                existingLine.customer_name = duplicateLine.customer_name;
+            }
+        }
+        if (existingLine.reference === 'Linked record' && duplicateLine.reference && duplicateLine.reference !== 'Linked record') {
+            existingLine.reference = duplicateLine.reference;
+        }
+    };
+
+    for (const line of lines) {
+        let isDup = false;
+        for (const existing of unique) {
+            // Check if they point to the exact same source database record
+            if (line.source_table && line.source_id &&
+                line.source_table === existing.source_table &&
+                line.source_id === existing.source_id) {
+                isDup = true;
+                mergeFields(existing, line);
+                break;
+            }
+
+            // Compare amount and payment method
+            const amtDiff = Math.abs(logbookNumber(line.amount) - logbookNumber(existing.amount));
+            const methodLine = normalizeLogbookPaymentMethod(line.payment_method);
+            const methodExisting = normalizeLogbookPaymentMethod(existing.payment_method);
+            if (amtDiff <= 0.01 && methodLine === methodExisting) {
+                const refLine = cleanRef(line.reference);
+                const refExisting = cleanRef(existing.reference);
+
+                if (refLine && refExisting) {
+                    if (refLine === refExisting) {
+                        isDup = true;
+                        mergeFields(existing, line);
+                        break;
+                    }
+                } else {
+                    const timeLine = new Date(line.created_at || 0).getTime();
+                    const timeExisting = new Date(existing.created_at || 0).getTime();
+                    if (!isNaN(timeLine) && !isNaN(timeExisting)) {
+                        const diffSec = Math.abs(timeLine - timeExisting) / 1000;
+                        if (diffSec <= 15) {
+                            isDup = true;
+                            mergeFields(existing, line);
+                            // If the existing line doesn't have a clean reference, but the new one does,
+                            // update the existing line to have the cleaner reference so it is preserved.
+                            if (!refExisting && refLine) {
+                                existing.reference = line.reference;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!isDup) {
+            unique.push(line);
+        }
     }
 
     return unique;
@@ -7007,6 +7091,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         }
     }
 
+    const outletShiftTypeMap = new Map<string, string>();
     let outletShiftIds: string[] = [];
     if (logbook.outlet_shift_id) {
         outletShiftIds.push(logbook.outlet_shift_id);
@@ -7033,6 +7118,12 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         const outletShifts = outletShiftsResult.data || [];
         if (outletShifts.length > 0) {
             outletShift = outletShifts[0];
+            outletShifts.forEach((s: any) => {
+                const oType = Array.isArray(s.outlet) ? s.outlet[0]?.outlet_type : s.outlet?.outlet_type;
+                if (oType) {
+                    outletShiftTypeMap.set(s.id, oType);
+                }
+            });
         }
 
         const additionalOrders = await safeLogbookQuery(
@@ -7056,7 +7147,74 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         outletPayments = [...outletPayments, ...additionalPayments];
     }
 
-    const storedLines = storedRawLines.map((line: any) => normalizeLogbookLine(line, 'logbook_line'));
+    const getActiveOrderTotal = (order: any) => {
+        const items = Array.isArray(order.items) ? order.items : [];
+        return items.reduce((sum: number, item: any) => {
+            if (
+                item.is_voided === true ||
+                item.is_cancelled === true ||
+                item.kitchen_status === 'voided' ||
+                item.kitchen_status === 'cancelled' ||
+                item.is_fully_voided === true
+            ) {
+                return sum;
+            }
+            const quantity = Number(item.active_qty !== undefined ? item.active_qty : (item.quantity ?? item.qty ?? 0)) || 0;
+            const unitPrice = Number(item.unit_price ?? item.selling_price ?? item.price ?? 0) || 0;
+            const revenue = Number(item.active_total !== undefined ? item.active_total : (item.line_total ?? item.total_price ?? item.total ?? quantity * unitPrice)) || 0;
+            return sum + revenue;
+        }, 0);
+    };
+
+    const orderActiveTotals: Record<string, number> = {};
+    const orderOriginalTotals: Record<string, number> = {};
+    
+    outletOrders.forEach((order: any) => {
+        const activeTotal = getActiveOrderTotal(order);
+        orderActiveTotals[order.id] = activeTotal;
+        orderOriginalTotals[order.id] = Number(order.total_amount || 0);
+        order.total_amount = activeTotal;
+    });
+
+    outletPayments.forEach((payment: any) => {
+        const orderId = payment.order_id;
+        const activeTotal = orderActiveTotals[orderId];
+        const originalTotal = orderOriginalTotals[orderId];
+        if (activeTotal !== undefined && originalTotal > 0) {
+            payment.amount = (Number(payment.amount) * activeTotal) / originalTotal;
+        } else if (activeTotal === 0) {
+            payment.amount = 0;
+        }
+    });
+
+    // Filter credit bills by cashier shift:
+    // 1. If it has a source_document_id, resolve its order to see if it belongs to one of the cashier's POS outlet shifts.
+    // 2. Otherwise, fall back to matching created_by = shift.cashier_id.
+    const outletOrderIds = new Set((outletOrders || []).map((o: any) => o.id).filter(Boolean));
+    const activeCashierId = shift?.cashier_id;
+    creditBillRecords = (creditBillRecords || []).filter((bill: any) => {
+        if (outletShiftIds.length > 0) {
+            return bill.source_document_id ? outletOrderIds.has(bill.source_document_id) : false;
+        }
+        if (bill.source_document_id) {
+            return outletOrderIds.has(bill.source_document_id);
+        }
+        return activeCashierId ? bill.created_by === activeCashierId : true;
+    });
+
+    const getShiftOutletType = (shiftId: string) => {
+        const oType = outletShiftTypeMap.get(shiftId) || (Array.isArray(outletShift?.outlet) ? outletShift?.outlet[0]?.outlet_type : outletShift?.outlet?.outlet_type);
+        return oType || logbook.type;
+    };
+
+    const storedLines = storedRawLines.map((line: any) => {
+        const oType = line.outlet_shift_id ? getShiftOutletType(line.outlet_shift_id) : logbook.type;
+        return normalizeLogbookLine({
+            ...line,
+            outlet_type: line.outlet_type || oType,
+            revenue_type: line.revenue_type || line.outlet_type || oType
+        }, 'logbook_line');
+    });
     const generatedLines = [
         ...shiftTransactions.map((line) => normalizeLogbookLine(line, 'cashier_shift_transaction')),
         ...cashierTransactions.map((line) => normalizeLogbookLine(line, 'cashier_transaction')),
@@ -7072,22 +7230,28 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             section: 'bar_sale',
             customer_name: line.customer_name || line.guest_name || line.order_type
         })),
-        ...outletOrders.map((line) => normalizeLogbookLine({
-            ...line,
-            amount: line.total_amount,
-            section: 'outlet_order',
-            customer_name: line.customer_name || line.order_type,
-            outlet_type: line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type,
-            revenue_type: line.order_type || line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type
-        })),
-        ...outletPayments.map((line) => normalizeLogbookLine({
-            ...line,
-            amount: line.amount,
-            section: 'outlet_payment',
-            customer_name: line.reference || line.payment_method,
-            outlet_type: line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type,
-            revenue_type: line.revenue_type || line.outlet_type || outletShift?.outlet?.outlet_type || logbook.type
-        })),
+        ...outletOrders.map((line) => {
+            const oType = getShiftOutletType(line.shift_id);
+            return normalizeLogbookLine({
+                ...line,
+                amount: line.total_amount,
+                section: 'outlet_order',
+                customer_name: line.customer_name || line.order_type,
+                outlet_type: line.outlet_type || oType,
+                revenue_type: line.order_type || line.outlet_type || oType
+            });
+        }),
+        ...outletPayments.map((line) => {
+            const oType = getShiftOutletType(line.shift_id);
+            return normalizeLogbookLine({
+                ...line,
+                amount: line.amount,
+                section: 'outlet_payment',
+                customer_name: line.reference || line.payment_method,
+                outlet_type: line.outlet_type || oType,
+                revenue_type: line.revenue_type || line.outlet_type || oType
+            });
+        }),
         ...creditBillRecords.map((line) => normalizeLogbookLine({
             ...line,
             amount: line.total_amount ?? line.amount,
@@ -7098,7 +7262,10 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         ...voidAudit.lines.map((line) => normalizeLogbookLine(line, 'voided_transaction'))
     ];
 
-    const allLines = dedupeLogbookLines([...generatedLines, ...storedLines]);
+    const orderSections = ['restaurant_sale', 'bar_sale', 'outlet_order'];
+    const paymentLines = [...generatedLines, ...storedLines]
+        .filter((line) => !orderSections.includes(line.section));
+    const allLines = dedupeLogbookLines(paymentLines);
     const nonVoidLines = allLines.filter((line) => !isVoidedLogbookLine(line));
     const transactionHistory = [...allLines]
         .filter((line) => logbookNumber(line.amount) > 0)
@@ -7112,10 +7279,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     // (restaurant/bar) are NOT included here so the same sale isn't counted
     // twice (once as the order, once as its clearance).
     const clearedPaymentTotals: Record<string, number> = {};
-    const clearedPaymentLines = [
-        ...shiftTransactions.map((line) => normalizeLogbookLine(line, 'cashier_shift_transaction')),
-        ...cashierTransactions.map((line) => normalizeLogbookLine(line, 'cashier_transaction'))
-    ].filter((line) => !isVoidedLogbookLine(line));
+    const clearedPaymentLines = nonVoidLines;
     clearedPaymentLines.forEach((line) => {
         if (logbookNumber(line.amount) > 0) addAmount(clearedPaymentTotals, line.payment_method, line.amount);
     });
@@ -7173,10 +7337,18 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             logbookNumber(clearedPaymentTotals[method])
             || logbookNumber(allLinePaymentTotals[method])
             || logbookNumber(outletOrderPaymentTotals[method]);
-        if (method === 'credit_bill') {
-            acc[method] = creditBillsTotal || explicitAmount || evidenceAmount;
+        if (outletShiftIds.length > 0) {
+            if (method === 'credit_bill') {
+                acc[method] = evidenceAmount || creditBillsTotal || explicitAmount;
+            } else {
+                acc[method] = evidenceAmount || explicitAmount;
+            }
         } else {
-            acc[method] = explicitAmount || evidenceAmount;
+            if (method === 'credit_bill') {
+                acc[method] = creditBillsTotal || explicitAmount || evidenceAmount;
+            } else {
+                acc[method] = explicitAmount || evidenceAmount;
+            }
         }
         return acc;
     }, {});
@@ -7200,12 +7372,24 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
     const grossSales = netSales + logbookNumber(voidAudit.summary.total_void_amount);
     const openingFloat = logbookNumber(logbook.opening_float ?? shift?.opening_float);
     const closingFloat = logbookNumber(logbook.closing_float ?? shift?.closing_float ?? shift?.cash_at_hand);
-    const cashDrops = logbookNumber(breakdown.cash_drops ?? shift?.cash_deposited);
+    const cashDrops = 0; // cash_deposited is not a cashier-declared deposit
     const payouts = logbookNumber(breakdown.payouts ?? breakdown.paid_outs);
     const expenseTotal = logbookNumber(breakdown.expense_total ?? shift?.expense_total);
     const creditPaymentsReceived = logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value);
-    const expectedCash = openingFloat + totalCash + creditPaymentsReceived - cashDrops - payouts - expenseTotal;
-    const variance = closingFloat - expectedCash;
+    // For new-path logbooks (source: cashier_shift_logs) the shift row stores
+    // expected_closing_float and variance using the correct formula at close time.
+    // breakdown.total_cash is already net of cash expenses, so recomputing here
+    // would double-subtract expenses. Use the stored shift values as the authority.
+    const hasStoredExpected = shift != null && shift.expected_closing_float !== undefined && shift.expected_closing_float !== null;
+    const hasStoredVariance = shift != null && shift.variance !== undefined && shift.variance !== null;
+    // totalCash is NET (expenses already deducted). Fallback formula: opening + NET_cash + paid_credits.
+    // Do NOT subtract expenseTotal — it is already absent from totalCash.
+    const expectedCash = hasStoredExpected
+        ? logbookNumber(shift.expected_closing_float)
+        : (openingFloat + totalCash + creditPaymentsReceived);
+    const variance = hasStoredVariance
+        ? logbookNumber(shift.variance)
+        : (closingFloat - expectedCash);
 
     const revenueEvidence: Record<string, number> = {
         restaurant: restaurantOrders.reduce((sum, line) => sum + logbookNumber(line.total_amount), 0),
@@ -7216,7 +7400,7 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
         other: 0
     };
 
-    // Aggregate from cashier transactions (cleared payment lines)
+    // Aggregate from the authoritative, fully-deduplicated cleared payment lines
     clearedPaymentLines.forEach((line: any) => {
         const bucket = inferRevenueBucket(line);
         if (bucket) {
@@ -7234,7 +7418,6 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             revenueEvidence[bucket] = logbookNumber(revenueEvidence[bucket]) + logbookNumber(line.amount ?? line.total_amount ?? line.total);
         }
     });
-
     // Include other types of payments / credit bills
     revenueEvidence.other += creditPaymentsReceived;
 
@@ -7403,10 +7586,9 @@ async function buildCashierLogbookDetail(req: Request, id: string): Promise<any>
             gross_sales: grossSales,
             total_void_amount: logbookNumber(voidAudit.summary.total_void_amount),
             total_void_count: logbookNumber(voidAudit.summary.total_void_count),
-            transaction_count: Math.max(
-                logbookNumber(breakdown.transaction_count ?? shift?.transaction_count),
-                transactionHistory.length
-            ),
+            transaction_count: transactionHistory.length > 0
+                ? transactionHistory.length
+                : logbookNumber(breakdown.transaction_count ?? shift?.transaction_count),
             paid_bills_value: logbookNumber(breakdown.paid_bills_value ?? shift?.paid_bills_value),
             paid_bills_count: logbookNumber(breakdown.paid_bills_count ?? shift?.paid_bills_count),
             unpaid_bills_value: logbookNumber(breakdown.unpaid_bills_value ?? shift?.unpaid_bills_value),

@@ -5,6 +5,7 @@ import path from 'path';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { UserRole } from '../models/User';
+import db from '../db';
 
 const FG_PRIMARY = '#1a1a1a';
 const FG_SECONDARY = '#555555';
@@ -2381,7 +2382,7 @@ const buildSoldItemsAnalysisPDF = async (payload: any): Promise<Buffer> => {
       doc,
       y,
       ['Product', 'Outlet', 'Qty', 'Revenue', 'COGS', 'Profit', 'Margin', 'Movement'],
-      (payload.analysis || []).slice(0, 80).map((item: any) => [
+      (payload.analysis || []).map((item: any) => [
         String(item.name || item.item_name || '-'),
         String(item.outlet_label || item.category || '-'),
         Number(item.quantity || 0).toLocaleString('en-KE'),
@@ -2428,83 +2429,138 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const { startRaw, endRaw, startIso, endIso } = normalizeDateWindow(start_date, end_date);
     const days = Math.max(1, Math.ceil((new Date(endIso).getTime() - new Date(startIso).getTime()) / (24 * 60 * 60 * 1000)));
 
-    let restQuery = supabase.from('restaurant_orders').select('id, branch_id, shift_id, created_at, order_type, room_number, department').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
-    let barQuery = supabase.from('bar_orders').select('id, branch_id, outlet_id, created_at').eq('status', 'completed').gte('created_at', startIso).lte('created_at', endIso);
-    let outletOrderQuery = supabase
-      .from('pos_shift_orders')
-      .select('id, outlet_id, shift_id, order_number, order_type, room_number, customer_name, status, payment_status, total_amount, items, created_at, kitchen_status, kitchen_ready_at, updated_at')
-      .gte('created_at', startIso)
-      .lte('created_at', endIso)
-      .or('status.in.(paid,credit_bill),payment_status.in.(paid,credit_bill)');
-    let stockReqQuery = supabase.from('stock_requests').select('id, requesting_branch_id').gte('created_at', startIso).lte('created_at', endIso);
-    let barStockReqQuery = supabase.from('bar_stock_requests').select('id, branch_id').gte('created_at', startIso).lte('created_at', endIso);
+    const numericBranchId = effectiveBranchId ? Number(effectiveBranchId) : null;
 
-    if (effectiveBranchId) {
-      restQuery = restQuery.eq('branch_id', effectiveBranchId);
-      barQuery = barQuery.eq('branch_id', effectiveBranchId);
-      stockReqQuery = stockReqQuery.eq('requesting_branch_id', effectiveBranchId);
-      barStockReqQuery = barStockReqQuery.eq('branch_id', effectiveBranchId);
+    let restQueryText = `
+      SELECT id, branch_id, shift_id, created_at, order_type, room_number, department 
+      FROM public.restaurant_orders 
+      WHERE status = 'completed' AND created_at >= $1 AND created_at <= $2
+    `;
+    let restParams: any[] = [startIso, endIso];
+    if (numericBranchId) {
+      restQueryText += ` AND branch_id = $3`;
+      restParams.push(numericBranchId);
+    }
+    
+    let barQueryText = `
+      SELECT id, branch_id, outlet_id, created_at 
+      FROM public.bar_orders 
+      WHERE status = 'completed' AND created_at >= $1 AND created_at <= $2
+    `;
+    let barParams: any[] = [startIso, endIso];
+    if (numericBranchId) {
+      barQueryText += ` AND branch_id = $3`;
+      barParams.push(numericBranchId);
     }
 
-    const [rawRest, rawBar, rawOutletOrders, rawStock, rawBarStock] = await Promise.all([restQuery, barQuery, outletOrderQuery, stockReqQuery, barStockReqQuery]);
+    let posShiftOrdersQueryText = `
+      SELECT id, outlet_id, shift_id, order_number, order_type, room_number, customer_name, status, payment_status, total_amount, items, created_at, kitchen_status, kitchen_ready_at, updated_at 
+      FROM public.pos_shift_orders 
+      WHERE created_at >= $1 AND created_at <= $2 
+        AND (status IN ('paid', 'credit_bill') OR payment_status IN ('paid', 'credit_bill'))
+    `;
+    let posShiftOrdersParams: any[] = [startIso, endIso];
+    if (numericBranchId) {
+      posShiftOrdersQueryText += ` AND branch_id = $3`;
+      posShiftOrdersParams.push(numericBranchId);
+    }
 
-    if (rawRest.error) throw rawRest.error;
-    if (rawBar.error) throw rawBar.error;
-    if (rawOutletOrders.error) throw rawOutletOrders.error;
-    if (rawStock.error) throw rawStock.error;
-    if (rawBarStock.error) throw rawBarStock.error;
+    let stockQueryText = `
+      SELECT id, requesting_branch_id 
+      FROM public.stock_requests 
+      WHERE created_at >= $1 AND created_at <= $2
+    `;
+    let stockParams: any[] = [startIso, endIso];
+    if (numericBranchId) {
+      stockQueryText += ` AND requesting_branch_id = $3`;
+      stockParams.push(numericBranchId);
+    }
 
-    const restOrders = rawRest.data || [];
-    const barOrders = rawBar.data || [];
-    let outletOrders = rawOutletOrders.data || [];
-    const stockRequests = rawStock.data || [];
-    const barStockRequests = rawBarStock.data || [];
+    let barStockQueryText = `
+      SELECT id, branch_id 
+      FROM public.bar_stock_requests 
+      WHERE created_at >= $1 AND created_at <= $2
+    `;
+    let barStockParams: any[] = [startIso, endIso];
+    if (numericBranchId) {
+      barStockQueryText += ` AND branch_id = $3`;
+      barStockParams.push(numericBranchId);
+    }
+
+    const [rawRest, rawBar, rawOutletOrders, rawStock, rawBarStock] = await Promise.all([
+      db.query(restQueryText, restParams),
+      db.query(barQueryText, barParams),
+      db.query(posShiftOrdersQueryText, posShiftOrdersParams),
+      db.query(stockQueryText, stockParams),
+      db.query(barStockQueryText, barStockParams)
+    ]);
+
+    const restOrders = rawRest.rows || [];
+    const barOrders = rawBar.rows || [];
+    let outletOrders = rawOutletOrders.rows || [];
+    const stockRequests = rawStock.rows || [];
+    const barStockRequests = rawBarStock.rows || [];
 
     const outletIds = [...new Set(outletOrders.map((order: any) => order.outlet_id).filter(Boolean))];
     const outletShiftIds = [...new Set(outletOrders.map((order: any) => order.shift_id).filter(Boolean))];
     const legacyShiftIds = [...new Set(restOrders.map((order: any) => order.shift_id).filter(Boolean))];
-    const [outletsRes, outletItemsRes, outletShiftsRes, legacyShiftsRes] = await Promise.all([
-      outletIds.length
-        ? supabase.from('pos_outlets').select('id, branch_id, name, outlet_type').in('id', outletIds)
-        : Promise.resolve({ data: [], error: null } as any),
-      outletIds.length
-        ? supabase.from('pos_outlet_items').select('id, name, sku, cost_price, selling_price').in('outlet_id', outletIds)
-        : Promise.resolve({ data: [], error: null } as any),
-      outletShiftIds.length
-        ? supabase.from('pos_outlet_shifts').select('id, outlet_id, cashier_id, branch_id, shift_number, opened_at, closed_at, status').in('id', outletShiftIds)
-        : Promise.resolve({ data: [], error: null } as any),
-      legacyShiftIds.length
-        ? supabase.from('pos_shifts').select('id, outlet_id, branch_id, shift_number, opened_at, closed_at, status, opened_by').in('id', legacyShiftIds)
-        : Promise.resolve({ data: [], error: null } as any)
-    ]);
-    if (outletsRes.error) throw outletsRes.error;
-    if (outletItemsRes.error) throw outletItemsRes.error;
-    if (outletShiftsRes.error) throw outletShiftsRes.error;
-    if (legacyShiftsRes.error) throw legacyShiftsRes.error;
 
-    // bar_orders has no shift_id column of its own — it only carries
-    // outlet_id. Recover which cashier shift each bar sale belongs to by
-    // overlapping the order's timestamp against that outlet's pos_outlet_shifts
-    // window, the same shifts already used for shift_revenue/by_shift elsewhere
-    // on this screen. Without this, every "Bar" item falls into 'no_shift' and
-    // disappears the instant a specific shift (rather than "All Shifts") is
-    // selected.
+    let outletsData: any[] = [];
+    let outletItemsData: any[] = [];
+    let outletShiftsData: any[] = [];
+    let legacyShiftsData: any[] = [];
+
+    if (outletIds.length > 0) {
+      const [outletsResData, outletItemsResData] = await Promise.all([
+        db.query(`SELECT id, branch_id, name, outlet_type FROM public.pos_outlets WHERE id = ANY($1::uuid[])`, [outletIds]),
+        db.query(`SELECT id, name, sku, cost_price, selling_price FROM public.pos_outlet_items WHERE outlet_id = ANY($1::uuid[])`, [outletIds])
+      ]);
+      outletsData = outletsResData.rows || [];
+      outletItemsData = outletItemsResData.rows || [];
+    }
+
+    if (outletShiftIds.length > 0) {
+      const { rows } = await db.query(
+        `SELECT id, outlet_id, cashier_id, branch_id, shift_number, opened_at, closed_at, status 
+         FROM public.pos_outlet_shifts 
+         WHERE id = ANY($1::uuid[])`,
+        [outletShiftIds]
+      );
+      outletShiftsData = rows;
+    }
+
+    if (legacyShiftIds.length > 0) {
+      const { rows } = await db.query(
+        `SELECT id, outlet_id, branch_id, shift_number, opened_at, closed_at, status, opened_by 
+         FROM public.pos_shifts 
+         WHERE id = ANY($1::uuid[])`,
+        [legacyShiftIds]
+      );
+      legacyShiftsData = rows;
+    }
+
+    const outletsRes = { data: outletsData, error: null as any };
+    const outletItemsRes = { data: outletItemsData, error: null as any };
+    const outletShiftsRes = { data: outletShiftsData, error: null as any };
+    const legacyShiftsRes = { data: legacyShiftsData, error: null as any };
+
     const barOutletIds = [...new Set(barOrders.map((order: any) => order.outlet_id).filter(Boolean))];
     let barOutletShifts: any[] = [];
     if (barOutletIds.length) {
-      const { data: barShiftData, error: barShiftError } = await supabase
-        .from('pos_outlet_shifts')
-        .select('id, outlet_id, cashier_id, branch_id, shift_number, opened_at, closed_at, status')
-        .in('outlet_id', barOutletIds)
-        .lte('opened_at', endIso)
-        .or(`closed_at.gte.${startIso},closed_at.is.null`);
-      if (barShiftError) throw barShiftError;
-      barOutletShifts = barShiftData || [];
+      const { rows } = await db.query(
+        `SELECT id, outlet_id, cashier_id, branch_id, shift_number, opened_at, closed_at, status 
+         FROM public.pos_outlet_shifts 
+         WHERE outlet_id = ANY($1::uuid[]) 
+           AND opened_at <= $2 
+           AND (closed_at >= $3 OR closed_at IS NULL)`,
+        [barOutletIds, endIso, startIso]
+      );
+      barOutletShifts = rows || [];
     }
     const allOutletShifts = [
-      ...(outletShiftsRes.data || []),
+      ...outletShiftsData,
       ...barOutletShifts.filter((shift: any) =>
-        !(outletShiftsRes.data || []).some((existing: any) => String(existing.id) === String(shift.id)))
+        !outletShiftsData.some((existing: any) => String(existing.id) === String(shift.id)))
     ];
     const outletShiftsByOutletId: Record<string, any[]> = {};
     allOutletShifts.forEach((shift: any) => {
@@ -2540,10 +2596,14 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         ...(legacyShiftsRes.data || []).map((s: any) => s.opened_by).filter(Boolean)
       ])
     ];
-    const { data: shiftCashierUsers, error: shiftCashierUsersError } = shiftCashierIds.length
-      ? await supabase.from('users').select('id, first_name, last_name').in('id', shiftCashierIds)
-      : { data: [], error: null } as any;
-    if (shiftCashierUsersError) throw shiftCashierUsersError;
+    let shiftCashierUsers: any[] = [];
+    if (shiftCashierIds.length > 0) {
+      const { rows } = await db.query(
+        `SELECT id, first_name, last_name FROM public.users WHERE id = ANY($1::uuid[])`,
+        [shiftCashierIds]
+      );
+      shiftCashierUsers = rows || [];
+    }
 
     const shiftCashierNameMap = (shiftCashierUsers || []).reduce((acc: Record<string, string>, user: any) => {
       acc[String(user.id)] = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown Cashier';
@@ -2634,49 +2694,49 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     const stockIds = stockRequests.map((request: any) => request.id).filter(Boolean);
     const barStockIds = barStockRequests.map((request: any) => request.id).filter(Boolean);
 
-    const [restItemsRes, barItemsRes, stockItemsRes, barStockItemsRes] = await Promise.all([
+    let restaurantItems: any[] = [];
+    let barItems: any[] = [];
+    let stockItems: any[] = [];
+    let barStockItems: any[] = [];
+
+    const itemQueries = [
       restIds.length
-        ? supabase.from('restaurant_order_items').select('order_id, menu_item_id, item_name, quantity, unit_price, total_price, kitchen_status, kitchen_ready_at').in('order_id', restIds)
-        : Promise.resolve({ data: [], error: null } as any),
+        ? db.query(`SELECT order_id, menu_item_id, item_name, quantity, unit_price, total_price, kitchen_ready_at FROM public.restaurant_order_items WHERE order_id = ANY($1::uuid[])`, [restIds])
+        : Promise.resolve({ rows: [] }),
       barIds.length
-        ? supabase.from('bar_order_items').select('order_id, drink_id, drink_name, item_name, quantity, unit_price, total_price').in('order_id', barIds)
-        : Promise.resolve({ data: [], error: null } as any),
+        ? db.query(`SELECT order_id, drink_id, drink_name, item_name, quantity, unit_price, total_price FROM public.bar_order_items WHERE order_id = ANY($1::uuid[])`, [barIds])
+        : Promise.resolve({ rows: [] }),
       stockIds.length
-        ? supabase.from('stock_request_items').select('request_id, item_sku, requested_quantity').in('request_id', stockIds)
-        : Promise.resolve({ data: [], error: null } as any),
+        ? db.query(`SELECT request_id, item_sku, requested_quantity FROM public.stock_request_items WHERE request_id = ANY($1::uuid[])`, [stockIds])
+        : Promise.resolve({ rows: [] }),
       barStockIds.length
-        ? supabase.from('bar_stock_request_items').select('request_id, drink_id, requested_qty').in('request_id', barStockIds)
-        : Promise.resolve({ data: [], error: null } as any)
-    ]);
+        ? db.query(`SELECT request_id, drink_id, requested_qty FROM public.bar_stock_request_items WHERE request_id = ANY($1::uuid[])`, [barStockIds])
+        : Promise.resolve({ rows: [] })
+    ];
 
-    if (restItemsRes.error) throw restItemsRes.error;
-    if (barItemsRes.error) throw barItemsRes.error;
-    if (stockItemsRes.error) throw stockItemsRes.error;
-    if (barStockItemsRes.error) throw barStockItemsRes.error;
-
-    const restaurantItems = restItemsRes.data || [];
-    const barItems = barItemsRes.data || [];
-    const stockItems = stockItemsRes.data || [];
-    const barStockItems = barStockItemsRes.data || [];
+    const [rawRestItems, rawBarItems, rawStockItems, rawBarStockItems] = await Promise.all(itemQueries);
+    restaurantItems = rawRestItems.rows || [];
+    barItems = rawBarItems.rows || [];
+    stockItems = rawStockItems.rows || [];
+    barStockItems = rawBarStockItems.rows || [];
 
     const menuItemIds = [...new Set(restaurantItems.map((item: any) => item.menu_item_id).filter(Boolean))];
     const drinkIds = [...new Set(barItems.map((item: any) => item.drink_id).filter(Boolean))];
 
-    const [menuItemsRes, barInventoryRes] = await Promise.all([
-      menuItemIds.length
-        ? supabase.from('restaurant_menu_items').select('id, name, item_code').in('id', menuItemIds)
-        : Promise.resolve({ data: [], error: null } as any),
-      // bar_order_items.drink_id is a FK to bar_drinks.id, not
-      // restaurant_bar_inventory (a separate, unrelated legacy table) —
-      // querying the wrong table here meant bar item names/categories on
-      // this report always came back blank.
-      drinkIds.length
-        ? supabase.from('bar_drinks').select('id, name, category').in('id', drinkIds)
-        : Promise.resolve({ data: [], error: null } as any)
-    ]);
+    let menuItemsData: any[] = [];
+    let barInventoryData: any[] = [];
 
-    if (menuItemsRes.error) throw menuItemsRes.error;
-    if (barInventoryRes.error) throw barInventoryRes.error;
+    if (menuItemIds.length > 0) {
+      const { rows } = await db.query(`SELECT id, name, item_code FROM public.restaurant_menu_items WHERE id = ANY($1::uuid[])`, [menuItemIds]);
+      menuItemsData = rows || [];
+    }
+    if (drinkIds.length > 0) {
+      const { rows } = await db.query(`SELECT id, name, category FROM public.bar_drinks WHERE id = ANY($1::uuid[])`, [drinkIds]);
+      barInventoryData = rows || [];
+    }
+
+    const menuItemsRes = { data: menuItemsData, error: null as any };
+    const barInventoryRes = { data: barInventoryData, error: null as any };
 
     const menuItemNameMap = (menuItemsRes.data || []).reduce((acc: Record<string, string>, item: any) => {
       acc[String(item.id)] = item.name;
@@ -2870,7 +2930,16 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       if (!branchKey) return;
       const orderItems = Array.isArray(order.items) ? order.items : [];
       orderItems.forEach((item: any) => {
-        if (item.is_fully_voided === true) return;
+        // Skip voided/cancelled items!
+        if (
+          item.is_voided === true ||
+          item.is_cancelled === true ||
+          item.kitchen_status === 'voided' ||
+          item.kitchen_status === 'cancelled' ||
+          item.is_fully_voided === true
+        ) {
+          return;
+        }
         const rawQty = Number(item.quantity ?? item.qty ?? 0) || 0;
         const voidedQty = Number(item.voided_qty || 0);
         const quantity = Math.max(0, rawQty - voidedQty);
@@ -2885,7 +2954,6 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
         } else {
           revenue = quantity * unitPrice;
         }
-
         const itemId = item.outlet_item_id ? String(item.outlet_item_id) : String(item.product_id || item.id || item.name || '');
 
         // Lookup cost price from outlet items (same pattern as P&L fix)
@@ -3128,29 +3196,30 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     // ── Cashier Payment Clearance ──────────────────────────────────────────────
     let cashierClearance: any = { shifts: [], summary: {} };
     try {
-      let shiftsQuery = supabase
-        .from('cashier_shift_logs')
-        .select('id, branch_id, cashier_id, reconciled_by, shift_start, shift_end, status, expected_closing_float, closing_float, opening_float, reconciliation_notes, variance')
-        .gte('shift_start', startIso)
-        .lte('shift_start', endIso)
-        .order('shift_start', { ascending: false });
-
-      if (effectiveBranchId) {
-        shiftsQuery = shiftsQuery.eq('branch_id', effectiveBranchId);
+      let shiftsQueryText = `
+        SELECT id, branch_id, cashier_id, reconciled_by, shift_start, shift_end, status, expected_closing_float, closing_float, opening_float, reconciliation_notes, variance 
+        FROM public.cashier_shift_logs 
+        WHERE shift_start >= $1 AND shift_start <= $2
+      `;
+      let shiftsParams: any[] = [startIso, endIso];
+      if (numericBranchId) {
+        shiftsQueryText += ` AND branch_id = $3`;
+        shiftsParams.push(numericBranchId);
       }
+      shiftsQueryText += ` ORDER BY shift_start DESC`;
 
-      const { data: shifts, error: shiftsError } = await shiftsQuery;
-      if (!shiftsError && shifts && shifts.length > 0) {
+      const { rows: shifts } = await db.query(shiftsQueryText, shiftsParams);
+      if (shifts && shifts.length > 0) {
         const cashierIds = [...new Set(shifts.map((s: any) => s.cashier_id).filter(Boolean))];
         const approverIds = [...new Set(shifts.map((s: any) => s.reconciled_by).filter(Boolean))];
         const allIds = [...new Set([...cashierIds, ...approverIds])];
 
         let usersMap: Record<string, any> = {};
         if (allIds.length > 0) {
-          const { data: users } = await supabase
-            .from('users')
-            .select('id, first_name, last_name')
-            .in('id', allIds);
+          const { rows: users } = await db.query(
+            `SELECT id, first_name, last_name FROM public.users WHERE id = ANY($1::uuid[])`,
+            [allIds]
+          );
           usersMap = (users || []).reduce((acc: any, u: any) => {
             acc[u.id] = `${u.first_name || ''} ${u.last_name || ''}`.trim();
             return acc;
@@ -3200,13 +3269,13 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
     let payments: any[] = [];
     try {
       if (outletShiftIds.length) {
-        const { data: paymentData, error: paymentError } = await supabase
-          .from('pos_shift_payments')
-          .select('id, shift_id, outlet_id, order_id, payment_method, amount, reference')
-          .in('shift_id', outletShiftIds);
-        if (!paymentError && paymentData) {
-          payments = paymentData;
-        }
+        const { rows } = await db.query(
+          `SELECT id, shift_id, outlet_id, order_id, payment_method, amount, reference 
+           FROM public.pos_shift_payments 
+           WHERE shift_id = ANY($1::uuid[])`,
+          [outletShiftIds]
+        );
+        payments = rows || [];
       }
     } catch (payErr) {
       console.warn('[SoldItems] Could not load POS payments:', payErr);
@@ -3241,7 +3310,15 @@ const buildSoldItemsAnalysisPayload = async (req: Request) => {
       paymentMethods = [...new Set(paymentMethods)];
 
       const activeItems = (Array.isArray(order.items) ? order.items : []).filter((item: any) => {
-        if (item.is_fully_voided === true) return false;
+        if (
+          item.is_voided === true ||
+          item.is_cancelled === true ||
+          item.kitchen_status === 'voided' ||
+          item.kitchen_status === 'cancelled' ||
+          item.is_fully_voided === true
+        ) {
+          return false;
+        }
         const rawQty = Number(item.quantity ?? item.qty ?? 0) || 0;
         const voidedQty = Number(item.voided_qty || 0);
         return rawQty - voidedQty > 0;
