@@ -77,21 +77,21 @@ const resolveBarOutlet = async (branchId: number, barLocation: string) => {
 };
 
 const loadShiftCountMaps = async (
-    outletId: string | null,
+    branchId: number,
     skus: string[],
     fromIso: string,
     toIso: string
 ): Promise<{ additionsBySku: Map<string, number>; salesBySku: Map<string, number> }> => {
     const additionsBySku = new Map<string, number>();
     const salesBySku = new Map<string, number>();
-    if (!outletId || skus.length === 0) {
+    if (!branchId || skus.length === 0) {
         return { additionsBySku, salesBySku };
     }
 
     const { data: shifts, error: shiftsError } = await supabase
         .from('cashier_shift_logs')
         .select('id')
-        .eq('outlet_id', outletId)
+        .eq('branch_id', branchId)
         .gte('shift_start', fromIso)
         .lt('shift_start', toIso);
     if (shiftsError) throw shiftsError;
@@ -456,7 +456,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             .map((d: any) => String(d.sku || `BAR-${d.id}`))
             .filter(Boolean);
         const { additionsBySku, salesBySku } = await loadShiftCountMaps(
-            outlet?.id || null,
+            branchId,
             drinkSkus,
             sumWindow.from,
             sumWindow.to
@@ -628,7 +628,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                     .in('source_item_id', resolvedDrinkIds)
                 : Promise.resolve({ data: [] }),
             loadShiftCountMaps(
-                outlet?.id || null,
+                branchId,
                 branchDrinks
                     .filter((d) => resolvedDrinkIds.includes(String(d.id)))
                     .map((d) => String(d.sku || `BAR-${d.id}`)),
