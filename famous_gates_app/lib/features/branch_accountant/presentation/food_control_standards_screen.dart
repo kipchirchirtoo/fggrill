@@ -203,8 +203,9 @@ class _RecipeStandardsTab extends ConsumerWidget {
                       '${row['raw_item_sku'] ?? 'DIRECT'}_${row['raw_quantity'] ?? '0'}';
                 }
 
-                final groupKey =
-                    '${inputsKey}_${row['recipe_name'] ?? 'Recipe'}';
+                // Group by raw inputs only — all POS outputs for the same
+                // raw item collapse into one accordion card.
+                final groupKey = inputsKey;
 
                 if (!grouped.containsKey(groupKey)) {
                   grouped[groupKey] = {
@@ -230,6 +231,7 @@ class _RecipeStandardsTab extends ConsumerWidget {
 
                 if (row['produced_item_name'] != null) {
                   (grp['outputs'] as List).add({
+                    'recipe_id': row['id']?.toString() ?? '',
                     'produced_item_name': row['produced_item_name'],
                     'produced_quantity': row['produced_quantity'],
                     'produced_unit': row['produced_unit'],
@@ -294,13 +296,7 @@ class _RecipeStandardsTab extends ConsumerWidget {
                                 visualDensity: VisualDensity.compact,
                                 label: Text(
                                   _yieldTypeLabel(
-                                    outputs.isNotEmpty
-                                        ? outputs.first['yield_type_code']
-                                                ?.toString() ??
-                                            recipe['yield_type_code']
-                                                ?.toString()
-                                        : recipe['yield_type_code']
-                                            ?.toString(),
+                                    recipe['yield_type_code']?.toString(),
                                   ),
                                 ),
                               ),
@@ -324,27 +320,28 @@ class _RecipeStandardsTab extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        for (final out in outputs)
+                        if (outputs.isNotEmpty) const Divider(height: 1),
+                        for (final out in outputs) ...[
                           ListTile(
                             dense: true,
-                            leading: const Icon(Icons.subdirectory_arrow_right,
-                                size: 20),
-                            title: Text(out['produced_item_name'] ?? 'Unknown'),
-                            subtitle: Text(
-                              recipe['recipe_name']?.toString().trim().isNotEmpty ==
-                                      true
-                                  ? recipe['recipe_name'].toString()
-                                  : titleText,
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 12,
-                              ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 2),
+                            leading: const Icon(Icons.link,
+                                size: 18, color: Color(0xFF1D4ED8)),
+                            title: Text(
+                              out['produced_item_name'] ?? 'Unknown',
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w500),
                             ),
                             trailing: Text(
-                                '${out['produced_quantity']} ${out['produced_unit'] ?? 'pcs'}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600)),
-                          )
+                              '× ${out['produced_quantity'] ?? 1} ${out['produced_unit'] ?? 'pcs'}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 13),
+                            ),
+                          ),
+                          const Divider(height: 1, indent: 16, endIndent: 16),
+                        ],
+                        const SizedBox(height: 4),
                       ],
                     ),
                   );
@@ -2205,6 +2202,11 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
   // Multi Output (For Complex)
   final List<_ComplexOutputRow> _complexOutputs = [];
 
+  // When a PRODUCTION/DIRECT standard with multiple outputs is loaded for
+  // editing, we switch the form to Complex display mode but must preserve
+  // the original yield type code when saving.
+  String? _saveAsYieldTypeCode;
+
   bool _isSaving = false;
 
   @override
@@ -2323,16 +2325,39 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
       }
       _complexOutputs.add(_ComplexOutputRow());
     } else {
-      // PRODUCTION or DIRECT — single output
-      if (outputsList.isNotEmpty) {
-        _selectedPosItemSingle = {
-          'id': outputsList.first['pos_outlet_item_id'],
-          'name': outputsList.first['produced_item_name'],
+      // PRODUCTION or DIRECT — may have multiple outputs when the card groups
+      // several recipe rows that share the same raw input.
+      if (outputsList.length > 1) {
+        // Preserve yield type code and switch display to multi-output form.
+        _saveAsYieldTypeCode = switch (_yieldType) {
+          YieldType.ratio => 'PRODUCTION',
+          YieldType.direct => 'DIRECT',
+          _ => 'PRODUCTION',
         };
-        _singleOutputQtyController.text =
-            (outputsList.first['produced_quantity'] ?? 1.0).toString();
+        _yieldType = YieldType.complex;
+        for (final out in outputsList) {
+          final row = _ComplexOutputRow();
+          row.posItem = {
+            'id': out['pos_outlet_item_id'],
+            'name': out['produced_item_name'],
+          };
+          row.qtyController.text =
+              (out['produced_quantity'] ?? 1.0).toString();
+          _complexOutputs.add(row);
+        }
+        if (_complexOutputs.isEmpty) _complexOutputs.add(_ComplexOutputRow());
+      } else {
+        // Single output — standard single-output form.
+        if (outputsList.isNotEmpty) {
+          _selectedPosItemSingle = {
+            'id': outputsList.first['pos_outlet_item_id'],
+            'name': outputsList.first['produced_item_name'],
+          };
+          _singleOutputQtyController.text =
+              (outputsList.first['produced_quantity'] ?? 1.0).toString();
+        }
+        _complexOutputs.add(_ComplexOutputRow());
       }
-      _complexOutputs.add(_ComplexOutputRow());
     }
   }
 
@@ -3312,21 +3337,14 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
     setState(() => _isSaving = true);
 
     try {
-      String yieldTypeCode;
-      switch (_yieldType) {
-        case YieldType.complex:
-          yieldTypeCode = 'COMPLEX';
-          break;
-        case YieldType.ratio:
-          yieldTypeCode = 'PRODUCTION';
-          break;
-        case YieldType.direct:
-          yieldTypeCode = 'DIRECT';
-          break;
-        case YieldType.subAssembly:
-          yieldTypeCode = 'SUB_ASSEMBLY';
-          break;
-      }
+      // Use the preserved code when editing a multi-output PRODUCTION/DIRECT
+      // standard that was switched to complex display mode.
+      final String yieldTypeCode = _saveAsYieldTypeCode ?? switch (_yieldType) {
+        YieldType.complex => 'COMPLEX',
+        YieldType.ratio => 'PRODUCTION',
+        YieldType.direct => 'DIRECT',
+        YieldType.subAssembly => 'SUB_ASSEMBLY',
+      };
 
       final repo = ref.read(branchAccountantRepositoryProvider);
 
@@ -3335,16 +3353,29 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
         final existingIds =
             List<String>.from(widget.editData!['all_recipe_ids'] as List);
 
-        // Build pos_outlet_item_id → recipe_id map from original data so
-        // edits match by output identity rather than fragile positional index.
+        // Build pos_outlet_item_id → recipe_id map from output objects.
+        // Each output now carries its own recipe_id; fall back to positional
+        // indexing for older grouped data that predates the recipe_id field.
         final existingOutputs = ((widget.editData!['outputs'] as List?) ?? [])
             .map((o) => Map<String, dynamic>.from(o as Map))
             .toList();
         final idByPosItem = <String, String>{};
-        for (int i = 0; i < existingOutputs.length && i < existingIds.length; i++) {
-          final posId = existingOutputs[i]['pos_outlet_item_id']?.toString();
-          if (posId != null && posId.isNotEmpty) {
-            idByPosItem[posId] = existingIds[i];
+        for (final out in existingOutputs) {
+          final posId = out['pos_outlet_item_id']?.toString();
+          final recipeId = out['recipe_id']?.toString() ?? '';
+          if (posId != null && posId.isNotEmpty && recipeId.isNotEmpty) {
+            idByPosItem[posId] = recipeId;
+          }
+        }
+        if (idByPosItem.isEmpty) {
+          for (int i = 0;
+              i < existingOutputs.length && i < existingIds.length;
+              i++) {
+            final posId =
+                existingOutputs[i]['pos_outlet_item_id']?.toString();
+            if (posId != null && posId.isNotEmpty) {
+              idByPosItem[posId] = existingIds[i];
+            }
           }
         }
 
