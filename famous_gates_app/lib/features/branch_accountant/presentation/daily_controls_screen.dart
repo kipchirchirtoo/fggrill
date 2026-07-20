@@ -374,7 +374,7 @@ class _DailyControlsScreenState extends ConsumerState<DailyControlsScreen> {
           ),
           const SizedBox(height: 16),
           StickyHorizontalScrollbar(
-            contentWidth: 1910,
+            contentWidth: 2050,
             child: Column(
               children: [
                 Container(

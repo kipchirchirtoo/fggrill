@@ -96,7 +96,6 @@ class _ProductionLoggingLedgerState
   Map<String, dynamic> _productionSummary = const {};
   Map<String, dynamic>? _selectedRecipe;
   Map<String, dynamic>? _selectedProducedBy;
-  final Map<String, TextEditingController> _inputControllers = {};
 
   @override
   void initState() {
@@ -118,9 +117,6 @@ class _ProductionLoggingLedgerState
     _producedQtyController.dispose();
     _reasonController.dispose();
     _producedByController.dispose();
-    for (final controller in _inputControllers.values) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
@@ -134,17 +130,28 @@ class _ProductionLoggingLedgerState
         kitchenRepo.getShiftDetails(widget.shift.id),
         storekeeperRepo.getProductionSummary(widget.shift.id),
         kitchenRepo.getStaffProfiles(),
+        kitchenRepo.getShiftAdditions(widget.shift.id),
       ]);
 
       final allRecipes =
           List<Map<String, dynamic>>.from(results[0] as List<dynamic>);
+      final additionsList = List<KitchenShiftAddition>.from(results[4] as List);
+      final issuedRecipeIds = additionsList
+          .map((a) => (a.recipeId ?? '').trim())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
       final eligibleRecipes = allRecipes.where((recipe) {
         final yieldType =
             (recipe['yield_type_code'] ?? '').toString().toUpperCase();
         final outputId = _resolveOutputItemId(recipe);
-        return (yieldType == 'PRODUCTION' || yieldType == 'SUB_ASSEMBLY') &&
+        final recipeId = (recipe['id'] ?? '').toString().trim();
+        return (yieldType == 'PRODUCTION' ||
+                yieldType == 'SUB_ASSEMBLY' ||
+                yieldType == 'COMPLEX') &&
             outputId != null &&
-            outputId.isNotEmpty;
+            outputId.isNotEmpty &&
+            issuedRecipeIds.contains(recipeId);
       }).toList()
         ..sort(
             (a, b) => _recipeDisplayName(a).compareTo(_recipeDisplayName(b)));
@@ -181,10 +188,6 @@ class _ProductionLoggingLedgerState
     _producedQtyController.clear();
     _reasonController.clear();
     _producedByController.clear();
-    for (final controller in _inputControllers.values) {
-      controller.dispose();
-    }
-    _inputControllers.clear();
   }
 
   String _shiftLabel() {
@@ -230,34 +233,7 @@ class _ProductionLoggingLedgerState
     return null;
   }
 
-  double _availableKitchenQty(String sku) {
-    final item = _findShiftItem(sku);
-    if (item == null) return 0;
-    return ((item['opening_stock'] as num?)?.toDouble() ?? 0) +
-        ((item['additions'] as num?)?.toDouble() ?? 0) -
-        ((item['sold_quantity'] as num?)?.toDouble() ?? 0) -
-        ((item['spoilage_quantity'] as num?)?.toDouble() ?? 0);
-  }
-
   void _selectRecipe(Map<String, dynamic> recipe) {
-    for (final controller in _inputControllers.values) {
-      controller.dispose();
-    }
-    _inputControllers.clear();
-
-    final inputs = ((recipe['inputs'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList();
-
-    for (final input in inputs) {
-      final sku = (input['raw_item_sku'] ?? '').toString();
-      final standardQty = ((input['quantity'] as num?)?.toDouble() ?? 0);
-      _inputControllers[sku] = TextEditingController(
-        text: standardQty > 0 ? standardQty.toStringAsFixed(2) : '',
-      );
-    }
-
     setState(() {
       _selectedRecipe = recipe;
       _producedQtyController.clear();
@@ -268,22 +244,7 @@ class _ProductionLoggingLedgerState
   double get _expectedOutputQuantity {
     final recipe = _selectedRecipe;
     if (recipe == null) return 0;
-    final inputs = _recipeInputs();
-    if (inputs.isEmpty) return 0;
-
-    final factors = <double>[];
-    for (final input in inputs) {
-      final sku = (input['raw_item_sku'] ?? '').toString();
-      final standardQty = (input['quantity'] as num?)?.toDouble() ?? 0;
-      final usedQty =
-          double.tryParse(_inputControllers[sku]?.text.trim() ?? '') ?? 0;
-      if (standardQty > 0 && usedQty > 0) {
-        factors.add(usedQty / standardQty);
-      }
-    }
-    if (factors.isEmpty) return 0;
-    final minFactor = factors.reduce((a, b) => a < b ? a : b);
-    return ((recipe['produced_quantity'] as num?)?.toDouble() ?? 0) * minFactor;
+    return (recipe['produced_quantity'] as num?)?.toDouble() ?? 0;
   }
 
   double get _actualOutputQuantity =>
@@ -323,13 +284,6 @@ class _ProductionLoggingLedgerState
       return;
     }
 
-    final inputs = _recipeInputs();
-    if (inputs.isEmpty) {
-      AppNotifier.show(context, 'Selected standard has no raw inputs.',
-          isError: true);
-      return;
-    }
-
     final producedQty = _actualOutputQuantity;
     if (producedQty <= 0) {
       AppNotifier.show(context, 'Enter actual output produced.', isError: true);
@@ -351,32 +305,16 @@ class _ProductionLoggingLedgerState
       return;
     }
 
+    // Auto-calculate consumed inputs proportionally from recipe standard
+    final inputs = _recipeInputs();
+    final stdProducedQty = (recipe['produced_quantity'] as num?)?.toDouble() ?? 0;
+    final scaleFactor = stdProducedQty > 0 ? producedQty / stdProducedQty : 1.0;
     final consumedInputs = <Map<String, dynamic>>[];
     for (final input in inputs) {
       final sku = (input['raw_item_sku'] ?? '').toString();
-      final usedQty =
-          double.tryParse(_inputControllers[sku]?.text.trim() ?? '') ?? 0;
+      final stdQty = (input['quantity'] as num?)?.toDouble() ?? 0;
+      final usedQty = double.parse((stdQty * scaleFactor).toStringAsFixed(4));
       final unit = (input['unit'] ?? 'unit').toString();
-      final availableQty = _availableKitchenQty(sku);
-
-      if (usedQty <= 0) {
-        AppNotifier.show(
-          context,
-          'Enter quantity used for ${(input['raw_item_name'] ?? sku)}.',
-          isError: true,
-        );
-        return;
-      }
-
-      if (usedQty > availableQty) {
-        AppNotifier.show(
-          context,
-          '${input['raw_item_name'] ?? sku} exceeds available kitchen stock.',
-          isError: true,
-        );
-        return;
-      }
-
       final inventoryRow = _findShiftItem(sku);
       consumedInputs.add({
         'raw_item_id': inventoryRow?['id']?.toString(),
@@ -422,7 +360,6 @@ class _ProductionLoggingLedgerState
   Widget build(BuildContext context) {
     final user = ref.watch(authNotifierProvider).valueOrNull;
     final dateFmt = DateFormat('yyyy-MM-dd');
-    final inputs = _recipeInputs();
     final expectedQty = _expectedOutputQuantity;
     final actualQty = _actualOutputQuantity;
     final varianceQty = _varianceQuantity;
@@ -444,7 +381,7 @@ class _ProductionLoggingLedgerState
               ),
               const SizedBox(height: 6),
               Text(
-                'Record true batch production only. Normal kitchen issues remain controlled through POS sales and kitchen standards.',
+                'Record actual output produced this batch. Raw ingredient consumption is auto-calculated from the standard recipe. Issue raw ingredients to kitchen from Kitchen Sessions → Issue Production Batch.',
                 style: TextStyle(color: Colors.grey.shade700),
               ),
               const SizedBox(height: 16),
@@ -472,7 +409,11 @@ class _ProductionLoggingLedgerState
                 icon: Icons.search,
                 child: _recipes.isEmpty
                     ? const Text(
-                        'No true batch-production standards are configured yet. Add Production (Batch) standards in Branch Accountant → Food Control Standards.',
+                        'No production batch items have been issued to this kitchen shift yet. Issue raw ingredients for production standards from Kitchen Sessions -> Issue Stock first.',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
                       )
                     : _RecipePickerSection(
                         recipes: _recipes,
@@ -499,11 +440,11 @@ class _ProductionLoggingLedgerState
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'Raw Inputs Expected',
+                        'Raw Inputs (auto-calculated at submission)',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
-                      for (final input in inputs)
+                      for (final input in _recipeInputs())
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Text(
@@ -520,49 +461,6 @@ class _ProductionLoggingLedgerState
                         'Tolerance: ±${_tolerancePercent.toStringAsFixed(1)}%',
                         style: TextStyle(color: Colors.grey.shade700),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  title: 'Raw Used Table',
-                  icon: Icons.table_rows_outlined,
-                  child: Column(
-                    children: [
-                      Row(
-                        children: const [
-                          Expanded(
-                              flex: 3,
-                              child: Text('# / Raw Item',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700))),
-                          Expanded(
-                              flex: 2,
-                              child: Text('Available Qty',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700))),
-                          Expanded(
-                              flex: 2,
-                              child: Text('Qty Used',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700))),
-                          Expanded(
-                              flex: 1,
-                              child: Text('Unit',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w700))),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      for (var i = 0; i < inputs.length; i++)
-                        _RawInputLedgerRow(
-                          index: i + 1,
-                          input: inputs[i],
-                          availableQty: _availableKitchenQty(
-                              (inputs[i]['raw_item_sku'] ?? '').toString()),
-                          controller: _inputControllers[
-                              (inputs[i]['raw_item_sku'] ?? '').toString()]!,
-                        ),
                     ],
                   ),
                 ),
@@ -1063,71 +961,6 @@ class _RecipePickerSectionState extends State<_RecipePickerSection> {
             }).toList(),
           ),
       ],
-    );
-  }
-}
-
-class _RawInputLedgerRow extends StatelessWidget {
-  const _RawInputLedgerRow({
-    required this.index,
-    required this.input,
-    required this.availableQty,
-    required this.controller,
-  });
-
-  final int index;
-  final Map<String, dynamic> input;
-  final double availableQty;
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              '$index. ${input['raw_item_name'] ?? input['raw_item_sku']}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              availableQty.toStringAsFixed(2),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: TextFormField(
-              controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-              ],
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-                hintText: '0.00',
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text((input['unit'] ?? 'unit').toString()),
-          ),
-        ],
-      ),
     );
   }
 }

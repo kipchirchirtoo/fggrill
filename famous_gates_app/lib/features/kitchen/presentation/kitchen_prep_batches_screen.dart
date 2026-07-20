@@ -3,22 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../auth/domain/auth_notifier.dart';
-import '../../branch_accountant/presentation/food_control_standards_screen.dart';
+import '../../branch_storekeeper/data/branch_storekeeper_repository.dart';
 import '../data/repository.dart';
 import '../domain/session_models.dart';
 
-String _prepStageLabel(dynamic value) {
-  switch ((value ?? '').toString().trim().toUpperCase()) {
-    case 'PEEL':
-      return 'Peel';
-    case 'CUT':
-      return 'Cut';
-    case 'PREP_OTHER':
-      return 'Other Prep';
-    default:
-      return 'Prep';
-  }
-}
 
 class KitchenPrepBatchesScreen extends ConsumerStatefulWidget {
   const KitchenPrepBatchesScreen({
@@ -46,7 +34,6 @@ class _KitchenPrepBatchesScreenState
   List<Map<String, dynamic>> _inventoryItems = const [];
   List<KitchenPrepBatch> _batches = const [];
   String? _selectedRawSku;
-  Map<String, dynamic>? _selectedRecipe;
 
   @override
   void initState() {
@@ -85,12 +72,10 @@ class _KitchenPrepBatchesScreenState
       final rawSku = (recipe['raw_item_sku'] ?? '').toString().trim();
       final producedName = (recipe['produced_item_name'] ?? '').toString().trim();
       final yieldType = (recipe['yield_type_code'] ?? '').toString().trim();
-      final prepStageCode = (recipe['prep_stage_code'] ?? '').toString().trim();
       return rawSku.isNotEmpty &&
           rawSku != 'MULTI' &&
           producedName.isNotEmpty &&
-          yieldType.toUpperCase() != 'DIRECT' &&
-          prepStageCode.isNotEmpty;
+          yieldType.toUpperCase() != 'DIRECT';
     }).toList()
       ..sort((a, b) {
         final left =
@@ -137,8 +122,12 @@ class _KitchenPrepBatchesScreenState
       _selectedFamily?['recipes'] as List<Map<String, dynamic>>? ?? const [],
     );
     recipes.sort((a, b) {
-      final leftOrder = (a['prep_stage_order'] as num?)?.toInt() ?? 9999;
-      final rightOrder = (b['prep_stage_order'] as num?)?.toInt() ?? 9999;
+      final leftOrder = a['prep_stage_order'] != null
+          ? _numField(a['prep_stage_order']).toInt()
+          : 9999;
+      final rightOrder = b['prep_stage_order'] != null
+          ? _numField(b['prep_stage_order']).toInt()
+          : 9999;
       if (leftOrder != rightOrder) return leftOrder.compareTo(rightOrder);
       final leftStage = '${a['prep_stage_code'] ?? ''}';
       final rightStage = '${b['prep_stage_code'] ?? ''}';
@@ -177,15 +166,6 @@ class _KitchenPrepBatchesScreenState
     return false;
   }
 
-  List<Map<String, dynamic>> get _selectedRecipePrerequisites =>
-      _upstreamRecipesFor(_selectedRecipe);
-
-  bool get _selectedRecipePrerequisiteSatisfied {
-    final ids = _selectedRecipePrerequisites
-        .map((recipe) => (recipe['id'] ?? '').toString());
-    return _hasReturnedBatchForRecipeIds(ids);
-  }
-
   Map<String, dynamic>? get _selectedRawStockRow {
     final rawSku = (_selectedRawSku ?? '').trim();
     if (rawSku.isEmpty) return null;
@@ -202,13 +182,38 @@ class _KitchenPrepBatchesScreenState
     return ids.where((e) => e.trim().isNotEmpty).toList();
   }
 
+  /// The first recipe in the selected family (by prep_stage_order) used as
+  /// the batch anchor when sending. All siblings are shown on receive.
+  Map<String, dynamic>? get _primaryRecipe {
+    final dests = _availableDestinations;
+    return dests.isNotEmpty ? dests.first : null;
+  }
+
+  /// All prerequisites across every recipe in the selected family.
+  List<Map<String, dynamic>> get _familyPrerequisites {
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final recipe in _availableDestinations) {
+      for (final upstream in _upstreamRecipesFor(recipe)) {
+        final id = (upstream['id'] ?? '').toString();
+        if (seen.add(id)) result.add(upstream);
+      }
+    }
+    return result;
+  }
+
+  bool get _familyPrerequisitesSatisfied {
+    final ids = _familyPrerequisites.map((r) => (r['id'] ?? '').toString());
+    return _hasReturnedBatchForRecipeIds(ids);
+  }
+
   Future<void> _sendForPrep() async {
     final messenger = ScaffoldMessenger.of(context);
-    final recipe = _selectedRecipe;
+    final recipe = _primaryRecipe;
     final qty = double.tryParse(_quantityController.text.trim()) ?? 0;
     if (recipe == null) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Select a prep standard first.')),
+        const SnackBar(content: Text('Select a raw stock family first.')),
       );
       return;
     }
@@ -232,11 +237,19 @@ class _KitchenPrepBatchesScreenState
       _rawSearchController.clear();
       _destinationSearchController.clear();
       _selectedRawSku = null;
-      _selectedRecipe = null;
+      // _selectedRecipe removed
       await _load();
       if (!mounted) return;
+      final family = _prepFamilies
+          .where((f) =>
+              (f['raw_item_sku'] ?? '').toString() ==
+              (recipe['raw_item_sku'] ?? '').toString())
+          .firstOrNull;
+      final familyName =
+          (family?['raw_item_name'] ?? recipe['raw_item_name'] ?? 'batch')
+              .toString();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Prep batch sent successfully.')),
+        SnackBar(content: Text('$familyName sent for prep successfully.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -246,175 +259,164 @@ class _KitchenPrepBatchesScreenState
     }
   }
 
-  Future<void> _showReceiveDialog(KitchenPrepBatch batch) async {
-    final qtyController = TextEditingController();
-    final notesController = TextEditingController();
-    final processLossController = TextEditingController(text: '0');
-    final wastageController = TextEditingController(text: '0');
-    final wastageReasonController = TextEditingController();
-    final messenger = ScaffoldMessenger.of(context);
-    bool saving = false;
+  Future<void> _showIssueToKitchenDialog(KitchenPrepBatch batch) async {
+    final outputs = batch.extraOutputs.isNotEmpty
+        ? batch.extraOutputs
+        : batch.returnedQuantity != null
+            ? [
+                {
+                  'name': batch.producedItemName,
+                  'sku': batch.producedItemSku ?? '',
+                  'quantity': batch.returnedQuantity,
+                  'unit': batch.returnedUnit ?? batch.producedUnit,
+                }
+              ]
+            : <Map<String, dynamic>>[];
 
-    await showDialog(
+    if (outputs.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final items = await showDialog<List<Map<String, dynamic>>>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setLocalState) {
-            return AlertDialog(
-              title: const Text('Receive Prep Return'),
-              content: SizedBox(
-                width: 440,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${batch.rawItemName} -> ${batch.producedItemName}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Sent out: ${batch.rawQuantitySent.toStringAsFixed(2)} ${batch.rawUnit}',
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: qtyController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(
-                        labelText: 'Returned usable quantity (${batch.producedUnit})',
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: notesController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Return notes (optional)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: processLossController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: InputDecoration(
-                              labelText:
-                                  'Normal process loss (${batch.rawUnit})',
-                              border: const OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: wastageController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: InputDecoration(
-                              labelText: 'Wastage (${batch.rawUnit})',
-                              border: const OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: wastageReasonController,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Wastage reason (required if wastage > 0)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Normal process loss covers peelings and trimming. Wastage is avoidable loss that needs a reason.',
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: saving ? null : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: saving
-                      ? null
-                      : () async {
-                          final qty =
-                              double.tryParse(qtyController.text.trim()) ?? 0;
-                          final processLoss = double.tryParse(
-                                processLossController.text.trim(),
-                              ) ??
-                              0;
-                          final wastage = double.tryParse(
-                                wastageController.text.trim(),
-                              ) ??
-                              0;
-                          if (qty <= 0) return;
-                          if (processLoss < 0 || wastage < 0) return;
-                          setLocalState(() => saving = true);
-                          try {
-                            await ref
-                                .read(kitchenRepositoryProvider)
-                                .receivePrepBatch(widget.shift.id, batch.id, {
-                              'returned_quantity': qty,
-                              'return_notes': notesController.text.trim(),
-                              'process_loss_quantity': processLoss,
-                              'wastage_quantity': wastage,
-                              'wastage_reason':
-                                  wastageReasonController.text.trim(),
-                            });
-                            if (!mounted) return;
-                            if (dialogContext.mounted) {
-                              Navigator.of(dialogContext).pop();
-                            }
-                            await _load();
-                            if (!mounted) return;
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Prep return received successfully.'),
-                              ),
-                            );
-                          } catch (e) {
-                            if (!mounted) return;
-                            messenger.showSnackBar(
-                              SnackBar(content: Text('Failed: $e')),
-                            );
-                          } finally {
-                            if (dialogContext.mounted) {
-                              setLocalState(() => saving = false);
-                            }
-                          }
-                        },
-                  child: const Text('Receive Return'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _IssueToKitchenDialog(
+        batch: batch,
+        outputs: outputs,
+        staffIds: _defaultAssignedStaffIds(),
+      ),
     );
 
-    qtyController.dispose();
-    notesController.dispose();
-    processLossController.dispose();
-    wastageController.dispose();
-    wastageReasonController.dispose();
+    if (items == null || items.isEmpty || !mounted) return;
+
+    try {
+      await ref
+          .read(branchStorekeeperRepositoryProvider)
+          .addShiftStock(widget.shift.id, items);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
+      return;
+    }
+
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(
+      content: Text(
+          '${items.length} output${items.length == 1 ? '' : 's'} issued to kitchen.'),
+    ));
+  }
+
+  /// Parse a JSON field that may arrive as int, double, or string.
+  static double _numField(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  /// Expected usable return in raw units based on the prep recipe yield standard.
+  /// Returns 0.0 when units differ (e.g. recipe produces portions, not kg).
+  double _expectedUsableReturn(KitchenPrepBatch batch) {
+    try {
+      final recipe = _eligibleRecipes.where(
+        (r) => (r['id'] ?? '').toString() == batch.recipeId,
+      ).firstOrNull;
+      if (recipe == null) return 0.0;
+      final producedUnit =
+          (recipe['produced_unit'] ?? '').toString().toLowerCase().trim();
+      final rawUnitStr = batch.rawUnit.toLowerCase().trim();
+      if (producedUnit != rawUnitStr) return 0.0;
+      final stdRaw = _numField(recipe['raw_quantity']);
+      final stdOut = _numField(recipe['produced_quantity']);
+      if (stdRaw <= 0 || stdOut <= 0) return 0.0;
+      return batch.rawQuantitySent * (stdOut / stdRaw);
+    } catch (_) {
+      return 0.0;
+    }
+  }
+
+  Future<void> _showReceiveDialog(KitchenPrepBatch batch) async {
+    final producedName = batch.producedItemName.trim().isNotEmpty
+        ? batch.producedItemName
+        : '${batch.rawItemName} (prepared)';
+    final rawUnit = batch.rawUnit;
+    final expectedUsable = _expectedUsableReturn(batch);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final input = await showDialog<_ReceiveInput>(
+      context: context,
+      builder: (_) => _PrepReceiveDialog(
+        batch: batch,
+        producedName: producedName,
+        rawUnit: rawUnit,
+        expectedUsable: expectedUsable,
+      ),
+    );
+
+    if (input == null || !mounted) return;
+
+    // Step 1: Receive (must succeed first)
+    try {
+      await ref.read(kitchenRepositoryProvider).receivePrepBatch(
+        widget.shift.id,
+        batch.id,
+        {
+          'returned_quantity': input.returned,
+          'process_loss_quantity': input.processLoss,
+          'wastage_quantity': input.wastage,
+          'wastage_reason': input.wastageReason,
+          'return_notes': input.notes,
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Receive failed: $e')));
+      return;
+    }
+
+    // Step 2: Issue to kitchen
+    Object? issueErr;
+    if (input.issueQty > 0) {
+      final producedSku = (batch.producedItemSku ?? '').trim();
+      if (producedSku.isNotEmpty) {
+        try {
+          await ref
+              .read(branchStorekeeperRepositoryProvider)
+              .addShiftStock(widget.shift.id, [
+            {
+              'sku': producedSku,
+              'item_name': producedName,
+              'quantity': input.issueQty,
+              'unit': rawUnit,
+              'purpose_channel': 'pos_restaurant',
+              'responsible_staff_ids': _defaultAssignedStaffIds(),
+              'notes': 'Issued from prep batch ${batch.id.substring(0, 8)}',
+            }
+          ]);
+        } catch (e) {
+          issueErr = e;
+        }
+      }
+    }
+
+    if (!mounted) return;
+    await _load();
+    if (!mounted) return;
+
+    if (issueErr != null) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+          'Received ${input.returned.toStringAsFixed(2)} $rawUnit into branch stock. '
+          'Issue to kitchen failed — tap "Issue to Kitchen" on the batch card. '
+          'Detail: $issueErr',
+        ),
+        duration: const Duration(seconds: 8),
+      ));
+    } else {
+      messenger.showSnackBar(SnackBar(
+        content: Text(input.issueQty > 0
+            ? 'Received ${input.returned.toStringAsFixed(2)} $rawUnit. '
+                'Issued ${input.issueQty.toStringAsFixed(2)} $rawUnit to kitchen.'
+            : 'Received ${input.returned.toStringAsFixed(2)} $rawUnit into branch stock.'),
+      ));
+    }
   }
 
   @override
@@ -450,7 +452,7 @@ class _KitchenPrepBatchesScreenState
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Send raw stock for prep, receive the measured usable return, then issue the returned stock to kitchen from the normal issue screen.',
+                              'Send raw stock for prep. Receive the measured usable quantity back into branch stock, then issue all or part to the POS kitchen. POS sales consume from the issued stock independently per menu item.',
                               style: TextStyle(
                                 color: Colors.grey.shade700,
                                 fontSize: 13,
@@ -505,36 +507,13 @@ class _KitchenPrepBatchesScreenState
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Send Raw Stock for Prep',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 18,
-                                  color: Color(0xFF0F2E5E),
-                                ),
-                              ),
-                              TextButton.icon(
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    barrierDismissible: false,
-                                    builder: (_) => const AddStandardDialog(
-                                      isPrepFlow: true,
-                                    ),
-                                  ).then((_) {
-                                    _load();
-                                  });
-                                },
-                                icon: const Icon(Icons.settings, size: 16),
-                                label: const Text(
-                                  'New Prep Standard',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ],
+                          const Text(
+                            'Send Raw Stock for Prep',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              color: Color(0xFF0F2E5E),
+                            ),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -542,6 +521,7 @@ class _KitchenPrepBatchesScreenState
                             style: TextStyle(color: Colors.grey.shade700),
                           ),
                           const SizedBox(height: 16),
+                          // ── Raw family search ─────────────────────────
                           Autocomplete<Map<String, dynamic>>(
                             displayStringForOption: (option) =>
                                 '${option['raw_item_name'] ?? 'Raw stock'}',
@@ -558,7 +538,7 @@ class _KitchenPrepBatchesScreenState
                               setState(() {
                                 _selectedRawSku =
                                     (family['raw_item_sku'] ?? '').toString();
-                                _selectedRecipe = null;
+                                // _selectedRecipe removed
                                 _rawSearchController.text =
                                     '${family['raw_item_name'] ?? 'Raw stock'}';
                                 _destinationSearchController.clear();
@@ -580,155 +560,146 @@ class _KitchenPrepBatchesScreenState
                               );
                             },
                           ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedRecipe == null
-                                ? null
-                                : (_selectedRecipe!['id'] ?? '').toString(),
-                            decoration: const InputDecoration(
-                              labelText: 'Prep destination / return stage',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: _availableDestinations
-                                .map(
-                                  (recipe) => DropdownMenuItem<String>(
-                                    value: (recipe['id'] ?? '').toString(),
-                                    child: Text(
-                                      '${recipe['produced_item_name'] ?? 'Produced item'}'
-                                      '${recipe['prep_stage_code'] == null ? '' : '  •  ${_prepStageLabel(recipe['prep_stage_code'])}'}'
-                                      '${recipe['prep_stage_order'] == null ? '' : '  •  Step ${recipe['prep_stage_order']}'}',
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedRecipe = _availableDestinations
-                                    .where((recipe) =>
-                                        (recipe['id'] ?? '').toString() ==
-                                        value)
-                                    .cast<Map<String, dynamic>?>()
-                                    .firstOrNull;
-                                _destinationSearchController.text =
-                                    _selectedRecipe == null
-                                        ? ''
-                                        : '${_selectedRecipe!['produced_item_name'] ?? 'Produced item'}';
-                              });
-                            },
-                          ),
-                          if (_selectedRecipe != null) ...[
-                            const SizedBox(height: 12),
-                            _ReadOnlyField(
-                              label: 'Configured flow',
-                              value: (_selectedRecipe!['recipe_name'] ?? '')
-                                      .toString()
-                                      .trim()
-                                      .isNotEmpty
-                                  ? _selectedRecipe!['recipe_name'].toString()
-                                  : '${_selectedRecipe!['raw_item_name'] ?? 'Raw stock'} -> ${_selectedRecipe!['produced_item_name'] ?? 'Produced item'}',
-                            ),
-                            if ((_selectedRecipe!['prep_stage_code'] ?? '')
-                                .toString()
-                                .trim()
-                                .isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              Row(
+
+                          // ── Expected outputs panel (auto, no picker needed) ─
+                          if (_selectedRawSku != null &&
+                              _availableDestinations.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _InfoChip(
-                                    'Stage',
-                                    _prepStageLabel(
-                                      _selectedRecipe!['prep_stage_code'],
-                                    ),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.output_outlined,
+                                          size: 16,
+                                          color: Color(0xFF059669)),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'POS consumption standards linked to this prepared stock',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                          color: Colors.green.shade800,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  if (_selectedRecipe!['prep_stage_order'] != null)
-                                    _InfoChip(
-                                      'Step',
-                                      '${_selectedRecipe!['prep_stage_order']}',
-                                    ),
-                                  if ((_selectedRecipe!['prep_stage_group'] ?? '')
-                                      .toString()
-                                      .trim()
-                                      .isNotEmpty) ...[
-                                    const SizedBox(width: 8),
-                                    _InfoChip(
-                                      'Flow',
-                                      '${_selectedRecipe!['prep_stage_group']}',
-                                    ),
-                                  ],
+                                  const SizedBox(height: 10),
+                                  ..._availableDestinations.map((recipe) {
+                                    final name = (recipe['produced_item_name'] ??
+                                            'Produced item')
+                                        .toString();
+                                    final stdRaw =
+                                        _numField(recipe['raw_quantity']);
+                                    final stdOut =
+                                        _numField(recipe['produced_quantity']);
+                                    final unit =
+                                        (recipe['produced_unit'] ?? '').toString();
+                                    final rawUnit =
+                                        (recipe['raw_unit'] ?? '').toString();
+                                    // Scale expected yield to the qty entered
+                                    final enteredQty = double.tryParse(
+                                            _quantityController.text.trim()) ??
+                                        0;
+                                    final scaleFactor = stdRaw > 0
+                                        ? enteredQty / stdRaw
+                                        : 1.0;
+                                    final expectedYield = stdOut * scaleFactor;
+
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 6),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.arrow_right,
+                                              size: 18,
+                                              color: Color(0xFF059669)),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              name,
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w600),
+                                            ),
+                                          ),
+                                          if (stdRaw > 0 && stdOut > 0)
+                                            Text(
+                                              enteredQty > 0
+                                                  ? '≈ ${expectedYield.toStringAsFixed(1)} $unit'
+                                                  : 'Std: ${stdOut.toStringAsFixed(1)} $unit / ${stdRaw.toStringAsFixed(0)} $rawUnit',
+                                              style: TextStyle(
+                                                color: Colors.green.shade700,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
                                 ],
                               ),
-                            ],
-                            if (_selectedRecipePrerequisites.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: _selectedRecipePrerequisiteSatisfied
-                                      ? const Color(0xFFE8F5E9)
-                                      : const Color(0xFFFFF3E0),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: _selectedRecipePrerequisiteSatisfied
-                                        ? const Color(0xFF81C784)
-                                        : const Color(0xFFFFCC80),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _selectedRecipePrerequisiteSatisfied
-                                          ? 'Prerequisite prep completed'
-                                          : 'Earlier prep stage required',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        color: _selectedRecipePrerequisiteSatisfied
-                                            ? const Color(0xFF2E7D32)
-                                            : const Color(0xFF9A6700),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _selectedRecipePrerequisites
-                                          .map(
-                                            (recipe) =>
-                                                (recipe['recipe_name'] ?? recipe['produced_item_name'] ?? 'prep stage')
-                                                    .toString(),
-                                          )
-                                          .join(', '),
-                                      style: TextStyle(
-                                        color: Colors.grey.shade800,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                            ),
                           ],
+
+                          // ── Prerequisites warning ──────────────────────────
+                          if (_selectedRawSku != null &&
+                              _familyPrerequisites.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: _familyPrerequisitesSatisfied
+                                    ? const Color(0xFFE8F5E9)
+                                    : const Color(0xFFFFF3E0),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _familyPrerequisitesSatisfied
+                                      ? const Color(0xFF81C784)
+                                      : const Color(0xFFFFCC80),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _familyPrerequisitesSatisfied
+                                        ? 'Prerequisite prep completed'
+                                        : 'Earlier prep stage required first',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: _familyPrerequisitesSatisfied
+                                          ? const Color(0xFF2E7D32)
+                                          : const Color(0xFF9A6700),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _familyPrerequisites
+                                        .map((r) =>
+                                            (r['recipe_name'] ??
+                                                    r['produced_item_name'] ??
+                                                    'prep stage')
+                                                .toString())
+                                        .join(', '),
+                                    style: TextStyle(
+                                        color: Colors.grey.shade800),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _ReadOnlyField(
-                                  label: 'Raw stock item',
-                                  value: (_selectedRecipe?['raw_item_name'] ?? '-')
-                                      .toString(),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _ReadOnlyField(
-                                  label: 'Processed return item',
-                                  value:
-                                      (_selectedRecipe?['produced_item_name'] ?? '-')
-                                          .toString(),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
+                          // ── Stock available + qty to send ─────────────────
                           Row(
                             children: [
                               Expanded(
@@ -736,20 +707,25 @@ class _KitchenPrepBatchesScreenState
                                   label: 'Current branch stock available',
                                   value: rawStock == null
                                       ? '-'
-                                      : '${((rawStock['quantity'] as num?) ?? 0).toStringAsFixed(2)} '
+                                      : '${_numField(rawStock['quantity']).toStringAsFixed(2)} '
                                           '${rawStock['unit_of_measure'] ?? rawStock['unit'] ?? ''}',
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: TextFormField(
-                                  controller: _quantityController,
-                                  keyboardType: const TextInputType.numberWithOptions(
-                                      decimal: true),
-                                  decoration: InputDecoration(
-                                    labelText:
-                                        'Raw quantity sent (${(_selectedRecipe?['raw_unit'] ?? rawStock?['unit_of_measure'] ?? 'unit')})',
-                                    border: const OutlineInputBorder(),
+                                child: StatefulBuilder(
+                                  builder: (ctx, setQtyState) =>
+                                      TextFormField(
+                                    controller: _quantityController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    onChanged: (_) => setState(() {}),
+                                    decoration: InputDecoration(
+                                      labelText:
+                                          'Raw quantity sent (${_primaryRecipe?['raw_unit'] ?? rawStock?['unit_of_measure'] ?? 'unit'})',
+                                      border: const OutlineInputBorder(),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -769,12 +745,14 @@ class _KitchenPrepBatchesScreenState
                             alignment: Alignment.centerRight,
                             child: FilledButton.icon(
                               onPressed: _isSaving ||
-                                      (_selectedRecipe != null &&
-                                          !_selectedRecipePrerequisiteSatisfied)
+                                      _primaryRecipe == null ||
+                                      !_familyPrerequisitesSatisfied
                                   ? null
                                   : _sendForPrep,
                               icon: const Icon(Icons.send_outlined),
-                              label: const Text('Send for Prep'),
+                              label: Text(_isSaving
+                                  ? 'Sending...'
+                                  : 'Send for Prep'),
                             ),
                           ),
                         ],
@@ -873,12 +851,10 @@ class _KitchenPrepBatchesScreenState
                                       children: [
                                         _InfoChip('Sent',
                                             '${batch.rawQuantitySent.toStringAsFixed(2)} ${batch.rawUnit}'),
-                                        _InfoChip('Processed item',
-                                            batch.producedUnit),
                                         _InfoChip('Time', sent),
                                         if (batch.returnedQuantity != null)
                                           _InfoChip(
-                                            'Returned',
+                                            'Total returned',
                                             '${batch.returnedQuantity!.toStringAsFixed(2)} ${batch.returnedUnit ?? batch.producedUnit}',
                                           ),
                                         if ((batch.processLossQuantity ?? 0) > 0)
@@ -898,6 +874,37 @@ class _KitchenPrepBatchesScreenState
                                           ),
                                       ],
                                     ),
+                                    // Multi-output breakdown (shown when multiple items returned)
+                                    if (isReturned && batch.extraOutputs.length > 1) ...[
+                                      const SizedBox(height: 10),
+                                      Text('Output breakdown',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                              color: Colors.grey.shade700)),
+                                      const SizedBox(height: 4),
+                                      ...batch.extraOutputs.map((o) {
+                                        final name = (o['name'] ?? o['sku'] ?? '').toString();
+                                        final qty = _numField(o['quantity']);
+                                        final unit = (o['unit'] ?? '').toString();
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 2),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.arrow_right,
+                                                  size: 16, color: Color(0xFF059669)),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  '$name: ${qty.toStringAsFixed(2)} $unit',
+                                                  style: const TextStyle(fontSize: 13),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                    ],
                                     if ((batch.sentNotes ?? '').trim().isNotEmpty) ...[
                                       const SizedBox(height: 8),
                                       Text(
@@ -917,18 +924,53 @@ class _KitchenPrepBatchesScreenState
                                       Align(
                                         alignment: Alignment.centerRight,
                                         child: FilledButton.icon(
-                                          onPressed: () => _showReceiveDialog(batch),
-                                          icon: const Icon(Icons.inventory_2_outlined),
-                                          label: const Text('Receive Return'),
+                                          onPressed: () =>
+                                              _showReceiveDialog(batch),
+                                          icon: const Icon(
+                                              Icons.inventory_2_outlined),
+                                          label:
+                                              const Text('Receive Return'),
                                         ),
                                       )
                                     else
-                                      Text(
-                                        'Returned stock is now back in branch stock and can be issued to kitchen from the normal Issue Stock screen.',
-                                        style: TextStyle(
-                                          color: Colors.green.shade800,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.check_circle,
+                                              color: Color(0xFF059669),
+                                              size: 16),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              'In branch stock — ready to issue to kitchen.',
+                                              style: TextStyle(
+                                                color: Colors.green.shade800,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          FilledButton.icon(
+                                            onPressed: () =>
+                                                _showIssueToKitchenDialog(
+                                                    batch),
+                                            icon: const Icon(
+                                                Icons.kitchen_outlined,
+                                                size: 16),
+                                            label: const Text(
+                                                'Issue to Kitchen'),
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor:
+                                                  const Color(0xFF059669),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 14,
+                                                      vertical: 10),
+                                              textStyle: const TextStyle(
+                                                  fontSize: 13),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                   ],
                                 ),
@@ -944,6 +986,572 @@ class _KitchenPrepBatchesScreenState
     );
   }
 }
+
+// ── Receive prep return dialog ────────────────────────────────────────────────
+
+typedef _ReceiveInput = ({
+  double returned,
+  double processLoss,
+  double wastage,
+  String wastageReason,
+  String notes,
+  double issueQty,
+});
+
+class _PrepReceiveDialog extends StatefulWidget {
+  const _PrepReceiveDialog({
+    required this.batch,
+    required this.producedName,
+    required this.rawUnit,
+    required this.expectedUsable,
+  });
+
+  final KitchenPrepBatch batch;
+  final String producedName;
+  final String rawUnit;
+  final double expectedUsable;
+
+  @override
+  State<_PrepReceiveDialog> createState() => _PrepReceiveDialogState();
+}
+
+class _PrepReceiveDialogState extends State<_PrepReceiveDialog> {
+  late final TextEditingController _returnedCtl;
+  late final TextEditingController _processLossCtl;
+  late final TextEditingController _wastageCtl;
+  late final TextEditingController _wastageReasonCtl;
+  late final TextEditingController _notesCtl;
+  late final TextEditingController _issueCtl;
+
+  @override
+  void initState() {
+    super.initState();
+    final defaultText = widget.expectedUsable > 0
+        ? widget.expectedUsable.toStringAsFixed(2)
+        : '';
+    _returnedCtl = TextEditingController(text: defaultText);
+    _processLossCtl = TextEditingController(text: '0');
+    _wastageCtl = TextEditingController(text: '0');
+    _wastageReasonCtl = TextEditingController();
+    _notesCtl = TextEditingController();
+    _issueCtl = TextEditingController(text: defaultText);
+  }
+
+  @override
+  void dispose() {
+    _returnedCtl.dispose();
+    _processLossCtl.dispose();
+    _wastageCtl.dispose();
+    _wastageReasonCtl.dispose();
+    _notesCtl.dispose();
+    _issueCtl.dispose();
+    super.dispose();
+  }
+
+  double get _variance {
+    final ret = double.tryParse(_returnedCtl.text.trim()) ?? 0;
+    final pl = double.tryParse(_processLossCtl.text.trim()) ?? 0;
+    final w = double.tryParse(_wastageCtl.text.trim()) ?? 0;
+    return widget.batch.rawQuantitySent - ret - pl - w;
+  }
+
+  void _onReturnedChanged(String v) {
+    final ret = double.tryParse(v.trim()) ?? 0;
+    final iss = double.tryParse(_issueCtl.text.trim()) ?? 0;
+    if (iss > ret) {
+      _issueCtl.text = ret <= 0 ? '0' : ret.toStringAsFixed(2);
+    }
+    setState(() {});
+  }
+
+  void _submit() {
+    final returned = double.tryParse(_returnedCtl.text.trim()) ?? 0;
+    final processLoss = double.tryParse(_processLossCtl.text.trim()) ?? 0;
+    final wastage = double.tryParse(_wastageCtl.text.trim()) ?? 0;
+    final issueQty = double.tryParse(_issueCtl.text.trim()) ?? 0;
+    final rawUnit = widget.rawUnit;
+
+    if (returned <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Enter the usable quantity returned from prep.')));
+      return;
+    }
+    if (processLoss < 0 || wastage < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Process loss and wastage cannot be negative.')));
+      return;
+    }
+    if (wastage > 0 && _wastageReasonCtl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Wastage reason is required when wastage > 0.')));
+      return;
+    }
+    if (issueQty > returned + 0.001) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Issue qty cannot exceed returned qty '
+              '(${returned.toStringAsFixed(2)} $rawUnit).')));
+      return;
+    }
+
+    Navigator.of(context).pop<_ReceiveInput>((
+      returned: returned,
+      processLoss: processLoss,
+      wastage: wastage,
+      wastageReason: _wastageReasonCtl.text.trim(),
+      notes: _notesCtl.text.trim(),
+      issueQty: issueQty,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final variance = _variance;
+    final varianceColor = variance.abs() < 0.5
+        ? Colors.green.shade700
+        : variance.abs() < 2.0
+            ? Colors.orange.shade700
+            : Colors.red.shade700;
+    final rawUnit = widget.rawUnit;
+    final producedName = widget.producedName;
+    final batch = widget.batch;
+    final expectedUsable = widget.expectedUsable;
+
+    return AlertDialog(
+      title: const Text('Receive Prep Return'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.inventory_2_outlined,
+                            size: 16, color: Color(0xFF1D4ED8)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${batch.rawItemName}  ·  Sent: '
+                            '${batch.rawQuantitySent.toStringAsFixed(2)} $rawUnit',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (expectedUsable > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const SizedBox(width: 24),
+                          Text(
+                            'Expected usable return: '
+                            '${expectedUsable.toStringAsFixed(2)} $rawUnit'
+                            '  (${(expectedUsable / batch.rawQuantitySent * 100).toStringAsFixed(0)}% standard yield)',
+                            style: TextStyle(
+                                color: Colors.blue.shade700, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Step 1 — Record what came back from prep',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _returnedCtl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: _onReturnedChanged,
+                decoration: InputDecoration(
+                  labelText: 'Usable $producedName returned ($rawUnit)',
+                  hintText: '0',
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _processLossCtl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Process loss ($rawUnit)',
+                        hintText: '0',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _wastageCtl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Wastage ($rawUnit)',
+                        hintText: '0',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _wastageReasonCtl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Wastage reason (required if wastage > 0)',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _notesCtl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Return notes (optional)',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: variance.abs() < 0.5
+                      ? Colors.green.shade50
+                      : variance.abs() < 2.0
+                          ? Colors.orange.shade50
+                          : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: varianceColor.withAlpha(80)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          variance.abs() < 0.5
+                              ? Icons.check_circle_outline
+                              : Icons.warning_amber_outlined,
+                          color: varianceColor,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Prep variance: '
+                            '${variance.toStringAsFixed(3)} $rawUnit',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: varianceColor,
+                                fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${batch.rawQuantitySent.toStringAsFixed(2)} sent'
+                      ' − usable returned − process loss − wastage',
+                      style: TextStyle(
+                          color: varianceColor.withAlpha(160), fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.kitchen_outlined,
+                            size: 16, color: Color(0xFF059669)),
+                        SizedBox(width: 6),
+                        Text(
+                          'Step 2 — Issue to POS Kitchen',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: Color(0xFF065F46)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Partial issues allowed. Leave 0 to issue from the batch card later.',
+                      style: TextStyle(
+                          color: Colors.green.shade800, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _issueCtl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: '$producedName to issue ($rawUnit)',
+                        hintText: '0',
+                        helperText: () {
+                          final ret =
+                              double.tryParse(_returnedCtl.text.trim()) ?? 0;
+                          return ret > 0
+                              ? 'Max: ${ret.toStringAsFixed(2)} $rawUnit'
+                              : 'Enter returned qty above first';
+                        }(),
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.check_circle_outline, size: 18),
+          label: const Text('Receive & Issue'),
+          style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF059669)),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Issue to kitchen dialog ───────────────────────────────────────────────────
+
+class _IssueToKitchenDialog extends StatefulWidget {
+  const _IssueToKitchenDialog({
+    required this.batch,
+    required this.outputs,
+    required this.staffIds,
+  });
+
+  final KitchenPrepBatch batch;
+  final List<Map<String, dynamic>> outputs;
+  final List<String> staffIds;
+
+  static double _numField(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  @override
+  State<_IssueToKitchenDialog> createState() => _IssueToKitchenDialogState();
+}
+
+class _IssueToKitchenDialogState extends State<_IssueToKitchenDialog> {
+  late final List<TextEditingController> _controllers;
+  late final TextEditingController _notesCtl;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = [
+      for (final o in widget.outputs)
+        TextEditingController(
+            text: _IssueToKitchenDialog._numField(o['quantity'])
+                .toStringAsFixed(2)),
+    ];
+    _notesCtl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    _notesCtl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final items = <Map<String, dynamic>>[];
+    for (var i = 0; i < widget.outputs.length; i++) {
+      final qty = double.tryParse(_controllers[i].text.trim()) ?? 0;
+      if (qty <= 0) continue;
+      final o = widget.outputs[i];
+      final available = _IssueToKitchenDialog._numField(o['quantity']);
+      if (qty > available + 0.001) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Cannot issue more than available: ${o['name']} '
+              'max ${available.toStringAsFixed(2)} ${o['unit']}'),
+        ));
+        return;
+      }
+      items.add({
+        'sku': (o['sku'] ?? '').toString(),
+        'item_name': (o['name'] ?? '').toString(),
+        'quantity': qty,
+        'unit': (o['unit'] ?? '').toString(),
+        'purpose_channel': 'pos_restaurant',
+        'notes': _notesCtl.text.trim().isNotEmpty
+            ? _notesCtl.text.trim()
+            : 'Issued from prep batch ${widget.batch.id.substring(0, 8)}',
+        'responsible_staff_ids': widget.staffIds,
+      });
+    }
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Enter at least one quantity to issue.')));
+      return;
+    }
+    Navigator.of(context).pop<List<Map<String, dynamic>>>(items);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Issue to POS Kitchen'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.kitchen_outlined,
+                        size: 18, color: Color(0xFF059669)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Issuing prep outputs from '
+                        '${widget.batch.rawItemName} batch to kitchen.',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Partial issues are allowed — remaining quantity stays '
+                'available for later.',
+                style:
+                    TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+              const SizedBox(height: 14),
+              ...List.generate(widget.outputs.length, (i) {
+                final o = widget.outputs[i];
+                final name = (o['name'] ?? o['sku'] ?? '').toString();
+                final unit = (o['unit'] ?? '').toString();
+                final available =
+                    _IssueToKitchenDialog._numField(o['quantity']);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TextFormField(
+                    controller: _controllers[i],
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: '$name ($unit)',
+                      helperText:
+                          'Available: ${available.toStringAsFixed(2)} $unit',
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+              TextFormField(
+                controller: _notesCtl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.kitchen_outlined),
+          label: const Text('Issue to Kitchen'),
+          style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF059669)),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _MetaTile extends StatelessWidget {
   const _MetaTile({required this.label, required this.value});

@@ -6,6 +6,7 @@ import { creditOutletItemStock, updateBranchStock } from '../services/branch-inv
 import { normalizeQty } from '../utils/unitNormalization';
 import { getActiveShiftMode } from '../services/shiftConfigService';
 import db from '../db';
+import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 
 interface AuthenticatedRequest extends Request {
     user?: {
@@ -1128,7 +1129,8 @@ export const sendPrepBatch = asyncWrap(async (req: AuthenticatedRequest, res: Re
 export const receivePrepBatch = asyncWrap(async (req: AuthenticatedRequest, res: Response) => {
     const { shift_id, batch_id } = req.params;
     const {
-        returned_quantity,
+        outputs,           // preferred: [{sku, name, quantity, unit}] — multi-output
+        returned_quantity, // legacy single-output fallback
         return_notes,
         process_loss_quantity,
         wastage_quantity,
@@ -1138,16 +1140,11 @@ export const receivePrepBatch = asyncWrap(async (req: AuthenticatedRequest, res:
     const userId = req.user?.id || '';
     const userBranchId = req.user?.branch_id;
 
-    if (n(returned_quantity) <= 0) {
-        throw new AppError('returned_quantity must be greater than zero', 400);
-    }
-    if (n(process_loss_quantity) < 0) {
-        throw new AppError('process_loss_quantity cannot be negative', 400);
-    }
-    if (n(wastage_quantity) < 0) {
-        throw new AppError('wastage_quantity cannot be negative', 400);
-    }
-    if (n(wastage_quantity) > 0 && !String(wastage_reason || '').trim()) {
+    const processLossQty = n(process_loss_quantity);
+    const wastageQty = n(wastage_quantity);
+    if (processLossQty < 0) throw new AppError('process_loss_quantity cannot be negative', 400);
+    if (wastageQty < 0) throw new AppError('wastage_quantity cannot be negative', 400);
+    if (wastageQty > 0 && !String(wastage_reason || '').trim()) {
         throw new AppError('wastage_reason is required when wastage_quantity is greater than zero', 400);
     }
 
@@ -1159,12 +1156,8 @@ export const receivePrepBatch = asyncWrap(async (req: AuthenticatedRequest, res:
         .maybeSingle();
     if (batchError) throw new AppError(batchError.message, 500);
     if (!batch) throw new AppError('Prep batch not found', 404);
-    if (!PREP_BATCH_STATUSES.includes(String(batch.status))) {
-        throw new AppError('Invalid prep batch status', 400);
-    }
-    if (batch.status !== 'sent') {
-        throw new AppError('This prep batch has already been received or cancelled', 400);
-    }
+    if (!PREP_BATCH_STATUSES.includes(String(batch.status))) throw new AppError('Invalid prep batch status', 400);
+    if (batch.status !== 'sent') throw new AppError('This prep batch has already been received or cancelled', 400);
     if (Number(batch.branch_id) !== Number(userBranchId)) {
         throw new AppError('BRANCH_SCOPE_VIOLATION: Branch does not match user context', 403);
     }
@@ -1176,66 +1169,119 @@ export const receivePrepBatch = asyncWrap(async (req: AuthenticatedRequest, res:
         .maybeSingle();
     if (!shift) throw new AppError('Shift not found', 404);
 
-    const producedInventoryId = batch.produced_inventory_item_id?.toString();
-    const producedSku = String(batch.produced_item_sku || '').trim();
-    if (!producedInventoryId || !producedSku) {
-        throw new AppError('Processed inventory item is not configured on this prep batch', 400);
+    const rawUnit = String(batch.raw_unit || '').trim() || 'unit';
+
+    // ── MULTI-OUTPUT PATH ─────────────────────────────────────────────────────
+    // New path: outputs[] array with one entry per produced item type.
+    // Legacy path: single returned_quantity + produced_inventory_item_id on batch.
+    const outputList: Array<{ sku: string; name: string; quantity: number; unit: string; raw_equivalent?: number | null }> =
+        Array.isArray(outputs) && outputs.length > 0
+            ? outputs
+            : (() => {
+                // Build a single-item list from legacy fields
+                const legacyQty = n(returned_quantity);
+                if (legacyQty <= 0) throw new AppError('returned_quantity must be greater than zero', 400);
+                return [{
+                    sku: String(batch.produced_item_sku || '').trim(),
+                    name: String(batch.produced_item_name || 'Produced item'),
+                    quantity: legacyQty,
+                    unit: String(batch.produced_unit || rawUnit),
+                }];
+            })();
+
+    if (outputList.length === 0) {
+        throw new AppError('At least one output quantity is required', 400);
+    }
+    if (outputList.every((o) => n(o.quantity) <= 0)) {
+        throw new AppError('At least one output must have a quantity greater than zero', 400);
     }
 
-    const { data: producedInventory } = await supabase
+    // Resolve each output SKU to an inventory_items row
+    const outputSkus = [...new Set(outputList.map((o) => o.sku).filter(Boolean))];
+    const { data: invRows } = await supabase
         .from('inventory_items')
         .select('id, sku, unit')
-        .eq('id', producedInventoryId)
-        .maybeSingle();
-    if (!producedInventory) throw new AppError('Processed inventory item not found', 404);
+        .in('sku', outputSkus);
+    const invBySku = new Map<string, any>((invRows || []).map((r: any) => [r.sku, r]));
 
-    const normalizedReturnedQty = await normalizeQty(
-        n(returned_quantity),
-        batch.produced_unit || producedInventory.unit || 'portion',
-        producedInventory.unit || batch.produced_unit || 'portion',
-        producedInventory.id,
-        shift.branch_id
-    );
+    // Credit each output item to branch stock and build the JSONB record.
+    // raw_equivalent: raw-unit kg consumed by this output portion, supplied by
+    // the client from the recipe standard (raw_quantity / produced_quantity × qty).
+    // This enables variance in raw units even when outputs are in portions/pcs.
+    let totalRawEquivalentUsed = 0;
+    let rawEquivProvided = false;
+    const storedOutputs: any[] = [];
 
-    const processLossQty = n(process_loss_quantity);
-    const wastageQty = n(wastage_quantity);
-    const rawUnit = String(batch.raw_unit || '').trim() || 'unit';
-    const producedUnit = String(producedInventory.unit || batch.produced_unit || '').trim() || 'unit';
-    const unexplainedVarianceQuantity =
-        canonicalUnitLabel(rawUnit) === canonicalUnitLabel(producedUnit)
-            ? Number((n(batch.raw_quantity_sent) - normalizedReturnedQty - processLossQty - wastageQty).toFixed(3))
-            : null;
+    for (const out of outputList) {
+        const qty = n(out.quantity);
+        if (qty <= 0) continue;
 
-    await updateBranchStock(
-        Number(shift.branch_id),
-        producedInventory.sku,
-        normalizedReturnedQty,
-        'KITCHEN_PREP_RETURNED',
-        userId,
-        'kitchen_prep_batch',
-        batch.id,
-        shift.shift_number,
-        return_notes || `Prep return received for ${batch.produced_item_name}`
-    );
+        const inv = invBySku.get(out.sku);
+        if (!inv) throw new AppError(`Inventory item not found for SKU: ${out.sku}`, 400);
+
+        const normalizedQty = await normalizeQty(qty, out.unit || inv.unit || rawUnit, inv.unit, inv.id, shift.branch_id);
+
+        await updateBranchStock(
+            Number(shift.branch_id),
+            inv.sku,
+            normalizedQty,
+            'KITCHEN_PREP_RETURNED',
+            userId,
+            'kitchen_prep_batch',
+            batch.id,
+            shift.shift_number,
+            return_notes || `Prep return: ${out.name || out.sku} from batch ${batch_id}`
+        );
+
+        const rawEquiv = typeof out.raw_equivalent === 'number' ? out.raw_equivalent : null;
+        if (rawEquiv !== null && rawEquiv >= 0) {
+            totalRawEquivalentUsed += rawEquiv;
+            rawEquivProvided = true;
+        } else if (!rawEquivProvided && canonicalUnitLabel(rawUnit) === canonicalUnitLabel(inv.unit)) {
+            // Fallback: same-unit path (e.g. kg→kg)
+            totalRawEquivalentUsed += normalizedQty;
+        }
+
+        storedOutputs.push({
+            sku: inv.sku,
+            name: out.name || inv.sku,
+            quantity: normalizedQty,
+            unit: inv.unit,
+            inventory_item_id: inv.id,
+            raw_equivalent: rawEquiv ?? null,
+        });
+    }
+
+    const grandTotalReturned = storedOutputs.reduce((s, o) => s + o.quantity, 0);
+    // Variance is always in raw units (e.g. kg). Possible when raw_equivalent was
+    // provided for all outputs (mixed-unit scenario) or all units matched.
+    const canComputeVariance = rawEquivProvided ||
+        storedOutputs.every((o) => canonicalUnitLabel(rawUnit) === canonicalUnitLabel(o.unit));
+    const unexplainedVarianceQuantity = canComputeVariance
+        ? Number((n(batch.raw_quantity_sent) - totalRawEquivalentUsed - processLossQty - wastageQty).toFixed(3))
+        : null;
+
+    // Use primary produced_unit from first output item
+    const primaryOut = storedOutputs[0];
 
     const { data: updated, error: updateError } = await supabase
         .from('kitchen_prep_batches')
         .update({
-            returned_quantity: normalizedReturnedQty,
-            returned_unit: producedInventory.unit || batch.produced_unit,
+            returned_quantity: Number(grandTotalReturned.toFixed(3)),
+            returned_unit: primaryOut?.unit || batch.produced_unit,
+            extra_outputs: storedOutputs,
             process_loss_quantity: processLossQty,
             process_loss_unit: rawUnit,
             wastage_quantity: wastageQty,
             wastage_unit: rawUnit,
             wastage_reason: String(wastage_reason || '').trim() || null,
             unexplained_variance_quantity: unexplainedVarianceQuantity,
-            unexplained_variance_unit:
-                unexplainedVarianceQuantity === null ? null : rawUnit,
+            unexplained_variance_unit: unexplainedVarianceQuantity === null ? null : rawUnit,
             status: 'returned',
             return_notes: return_notes || null,
             returned_by: userId,
             returned_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
         })
         .eq('id', batch.id)
         .select('*')
@@ -1464,7 +1510,12 @@ export const recordProduction = asyncWrap(async (req: Request, res: Response) =>
             });
         }
 
-        await supabase.from('kitchen_shift_items').update({ sold_quantity: n(raw.sold_quantity) + n(p.raw_quantity_used) }).eq('id', raw.id);
+        // Atomic increment avoids lost-update race when multiple productions are
+        // logged concurrently for the same shift item.
+        await db.query(
+            'UPDATE kitchen_shift_items SET sold_quantity = sold_quantity + $1, updated_at = NOW() WHERE id = $2',
+            [n(p.raw_quantity_used), raw.id]
+        );
         if (p.pos_outlet_item_id) await creditOutletItemStock(p.pos_outlet_item_id, n(p.produced_quantity));
     }
     res.json({ success: true, data: results });
@@ -2050,6 +2101,12 @@ export const createProductionRecipe = asyncWrap(async (req: Request, res: Respon
         prep_stage_order
     } = req.body;
     const userId = (req as any).user?.id;
+    const userRole = (req as any).user?.role;
+    const userBranchId = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+    // Non-global users may only create standards for their own branch
+    if (!isGlobalRole(userRole) && userBranchId != null && Number(branch_id) !== Number(userBranchId)) {
+        throw new AppError('You can only create food control standards for your own branch.', 403);
+    }
     const outputs = Array.isArray(req.body.outputs) ? req.body.outputs : [];
     const resolvedControlMode = String(stocktake_control_mode || 'BOTH').trim().toUpperCase();
     const resolvedStocktakeLocation = String(stocktake_location || 'KITCHEN').trim().toUpperCase();
@@ -2246,6 +2303,21 @@ export const createProductionRecipe = asyncWrap(async (req: Request, res: Respon
 
 export const updateProductionRecipe = asyncWrap(async (req: Request, res: Response) => {
     const { recipe_id } = req.params;
+    // Verify the caller owns this recipe (non-global roles only)
+    const userRole = (req as any).user?.role;
+    if (!isGlobalRole(userRole)) {
+        const userBranchId = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+        const { data: existing, error: fetchErr } = await supabase
+            .from('kitchen_production_recipes')
+            .select('branch_id')
+            .eq('id', recipe_id)
+            .maybeSingle();
+        if (fetchErr) throw new AppError(fetchErr.message, 500);
+        if (!existing) throw new AppError('Recipe standard not found.', 404);
+        if (Number(existing.branch_id) !== Number(userBranchId)) {
+            throw new AppError('You can only update food control standards for your own branch.', 403);
+        }
+    }
     const payload: any = {};
     for (const key of [
         'recipe_name',
@@ -2359,6 +2431,21 @@ export const updateProductionRecipe = asyncWrap(async (req: Request, res: Respon
 
 export const deactivateProductionRecipe = asyncWrap(async (req: Request, res: Response) => {
     const { recipe_id } = req.params;
+    // Verify the caller owns this recipe (non-global roles only)
+    const userRole = (req as any).user?.role;
+    if (!isGlobalRole(userRole)) {
+        const userBranchId = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+        const { data: existing, error: fetchErr } = await supabase
+            .from('kitchen_production_recipes')
+            .select('branch_id')
+            .eq('id', recipe_id)
+            .maybeSingle();
+        if (fetchErr) throw new AppError(fetchErr.message, 500);
+        if (!existing) throw new AppError('Recipe standard not found.', 404);
+        if (Number(existing.branch_id) !== Number(userBranchId)) {
+            throw new AppError('You can only deactivate food control standards for your own branch.', 403);
+        }
+    }
     const { data, error } = await supabase
         .from('kitchen_production_recipes')
         .update({ is_active: false, updated_at: new Date().toISOString() })
@@ -2370,9 +2457,10 @@ export const deactivateProductionRecipe = asyncWrap(async (req: Request, res: Re
 });
 
 export const listProductionRecipes = asyncWrap(async (req: Request, res: Response) => {
-    const { branch_id, yield_type } = req.query;
+    const { yield_type } = req.query;
     let q = supabase.from('kitchen_production_recipes').select('*, inputs:kitchen_production_recipe_inputs(*)').eq('is_active', true).order('recipe_name');
-    if (branch_id) q = q.eq('branch_id', branch_id);
+    // Apply branch isolation: non-global users only see their branch's standards
+    q = applyBranchFilter(q, req);
     if (yield_type) q = q.eq('yield_type_code', yield_type);
     const { data, error } = await q;
     if (error) throw new AppError(error.message, 500);
@@ -2387,14 +2475,15 @@ export const listProductionRecipes = asyncWrap(async (req: Request, res: Respons
 export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: Response) => {
     const { branch_id } = req.query;
     if (!branch_id) throw new AppError('branch_id required', 400);
-    const { data, error } = await supabase
+    let q = supabase
         .from('pos_outlet_items')
         .select('id, name, sku, unit, category, item_group, track_stock, source_table')
-        .eq('branch_id', branch_id)
         .eq('is_active', true)
         .order('name', { ascending: true });
+    // Apply branch isolation; query branch_id param is the floor, token further restricts non-globals
+    q = applyBranchFilter(q, req);
+    const { data, error } = await q;
     if (error) throw new AppError(error.message, 500);
-    
     res.json({ success: true, data: data || [] });
 });
 
@@ -2444,12 +2533,14 @@ export const getStockItemFoodControlType = asyncWrap(async (req: Request, res: R
 export const listDirectItems = asyncWrap(async (req: Request, res: Response) => {
     const { branch_id } = req.query;
     if (!branch_id) throw new AppError('branch_id required', 400);
-    const { data, error } = await supabase
+    let q = supabase
         .from('food_control_direct_items')
         .select('*, pos_outlet_item:pos_outlet_items(id,name,sku,unit)')
-        .eq('branch_id', Number(branch_id))
         .eq('is_active', true)
         .order('stock_item_name');
+    // Apply branch isolation
+    q = applyBranchFilter(q, req);
+    const { data, error } = await q;
     if (error) throw new AppError(error.message, 500);
     res.json({ success: true, data: data || [] });
 });
@@ -2460,6 +2551,12 @@ export const createDirectItem = asyncWrap(async (req: Request, res: Response) =>
         throw new AppError('branch_id, stock_item_sku and pos_outlet_item_id are required', 400);
     }
     const userId = (req as any).user?.id;
+    const userRole = (req as any).user?.role;
+    const userBranchId = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+    // Non-global users may only create direct items for their own branch
+    if (!isGlobalRole(userRole) && userBranchId != null && Number(branch_id) !== Number(userBranchId)) {
+        throw new AppError('You can only create direct food control items for your own branch.', 403);
+    }
     const { data, error } = await supabase
         .from('food_control_direct_items')
         .insert({
@@ -2477,6 +2574,21 @@ export const createDirectItem = asyncWrap(async (req: Request, res: Response) =>
 
 export const deactivateDirectItem = asyncWrap(async (req: Request, res: Response) => {
     const { id } = req.params;
+    // Verify the caller owns this direct item (non-global roles only)
+    const userRole = (req as any).user?.role;
+    if (!isGlobalRole(userRole)) {
+        const userBranchId = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+        const { data: existing, error: fetchErr } = await supabase
+            .from('food_control_direct_items')
+            .select('branch_id')
+            .eq('id', id)
+            .maybeSingle();
+        if (fetchErr) throw new AppError(fetchErr.message, 500);
+        if (!existing) throw new AppError('Direct item not found.', 404);
+        if (Number(existing.branch_id) !== Number(userBranchId)) {
+            throw new AppError('You can only deactivate direct food control items for your own branch.', 403);
+        }
+    }
     const { data, error } = await supabase
         .from('food_control_direct_items')
         .update({ is_active: false, updated_at: new Date().toISOString() })
@@ -2490,11 +2602,13 @@ export const deactivateDirectItem = asyncWrap(async (req: Request, res: Response
 export const listExemptItems = asyncWrap(async (req: Request, res: Response) => {
     const { branch_id } = req.query;
     if (!branch_id) throw new AppError('branch_id required', 400);
-    const { data, error } = await supabase
+    let q = supabase
         .from('food_control_exempt_items')
         .select('*, pos_outlet_item:pos_outlet_items(id,name,sku,unit,category)')
-        .eq('branch_id', Number(branch_id))
         .order('created_at', { ascending: false });
+    // Apply branch isolation
+    q = applyBranchFilter(q, req);
+    const { data, error } = await q;
     if (error) throw new AppError(error.message, 500);
     res.json({ success: true, data: data || [] });
 });
@@ -2657,19 +2771,28 @@ export const clearPoolLink = asyncWrap(async (req: Request, res: Response) => {
 export const listUnregisteredItems = asyncWrap(async (req: Request, res: Response) => {
     const { branch_id } = req.query;
     if (!branch_id) throw new AppError('branch_id required', 400);
-    const { data: items, error } = await supabase
+    let q = supabase
         .from('pos_outlet_items')
         .select('id, name, sku, category, unit, stock_pool_item_id, item_group, source_table')
-        .eq('branch_id', Number(branch_id))
         .eq('is_active', true);
+    // Apply branch isolation
+    q = applyBranchFilter(q, req);
+    const { data: items, error } = await q;
     if (error) throw new AppError(error.message, 500);
+
+    // Resolve effective branch_id for the RPC (use token branch for non-globals, else query param)
+    const userRole = (req as any).user?.role;
+    const userBranchId = (req as any).user?.branch_id ?? (req as any).user?.branchId;
+    const effectiveBranchId = !isGlobalRole(userRole) && userBranchId != null
+        ? Number(userBranchId)
+        : Number(branch_id);
 
     const candidates = (items || []).filter((item) => !isBarItem(item) && !item.stock_pool_item_id);
     const skus = Array.from(new Set(candidates.map((item) => item.sku).filter(Boolean)));
     const types = new Map<string, string>();
     await Promise.all(skus.map(async (sku) => {
         const { data } = await supabase.rpc('get_stock_item_food_control_type', {
-            p_branch_id: Number(branch_id),
+            p_branch_id: effectiveBranchId,
             p_item_sku: sku
         });
         types.set(sku as string, data || 'UNREGISTERED');
@@ -3836,6 +3959,7 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         { data: recipeRows, error: recipesError },
         { data: posConsumptionRows, error: posConsumptionError },
         { data: directFoodControlRows, error: directFoodControlError },
+        { data: shiftProductionRows, error: shiftProductionError },
     ] = await Promise.all([
         supabase
             .from('kitchen_shift_items')
@@ -3865,6 +3989,10 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             .select('stock_item_sku, stock_item_name')
             .eq('branch_id', shift.branch_id)
             .eq('is_active', true),
+        supabase
+            .from('kitchen_shift_production')
+            .select('id, recipe_id, raw_item_sku, produced_quantity, produced_unit, pos_outlet_item_id')
+            .eq('shift_id', shiftId),
     ]);
 
     if (itemsError) throw new AppError(itemsError.message, 500);
@@ -3873,6 +4001,7 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     if (recipesError) throw new AppError(recipesError.message, 500);
     if (posConsumptionError) throw new AppError(posConsumptionError.message, 500);
     if (directFoodControlError) throw new AppError(directFoodControlError.message, 500);
+    if (shiftProductionError) throw new AppError(shiftProductionError.message, 500);
 
     const shiftItemsList = (shiftItems || []) as any[];
     const additionsList = (additions || []) as any[];
@@ -3880,14 +4009,53 @@ export async function buildShiftDailyControlsData(shiftId: string) {
     const activeRecipes = (recipeRows || []) as any[];
     const posConsumptionList = (posConsumptionRows || []) as any[];
     const directFoodControlList = (directFoodControlRows || []) as any[];
+    const shiftProductionList = (shiftProductionRows || []) as any[];
     const recipeIds = activeRecipes.map((row: any) => row.id).filter(Boolean);
     const { data: recipeInputs, error: recipeInputsError } = recipeIds.length
         ? await supabase
             .from('kitchen_production_recipe_inputs')
-            .select('recipe_id, raw_item_sku, raw_item_name')
+            .select('recipe_id, raw_item_sku, raw_item_name, quantity, unit')
             .in('recipe_id', recipeIds)
         : { data: [], error: null } as any;
     if (recipeInputsError) throw new AppError(recipeInputsError.message, 500);
+
+    // Resolve UUID-looking raw_item_sku values to real SKUs.
+    // Old records (before C1 fix) stored inventory_items.id instead of sku in both
+    // channel_food_standards and kitchen_production_recipes.
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const allSkuUuids = [...new Set([
+        ...activeRecipes.map((r: any) => String(r.raw_item_sku || '').trim()),
+        ...standardsList.map((r: any) => String(r.raw_item_sku || '').trim()),
+    ].filter((sku: string) => uuidRegex.test(sku)))];
+    const uuidToInv = new Map<string, any>();
+    if (allSkuUuids.length) {
+        const { data: invByIds } = await supabase
+            .from('inventory_items')
+            .select('id, sku, item_name, unit')
+            .in('id', allSkuUuids);
+        for (const row of ((invByIds || []) as any[])) {
+            uuidToInv.set(String(row.id), row);
+        }
+    }
+    const resolveSkuField = (record: any) => {
+        const rawSku = String(record.raw_item_sku || '').trim();
+        if (!uuidRegex.test(rawSku)) return;
+        const inv = uuidToInv.get(rawSku);
+        record.raw_item_sku = inv ? inv.sku : '';
+        if (inv) {
+            record.raw_item_name = record.raw_item_name || inv.item_name;
+            record.raw_unit = record.raw_unit || record.unit || inv.unit;
+        }
+    };
+    for (const recipe of activeRecipes) resolveSkuField(recipe);
+    for (const standard of standardsList) resolveSkuField(standard);
+
+    // POS-linked recipes are shown as produced items (not raw ingredients) in daily controls
+    const posLinkedRecipeIds = new Set<string>(
+        activeRecipes
+            .filter((r: any) => String(r.pos_outlet_item_id || '').trim())
+            .map((r: any) => String(r.id))
+    );
 
     const controlledSkuSet = new Set<string>();
     for (const row of standardsList) {
@@ -3895,10 +4063,15 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         if (sku) controlledSkuSet.add(sku);
     }
     for (const row of activeRecipes) {
+        // POS-linked recipes: tracked as produced items, not raw ingredients
+        if (row.pos_outlet_item_id) continue;
         const sku = String(row.raw_item_sku || '').trim();
-        if (sku) controlledSkuSet.add(sku);
+        // 'MULTI' is a COMPLEX-recipe marker, not a real ingredient SKU — skip it
+        if (sku && sku.toUpperCase() !== 'MULTI') controlledSkuSet.add(sku);
     }
     for (const row of ((recipeInputs || []) as any[])) {
+        // Skip inputs for POS-linked recipes — those flow through produced item rows
+        if (posLinkedRecipeIds.has(String(row.recipe_id))) continue;
         const sku = String(row.raw_item_sku || '').trim();
         if (sku) controlledSkuSet.add(sku);
     }
@@ -3907,6 +4080,21 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         if (sku) controlledSkuSet.add(sku);
     }
     const controlledSkus = [...controlledSkuSet];
+
+    // Fetch current kitchen stocktake for this shift (produced item opening/closing stock)
+    const shiftLetter: 'A' | 'B' = String(shift.sub_shift_type || 'A').trim().toUpperCase() === 'B' ? 'B' : 'A';
+    const { data: currentStocktake } = await supabase
+        .from('kitchen_stocktake_shifts')
+        .select('id, items:kitchen_stocktake_items(inventory_item_id, opening_qty, closing_qty, spoilage_qty)')
+        .eq('branch_id', shift.branch_id)
+        .eq('stocktake_date', shift.shift_date)
+        .eq('shift', shiftLetter)
+        .maybeSingle() as any;
+    const stocktakeItemByInvId = new Map<string, any>();
+    for (const item of ((currentStocktake?.items || []) as any[])) {
+        const id = String(item.inventory_item_id || '').trim();
+        if (id) stocktakeItemByInvId.set(id, item);
+    }
 
     const eventRefIds = [...new Set(
         additionsList
@@ -4021,6 +4209,61 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         }
     }
 
+    // Build recipe lookup maps for production-based expected consumption
+    const recipeById = new Map<string, any>(
+        activeRecipes.map((r: any) => [String(r.id), r])
+    );
+    const recipeInputsByRecipeId = new Map<string, any[]>();
+    for (const inp of (recipeInputs || []) as any[]) {
+        const id = String(inp.recipe_id);
+        if (!recipeInputsByRecipeId.has(id)) recipeInputsByRecipeId.set(id, []);
+        recipeInputsByRecipeId.get(id)!.push(inp);
+    }
+
+    // Derive expected consumption from logged production events × recipe standards.
+    // Only runs in non-legacy mode (posConsumptionList populated): legacy mode uses
+    // item.sold_quantity for expected which already includes production deductions.
+    // Only for non-POS production (no pos_outlet_item_id): POS-linked recipes are
+    // already covered by kitchen_shift_pos_consumption and would double-count here.
+    if (posConsumptionList.length > 0) {
+        for (const prod of shiftProductionList) {
+            // Skip POS-linked production; kitchen_shift_pos_consumption already provides expected
+            if (prod.pos_outlet_item_id) continue;
+
+            const recipeId = String(prod.recipe_id || '').trim();
+            const loggedProducedQty = n(prod.produced_quantity);
+            if (!recipeId || loggedProducedQty <= 0) continue;
+
+            const recipe = recipeById.get(recipeId);
+            if (!recipe) continue;
+
+            const stdProducedQty = n(recipe.produced_quantity);
+            if (stdProducedQty <= 0) continue;
+
+            const batchRatio = loggedProducedQty / stdProducedQty;
+            const isMultiInput = String(recipe.raw_item_sku || '').trim().toUpperCase() === 'MULTI';
+
+            if (isMultiInput) {
+                // COMPLEX/multi-input recipe: compute expected per input from recipe_inputs table
+                const inputs = recipeInputsByRecipeId.get(recipeId) || [];
+                for (const inp of inputs) {
+                    const sku = String(inp.raw_item_sku || '').trim();
+                    const stdRawQty = n(inp.quantity);
+                    if (sku && stdRawQty > 0) {
+                        addExpectedQty(sku, batchRatio * stdRawQty);
+                    }
+                }
+            } else {
+                // Single-input recipe
+                const sku = String(recipe.raw_item_sku || '').trim();
+                const stdRawQty = n(recipe.raw_quantity);
+                if (sku && stdRawQty > 0) {
+                    addExpectedQty(sku, batchRatio * stdRawQty);
+                }
+            }
+        }
+    }
+
     const additionsBySku = new Map<string, number>();
     const additionsBySkuAndChannel = new Map<string, Map<string, number>>();
     for (const addition of additionsList) {
@@ -4060,6 +4303,29 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             });
         }
     }
+    // Populate names from production recipes so that recipe-controlled items
+    // show their human-readable raw item name rather than falling back to a UUID.
+    for (const recipe of activeRecipes) {
+        const sku = String(recipe.raw_item_sku || '').trim();
+        if (sku && sku.toUpperCase() !== 'MULTI' && !standardBySku.has(sku)) {
+            standardBySku.set(sku, {
+                raw_item_sku: sku,
+                raw_item_name: recipe.raw_item_name || sku,
+                raw_item_unit: recipe.raw_unit || null,
+            });
+        }
+    }
+    // Also populate names from multi-input recipe inputs
+    for (const inp of (recipeInputs || []) as any[]) {
+        const sku = String(inp.raw_item_sku || '').trim();
+        if (sku && !standardBySku.has(sku)) {
+            standardBySku.set(sku, {
+                raw_item_sku: sku,
+                raw_item_name: inp.raw_item_name || sku,
+                raw_item_unit: inp.unit || null,
+            });
+        }
+    }
     const shiftItemBySku = new Map<string, any>();
     for (const item of shiftItemsList) {
         const sku = String(item.item_sku || '').trim();
@@ -4067,13 +4333,96 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             shiftItemBySku.set(sku, item);
         }
     }
+
+    // ── PRODUCED ITEM ROWS (POS Restaurant) ──────────────────────────────────
+    // Show produced/menu items (e.g. Mbuzi Wetfry, Chicken Burger) for POS channel,
+    // linking opening/closing to kitchen stocktake, not raw ingredients.
+
+    // Portions sold and produced qty per pos_outlet_item_id
+    const portionsSoldByPosId = new Map<string, number>();
+    for (const sale of posConsumptionList) {
+        const posId = String(sale.pos_outlet_item_id || '').trim();
+        if (!posId) continue;
+        portionsSoldByPosId.set(posId, (portionsSoldByPosId.get(posId) || 0) + n(sale.portions_sold));
+    }
+    const producedQtyByPosId = new Map<string, number>();
+    for (const prod of shiftProductionList) {
+        const posId = String(prod.pos_outlet_item_id || '').trim();
+        if (!posId) continue;
+        producedQtyByPosId.set(posId, (producedQtyByPosId.get(posId) || 0) + n(prod.produced_quantity));
+    }
+
+    // Deduplicate POS-linked recipes by pos_outlet_item_id
+    const dedupeByPosId = new Map<string, any>();
+    for (const recipe of activeRecipes) {
+        const posId = String(recipe.pos_outlet_item_id || '').trim();
+        if (posId && !dedupeByPosId.has(posId)) dedupeByPosId.set(posId, recipe);
+    }
+
+    // If no current stocktake yet, seed opening stock from previous stocktake closing
+    if (dedupeByPosId.size && !stocktakeItemByInvId.size) {
+        const posOutletIds = [...dedupeByPosId.keys()];
+        try {
+            const { rows: prevRows } = await db.query(
+                `SELECT DISTINCT ON (ki.inventory_item_id) ki.inventory_item_id, ki.closing_qty
+                 FROM public.kitchen_stocktake_items ki
+                 JOIN public.kitchen_stocktake_shifts ks ON ks.id = ki.shift_id
+                 WHERE ks.branch_id = $1
+                   AND ki.inventory_item_id = ANY($2)
+                   AND (ks.stocktake_date < $3 OR (ks.stocktake_date = $3 AND ks.shift < $4))
+                 ORDER BY ki.inventory_item_id, ks.stocktake_date DESC, ks.shift DESC`,
+                [shift.branch_id, posOutletIds, shift.shift_date, shiftLetter]
+            );
+            for (const row of (prevRows || [])) {
+                const id = String(row.inventory_item_id || '').trim();
+                if (id) stocktakeItemByInvId.set(id, { opening_qty: n(row.closing_qty), closing_qty: null, spoilage_qty: 0 });
+            }
+        } catch (_) { /* non-critical — opening defaults to 0 */ }
+    }
+
+    const producedItemRows: DailyControlRow[] = [];
+    for (const [posId, recipe] of dedupeByPosId.entries()) {
+        const stk = stocktakeItemByInvId.get(posId) || {};
+        const openingQty = n(stk.opening_qty);
+        const additionsQty = producedQtyByPosId.get(posId) ?? 0;
+        const posSalesQty = portionsSoldByPosId.get(posId) ?? 0;
+        const spoilageQty = n(stk.spoilage_qty);
+        const systemClosingQty = openingQty + additionsQty - posSalesQty - spoilageQty;
+        const physicalClosingQty = stk.closing_qty != null ? n(stk.closing_qty) : systemClosingQty;
+        const actualConsumptionQty = Math.max(0, Number((openingQty + additionsQty - physicalClosingQty - spoilageQty).toFixed(3)));
+        const expectedConsumptionQty = Number(posSalesQty.toFixed(3));
+        const varianceQty = Number((actualConsumptionQty - expectedConsumptionQty).toFixed(3));
+        const costPrice = 0;
+        producedItemRows.push({
+            item_sku: recipe.produced_item_sku || posId,
+            item_name: recipe.produced_item_name || 'Unknown Item',
+            unit: recipe.produced_unit || 'portion',
+            main_channel: 'POS Restaurant',
+            opening_qty: Number(openingQty.toFixed(3)),
+            additions_qty: Number(additionsQty.toFixed(3)),
+            pos_sales_qty: Number(posSalesQty.toFixed(3)),
+            spoilage_qty: Number(spoilageQty.toFixed(3)),
+            system_closing_qty: Number(systemClosingQty.toFixed(3)),
+            physical_closing_qty: Number(physicalClosingQty.toFixed(3)),
+            actual_consumption_qty: actualConsumptionQty,
+            expected_consumption_qty: expectedConsumptionQty,
+            variance_qty: varianceQty,
+            cost_price: costPrice,
+            expected_cost: 0,
+            actual_cost: 0,
+            variance_cost: 0,
+            channel_breakdown: [{ channel_code: 'pos_restaurant', channel_name: 'POS Restaurant', issued_qty: posSalesQty }],
+        });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const allSkus = [...new Set([
         ...controlledSkus,
         ...[...expectedQtyBySku.keys()].filter((sku) => controlledSkuSet.has(sku)),
         ...[...additionsBySku.keys()].filter((sku) => controlledSkuSet.has(sku)),
     ])];
 
-    const rows: DailyControlRow[] = allSkus.map((sku) => {
+    const rawIngredientRows: DailyControlRow[] = allSkus.map((sku) => {
         const item = shiftItemBySku.get(sku) || {};
         const inventoryItem = inventoryBySku.get(sku) || {};
         const standard = standardBySku.get(sku) || {};
@@ -4143,6 +4492,9 @@ export async function buildShiftDailyControlsData(shiftId: string) {
         };
     }).filter((row) => row.item_sku.trim().length > 0);
 
+    // Produced item rows come first, then raw ingredient rows for other channels
+    const rows: DailyControlRow[] = [...producedItemRows, ...rawIngredientRows];
+
     const summary = rows.reduce(
         (acc, row) => {
             acc.total_opening_qty += row.opening_qty;
@@ -4178,9 +4530,9 @@ export async function buildShiftDailyControlsData(shiftId: string) {
             total_actual_cost: Number(summary.total_actual_cost.toFixed(2)),
             total_variance_cost: Number(summary.total_variance_cost.toFixed(2)),
             item_count: rows.length,
-            standards_item_count: controlledSkus.length,
+            standards_item_count: controlledSkus.length + producedItemRows.length,
         },
-        standards_configured: controlledSkus.length > 0,
+        standards_configured: controlledSkus.length > 0 || producedItemRows.length > 0,
     };
 }
 

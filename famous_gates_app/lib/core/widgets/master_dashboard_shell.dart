@@ -583,6 +583,7 @@ class _MasterTopBar extends ConsumerWidget {
               iconColor: palette?.mutedText ?? Colors.grey.shade700),
           const SizedBox(width: 12),
           PopupMenuButton<String>(
+            tooltip: '',
             offset: const Offset(0, 42),
             onSelected: (value) {
               if (value == 'logout') {

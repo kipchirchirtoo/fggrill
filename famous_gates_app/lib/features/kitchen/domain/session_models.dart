@@ -92,37 +92,66 @@ class KitchenShiftItem {
 class KitchenProductionRecipe {
   final String id;
   final String recipeName;
-  final String producedItemId;
-  final String rawItemId;
+  final String rawItemSku;
+  final String rawItemName;
   final double rawQuantity;
   final String rawUnit;
+  final String producedItemName;
+  final String? producedItemSku;
   final double producedQuantity;
   final String producedUnit;
+  final String? yieldTypeCode;
+  final String? posOutletItemId;
+  /// UUID of the produced item row in inventory_items (kitchen_ledger store type)
+  final String? producedInventoryItemId;
+  /// UUID of the raw item row in inventory_items used by the backend for consumption tracking
+  final String? rawInventoryItemId;
+
+  /// Deprecated helper getter for backward compatibility with old code/tests
+  String get producedItemId => producedInventoryItemId ?? '';
+  /// Deprecated helper getter for backward compatibility with old code/tests
+  String get rawItemId => rawInventoryItemId ?? rawItemSku;
+
 
   KitchenProductionRecipe({
     required this.id,
     required this.recipeName,
-    required this.producedItemId,
-    required this.rawItemId,
+    required this.rawItemSku,
+    required this.rawItemName,
     required this.rawQuantity,
     required this.rawUnit,
+    required this.producedItemName,
+    this.producedItemSku,
     required this.producedQuantity,
     required this.producedUnit,
+    this.yieldTypeCode,
+    this.posOutletItemId,
+    this.producedInventoryItemId,
+    this.rawInventoryItemId,
   });
 
   factory KitchenProductionRecipe.fromJson(Map<String, dynamic> json) {
     return KitchenProductionRecipe(
-      id: json['id'] as String,
-      recipeName: json['recipe_name'] as String,
-      producedItemId: json['produced_item_id'] as String,
-      rawItemId: json['raw_item_id'] as String,
+      id: json['id']?.toString() ?? '',
+      recipeName: json['recipe_name']?.toString() ?? '',
+      rawItemSku: json['raw_item_sku']?.toString() ?? '',
+      rawItemName: json['raw_item_name']?.toString() ?? '',
       rawQuantity: (json['raw_quantity'] as num?)?.toDouble() ?? 0.0,
-      rawUnit: json['raw_unit'] as String,
+      rawUnit: json['raw_unit']?.toString() ?? 'unit',
+      producedItemName: json['produced_item_name']?.toString() ?? '',
+      producedItemSku: json['produced_item_sku']?.toString(),
       producedQuantity: (json['produced_quantity'] as num?)?.toDouble() ?? 0.0,
-      producedUnit: json['produced_unit'] as String,
+      producedUnit: json['produced_unit']?.toString() ?? 'portion',
+      yieldTypeCode: json['yield_type_code']?.toString(),
+      posOutletItemId: json['pos_outlet_item_id']?.toString(),
+      producedInventoryItemId: (json['produced_inventory_item_id'] ?? json['produced_item_id'])?.toString(),
+      // raw_inventory_item_id is not a direct API field; the backend resolves it
+      // from raw_item_sku — store null here, caller uses rawItemSku instead.
+      rawInventoryItemId: json['raw_item_id']?.toString(),
     );
   }
 }
+
 
 class KitchenShiftAddition {
   final String id;
@@ -252,6 +281,8 @@ class KitchenPrepBatch {
   final String? returnNotes;
   final String sentAt;
   final String? returnedAt;
+  /// Multi-output breakdown: [{sku, name, quantity, unit, inventory_item_id}]
+  final List<Map<String, dynamic>> extraOutputs;
 
   KitchenPrepBatch({
     required this.id,
@@ -280,6 +311,7 @@ class KitchenPrepBatch {
     this.returnNotes,
     required this.sentAt,
     this.returnedAt,
+    this.extraOutputs = const [],
   });
 
   factory KitchenPrepBatch.fromJson(Map<String, dynamic> json) {
@@ -314,6 +346,10 @@ class KitchenPrepBatch {
       returnNotes: json['return_notes'] as String?,
       sentAt: json['sent_at'] as String? ?? '',
       returnedAt: json['returned_at'] as String?,
+      extraOutputs: (json['extra_outputs'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          const [],
     );
   }
 }

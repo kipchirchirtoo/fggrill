@@ -381,6 +381,23 @@ class KitchenRepository {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getLinkableMenuItems() async {
+    try {
+      final branchId = await _branchId;
+      final response = await _dio.get('/kitchen/shifts/recipes/menu-items',
+          queryParameters: {
+            if (branchId != null) 'branch_id': branchId,
+          });
+      final list = response.data is List
+          ? response.data
+          : (response.data is Map ? (response.data['data'] ?? []) : []);
+      return _parseMapList(list);
+    } catch (e) {
+      debugPrint('KitchenRepository.getLinkableMenuItems error: $e');
+      return [];
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getRecipeCatalog() async {
     try {
       final branchId = await _branchId;
@@ -496,6 +513,24 @@ class KitchenRepository {
       return [];
     }
   }
+
+  /// Fetches kitchen ledger items — sub-assembly / produced items that result
+  /// from PRODUCTION and COMPLEX yield-type recipes in Food Control Standards.
+  Future<List<Map<String, dynamic>>> getKitchenLedgerItems({
+    int limit = 500,
+  }) async {
+    try {
+      final response = await _dio.get('/store/items', queryParameters: {
+        'store_type': 'kitchen_ledger',
+        'limit': limit,
+      });
+      return _parseMapList(response.data);
+    } catch (e) {
+      debugPrint('KitchenRepository.getKitchenLedgerItems error: $e');
+      return [];
+    }
+  }
+
 
   Future<void> addStock(
       String shiftId, List<Map<String, dynamic>> items) async {

@@ -10,7 +10,6 @@ import '../domain/providers.dart';
 enum YieldType { complex, ratio, direct, subAssembly }
 enum StocktakeControlMode { rawOnly, producedOnly, both, none }
 enum StocktakeLocation { kitchen, store, both, none }
-enum PrepStageCode { peel, cut, other }
 
 String _yieldTypeLabel(String? value) {
   switch ((value ?? '').toUpperCase()) {
@@ -27,29 +26,6 @@ String _yieldTypeLabel(String? value) {
   }
 }
 
-String _prepStageCodeLabel(String? value) {
-  switch ((value ?? '').toUpperCase()) {
-    case 'PEEL':
-      return 'Peel';
-    case 'CUT':
-      return 'Cut';
-    case 'PREP_OTHER':
-      return 'Other Prep';
-    default:
-      return 'No Prep Stage';
-  }
-}
-
-String _prepStageCodeValue(PrepStageCode value) {
-  switch (value) {
-    case PrepStageCode.peel:
-      return 'PEEL';
-    case PrepStageCode.cut:
-      return 'CUT';
-    case PrepStageCode.other:
-      return 'PREP_OTHER';
-  }
-}
 
 String _stocktakeControlLabel(String? value) {
   switch ((value ?? '').toUpperCase()) {
@@ -288,11 +264,24 @@ class _RecipeStandardsTab extends ConsumerWidget {
                           'Produces ${outputs.length} distinct item(s)',
                           style: TextStyle(
                               color: Colors.grey.shade600, fontSize: 13)),
-                      trailing: IconButton(
-                        icon:
-                            const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () => _confirmDelete(context, ref,
-                            recipe['all_recipe_ids'] as List<String>),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined,
+                                color: Color(0xFF1D4ED8)),
+                            tooltip: 'Edit standard',
+                            onPressed: () =>
+                                _showEditDialog(context, ref, recipe),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.red),
+                            tooltip: 'Deactivate standard',
+                            onPressed: () => _confirmDelete(context, ref,
+                                recipe['all_recipe_ids'] as List<String>),
+                          ),
+                        ],
                       ),
                       children: [
                         Padding(
@@ -328,23 +317,9 @@ class _RecipeStandardsTab extends ConsumerWidget {
                                 ),
                               ),
                               if (recipe['prep_stage_code'] != null)
-                                Chip(
+                                const Chip(
                                   visualDensity: VisualDensity.compact,
-                                  label: Text(
-                                    'Stage: ${_prepStageCodeLabel(recipe['prep_stage_code']?.toString())}',
-                                  ),
-                                ),
-                              if (recipe['prep_stage_group'] != null &&
-                                  recipe['prep_stage_group']
-                                      .toString()
-                                      .trim()
-                                      .isNotEmpty)
-                                Chip(
-                                  visualDensity: VisualDensity.compact,
-                                  label: Text(
-                                    'Flow: ${recipe['prep_stage_group']}'
-                                    '${recipe['prep_stage_order'] == null ? '' : ' â€¢ #${recipe['prep_stage_order']}'}',
-                                  ),
+                                  label: Text('Prep Return Flow'),
                                 ),
                             ],
                           ),
@@ -439,6 +414,17 @@ class _RecipeStandardsTab extends ConsumerWidget {
         );
       }
     }
+  }
+
+  void _showEditDialog(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> recipe) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AddStandardDialog(editData: recipe),
+    ).then((_) {
+      ref.invalidate(kitchenRecipesProvider);
+    });
   }
 
   void _confirmDelete(
@@ -2184,9 +2170,12 @@ class AddStandardDialog extends ConsumerStatefulWidget {
   const AddStandardDialog({
     super.key,
     this.isPrepFlow = false,
+    this.editData,
   });
 
   final bool isPrepFlow;
+  /// When set, the dialog opens in edit mode pre-populated with this recipe group.
+  final Map<String, dynamic>? editData;
 
   @override
   ConsumerState<AddStandardDialog> createState() => AddStandardDialogState();
@@ -2201,9 +2190,6 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
   bool _showAdvancedSettings = false;
   final _recipeNameController = TextEditingController();
   bool _isPrepFlow = false;
-  PrepStageCode _prepStageCode = PrepStageCode.peel;
-  final _prepStageGroupController = TextEditingController();
-  final _prepStageOrderController = TextEditingController(text: '1');
 
   // Raw Inputs
   final List<_RawInputRow> _rawInputs = [];
@@ -2224,15 +2210,130 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
   @override
   void initState() {
     super.initState();
-    _isPrepFlow = widget.isPrepFlow;
-    if (_isPrepFlow) {
-      _showAdvancedSettings = true;
-      _yieldType = YieldType.subAssembly;
-      _stocktakeControlMode =
-          _defaultStocktakeControlForYield(YieldType.subAssembly);
+    if (widget.editData != null) {
+      _populateFromEditData(widget.editData!);
+    } else {
+      _isPrepFlow = widget.isPrepFlow;
+      if (_isPrepFlow) {
+        _showAdvancedSettings = true;
+        _yieldType = YieldType.subAssembly;
+        _stocktakeControlMode =
+            _defaultStocktakeControlForYield(YieldType.subAssembly);
+      }
+      _rawInputs.add(_RawInputRow());
+      _complexOutputs.add(_ComplexOutputRow());
     }
-    _rawInputs.add(_RawInputRow()); // start with 1 row
-    _complexOutputs.add(_ComplexOutputRow()); // start with 1 row
+  }
+
+  void _populateFromEditData(Map<String, dynamic> data) {
+    // Yield type
+    final yieldCode = (data['yield_type_code'] ?? '').toString().toUpperCase();
+    _yieldType = switch (yieldCode) {
+      'COMPLEX' => YieldType.complex,
+      'SUB_ASSEMBLY' => YieldType.subAssembly,
+      'DIRECT' => YieldType.direct,
+      _ => YieldType.ratio,
+    };
+
+    // Recipe name
+    _recipeNameController.text = (data['recipe_name'] ?? '').toString();
+
+    // Stocktake settings
+    final controlMode =
+        (data['stocktake_control_mode'] ?? 'BOTH').toString().toUpperCase();
+    _stocktakeControlMode = switch (controlMode) {
+      'RAW_ONLY' => StocktakeControlMode.rawOnly,
+      'PRODUCED_ONLY' => StocktakeControlMode.producedOnly,
+      'NONE' => StocktakeControlMode.none,
+      _ => StocktakeControlMode.both,
+    };
+    final location =
+        (data['stocktake_location'] ?? 'KITCHEN').toString().toUpperCase();
+    _stocktakeLocation = switch (location) {
+      'STORE' => StocktakeLocation.store,
+      'BOTH' => StocktakeLocation.both,
+      'NONE' => StocktakeLocation.none,
+      _ => StocktakeLocation.kitchen,
+    };
+
+    // Prep flow / advanced settings
+    if ((data['prep_stage_code'] ?? '').toString().trim().isNotEmpty) {
+      _isPrepFlow = true;
+      _showAdvancedSettings = true;
+    }
+
+    // Raw inputs
+    final inputsList = (data['inputs'] as List?) ?? [];
+    if (inputsList.isNotEmpty) {
+      for (final input in inputsList) {
+        final row = _RawInputRow();
+        row.rawItem = {
+          'sku': input['raw_item_sku'],
+          'id': input['raw_item_sku'],
+          'item_name': input['raw_item_name'],
+          'name': input['raw_item_name'],
+        };
+        final unit = (input['unit'] ?? '').toString().trim();
+        row.selectedUnit = unit.isNotEmpty ? unit : null;
+        row.qtyController.text =
+            (input['quantity'] ?? 1.0).toString();
+        _rawInputs.add(row);
+      }
+    } else {
+      // Legacy single-input fields
+      final rawSku = (data['raw_item_sku'] ?? '').toString().trim();
+      if (rawSku.isNotEmpty && rawSku != 'MULTI') {
+        final row = _RawInputRow();
+        row.rawItem = {
+          'sku': rawSku,
+          'id': rawSku,
+          'item_name': data['raw_item_name'] ?? rawSku,
+          'name': data['raw_item_name'] ?? rawSku,
+        };
+        final unit = (data['raw_unit'] ?? '').toString().trim();
+        row.selectedUnit = unit.isNotEmpty ? unit : null;
+        row.qtyController.text =
+            (data['raw_quantity'] ?? 1.0).toString();
+        _rawInputs.add(row);
+      } else {
+        _rawInputs.add(_RawInputRow());
+      }
+    }
+
+    // Outputs
+    final outputsList = (data['outputs'] as List?) ?? [];
+    if (_yieldType == YieldType.complex) {
+      for (final out in outputsList) {
+        final row = _ComplexOutputRow();
+        row.posItem = {
+          'id': out['pos_outlet_item_id'],
+          'name': out['produced_item_name'],
+        };
+        row.qtyController.text =
+            (out['produced_quantity'] ?? 1.0).toString();
+        _complexOutputs.add(row);
+      }
+      if (_complexOutputs.isEmpty) _complexOutputs.add(_ComplexOutputRow());
+    } else if (_yieldType == YieldType.subAssembly) {
+      if (outputsList.isNotEmpty) {
+        _subAssemblyOutputNameController.text =
+            (outputsList.first['produced_item_name'] ?? '').toString();
+        _subAssemblyOutputQtyController.text =
+            (outputsList.first['produced_quantity'] ?? 1.0).toString();
+      }
+      _complexOutputs.add(_ComplexOutputRow());
+    } else {
+      // PRODUCTION or DIRECT — single output
+      if (outputsList.isNotEmpty) {
+        _selectedPosItemSingle = {
+          'id': outputsList.first['pos_outlet_item_id'],
+          'name': outputsList.first['produced_item_name'],
+        };
+        _singleOutputQtyController.text =
+            (outputsList.first['produced_quantity'] ?? 1.0).toString();
+      }
+      _complexOutputs.add(_ComplexOutputRow());
+    }
   }
 
   @override
@@ -2248,8 +2349,6 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
     _subAssemblyOutputNameController.dispose();
     _subAssemblyOutputQtyController.dispose();
     _recipeNameController.dispose();
-    _prepStageGroupController.dispose();
-    _prepStageOrderController.dispose();
     super.dispose();
   }
 
@@ -2301,8 +2400,11 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('New Food Control Standard',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(
+                widget.editData != null
+                    ? 'Edit Food Control Standard'
+                    : 'New Food Control Standard',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             const Divider(height: 32),
             Expanded(
               child: Scrollbar(
@@ -2645,11 +2747,13 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
             ],
 
             const SizedBox(height: 24),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                border: Border.all(color: Colors.grey.shade200),
+            Card(
+              elevation: 0,
+              color: Colors.grey.shade50,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade200),
               ),
               child: ExpansionTile(
                 key: ValueKey<bool>(_showAdvancedSettings),
@@ -2671,67 +2775,12 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     value: _isPrepFlow,
-                    title: const Text('This standard is part of a prep flow'),
+                    title: const Text('Use Prep Return Flow'),
                     subtitle: const Text(
-                      'Use this only for staged work like potatoes to peeled potatoes or cut chips.',
+                      'Enable when raw stock is sent for preparation, received back as usable prepared stock, then issued to the kitchen.',
                     ),
                     onChanged: (value) => setState(() => _isPrepFlow = value),
                   ),
-                  if (_isPrepFlow) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<PrepStageCode>(
-                            initialValue: _prepStageCode,
-                            decoration: const InputDecoration(
-                              labelText: 'Prep Stage',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: PrepStageCode.peel,
-                                child: Text('Peel'),
-                              ),
-                              DropdownMenuItem(
-                                value: PrepStageCode.cut,
-                                child: Text('Cut'),
-                              ),
-                              DropdownMenuItem(
-                                value: PrepStageCode.other,
-                                child: Text('Other Prep'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() => _prepStageCode = value);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _prepStageOrderController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Stage Order',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _prepStageGroupController,
-                      decoration: const InputDecoration(
-                        labelText: 'Prep Flow Group',
-                        hintText: 'Example: Potato Flow',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -2845,7 +2894,9 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
                           child: CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2))
                       : const Icon(Icons.save),
-                  label: const Text('Save Standard'),
+                  label: Text(widget.editData != null
+                      ? 'Update Standard'
+                      : 'Save Standard'),
                 ),
               ],
             )
@@ -3179,9 +3230,8 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
           return;
         }
         inputs.add({
-          'raw_item_sku': r.rawItem!['item_id'] ??
-              r.rawItem!['id'] ??
-              r.rawItem!['sku'] ??
+          'raw_item_sku': r.rawItem!['sku'] ??
+              r.rawItem!['item_id'] ??
               'UNK',
           'raw_item_name':
               r.rawItem!['item_name'] ?? r.rawItem!['name'] ?? 'Unknown',
@@ -3278,29 +3328,84 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
           break;
       }
 
-      final payload = {
-        if (_recipeNameController.text.trim().isNotEmpty)
-          'recipe_name': _recipeNameController.text.trim(),
-        'yield_type_code': yieldTypeCode,
-        'stocktake_control_mode':
-            _stocktakeControlCode(_stocktakeControlMode),
-        'stocktake_location': _stocktakeLocationCode(_stocktakeLocation),
-        'prep_stage_code':
-            _isPrepFlow ? _prepStageCodeValue(_prepStageCode) : null,
-        'prep_stage_group':
-            _isPrepFlow ? _prepStageGroupController.text.trim() : null,
-        'prep_stage_order': _isPrepFlow
-            ? int.tryParse(_prepStageOrderController.text.trim())
-            : null,
-        'inputs': inputs,
-        'outputs': outputs,
-      };
+      final repo = ref.read(branchAccountantRepositoryProvider);
 
-      await ref
-          .read(branchAccountantRepositoryProvider)
-          .saveKitchenRecipe(payload);
+      if (widget.editData != null) {
+        // ── EDIT MODE ────────────────────────────────────────────────────────
+        final existingIds =
+            List<String>.from(widget.editData!['all_recipe_ids'] as List);
+
+        // Build pos_outlet_item_id → recipe_id map from original data so
+        // edits match by output identity rather than fragile positional index.
+        final existingOutputs = ((widget.editData!['outputs'] as List?) ?? [])
+            .map((o) => Map<String, dynamic>.from(o as Map))
+            .toList();
+        final idByPosItem = <String, String>{};
+        for (int i = 0; i < existingOutputs.length && i < existingIds.length; i++) {
+          final posId = existingOutputs[i]['pos_outlet_item_id']?.toString();
+          if (posId != null && posId.isNotEmpty) {
+            idByPosItem[posId] = existingIds[i];
+          }
+        }
+
+        final basePayload = {
+          if (_recipeNameController.text.trim().isNotEmpty)
+            'recipe_name': _recipeNameController.text.trim(),
+          'yield_type_code': yieldTypeCode,
+          'stocktake_control_mode': _stocktakeControlCode(_stocktakeControlMode),
+          'stocktake_location': _stocktakeLocationCode(_stocktakeLocation),
+          'prep_stage_code': _isPrepFlow ? 'PREP_FLOW' : null,
+          'inputs': inputs,
+        };
+
+        final usedRecipeIds = <String>{};
+        for (final output in outputs) {
+          final outputFields = {
+            'produced_item_name': output['produced_item_name'],
+            'produced_quantity': output['produced_quantity'],
+            'produced_unit': output['produced_unit'],
+            'pos_outlet_item_id': output['pos_outlet_item_id'],
+          };
+          final posId = output['pos_outlet_item_id']?.toString();
+          final existingRecipeId =
+              (posId != null && posId.isNotEmpty) ? idByPosItem[posId] : null;
+          if (existingRecipeId != null) {
+            await repo.updateKitchenRecipe(
+                existingRecipeId, {...basePayload, ...outputFields});
+            usedRecipeIds.add(existingRecipeId);
+          } else {
+            await repo.saveKitchenRecipe({
+              ...basePayload,
+              'outputs': [output],
+            });
+          }
+        }
+        // Deactivate recipe rows whose output was removed
+        for (final id in existingIds) {
+          if (!usedRecipeIds.contains(id)) {
+            await repo.deactivateKitchenRecipe(id);
+          }
+        }
+      } else {
+        // ── CREATE MODE ──────────────────────────────────────────────────────
+        final payload = {
+          if (_recipeNameController.text.trim().isNotEmpty)
+            'recipe_name': _recipeNameController.text.trim(),
+          'yield_type_code': yieldTypeCode,
+          'stocktake_control_mode': _stocktakeControlCode(_stocktakeControlMode),
+          'stocktake_location': _stocktakeLocationCode(_stocktakeLocation),
+          'prep_stage_code': _isPrepFlow ? 'PREP_FLOW' : null,
+          'inputs': inputs,
+          'outputs': outputs,
+        };
+        await repo.saveKitchenRecipe(payload);
+      }
+
       if (mounted) {
-        AppNotifier.show(context, 'Food Control Standard saved successfully.');
+        AppNotifier.show(context,
+            widget.editData != null
+                ? 'Standard updated — changes apply from now onwards.'
+                : 'Food Control Standard saved successfully.');
         Navigator.pop(context);
       }
     } catch (e) {

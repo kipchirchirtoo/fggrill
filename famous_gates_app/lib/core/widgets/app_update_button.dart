@@ -88,16 +88,6 @@ class _UpdateButtonBody extends StatelessWidget {
     final hasUpdate = isDesktopUpdateAvailable(status);
     final ready = status == UpdatStatus.readyToInstall;
     final color = iconColor ?? AppColors.kTextSecondary;
-    final tooltip = switch (status) {
-      UpdatStatus.available ||
-      UpdatStatus.availableWithChangelog =>
-        'Download update ${latestVersion ?? ''}',
-      UpdatStatus.downloading => 'Downloading update',
-      UpdatStatus.readyToInstall => 'Install downloaded update',
-      UpdatStatus.upToDate => 'App is up to date. Check again',
-      UpdatStatus.error => 'Update check failed. Try again',
-      _ => 'Check for desktop updates',
-    };
 
     if (!compact) {
       return OutlinedButton.icon(
@@ -108,7 +98,7 @@ class _UpdateButtonBody extends StatelessWidget {
     }
 
     return Tooltip(
-      message: tooltip,
+      message: '',
       child: Stack(
         clipBehavior: Clip.none,
         children: [

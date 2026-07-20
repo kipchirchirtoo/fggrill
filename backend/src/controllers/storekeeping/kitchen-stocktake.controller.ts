@@ -670,7 +670,10 @@ const fetchKitchenStandardsCatalog = async (
 
   const rawEntries: StandardsCatalogRow[] = [];
   for (const row of (recipeRows || []) as any[]) {
-    if (includesKitchenStocktake(row.stocktake_location) && includesRawSide(row.stocktake_control_mode)) {
+    // COMPLEX recipes (raw_item_sku='MULTI') have multiple inputs stored in
+    // kitchen_production_recipe_inputs — each is added individually below.
+    const isMultiInput = String(row.raw_item_sku || '').trim().toUpperCase() === 'MULTI';
+    if (!isMultiInput && includesKitchenStocktake(row.stocktake_location) && includesRawSide(row.stocktake_control_mode)) {
       rawEntries.push({
         item_id: null,
         item_name: String(row.raw_item_name || '').trim(),
@@ -1266,6 +1269,38 @@ const buildKitchenStocktakeContext = async (
         system_qty: systemQty,
       } satisfies StocktakeContextRow;
     }).filter(Boolean) as StocktakeContextRow[];
+
+    // Supplement: add any standards not covered by shift items so newly-configured
+    // recipes appear even if they weren't in the opening seed.
+    const coveredNames = new Set(rows.map((r) => normalizeName(r.item_name)));
+    for (const standard of standardsCatalog.entries) {
+      const key = normalizeName(standard.item_name);
+      if (coveredNames.has(key)) continue;
+      const saved =
+        itemsByKey.get(String(standard.item_id || '')) ||
+        itemsByKey.get(key) ||
+        null;
+      const closing = saved?.closing_qty != null ? num(saved.closing_qty) : 0;
+      rows.push({
+        item_id: standard.item_id || null,
+        item_name: standard.item_name,
+        opening_qty: 0,
+        added_qty: 0,
+        sold_qty: 0,
+        spoilage_qty: 0,
+        closing_qty: closing,
+        variance: closing,
+        explanation: saved?.explanation ?? null,
+        action_taken: saved?.action_taken ?? null,
+        unit: standard.unit || null,
+        category: standard.category || null,
+        item_type: standard.standard_type,
+        channel: standard.default_channel,
+        item_sku: standard.item_sku || null,
+        expected_qty: 0,
+        system_qty: 0,
+      });
+    }
   } else {
     const previousRows = await getPreviousKitchenStocktakeSeedRows(
       branchId,

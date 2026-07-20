@@ -17,7 +17,7 @@ class AppNotificationButton extends ConsumerWidget {
     final count = countAsync.valueOrNull ?? 0;
 
     return Tooltip(
-      message: 'Notifications',
+      message: '',
       child: Stack(
         clipBehavior: Clip.none,
         children: [
