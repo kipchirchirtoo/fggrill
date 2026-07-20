@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../auth/domain/auth_notifier.dart';
+import '../../branch_accountant/presentation/food_control_standards_screen.dart';
 import '../data/repository.dart';
 import '../domain/session_models.dart';
 
@@ -84,10 +85,12 @@ class _KitchenPrepBatchesScreenState
       final rawSku = (recipe['raw_item_sku'] ?? '').toString().trim();
       final producedName = (recipe['produced_item_name'] ?? '').toString().trim();
       final yieldType = (recipe['yield_type_code'] ?? '').toString().trim();
+      final prepStageCode = (recipe['prep_stage_code'] ?? '').toString().trim();
       return rawSku.isNotEmpty &&
           rawSku != 'MULTI' &&
           producedName.isNotEmpty &&
-          yieldType.toUpperCase() != 'DIRECT';
+          yieldType.toUpperCase() != 'DIRECT' &&
+          prepStageCode.isNotEmpty;
     }).toList()
       ..sort((a, b) {
         final left =
@@ -502,13 +505,36 @@ class _KitchenPrepBatchesScreenState
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Send Raw Stock for Prep',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                              color: Color(0xFF0F2E5E),
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Send Raw Stock for Prep',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 18,
+                                  color: Color(0xFF0F2E5E),
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (_) => const AddStandardDialog(
+                                      isPrepFlow: true,
+                                    ),
+                                  ).then((_) {
+                                    _load();
+                                  });
+                                },
+                                icon: const Icon(Icons.settings, size: 16),
+                                label: const Text(
+                                  'New Prep Standard',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 6),
                           Text(

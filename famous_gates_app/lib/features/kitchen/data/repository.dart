@@ -383,7 +383,11 @@ class KitchenRepository {
 
   Future<List<Map<String, dynamic>>> getRecipeCatalog() async {
     try {
-      final response = await _dio.get('/kitchen/shifts/recipes/list');
+      final branchId = await _branchId;
+      final response = await _dio.get('/kitchen/shifts/recipes/list',
+          queryParameters: {
+            if (branchId != null) 'branch_id': branchId,
+          });
       return _parseMapList(response.data is Map ? response.data['data'] : response.data);
     } catch (e) {
       debugPrint('KitchenRepository.getRecipeCatalog error: $e');

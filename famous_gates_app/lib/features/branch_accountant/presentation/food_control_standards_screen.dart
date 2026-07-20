@@ -155,7 +155,7 @@ class FoodControlStandardsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _AddStandardDialog(),
+      builder: (_) => const AddStandardDialog(),
     ).then((_) {
       ref.invalidate(kitchenRecipesProvider);
     });
@@ -2180,14 +2180,19 @@ class _AddChannelStandardDialogState
   }
 }
 
-class _AddStandardDialog extends ConsumerStatefulWidget {
-  const _AddStandardDialog();
+class AddStandardDialog extends ConsumerStatefulWidget {
+  const AddStandardDialog({
+    super.key,
+    this.isPrepFlow = false,
+  });
+
+  final bool isPrepFlow;
 
   @override
-  ConsumerState<_AddStandardDialog> createState() => _AddStandardDialogState();
+  ConsumerState<AddStandardDialog> createState() => AddStandardDialogState();
 }
 
-class _AddStandardDialogState extends ConsumerState<_AddStandardDialog> {
+class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
   final ScrollController _dialogScrollController = ScrollController();
   YieldType _yieldType = YieldType.ratio;
   StocktakeControlMode _stocktakeControlMode =
@@ -2219,6 +2224,13 @@ class _AddStandardDialogState extends ConsumerState<_AddStandardDialog> {
   @override
   void initState() {
     super.initState();
+    _isPrepFlow = widget.isPrepFlow;
+    if (_isPrepFlow) {
+      _showAdvancedSettings = true;
+      _yieldType = YieldType.subAssembly;
+      _stocktakeControlMode =
+          _defaultStocktakeControlForYield(YieldType.subAssembly);
+    }
     _rawInputs.add(_RawInputRow()); // start with 1 row
     _complexOutputs.add(_ComplexOutputRow()); // start with 1 row
   }
