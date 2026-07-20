@@ -5,10 +5,11 @@ import '../stock_take/stock_take_page.dart';
 /// Bar Stocktake — embeds StockTakePage directly so bar stock loads
 /// immediately when the user navigates to this section.
 class BarStocktakeScreen extends StatelessWidget {
-  const BarStocktakeScreen({super.key});
+  final VoidCallback? onBack;
+  const BarStocktakeScreen({super.key, this.onBack});
 
   @override
   Widget build(BuildContext context) {
-    return const StockTakePage(stockTakeType: StockTakeType.bar);
+    return StockTakePage(stockTakeType: StockTakeType.bar, onBack: onBack);
   }
 }

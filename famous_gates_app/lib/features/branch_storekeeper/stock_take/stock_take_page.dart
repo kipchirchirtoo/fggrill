@@ -12,10 +12,12 @@ import 'widgets/bottom_action_bar.dart';
 
 class StockTakePage extends ConsumerStatefulWidget {
   final StockTakeType stockTakeType;
+  final VoidCallback? onBack;
 
   const StockTakePage({
     super.key,
     required this.stockTakeType,
+    this.onBack,
   });
 
   @override
@@ -143,7 +145,13 @@ class _StockTakePageState extends ConsumerState<StockTakePage> {
         foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (widget.onBack != null) {
+              widget.onBack!();
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

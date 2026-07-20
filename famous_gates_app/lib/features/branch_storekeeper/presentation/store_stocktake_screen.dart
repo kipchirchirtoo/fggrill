@@ -5,10 +5,11 @@ import '../stock_take/stock_take_page.dart';
 /// Store Stocktake — embeds StockTakePage directly so store items load
 /// immediately when the user navigates to this section.
 class StoreStocktakeScreen extends StatelessWidget {
-  const StoreStocktakeScreen({super.key});
+  final VoidCallback? onBack;
+  const StoreStocktakeScreen({super.key, this.onBack});
 
   @override
   Widget build(BuildContext context) {
-    return const StockTakePage(stockTakeType: StockTakeType.store);
+    return StockTakePage(stockTakeType: StockTakeType.store, onBack: onBack);
   }
 }

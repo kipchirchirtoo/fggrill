@@ -1144,11 +1144,17 @@ class _BranchStorekeeperDashboardState
       case BranchStorekeeperSection.kitchenProductionLog:
         return const KitchenProductionLoggingScreen();
       case BranchStorekeeperSection.storeStocktake:
-        return const StoreStocktakeScreen();
+        return StoreStocktakeScreen(
+          onBack: () => setState(() => _section = BranchStorekeeperSection.overview),
+        );
       case BranchStorekeeperSection.barStocktake:
-        return const BarStocktakeScreen();
+        return BarStocktakeScreen(
+          onBack: () => setState(() => _section = BranchStorekeeperSection.overview),
+        );
       case BranchStorekeeperSection.kitchenStocktake:
-        return const KitchenStocktakeScreen();
+        return KitchenStocktakeScreen(
+          onBack: () => setState(() => _section = BranchStorekeeperSection.overview),
+        );
       case BranchStorekeeperSection.recordSpoilage:
         return const RecordSpoilageScreen();
       case BranchStorekeeperSection.wastageReport:

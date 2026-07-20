@@ -9,7 +9,8 @@ import '../data/branch_storekeeper_repository.dart';
 import 'record_spoilage_screen.dart';
 
 class KitchenStocktakeScreen extends ConsumerStatefulWidget {
-  const KitchenStocktakeScreen({super.key});
+  final VoidCallback? onBack;
+  const KitchenStocktakeScreen({super.key, this.onBack});
 
   @override
   ConsumerState<KitchenStocktakeScreen> createState() =>
@@ -381,7 +382,13 @@ class _KitchenStocktakeScreenState
                           child: OutlinedButton(
                             onPressed: _saving
                                 ? null
-                                : () => Navigator.of(context).pop(),
+                                : () {
+                                    if (widget.onBack != null) {
+                                      widget.onBack!();
+                                    } else {
+                                      Navigator.of(context).pop();
+                                    }
+                                  },
                             child: const Text('Back'),
                           ),
                         ),
