@@ -559,7 +559,7 @@ class _LedgerTable extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: StickyHorizontalScrollbar(
-          contentWidth: locked ? 716 : 636,
+          contentWidth: locked ? 748 : 636,
           child: Column(
             children: [
               Container(
