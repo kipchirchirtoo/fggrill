@@ -2395,10 +2395,7 @@ export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: R
         .order('name', { ascending: true });
     if (error) throw new AppError(error.message, 500);
     
-    // Filter out Bar items so Kitchen only sees Restaurant items
-    const restaurantItems = (data || []).filter((item: any) => !isBarItem(item));
-    
-    res.json({ success: true, data: restaurantItems });
+    res.json({ success: true, data: data || [] });
 });
 
 // ── FOOD CONTROL TYPE CONFIG (Phase 1) ───────────────────────

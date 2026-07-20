@@ -90,12 +90,16 @@ export const getSpoilageCandidates = async (req: Request, res: Response, next: N
         }
 
         // store
-        const { data: items, error } = await supabase
+        let query = supabase
             .from('inventory_items')
-            .select('id, sku, item_name, unit, category, store_type')
-            .not('store_type', 'in', '(bar_store)')
-            .eq('is_active', true)
-            .order('item_name');
+            .select('id, sku, item_name, unit, category, store_type, branch_id')
+            .eq('is_active', true);
+
+        if (branchId) {
+            query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+        }
+
+        const { data: items, error } = await query.order('item_name');
         if (error) throw error;
         const result = (items || []).map((i: any) => ({
             id: i.id,
