@@ -179,7 +179,12 @@ class _RecipeStandardsTab extends ConsumerWidget {
             children: [
               IconButton(
                 icon: const Icon(Icons.refresh, color: AppColors.kPrimary),
-                onPressed: () => ref.invalidate(kitchenRecipesProvider),
+                onPressed: () {
+                  ref.invalidate(kitchenRecipesProvider);
+                  ref.invalidate(directFoodControlItemsProvider);
+                  ref.invalidate(rawStockCandidatesProvider);
+                  ref.invalidate(linkableMenuItemsProvider);
+                },
               ),
               const Spacer(),
               FilledButton.icon(
@@ -2984,61 +2989,59 @@ class _AddStandardDialogState extends ConsumerState<_AddStandardDialog> {
             ],
           ),
           const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _complexOutputs.length,
-              itemBuilder: (context, index) {
-                final row = _complexOutputs[index];
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(_complexOutputs.length, (index) {
+              final row = _complexOutputs[index];
 
-                final List<String> otherSelectedIds = _complexOutputs
-                    .where((r) => r != row && r.posItem != null)
-                    .map((r) => r.posItem!['id']?.toString() ?? '')
-                    .where((id) => id.isNotEmpty)
-                    .toList();
+              final List<String> otherSelectedIds = _complexOutputs
+                  .where((r) => r != row && r.posItem != null)
+                  .map((r) => r.posItem!['id']?.toString() ?? '')
+                  .where((id) => id.isNotEmpty)
+                  .toList();
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: _buildAutocomplete(
-                          posItems,
-                          'Search POS Item',
-                          row.posItem,
-                          (v) => setState(() => row.posItem = v),
-                          excludeIds: otherSelectedIds,
-                        ),
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: _buildAutocomplete(
+                        posItems,
+                        'Search POS Item',
+                        row.posItem,
+                        (v) => setState(() => row.posItem = v),
+                        excludeIds: otherSelectedIds,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: row.qtyController,
-                          decoration: const InputDecoration(
-                              labelText: 'Yield Qty',
-                              border: OutlineInputBorder(),
-                              isDense: true),
-                          keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(
-                                RegExp(r'^\d*\.?\d*')),
-                          ],
-                        ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: row.qtyController,
+                        decoration: const InputDecoration(
+                            labelText: 'Yield Qty',
+                            border: OutlineInputBorder(),
+                            isDense: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d*')),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () {
-                          if (_complexOutputs.length > 1) {
-                            setState(() => _complexOutputs.removeAt(index));
-                          }
-                        },
-                      )
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.red),
+                      onPressed: () {
+                        if (_complexOutputs.length > 1) {
+                          setState(() => _complexOutputs.removeAt(index));
+                        }
+                      },
+                    )
+                  ],
+                ),
+              );
+            }),
           )
         ],
       );
