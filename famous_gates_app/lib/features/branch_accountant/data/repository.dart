@@ -190,7 +190,10 @@ class BranchAccountantRepository {
 
   // ── Food Control Standards (Recipes) ──────────────────────────────────────
   Future<List<Map<String, dynamic>>> getKitchenRecipes() async {
-    return _getList('/kitchen/shifts/recipes/list');
+    final branchId = await getBranchId();
+    return _getList('/kitchen/shifts/recipes/list', query: {
+      if (branchId.isNotEmpty) 'branch_id': branchId,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getLinkableMenuItems() async {

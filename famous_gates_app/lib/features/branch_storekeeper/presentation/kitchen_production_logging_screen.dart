@@ -472,9 +472,9 @@ class _ProductionLoggingLedgerState
                 icon: Icons.search,
                 child: _recipes.isEmpty
                     ? const Text(
-                        'No true batch-production standards are configured yet.',
+                        'No true batch-production standards are configured yet. Add Production (Batch) standards in Branch Accountant → Food Control Standards.',
                       )
-                    : _RecipeAutocompleteField(
+                    : _RecipePickerSection(
                         recipes: _recipes,
                         selectedRecipe: _selectedRecipe,
                         onSelected: _selectRecipe,
@@ -893,8 +893,8 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _RecipeAutocompleteField extends StatelessWidget {
-  const _RecipeAutocompleteField({
+class _RecipePickerSection extends StatefulWidget {
+  const _RecipePickerSection({
     required this.recipes,
     required this.selectedRecipe,
     required this.onSelected,
@@ -907,87 +907,162 @@ class _RecipeAutocompleteField extends StatelessWidget {
   final VoidCallback onCleared;
 
   @override
+  State<_RecipePickerSection> createState() => _RecipePickerSectionState();
+}
+
+class _RecipePickerSectionState extends State<_RecipePickerSection> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_query.isEmpty) return widget.recipes;
+    return widget.recipes.where((recipe) {
+      final haystack = [
+        recipe['produced_item_name']?.toString() ?? '',
+        recipe['recipe_name']?.toString() ?? '',
+        recipe['produced_item_sku']?.toString() ?? '',
+      ].join(' ').toLowerCase();
+      return haystack.contains(_query);
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Autocomplete<Map<String, dynamic>>(
-      displayStringForOption: (recipe) =>
-          (recipe['produced_item_name'] ?? recipe['recipe_name'] ?? '')
-              .toString(),
-      optionsBuilder: (textEditingValue) {
-        final query = textEditingValue.text.trim().toLowerCase();
-        if (query.isEmpty) {
-          return recipes.take(12);
-        }
-        return recipes.where((recipe) {
-          final haystack = [
-            recipe['produced_item_name']?.toString() ?? '',
-            recipe['recipe_name']?.toString() ?? '',
-            recipe['produced_item_sku']?.toString() ?? '',
-          ].join(' ').toLowerCase();
-          return haystack.contains(query);
-        }).take(12);
-      },
-      onSelected: onSelected,
-      fieldViewBuilder: (context, controller, focusNode, _) {
-        if (selectedRecipe != null && controller.text.isEmpty) {
-          controller.text = (selectedRecipe!['produced_item_name'] ??
-                  selectedRecipe!['recipe_name'] ??
-                  '')
-              .toString();
-        }
-        return TextFormField(
-          controller: controller,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-            labelText: 'Search batch-production item',
-            hintText: 'Mango Juice Batch, Chapati Batch, Sauce, Cake...',
-            border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: selectedRecipe != null
-                ? IconButton(
-                    onPressed: () {
-                      controller.clear();
-                      onCleared();
-                    },
-                    icon: const Icon(Icons.clear),
-                  )
-                : null,
-          ),
-        );
-      },
-      optionsViewBuilder: (context, onSelected, options) {
-        final matches = options.toList();
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(12),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520, maxHeight: 280),
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: matches.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final recipe = matches[index];
-                  return ListTile(
-                    title: Text(
-                      (recipe['produced_item_name'] ??
-                              recipe['recipe_name'] ??
-                              'Unnamed item')
-                          .toString(),
-                    ),
-                    subtitle: Text(
-                      '${recipe['yield_type_code'] ?? 'PRODUCTION'} • ${recipe['produced_quantity'] ?? '?'} ${recipe['produced_unit'] ?? ''}',
-                    ),
-                    onTap: () => onSelected(recipe),
-                  );
-                },
+    if (widget.selectedRecipe != null) {
+      final recipe = widget.selectedRecipe!;
+      final name = (recipe['produced_item_name'] ?? recipe['recipe_name'] ?? 'Selected Item').toString();
+      final qty = recipe['produced_quantity']?.toString() ?? '?';
+      final unit = (recipe['produced_unit'] ?? 'pcs').toString();
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.kPrimary.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.kPrimary.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: AppColors.kPrimary, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text('Expected output: $qty $unit', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                ],
               ),
             ),
+            TextButton.icon(
+              onPressed: widget.onCleared,
+              icon: const Icon(Icons.close, size: 16),
+              label: const Text('Change'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final filtered = _filtered;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: _searchController,
+          decoration: const InputDecoration(
+            hintText: 'Search batch-production item...',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.search),
+            isDense: true,
           ),
-        );
-      },
+          onChanged: (value) => setState(() => _query = value.trim().toLowerCase()),
+        ),
+        const SizedBox(height: 12),
+        if (filtered.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'No matching items found.',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          )
+        else
+          Column(
+            children: filtered.map((recipe) {
+              final name = (recipe['produced_item_name'] ?? recipe['recipe_name'] ?? 'Unnamed').toString();
+              final qty = recipe['produced_quantity']?.toString() ?? '?';
+              final unit = (recipe['produced_unit'] ?? 'pcs').toString();
+              final inputs = ((recipe['inputs'] as List?) ?? const [])
+                  .whereType<Map>()
+                  .toList();
+              final inputSummary = inputs.isEmpty
+                  ? (recipe['raw_item_name']?.toString() ?? '')
+                  : inputs
+                      .map((i) => '${i['raw_item_name'] ?? i['raw_item_sku'] ?? ''} ${i['quantity'] ?? ''} ${i['unit'] ?? ''}'.trim())
+                      .join(' + ');
+
+              return InkWell(
+                onTap: () => widget.onSelected(recipe),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.kPrimary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.blender_outlined, color: AppColors.kPrimary, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            if (inputSummary.isNotEmpty)
+                              Text(
+                                'Uses: $inputSummary',
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('$qty $unit', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                          Text('yield', style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+      ],
     );
   }
 }

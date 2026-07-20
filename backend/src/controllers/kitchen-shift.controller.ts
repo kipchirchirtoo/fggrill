@@ -2215,7 +2215,12 @@ export const createProductionRecipe = asyncWrap(async (req: Request, res: Respon
         .from('kitchen_production_recipes')
         .insert(insertRows)
         .select();
-    if (error) throw new AppError(error.message, 500);
+    if (error) {
+        if (error.code === '23505') {
+            throw new AppError('A recipe standard for this raw stock item and output already exists in this branch.', 400);
+        }
+        throw new AppError(error.message, 500);
+    }
 
     // Insert inputs into the new table
     const inputRows: any[] = [];
@@ -2318,7 +2323,12 @@ export const updateProductionRecipe = asyncWrap(async (req: Request, res: Respon
         .eq('id', recipe_id)
         .select()
         .single();
-    if (error) throw new AppError(error.message, 500);
+    if (error) {
+        if (error.code === '23505') {
+            throw new AppError('A recipe standard for this raw stock item and output already exists in this branch.', 400);
+        }
+        throw new AppError(error.message, 500);
+    }
 
     // If inputs are provided, update the kitchen_production_recipe_inputs table
     if (Array.isArray(req.body.inputs)) {
