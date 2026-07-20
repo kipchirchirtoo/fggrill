@@ -1323,6 +1323,8 @@ class _BranchStorekeeperDashboardState
                   () => _go(BranchStorekeeperSection.kitchenUsage)),
               _QuickAction('Stock out', PhosphorIcons.trendDown(),
                   () => _go(BranchStorekeeperSection.stockOut)),
+              _QuickAction('Prep return flow', PhosphorIcons.arrowsLeftRight(),
+                  () => _go(BranchStorekeeperSection.kitchenProduction)),
             ],
           ),
         ),
