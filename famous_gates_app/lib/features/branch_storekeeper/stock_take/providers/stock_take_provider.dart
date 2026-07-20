@@ -1,7 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
-import '../../../../core/storage/secure_storage_provider.dart';
 import '../../data/branch_storekeeper_repository.dart';
 import '../models/stock_take_item.dart';
 
@@ -96,6 +97,15 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
 
   String get _draftKey =>
       'stock_take_draft_${_type.name}_${state.locationFilter}_${state.dateFilter}';
+
+  Future<File> _getDraftFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final draftsDir = Directory('${dir.path}/fggrill_drafts');
+    if (!draftsDir.existsSync()) {
+      await draftsDir.create(recursive: true);
+    }
+    return File('${draftsDir.path}/$_draftKey.json');
+  }
 
   Future<void> loadData({
     String? date,
@@ -246,26 +256,29 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
 
       // If not submitted, apply local draft values if they exist
       if (!submitted) {
-        final storage = _ref.read(secureStorageProvider);
-        final draftStr = await storage.read(key: _draftKey);
-        if (draftStr != null && draftStr.isNotEmpty) {
-          try {
-            final Map<String, dynamic> draftMap = json.decode(draftStr);
-            loadedItems = loadedItems.map((item) {
-              if (draftMap.containsKey(item.id)) {
-                final entry = draftMap[item.id] as Map<String, dynamic>;
-                final physical = entry['physical'] as int?;
-                final reason = entry['reason'] as String?;
-                return item.copyWith(
-                  physicalCount: physical,
-                  reason: reason,
-                );
-              }
-              return item;
-            }).toList();
-          } catch (e) {
-            // Bad JSON or corrupt draft, ignore
+        try {
+          final file = await _getDraftFile();
+          if (file.existsSync()) {
+            final draftStr = await file.readAsString();
+            if (draftStr.isNotEmpty) {
+              final Map<String, dynamic> draftMap = json.decode(draftStr);
+              loadedItems = loadedItems.map((item) {
+                if (draftMap.containsKey(item.id)) {
+                  final entry = draftMap[item.id] as Map<String, dynamic>;
+                  final rawPhysical = entry['physical'];
+                  final physical = rawPhysical != null ? (rawPhysical as num).toInt() : null;
+                  final reason = entry['reason'] as String?;
+                  return item.copyWith(
+                    physicalCount: physical,
+                    reason: reason,
+                  );
+                }
+                return item;
+              }).toList();
+            }
           }
+        } catch (_) {
+          // Corrupt draft file — ignore and continue with server data
         }
       }
 
@@ -354,12 +367,14 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
       }
     }
 
-    final storage = _ref.read(secureStorageProvider);
-    if (draftMap.isEmpty) {
-      await storage.delete(key: _draftKey);
-    } else {
-      await storage.write(key: _draftKey, value: json.encode(draftMap));
-    }
+    try {
+      final file = await _getDraftFile();
+      if (draftMap.isEmpty) {
+        if (file.existsSync()) await file.delete();
+      } else {
+        await file.writeAsString(json.encode(draftMap));
+      }
+    } catch (_) {}
   }
 
   Future<bool> submitStockTake() async {
@@ -414,9 +429,11 @@ class StockTakeNotifier extends StateNotifier<StockTakeState> {
         );
       }
 
-      // Submission succeeded, clear draft local storage
-      final storage = _ref.read(secureStorageProvider);
-      await storage.delete(key: _draftKey);
+      // Submission succeeded, clear draft file
+      try {
+        final file = await _getDraftFile();
+        if (file.existsSync()) await file.delete();
+      } catch (_) {}
 
       state = state.copyWith(isSubmitting: false, isSubmitted: true);
       // Reload state from server
