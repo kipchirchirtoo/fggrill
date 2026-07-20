@@ -2335,8 +2335,6 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
                     child: SegmentedButton<YieldType>(
                       segments: const [
                         ButtonSegment(
-                            value: YieldType.direct, label: Text('Direct (1:1)')),
-                        ButtonSegment(
                             value: YieldType.ratio,
                             label: Text('Production (Batch)')),
                         ButtonSegment(
