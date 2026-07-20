@@ -138,13 +138,27 @@ class FoodControlStandardsScreen extends ConsumerWidget {
   }
 }
 
-class _RecipeStandardsTab extends ConsumerWidget {
+class _RecipeStandardsTab extends ConsumerStatefulWidget {
   const _RecipeStandardsTab({required this.onAdd});
 
   final VoidCallback onAdd;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RecipeStandardsTab> createState() => _RecipeStandardsTabState();
+}
+
+class _RecipeStandardsTabState extends ConsumerState<_RecipeStandardsTab> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final recipesAsync = ref.watch(kitchenRecipesProvider);
     final directItemsAsync = ref.watch(directFoodControlItemsProvider);
     return Column(
@@ -162,9 +176,40 @@ class _RecipeStandardsTab extends ConsumerWidget {
                   ref.invalidate(linkableMenuItemsProvider);
                 },
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: (v) => setState(() => _query = v),
+                  decoration: InputDecoration(
+                    hintText: 'Search standards…',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: _query.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () => setState(() {
+                              _searchCtrl.clear();
+                              _query = '';
+                            }),
+                          )
+                        : null,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 12),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300)),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300)),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
-                onPressed: onAdd,
+                onPressed: widget.onAdd,
                 icon: const Icon(Icons.add),
                 label: const Text('New Recipe Standard'),
               ),
@@ -241,11 +286,43 @@ class _RecipeStandardsTab extends ConsumerWidget {
               }
               final groupedRecipes = grouped.values.toList();
 
+              final query = _query.trim().toLowerCase();
+              final filteredRecipes = query.isEmpty
+                  ? groupedRecipes
+                  : groupedRecipes.where((recipe) {
+                      final inputs = recipe['inputs'] as List? ?? [];
+                      final outputs = recipe['outputs'] as List? ?? [];
+                      final titleText = inputs.isNotEmpty
+                          ? inputs
+                              .map((i) => '${i['raw_item_name'] ?? ''}')
+                              .join(' ')
+                          : '${recipe['raw_item_name'] ?? ''}';
+                      if (titleText.toLowerCase().contains(query)) return true;
+                      return outputs.any((o) =>
+                          '${o['produced_item_name'] ?? ''}'
+                              .toLowerCase()
+                              .contains(query));
+                    }).toList();
+
+              if (filteredRecipes.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Text(
+                      query.isEmpty
+                          ? 'No recipe standards configured.'
+                          : 'No standards match "$_query".',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                  ),
+                );
+              }
+
               return ListView.builder(
                 padding: const EdgeInsets.all(16),
-                itemCount: groupedRecipes.length,
+                itemCount: filteredRecipes.length,
                 itemBuilder: (context, index) {
-                  final recipe = groupedRecipes[index];
+                  final recipe = filteredRecipes[index];
                   final outputs = recipe['outputs'] as List? ?? [];
                   final inputs = recipe['inputs'] as List? ?? [];
                   final titleText = inputs.isNotEmpty
@@ -1411,7 +1488,7 @@ class _ChannelMenuDraftRowWidget extends StatelessWidget {
     );
   }
 }
-class _DirectMappingsCard extends StatelessWidget {
+class _DirectMappingsCard extends StatefulWidget {
   const _DirectMappingsCard({
     required this.directItemsAsync,
     required this.onAdd,
@@ -1423,131 +1500,200 @@ class _DirectMappingsCard extends StatelessWidget {
   final ValueChanged<String> onDeactivate;
 
   @override
+  State<_DirectMappingsCard> createState() => _DirectMappingsCardState();
+}
+
+class _DirectMappingsCardState extends State<_DirectMappingsCard> {
+  bool _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    final itemCount = widget.directItemsAsync.when(
+      data: (items) => items.length,
+      loading: () => null,
+      error: (_, __) => null,
+    );
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Direct 1:1 POS Links',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Use this for branch stock items that sell directly in POS without recipe conversion.',
-                      style: TextStyle(fontSize: 13, color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_link),
-                label: const Text('Add Direct Link'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          directItemsAsync.when(
-            data: (items) {
-              if (items.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'No direct 1:1 mappings configured.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                );
-              }
-              return Column(
-                children: items.map((item) {
-                  final pos = Map<String, dynamic>.from(
-                    (item['pos_outlet_item'] as Map?) ?? const {},
-                  );
-                  final stockName = '${item['stock_item_name'] ?? ''}'.trim();
-                  final stockSku = '${item['stock_item_sku'] ?? ''}'.trim();
-                  final posName = '${pos['name'] ?? ''}'.trim();
-                  final posSku = '${pos['sku'] ?? ''}'.trim();
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFD),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Row(
+          // ── Header row (always visible) ──────────────────────────────────
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                stockName.isEmpty ? stockSku : stockName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
+                        Row(
+                          children: [
+                            const Text(
+                              'Direct 1:1 POS Links',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w700),
+                            ),
+                            if (itemCount != null && itemCount > 0) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.kPrimary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '$itemCount',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.kPrimary,
+                                  ),
                                 ),
                               ),
-                              if (stockSku.isNotEmpty)
-                                Text(
-                                  stockSku,
-                                  style: const TextStyle(color: Colors.black54),
-                                ),
-                              const Icon(Icons.arrow_forward, size: 16),
-                              Text(
-                                posName.isEmpty ? 'POS item' : posName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.kPrimary,
-                                ),
-                              ),
-                              if (posSku.isNotEmpty)
-                                Text(
-                                  posSku,
-                                  style: const TextStyle(color: Colors.black54),
-                                ),
                             ],
-                          ),
+                          ],
                         ),
-                        IconButton(
-                          tooltip: 'Remove mapping',
-                          onPressed: () =>
-                              onDeactivate('${item['id'] ?? ''}'.trim()),
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                          ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _expanded
+                              ? 'Use this for branch stock items that sell directly in POS without recipe conversion.'
+                              : itemCount != null
+                                  ? '$itemCount direct link${itemCount == 1 ? '' : 's'} configured'
+                                  : 'Tap to expand',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black54),
                         ),
                       ],
                     ),
-                  );
-                }).toList(),
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (error, _) => Text(
-              'Failed to load direct links: $error',
-              style: const TextStyle(color: Colors.red),
+                  ),
+                  FilledButton.icon(
+                    onPressed: widget.onAdd,
+                    icon: const Icon(Icons.add_link, size: 16),
+                    label: const Text('Add Direct Link'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.expand_more,
+                        color: Colors.black54, size: 22),
+                  ),
+                ],
+              ),
             ),
           ),
+          // ── Collapsible body ─────────────────────────────────────────────
+          if (_expanded) ...[
+            Divider(height: 1, color: Colors.grey.shade200),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: widget.directItemsAsync.when(
+                data: (items) {
+                  if (items.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'No direct 1:1 mappings configured.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: items.map((item) {
+                      final pos = Map<String, dynamic>.from(
+                        (item['pos_outlet_item'] as Map?) ?? const {},
+                      );
+                      final stockName =
+                          '${item['stock_item_name'] ?? ''}'.trim();
+                      final stockSku =
+                          '${item['stock_item_sku'] ?? ''}'.trim();
+                      final posName = '${pos['name'] ?? ''}'.trim();
+                      final posSku = '${pos['sku'] ?? ''}'.trim();
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFD),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Wrap(
+                                spacing: 10,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text(
+                                    stockName.isEmpty ? stockSku : stockName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  if (stockSku.isNotEmpty)
+                                    Text(
+                                      stockSku,
+                                      style: const TextStyle(
+                                          color: Colors.black54),
+                                    ),
+                                  const Icon(Icons.arrow_forward, size: 16),
+                                  Text(
+                                    posName.isEmpty ? 'POS item' : posName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.kPrimary,
+                                    ),
+                                  ),
+                                  if (posSku.isNotEmpty)
+                                    Text(
+                                      posSku,
+                                      style: const TextStyle(
+                                          color: Colors.black54),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Remove mapping',
+                              onPressed: () => widget
+                                  .onDeactivate('${item['id'] ?? ''}'.trim()),
+                              icon: const Icon(Icons.delete_outline,
+                                  color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, _) => Text(
+                  'Failed to load direct links: $error',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
