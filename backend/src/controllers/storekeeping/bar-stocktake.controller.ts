@@ -540,8 +540,8 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
  *          (closing) count. The system quantity is the live stock from the
  *          Bar Stock screen (restaurant_bar_inventory.current_bottles). Opening
  *          is the previous stocktake's physical count (or current stock for the
- *          first count). variance = physical - system. A reason is required for
- *          non-zero variance.
+ *          first count). variance = physical - system. Variances are flagged
+ *          and sent to the accountant for review — no reason required at submission.
  * @route   POST /api/storekeeping/bar-stocktake
  *          body: {
  *            branch_id, bar_location, stocktake_date?,
@@ -703,7 +703,7 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
         if (missingReasons.length > 0) {
             res.status(400).json({
                 success: false,
-                message: 'Reason for variance is required for all items with a variance',
+                message: 'Some items are missing a valid physical count',
                 items: missingReasons
             });
             return;
