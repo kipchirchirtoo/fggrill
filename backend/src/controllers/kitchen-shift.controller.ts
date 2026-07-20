@@ -2379,7 +2379,7 @@ export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: R
     if (!branch_id) throw new AppError('branch_id required', 400);
     const { data, error } = await supabase
         .from('pos_outlet_items')
-        .select('id, name, sku, unit, category, item_group, track_stock')
+        .select('id, name, sku, unit, category, item_group, track_stock, source_table')
         .eq('branch_id', branch_id)
         .eq('is_active', true)
         .order('name', { ascending: true });
@@ -2400,10 +2400,27 @@ export const listRecipeLinkableMenuItems = asyncWrap(async (req: Request, res: R
 // food_control_direct_items / food_control_exempt_items
 // (migration 20260629_food_control_type_config.sql).
 
-const BAR_KEYWORDS = ['beer', 'spirit', 'wine', 'whisky', 'whiskey', 'vodka', 'gin', 'rum', 'brandy', 'liqueur', 'soda', 'alcohol', 'bar'];
-function isBarItem(item: { category?: string | null; sku?: string | null; name?: string | null }): boolean {
-    const haystack = `${item.category || ''} ${item.sku || ''} ${item.name || ''}`.toLowerCase();
-    return BAR_KEYWORDS.some((kw) => haystack.includes(kw));
+function isBarItem(item: { item_group?: string | null; source_table?: string | null; category?: string | null; name?: string | null; sku?: string | null }): boolean {
+    if (item.item_group === 'bar') return true;
+    if (item.source_table === 'bar_drinks') return true;
+
+    const category = (item.category || '').toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    const sku = (item.sku || '').toLowerCase();
+
+    // Check if the item belongs to alcohol categories
+    const BAR_EXPLICIT_CATEGORIES = ['whisky', 'whiskey', 'beer', 'wine', 'spirit', 'liqueur', 'brandy', 'vodka', 'gin', 'rum', 'tequila', 'cider', 'alcohol'];
+    if (BAR_EXPLICIT_CATEGORIES.some(cat => category.includes(cat))) {
+        return true;
+    }
+
+    // Match exact bar terms using word boundaries
+    const barWordRegex = /\b(beer|wine|whisky|whiskey|vodka|gin|rum|brandy|liqueur|alcohol)\b/i;
+    if (barWordRegex.test(name) || barWordRegex.test(sku)) {
+        return true;
+    }
+
+    return false;
 }
 
 export const getStockItemFoodControlType = asyncWrap(async (req: Request, res: Response) => {
@@ -2635,7 +2652,7 @@ export const listUnregisteredItems = asyncWrap(async (req: Request, res: Respons
     if (!branch_id) throw new AppError('branch_id required', 400);
     const { data: items, error } = await supabase
         .from('pos_outlet_items')
-        .select('id, name, sku, category, unit, stock_pool_item_id')
+        .select('id, name, sku, category, unit, stock_pool_item_id, item_group, source_table')
         .eq('branch_id', Number(branch_id))
         .eq('is_active', true);
     if (error) throw new AppError(error.message, 500);
