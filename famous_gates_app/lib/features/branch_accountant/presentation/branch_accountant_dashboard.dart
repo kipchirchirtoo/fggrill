@@ -40,6 +40,8 @@ import 'event_orders_screen.dart';
 import 'food_control_standards_screen.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../../../core/services/user_service.dart';
+import '../../menu_pricing/data/menu_pricing_repository.dart';
+import '../../menu_pricing/domain/menu_pricing_providers.dart';
 
 enum BranchAccountantSection {
   overview,
@@ -83,6 +85,7 @@ enum BranchAccountantSection {
   dailyControls,
   foodControlStandards,
   eventOrders,
+  menuPricingCosting,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -291,6 +294,8 @@ class _BranchAccountantDashboardState
         return const FoodControlStandardsScreen();
       case BranchAccountantSection.eventOrders:
         return const EventOrdersScreen();
+      case BranchAccountantSection.menuPricingCosting:
+        return const _BranchMenuPricingSection();
     }
   }
 
@@ -388,6 +393,8 @@ const _navItems = [
   _NavItem(BranchAccountantSection.branchBarMenu, 'Bar Menu', Icons.local_bar),
   _NavItem(BranchAccountantSection.branchRestaurantMenu, 'Restaurant Menu',
       Icons.restaurant_menu),
+  _NavItem(BranchAccountantSection.menuPricingCosting, 'Menu Pricing & Costing',
+      Icons.price_check),
   _NavItem(BranchAccountantSection.posStockLink, 'POS Stock Link', Icons.link),
   _NavItem(BranchAccountantSection.restaurantStockLink, 'Restaurant Stock Link',
       Icons.restaurant_outlined),
@@ -21967,8 +21974,21 @@ class _BranchBarMenuSectionState
 // ─────────────────────────────────────────────────────────────────────────────
 
 String _menuCategoryName(dynamic rawCat) {
-  if (rawCat is Map) return '${rawCat['name'] ?? ''}';
-  return '${rawCat ?? ''}';
+  if (rawCat == null) return '';
+  if (rawCat is Map) {
+    final n = rawCat['name'];
+    if (n != null && n.toString().isNotEmpty) return n.toString();
+    return '';
+  }
+  if (rawCat is List) {
+    return rawCat.isEmpty ? '' : _menuCategoryName(rawCat.first);
+  }
+  final s = rawCat.toString().trim();
+  if (s.isEmpty || s == 'null') return '';
+  // Handle Dart Map.toString() output like {name: Foo Bar, id: ...}
+  final m = RegExp(r'\bname:\s*([^,{}]+)').firstMatch(s);
+  if (m != null) return m.group(1)!.trim();
+  return s;
 }
 
 class _BranchRestaurantMenuSection extends ConsumerStatefulWidget {
@@ -22071,6 +22091,8 @@ class _BranchRestaurantMenuSectionState
   Future<void> _showEditDialog(Map<String, dynamic> item) async {
     final nameCtrl = TextEditingController(text: '${item['name'] ?? ''}');
     final priceCtrl = TextEditingController(text: '${item['price'] ?? ''}');
+    final costCtrl = TextEditingController(
+        text: item['cost_price'] != null ? '${item['cost_price']}' : '');
 
     // Resolve initial category_id from the nested category object or direct field
     final rawCat = item['category'];
@@ -22107,33 +22129,42 @@ class _BranchRestaurantMenuSectionState
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
         return AlertDialog(
           title: const Text('Edit Menu Item'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Name')),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String?>(
-              value: cats.any((c) => c['id']?.toString() == selectedCategoryId)
-                  ? selectedCategoryId
-                  : null,
-              decoration: const InputDecoration(labelText: 'Category'),
-              isExpanded: true,
-              items: [
-                const DropdownMenuItem<String?>(
-                    value: null, child: Text('No category')),
-                ...cats.map((cat) => DropdownMenuItem<String?>(
-                      value: '${cat['id']}',
-                      child: Text('${cat['name']}'),
-                    )),
-              ],
-              onChanged: (v) => setDlgState(() => selectedCategoryId = v),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-                controller: priceCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Price')),
-          ]),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String?>(
+                value: cats.any((c) => c['id']?.toString() == selectedCategoryId)
+                    ? selectedCategoryId
+                    : null,
+                decoration: const InputDecoration(labelText: 'Category'),
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem<String?>(
+                      value: null, child: Text('No category')),
+                  ...cats.map((cat) => DropdownMenuItem<String?>(
+                        value: '${cat['id']}',
+                        child: Text('${cat['name']}'),
+                      )),
+                ],
+                onChanged: (v) => setDlgState(() => selectedCategoryId = v),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: priceCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Selling Price', prefixText: 'KES ')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: costCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Cost Price', prefixText: 'KES ')),
+            ]),
+          ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -22150,6 +22181,8 @@ class _BranchRestaurantMenuSectionState
                           'name': nameCtrl.text.trim(),
                           'category_id': selectedCategoryId,
                           'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                          if (costCtrl.text.trim().isNotEmpty)
+                            'cost_price': double.tryParse(costCtrl.text) ?? 0,
                         });
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
@@ -22171,11 +22204,13 @@ class _BranchRestaurantMenuSectionState
 
     nameCtrl.dispose();
     priceCtrl.dispose();
+    costCtrl.dispose();
   }
 
   Future<void> _showAddDialog() async {
     final nameCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
+    final costCtrl = TextEditingController();
     String? selectedCategoryId;
     bool saving = false;
 
@@ -22207,31 +22242,40 @@ class _BranchRestaurantMenuSectionState
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
         return AlertDialog(
           title: const Text('Add Menu Item'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Name *')),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String?>(
-              value: selectedCategoryId,
-              decoration: const InputDecoration(labelText: 'Category'),
-              isExpanded: true,
-              items: [
-                const DropdownMenuItem<String?>(
-                    value: null, child: Text('No category')),
-                ...cats.map((cat) => DropdownMenuItem<String?>(
-                      value: '${cat['id']}',
-                      child: Text('${cat['name']}'),
-                    )),
-              ],
-              onChanged: (v) => setDlgState(() => selectedCategoryId = v),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-                controller: priceCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Price *')),
-          ]),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name *')),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String?>(
+                value: selectedCategoryId,
+                decoration: const InputDecoration(labelText: 'Category'),
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem<String?>(
+                      value: null, child: Text('No category')),
+                  ...cats.map((cat) => DropdownMenuItem<String?>(
+                        value: '${cat['id']}',
+                        child: Text('${cat['name']}'),
+                      )),
+                ],
+                onChanged: (v) => setDlgState(() => selectedCategoryId = v),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: priceCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Selling Price *', prefixText: 'KES ')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: costCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Cost Price', prefixText: 'KES ')),
+            ]),
+          ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -22244,7 +22288,7 @@ class _BranchRestaurantMenuSectionState
                           priceCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           const SnackBar(
-                              content: Text('Name and price are required')),
+                              content: Text('Name and selling price are required')),
                         );
                         return;
                       }
@@ -22254,6 +22298,7 @@ class _BranchRestaurantMenuSectionState
                           'name': nameCtrl.text.trim(),
                           'category_id': selectedCategoryId,
                           'price': double.tryParse(priceCtrl.text) ?? 0,
+                          'cost_price': double.tryParse(costCtrl.text.trim()) ?? 0,
                           if (branchId.isNotEmpty)
                             'branch_id': int.tryParse(branchId) ?? branchId,
                         });
@@ -22277,6 +22322,7 @@ class _BranchRestaurantMenuSectionState
 
     nameCtrl.dispose();
     priceCtrl.dispose();
+    costCtrl.dispose();
   }
 
   @override
@@ -23750,6 +23796,520 @@ class _RestaurantStockLinkSectionState
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Menu Pricing & Costing Section (editable — saves to branch pricing table
+// AND updates the base item price so POS picks up the change immediately)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BranchMenuPricingSection extends ConsumerStatefulWidget {
+  const _BranchMenuPricingSection();
+
+  @override
+  ConsumerState<_BranchMenuPricingSection> createState() =>
+      _BranchMenuPricingSectionState();
+}
+
+class _BranchMenuPricingSectionState
+    extends ConsumerState<_BranchMenuPricingSection> {
+  int? _branchId;
+  String _type = 'all'; // all | restaurant | bar
+  String _search = '';
+  bool _branchLoading = true;
+  bool _saving = false;
+
+  // key ('itemType:itemId') → pending cost + selling edit
+  final Map<String, ({double cost, double? selling})> _pending = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBranchId();
+  }
+
+  Future<void> _loadBranchId() async {
+    final repo = ref.read(branchAccountantRepositoryProvider);
+    final raw = await repo.getBranchId();
+    final id = int.tryParse(raw);
+    if (!mounted) return;
+    setState(() {
+      _branchId = id;
+      _branchLoading = false;
+    });
+  }
+
+  BranchPricingArgs? get _args {
+    if (_branchId == null) return null;
+    return (branchId: _branchId!, type: _type == 'all' ? null : _type);
+  }
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  void _onRowChanged(String key, double cost, double? selling) {
+    _pending[key] = (cost: cost, selling: selling);
+    setState(() {});
+  }
+
+  Future<void> _resetItem(BranchMenuItemPricing item) async {
+    if (_branchId == null) return;
+    try {
+      await ref
+          .read(menuPricingRepositoryProvider)
+          .resetItem(_branchId!, item.itemType, item.itemId);
+      if (!mounted) return;
+      _pending.remove(item.key);
+      ref.invalidate(branchPricingProvider(_args!));
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(content: Text('Reverted to base price')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text(apiErrorMessage(e, fallback: 'Reset failed'))),
+      );
+    }
+  }
+
+  Future<void> _saveAll() async {
+    if (_pending.isEmpty || _branchId == null) return;
+    setState(() => _saving = true);
+    final dio = ref.read(dioProvider);
+    try {
+      // 1. Update the base item prices so POS picks up the change immediately.
+      for (final entry in _pending.entries) {
+        final parts = entry.key.split(':');
+        final itemType = parts.first;
+        final itemId = parts.sublist(1).join(':');
+        final cost = entry.value.cost;
+        final selling = entry.value.selling;
+        if (itemType == 'restaurant') {
+          await dio.put('/restaurant/menu/items/$itemId', data: {
+            if (selling != null) 'price': selling,
+            'cost_price': cost,
+          });
+        } else {
+          await dio.put('/bar/drinks/$itemId', data: {
+            if (selling != null) 'price': selling,
+            'cost_price': cost,
+          });
+        }
+      }
+
+      // 2. Also persist to the branch pricing override table for analytics.
+      final rows = _pending.entries.map((e) {
+        final parts = e.key.split(':');
+        return {
+          'item_type': parts.first,
+          'item_id': parts.sublist(1).join(':'),
+          'cost_price': e.value.cost,
+          if (e.value.selling != null) 'selling_price': e.value.selling,
+        };
+      }).toList();
+      try {
+        await ref
+            .read(menuPricingRepositoryProvider)
+            .saveBulk(_branchId!, rows);
+      } catch (_) {}
+
+      if (!mounted) return;
+      final count = _pending.length;
+      _pending.clear();
+      ref.invalidate(branchPricingProvider(_args!));
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(
+          content: Text(
+              'Saved $count item price${count == 1 ? '' : 's'} — POS updated'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(
+            content: Text(apiErrorMessage(e, fallback: 'Save failed'))),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _header(),
+          const SizedBox(height: 16),
+          _controls(),
+          const SizedBox(height: 12),
+          if (_branchLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_branchId == null)
+            const Expanded(
+              child: Center(
+                  child: Text('No branch assigned to your account.')),
+            )
+          else
+            Expanded(child: _pricingList()),
+        ],
+      ),
+    );
+  }
+
+  Widget _header() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Menu Pricing & Costing',
+                  style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                'Edit cost and selling prices. Changes save to the branch pricing table and update POS immediately.',
+                style:
+                    TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+        if (_pending.isNotEmpty)
+          FilledButton.icon(
+            onPressed: _saving ? null : _saveAll,
+            icon: _saving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child:
+                        CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.check, size: 18),
+            label: Text(_saving
+                ? 'Saving…'
+                : 'Save ${_pending.length} change${_pending.length == 1 ? '' : 's'}'),
+          ),
+      ],
+    );
+  }
+
+  Widget _controls() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'all', label: Text('All')),
+            ButtonSegment(
+                value: 'restaurant', label: Text('Restaurant')),
+            ButtonSegment(value: 'bar', label: Text('Bar')),
+          ],
+          selected: {_type},
+          onSelectionChanged: (s) => setState(() {
+            _type = s.first;
+            _pending.clear();
+          }),
+        ),
+        SizedBox(
+          width: 240,
+          child: TextField(
+            decoration: const InputDecoration(
+              labelText: 'Search item',
+              prefixIcon: Icon(Icons.search, size: 18),
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: (v) =>
+                setState(() => _search = v.trim().toLowerCase()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pricingList() {
+    final args = _args!;
+    final async = ref.watch(branchPricingProvider(args));
+    return async.when(
+      loading: () =>
+          const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 12),
+            Text('$e',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () =>
+                  ref.invalidate(branchPricingProvider(args)),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+      data: (result) {
+        var items = result.items;
+        if (_search.isNotEmpty) {
+          items = items
+              .where((i) =>
+                  i.name.toLowerCase().contains(_search) ||
+                  (i.category ?? '').toLowerCase().contains(_search))
+              .toList();
+        }
+        if (items.isEmpty) {
+          return const Center(
+            child: Text('No items found.',
+                style: TextStyle(color: Colors.grey)),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _summaryBar(result.summary),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.separated(
+                itemCount: items.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: 6),
+                itemBuilder: (_, i) => _EditablePricingRow(
+                  key: ValueKey(
+                      '${_branchId}_${items[i].key}_${_type}'),
+                  item: items[i],
+                  onChanged: _onRowChanged,
+                  onReset: () => _resetItem(items[i]),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _summaryBar(Map<String, dynamic> s) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      children: [
+        _stat('Items', '${s['total_items'] ?? 0}'),
+        _stat('Costed', '${s['costed_items'] ?? 0}'),
+        _stat('Branch overrides', '${s['with_override'] ?? 0}'),
+        _stat('Avg margin', '${s['avg_margin_pct'] ?? 0}%'),
+      ],
+    );
+  }
+
+  Widget _stat(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('$label: ',
+            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(value,
+            style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+}
+
+class _EditablePricingRow extends StatefulWidget {
+  const _EditablePricingRow({
+    super.key,
+    required this.item,
+    required this.onChanged,
+    required this.onReset,
+  });
+
+  final BranchMenuItemPricing item;
+  final void Function(String key, double cost, double? selling) onChanged;
+  final VoidCallback onReset;
+
+  @override
+  State<_EditablePricingRow> createState() => _EditablePricingRowState();
+}
+
+class _EditablePricingRowState extends State<_EditablePricingRow> {
+  late final TextEditingController _cost;
+  late final TextEditingController _selling;
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  @override
+  void initState() {
+    super.initState();
+    final it = widget.item;
+    _cost = TextEditingController(
+      text: it.overrideCost != null
+          ? _fmt(it.overrideCost!)
+          : (it.baseCost > 0 ? _fmt(it.baseCost) : ''),
+    );
+    _selling = TextEditingController(
+      text: it.overrideSelling != null ? _fmt(it.overrideSelling!) : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _cost.dispose();
+    _selling.dispose();
+    super.dispose();
+  }
+
+  double get _costVal => double.tryParse(_cost.text.trim()) ?? 0;
+  double? get _sellVal {
+    final t = _selling.text.trim();
+    if (t.isEmpty) return null;
+    return double.tryParse(t);
+  }
+
+  double get _effSelling => _sellVal ?? widget.item.basePrice;
+  double get _margin => _effSelling - _costVal;
+  double get _marginPct =>
+      _effSelling > 0 ? (_margin / _effSelling) * 100 : 0;
+
+  void _emit() {
+    widget.onChanged(widget.item.key, _costVal, _sellVal);
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final it = widget.item;
+    final marginColor = _margin < 0
+        ? Colors.red
+        : (_marginPct < 15 ? Colors.orange[800]! : Colors.green[700]!);
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+      ),
+      child: Padding(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: (it.itemType == 'bar'
+                        ? Colors.purple
+                        : Colors.teal)
+                    .withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                it.itemType == 'bar' ? 'BAR' : 'FOOD',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color:
+                      it.itemType == 'bar' ? Colors.purple : Colors.teal,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(it.name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600)),
+                  Text(
+                    '${it.category ?? 'Uncategorised'}'
+                    '  ·  base ${_fmt(it.basePrice)}'
+                    '${it.hasOverride ? '  ·  overridden' : ''}',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _field(_cost, 'Cost', 'buy'),
+            const SizedBox(width: 8),
+            _field(_selling, 'Selling', _fmt(it.basePrice)),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 78,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'KES ${_fmt(_margin)}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: marginColor),
+                  ),
+                  Text(
+                    '${_marginPct.toStringAsFixed(0)}%',
+                    style:
+                        TextStyle(fontSize: 11, color: marginColor),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Revert to base price',
+              onPressed: it.hasOverride ? widget.onReset : null,
+              icon: const Icon(Icons.refresh, size: 18),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _field(
+      TextEditingController c, String label, String hint) {
+    return SizedBox(
+      width: 90,
+      child: TextField(
+        controller: c,
+        keyboardType:
+            const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+        ],
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          isDense: true,
+          border: const OutlineInputBorder(),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        ),
+        onChanged: (_) => _emit(),
       ),
     );
   }

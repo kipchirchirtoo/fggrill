@@ -37,7 +37,7 @@ Future<void> main() async {
         title: 'FamousGate Hotels System',
         center: true,
         size: Size(1440, 900),
-        minimumSize: Size(1100, 700),
+        minimumSize: Size(800, 580),
       ),
       () async {
         await windowManager.show();

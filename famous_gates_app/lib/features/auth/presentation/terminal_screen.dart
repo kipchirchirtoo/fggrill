@@ -18,6 +18,12 @@ final _terminalClockProvider = StreamProvider.autoDispose<DateTime>((ref) {
       .startWith(DateTime.now());
 });
 
+final _terminalFocusNodeProvider = Provider.autoDispose<FocusNode>((ref) {
+  final node = FocusNode();
+  ref.onDispose(() => node.dispose());
+  return node;
+});
+
 const _kGold = Color(0xFFD4A843);
 
 class TerminalScreen extends ConsumerWidget {
@@ -33,8 +39,10 @@ class TerminalScreen extends ConsumerWidget {
     final now = ref.watch(_terminalClockProvider).valueOrNull ?? DateTime.now();
     final selectedPrefix = pin.isNotEmpty ? pin[0] : null;
 
+    final focusNode = ref.watch(_terminalFocusNodeProvider);
+
     return KeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
+      focusNode: focusNode,
       autofocus: true,
       onKeyEvent: (event) {
         if (event is! KeyDownEvent || isLoading) return;
@@ -76,19 +84,33 @@ class TerminalScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            // 5 — BACKOFFICE button pinned to true top-right edge (outside the 24px padding)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 18),
+                  child: _BackOfficeButton(),
+                ),
+              ),
+            ),
             // 4 — UI content
             SafeArea(
               child: Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                    const EdgeInsets.only(left: 24, right: 24, top: 18, bottom: 8),
                 child: Column(
                   children: [
-                    const _TopBar(),
+                    const SizedBox(
+                      width: double.infinity,
+                      child: _TopBarLogo(),
+                    ),
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, constraints) =>
                             SingleChildScrollView(
-                          physics: const NeverScrollableScrollPhysics(),
+                          physics: const ClampingScrollPhysics(),
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                                 minHeight: constraints.maxHeight),
@@ -237,8 +259,10 @@ class TerminalScreen extends ConsumerWidget {
 // Top bar
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _TopBar extends StatelessWidget {
-  const _TopBar();
+// Logo + title only — BACKOFFICE button is a separate Positioned widget at the
+// true screen edge, outside the 24px horizontal padding.
+class _TopBarLogo extends StatelessWidget {
+  const _TopBarLogo();
 
   @override
   Widget build(BuildContext context) {
@@ -266,42 +290,51 @@ class _TopBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        const Text(
-          'Famous Gates Terminal',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const Spacer(),
-        // Pill-style backoffice link
-        TextButton(
-          onPressed: () => context.go('/login'),
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.white54,
-            backgroundColor: Colors.white.withValues(alpha: 0.07),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        const Flexible(
+          child: Text(
+            'Famous Gates Terminal',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              letterSpacing: 0.2,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('BACKOFFICE',
-                  style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5)),
-              SizedBox(width: 5),
-              Icon(Icons.arrow_forward_rounded, size: 13),
-            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BackOfficeButton extends StatelessWidget {
+  const _BackOfficeButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: () => context.go('/login'),
+      style: TextButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: Colors.white.withValues(alpha: 0.10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.28)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('BACKOFFICE',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5)),
+          SizedBox(width: 5),
+          Icon(Icons.arrow_forward_rounded, size: 13),
+        ],
+      ),
     );
   }
 }
@@ -322,44 +355,53 @@ class _BrandClock extends StatelessWidget {
         '${_weekday(now.weekday)}, ${_month(now.month)} ${now.day.toString().padLeft(2, '0')}';
     return Column(
       children: [
-        Text(
-          time,
-          style: const TextStyle(
-            color: Colors.white,
-            fontFamily: 'SF Pro Display',
-            fontSize: 62,
-            fontWeight: FontWeight.w700,
-            height: 1,
-            letterSpacing: -1.5,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            time,
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: 'SF Pro Display',
+              fontSize: 62,
+              fontWeight: FontWeight.w700,
+              height: 1,
+              letterSpacing: -1.5,
+            ),
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          date.toUpperCase(),
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.45),
-            fontWeight: FontWeight.w600,
-            fontSize: 11,
-            letterSpacing: 2.0,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            date.toUpperCase(),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              letterSpacing: 2.0,
+            ),
           ),
         ),
         const SizedBox(height: 12),
         // Instruction hint
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: Colors.white.withValues(alpha: 0.10), width: 1),
-          ),
-          child: Text(
-            'Select your station  •  Enter your PIN',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.38),
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.4,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.10), width: 1),
+            ),
+            child: Text(
+              'Select your station  •  Enter your PIN',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.38),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.4,
+              ),
             ),
           ),
         ),
@@ -407,21 +449,24 @@ class _PinDots extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(PhosphorIcons.shieldCheck(), size: 14, color: Colors.white38),
-            const SizedBox(width: 7),
-            const Text(
-              'ENTER PIN',
-              style: TextStyle(
-                color: Colors.white38,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.8,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(PhosphorIcons.shieldCheck(), size: 14, color: Colors.white38),
+              const SizedBox(width: 7),
+              const Text(
+                'ENTER PIN',
+                style: TextStyle(
+                  color: Colors.white38,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.8,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 14),
         Row(
@@ -511,8 +556,12 @@ class _PinPad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.of(context).size.width;
-    // Responsive card width: tablet ≤1024 → 560, desktop → 640
-    final cardW = screenW >= 1100 ? 640.0 : 560.0;
+    // Responsive card width: tablet ≤1024 → 560, desktop → 640. Shrink gracefully below 600.
+    final cardW = screenW >= 1100
+        ? 640.0
+        : (screenW >= 600 ? 560.0 : screenW - 32);
+
+    final isCompact = screenW < 580;
 
     // Wrap in Center + SizedBox so the card doesn't inherit the Column's
     // tight full-width constraint (which ConstrainedBox cannot shrink below).
@@ -553,49 +602,80 @@ class _PinPad extends StatelessWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Station column
-                        Expanded(
-                          flex: 10,
-                          child: _StationColumn(
-                            selectedPrefix: selectedPrefix,
-                            onKey: onKey,
-                            disabled: disabled,
+                    child: isCompact
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StationColumn(
+                                selectedPrefix: selectedPrefix,
+                                onKey: onKey,
+                                disabled: disabled,
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                height: 1,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.white.withValues(alpha: 0.15),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              _NumberColumn(
+                                onKey: onKey,
+                                onDelete: onDelete,
+                                onStaff: onStaff,
+                                disabled: disabled,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Station column
+                              Expanded(
+                                flex: 10,
+                                child: _StationColumn(
+                                  selectedPrefix: selectedPrefix,
+                                  onKey: onKey,
+                                  disabled: disabled,
+                                ),
+                              ),
+                              // Gradient divider
+                              Container(
+                                width: 1,
+                                height: 290,
+                                margin: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.white.withValues(alpha: 0.15),
+                                      Colors.white.withValues(alpha: 0.15),
+                                      Colors.transparent,
+                                    ],
+                                    stops: const [0, 0.1, 0.9, 1],
+                                  ),
+                                ),
+                              ),
+                              // Number pad column
+                              Expanded(
+                                flex: 11,
+                                child: _NumberColumn(
+                                  onKey: onKey,
+                                  onDelete: onDelete,
+                                  onStaff: onStaff,
+                                  disabled: disabled,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        // Gradient divider
-                        Container(
-                          width: 1,
-                          height: 290,
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Colors.white.withValues(alpha: 0.15),
-                                Colors.white.withValues(alpha: 0.15),
-                                Colors.transparent,
-                              ],
-                              stops: const [0, 0.1, 0.9, 1],
-                            ),
-                          ),
-                        ),
-                        // Number pad column
-                        Expanded(
-                          flex: 11,
-                          child: _NumberColumn(
-                            onKey: onKey,
-                            onDelete: onDelete,
-                            onStaff: onStaff,
-                            disabled: disabled,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -965,28 +1045,31 @@ class _FooterBranding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          'FAMOUS GATES HOTELS',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.28),
-            fontWeight: FontWeight.w800,
-            fontSize: 9,
-            letterSpacing: 3.5,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        children: [
+          Text(
+            'FAMOUS GATES HOTELS',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.28),
+              fontWeight: FontWeight.w800,
+              fontSize: 9,
+              letterSpacing: 3.5,
+            ),
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          'HIRALL SYSTEMS',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.16),
-            fontFamily: 'monospace',
-            fontSize: 8,
-            letterSpacing: 3,
+          const SizedBox(height: 5),
+          Text(
+            'HIRALL SYSTEMS',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.16),
+              fontFamily: 'monospace',
+              fontSize: 8,
+              letterSpacing: 3,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

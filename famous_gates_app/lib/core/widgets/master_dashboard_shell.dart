@@ -112,7 +112,7 @@ class _MasterDashboardShellState<T>
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isMobile = width < 768;
-    final isTablet = width >= 768 && width < 1024;
+    final isTablet = width >= 768 && width <= 1024;
     final autoCollapsed = isTablet;
     final isCollapsed = _sidebarOverrideActive
         ? _sidebarCollapsed

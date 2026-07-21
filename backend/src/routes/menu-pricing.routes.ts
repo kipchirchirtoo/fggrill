@@ -18,8 +18,8 @@ const READ_ROLES = [
   UserRole.AUDITOR,
 ];
 
-// Only SuperAdmin can edit cost / selling prices.
-const WRITE_ROLES = [UserRole.SUPER_ADMIN];
+// SuperAdmin and branch accountants can edit cost / selling prices.
+const WRITE_ROLES = [UserRole.SUPER_ADMIN, UserRole.BRANCH_ACCOUNTANT];
 
 router.get('/branch/:branchId', authorize(READ_ROLES), ctrl.getBranchMenuPricing);
 router.get('/branch/:branchId/profitability', authorize(READ_ROLES), ctrl.getBranchMenuProfitability);

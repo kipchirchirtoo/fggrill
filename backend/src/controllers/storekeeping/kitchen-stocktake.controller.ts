@@ -761,7 +761,7 @@ const fetchKitchenStandardsCatalog = async (
       item_id: inv?.id || entry.item_id || null,
       item_sku: inv?.sku || entry.item_sku || null,
       item_name: inv?.item_name || entry.item_name,
-      unit: inv?.unit || entry.unit || null,
+      unit: entry.unit || inv?.unit || null,
       category: inv?.category || entry.category || null,
       default_channel: entry.default_channel,
     };
@@ -1260,7 +1260,7 @@ const buildKitchenStocktakeContext = async (
         variance: closing - expectedQty,
         explanation: saved?.explanation ?? null,
         action_taken: saved?.action_taken ?? null,
-        unit: inv?.unit || standard.unit || item.unit_of_measure || null,
+        unit: standard.unit || inv?.unit || item.unit_of_measure || null,
         category: inv?.category || standard.category || null,
         item_type: itemType,
         channel,

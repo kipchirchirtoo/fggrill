@@ -2121,7 +2121,7 @@ export const createProductionRecipe = asyncWrap(async (req: Request, res: Respon
     const resolvedPrepStageOrder = prep_stage_order == null || prep_stage_order === ''
         ? null
         : Math.trunc(n(prep_stage_order));
-    if (resolvedPrepStageCode && !['PEEL', 'CUT', 'PREP_OTHER'].includes(resolvedPrepStageCode)) {
+    if (resolvedPrepStageCode && !['PEEL', 'CUT', 'PREP_OTHER', 'PREP_FLOW'].includes(resolvedPrepStageCode)) {
         throw new AppError('Invalid prep_stage_code', 400);
     }
     const normalizedOutputs = outputs.length > 0
@@ -2352,7 +2352,7 @@ export const updateProductionRecipe = asyncWrap(async (req: Request, res: Respon
     }
     if (Object.prototype.hasOwnProperty.call(payload, 'prep_stage_code')) {
         payload.prep_stage_code = String(payload.prep_stage_code || '').trim().toUpperCase() || null;
-        if (payload.prep_stage_code && !['PEEL', 'CUT', 'PREP_OTHER'].includes(payload.prep_stage_code)) {
+        if (payload.prep_stage_code && !['PEEL', 'CUT', 'PREP_OTHER', 'PREP_FLOW'].includes(payload.prep_stage_code)) {
             throw new AppError('Invalid prep_stage_code', 400);
         }
     }
