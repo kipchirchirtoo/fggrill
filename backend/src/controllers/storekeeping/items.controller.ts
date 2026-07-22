@@ -102,8 +102,7 @@ export const getItems = async (
       // these are prepared dishes tracked by the kitchen, not physical store stock.
       query = query
         .not('category', 'eq', 'KITCHEN MENU')
-        .not('sku', 'like', 'MENU-%')
-        .not('sku', 'like', 'FGH-%');
+        .not('sku', 'like', 'MENU-%');
     }
 
     if (search) {

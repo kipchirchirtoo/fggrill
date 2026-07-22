@@ -1197,7 +1197,6 @@ export const getMasterCatalog = async (
       .eq('is_active', true)
       .not('category', 'eq', 'KITCHEN MENU')
       .not('sku', 'like', 'MENU-%')
-      .not('sku', 'like', 'FGH-%')
       .order('item_name');
 
     if (category) {
