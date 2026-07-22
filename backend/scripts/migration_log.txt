@@ -1,0 +1,10 @@
+=== FGH Catalog Migration 2026-07-22T08:42:22.934Z [LIVE] phase=2 ===
+[08:42:27] ━━━━━━  PHASE 2: Populate branch_stock (branches 2, 5, Sotik)  ━━━━━━
+[08:42:28]   All branches: 1:Kyogong, 2:BOMET TOWN, 3:KAPLONG, 4:SOTIK, 5:MOGOGOSHIEK, 6:KAPTOTE, 7:LITEIN, 8:KAPSOIT, 9:GRILL, 10:GUESTHOUSE
+[08:42:28]   Target branches: 2:BOMET TOWN, 4:SOTIK, 5:MOGOGOSHIEK
+[08:42:29]   Active catalog items: 457
+[08:42:30]   Existing branch_stock entries for these branches: 820
+[08:42:30]   New branch_stock rows to create: 1281  (0 already exist)
+[08:42:33]     ... 1000/1281
+[08:42:33]   ✓ Created 1281 branch_stock entries (0 errors)
+[08:42:33] Migration complete: {"renamed":0,"deactivated":0,"skipped":0,"errors":0,"bs_created":1281,"bs_existing":0,"bs_errors":0}
