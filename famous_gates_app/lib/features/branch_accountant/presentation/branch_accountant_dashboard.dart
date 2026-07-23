@@ -18448,14 +18448,38 @@ class _CompactAction extends StatelessWidget {
   }
 }
 
-class _SimpleTable extends StatelessWidget {
-  const _SimpleTable({required this.columns, required this.rows});
+class _SimpleTable extends StatefulWidget {
+  const _SimpleTable({
+    super.key,
+    required this.columns,
+    required this.rows,
+    this.pageSize = 50,
+    this.enablePagination = true,
+  });
+
   final List<String> columns;
   final List<List<Object>> rows;
+  final int pageSize;
+  final bool enablePagination;
+
+  @override
+  State<_SimpleTable> createState() => _SimpleTableState();
+}
+
+class _SimpleTableState extends State<_SimpleTable> {
+  int _currentPage = 1;
+
+  @override
+  void didUpdateWidget(covariant _SimpleTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rows.length != widget.rows.length) {
+      _currentPage = 1;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) {
+    if (widget.rows.isEmpty) {
       return Padding(
         padding: ScreenSize.p(context),
         child: Center(
@@ -18464,31 +18488,116 @@ class _SimpleTable extends StatelessWidget {
         ),
       );
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        // Allow rows to grow so multi-button action cells don't overlap the
-        // next row (default DataTable row height is too short for them).
-        dataRowMinHeight: 52,
-        dataRowMaxHeight: 88,
-        columnSpacing: 24,
-        columns: columns
-            .map((column) => DataColumn(
-                  label: Text(column,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                ))
-            .toList(),
-        rows: rows
-            .map((row) => DataRow(
-                  cells: row
-                      .map((cell) => DataCell(cell is Widget
-                          ? cell
-                          : Text('$cell',
-                              overflow: TextOverflow.ellipsis, maxLines: 2)))
-                      .toList(),
-                ))
-            .toList(),
-      ),
+
+    final totalRows = widget.rows.length;
+    final shouldPaginate = widget.enablePagination && totalRows > widget.pageSize;
+    final totalPages = shouldPaginate ? (totalRows / widget.pageSize).ceil() : 1;
+
+    if (_currentPage > totalPages) {
+      _currentPage = totalPages;
+    }
+    if (_currentPage < 1) {
+      _currentPage = 1;
+    }
+
+    final startIdx = shouldPaginate ? (_currentPage - 1) * widget.pageSize : 0;
+    final endIdx = shouldPaginate ? (startIdx + widget.pageSize).clamp(0, totalRows) : totalRows;
+    final pageRows = widget.rows.sublist(startIdx, endIdx);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            dataRowMinHeight: 52,
+            dataRowMaxHeight: 88,
+            columnSpacing: 24,
+            columns: widget.columns
+                .map((column) => DataColumn(
+                      label: Text(column,
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ))
+                .toList(),
+            rows: pageRows
+                .map((row) => DataRow(
+                      cells: row
+                          .map((cell) => DataCell(cell is Widget
+                              ? cell
+                              : Text('$cell',
+                                  overflow: TextOverflow.ellipsis, maxLines: 2)))
+                          .toList(),
+                    ))
+                .toList(),
+          ),
+        ),
+        if (shouldPaginate) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              cross: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                Text(
+                  'Showing ${startIdx + 1} to $endIdx of $totalRows entries',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _currentPage > 1
+                          ? () => setState(() => _currentPage--)
+                          : null,
+                      icon: const Icon(Icons.chevron_left, size: 18),
+                      label: const Text('Previous'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.indigo.shade100),
+                      ),
+                      child: Text(
+                        'Page $_currentPage of $totalPages',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.indigo.shade900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: _currentPage < totalPages
+                          ? () => setState(() => _currentPage++)
+                          : null,
+                      icon: const Icon(Icons.chevron_right, size: 18),
+                      label: const Text('Next'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
