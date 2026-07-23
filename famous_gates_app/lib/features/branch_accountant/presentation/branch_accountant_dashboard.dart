@@ -18538,7 +18538,7 @@ class _SimpleTableState extends State<_SimpleTable> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Wrap(
               alignment: WrapAlignment.spaceBetween,
-              cross: WrapCrossAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 16,
               runSpacing: 8,
               children: [
