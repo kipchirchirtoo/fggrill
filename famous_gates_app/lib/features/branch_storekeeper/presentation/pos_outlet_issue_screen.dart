@@ -59,7 +59,9 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
   static const _barOutlets = {
     'main_bar': 'Main Bar',
     'executive_bar': 'Executive Bar',
+    'kyogong_executive_bar': 'Executive Bar',
     'sports_bar': 'Sports Bar',
+    'kyogong_sports_bar': 'Sports Bar',
   };
 
   @override
@@ -831,10 +833,18 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
     Map<String, dynamic>? presetOutput,
   }) {
     final outletId = _outletId(outlet);
+    final outletType = _outletType(outlet);
+    final isBarOutlet = _barOutlets.containsKey(outletType) ||
+        outletType.contains('bar') ||
+        widget.outletDisplayName(outlet).toLowerCase().contains('bar');
+
     final quantity = TextEditingController();
     final notes = TextEditingController();
     Map<String, dynamic>? sourceItem;
     Map<String, dynamic>? outputItem = presetOutput;
+    bool wasAutoMatched = false;
+
+    // If a preset output (clicked "Issue" from stock list), reverse-match source
     if (presetOutput != null) {
       final outputSku = _outletItemSku(presetOutput);
       final matches = widget.branchStock.where((item) {
@@ -843,6 +853,12 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
                 _outletItemName(presetOutput).toLowerCase();
       }).toList();
       sourceItem = matches.isEmpty ? null : matches.first;
+    }
+
+    // Helper: try to auto-match a branch stock item to its POS outlet item.
+    // Matches in order: exact SKU → exact name (case-insensitive).
+    Map<String, dynamic>? tryAutoMatch(Map<String, dynamic> source) {
+      return _matchingOutletItemForSource(outletId, source);
     }
 
     showDialog<void>(
@@ -867,6 +883,33 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _InfoPill('Outlet', widget.outletDisplayName(outlet)),
+                  // Bar-flow info banner
+                  if (isBarOutlet) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        border: Border.all(color: Colors.amber.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.local_bar_outlined,
+                              color: Colors.amber.shade800, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Bar stock flow: selecting a branch stock item will automatically '
+                              'link it to the matching bar POS item. Verify the link, then enter quantity.',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.amber.shade900),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   _SearchPickField(
                     label: 'Source branch stock',
@@ -877,12 +920,106 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
                     subtitleFor: (item) =>
                         '${_optionSku(item)} | Available ${_qty(item)}',
                     icon: PhosphorIcons.package(),
-                    onSelected: (item) =>
-                        setDialogState(() => sourceItem = item),
+                    onSelected: (item) {
+                      // Auto-resolve POS item for bar outlets
+                      Map<String, dynamic>? matched;
+                      bool autoMatched = false;
+                      if (isBarOutlet) {
+                        matched = tryAutoMatch(item);
+                        autoMatched = matched != null;
+                      }
+                      setDialogState(() {
+                        sourceItem = item;
+                        if (autoMatched) {
+                          outputItem = matched;
+                          wasAutoMatched = true;
+                        } else {
+                          // Clear previous auto-match when user picks a different source
+                          if (wasAutoMatched) {
+                            outputItem = null;
+                            wasAutoMatched = false;
+                          }
+                        }
+                      });
+                    },
                   ),
                   const SizedBox(height: 12),
+                  // Auto-match success banner
+                  if (isBarOutlet && outputItem != null && wasAutoMatched) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        border: Border.all(color: Colors.green.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.link,
+                              color: Colors.green.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Auto-linked → ${_outletItemName(outputItem!)}',
+                              style: TextStyle(
+                                color: Colors.green.shade800,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => setDialogState(() {
+                              outputItem = null;
+                              wasAutoMatched = false;
+                            }),
+                            child: Text('Change',
+                                style:
+                                    TextStyle(color: Colors.green.shade700)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  // Auto-match failed banner for bar outlets
+                  if (isBarOutlet &&
+                      sourceItem != null &&
+                      outputItem == null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        border: Border.all(color: Colors.orange.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.link_off,
+                              color: Colors.orange.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No auto-match found — please select the bar POS item manually below.',
+                              style: TextStyle(
+                                color: Colors.orange.shade900,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  // POS item picker — always show for manual override
+                  // For bar outlets: label changes based on auto-match state
                   _SearchPickField(
-                    label: 'POS outlet item to increase',
+                    label: isBarOutlet && wasAutoMatched && outputItem != null
+                        ? 'Bar POS item (auto-matched — tap to override)'
+                        : 'POS outlet item to increase',
                     hint: 'Search the selected outlet menu/stock item',
                     options: outletItems,
                     selected: outputItem,
@@ -890,8 +1027,10 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
                     subtitleFor: (item) =>
                         '${_outletItemSku(item)} | Current ${_qtyText(item['current_stock'] ?? item['quantity'])} ${item['unit'] ?? 'units'}',
                     icon: Icons.storefront_outlined,
-                    onSelected: (item) =>
-                        setDialogState(() => outputItem = item),
+                    onSelected: (item) => setDialogState(() {
+                      outputItem = item;
+                      wasAutoMatched = false; // manual override
+                    }),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -928,6 +1067,8 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
                       _InfoPill('POS Outlet Stock In', _qtyText(qty)),
                       if (outputItem != null)
                         _InfoPill('POS Item ID', _outletItemId(outputItem!)),
+                      if (isBarOutlet && wasAutoMatched && outputItem != null)
+                        _InfoPill('Link', 'Auto-matched ✓'),
                     ],
                   ),
                   if (outletItems.isEmpty)
@@ -989,6 +1130,8 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
                               'metadata': {
                                 'source': 'branch_store_pos_outlet_issue',
                                 'source_sku': _optionSku(source),
+                                if (isBarOutlet)
+                                  'bar_auto_matched': wasAutoMatched,
                               },
                             }
                           ],
@@ -1012,6 +1155,7 @@ class _PosOutletIssueScreenState extends ConsumerState<PosOutletIssueScreen>
         );
       }),
     );
+
   }
 
   Future<void> _commitOutletProductionItem(
@@ -1355,11 +1499,17 @@ class _StatCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    data.value,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      data.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                 ],

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
+import db from '../db';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
@@ -676,6 +677,10 @@ export const deleteUser = async (
       });
       return;
     }
+
+    // Safely un-link audit/history references so deletion is clean
+    await db.query('UPDATE room_status_history SET changed_by = NULL WHERE changed_by = $1', [id]).catch(() => {});
+    await db.query('UPDATE hk_room_status_history SET changed_by = NULL WHERE changed_by = $1', [id]).catch(() => {});
 
     // 1. Delete from Supabase Auth (admin)
     // Note: Due to our ON DELETE CASCADE migration, deleting from auth.users

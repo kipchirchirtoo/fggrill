@@ -263,6 +263,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _PosPalette.isExecutiveBar = _isExecutiveBar;
+    _PosPalette.isChomaZone = _isChomaZone;
+    _PosPalette.isMainBar = _isMainBar;
     _PosPalette.isDark = !_usesLightPalette;
     return MasterDashboardShell<OutletPosSection>(
       title: widget.title,
@@ -1235,9 +1238,34 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   bool get _isRestaurant =>
       (_outlet?.outletType ?? widget.outletType).toLowerCase() == 'restaurant';
 
+  bool get _isExecutiveBar {
+    final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();
+    return type == 'executive_bar' || type == 'kyogong_executive_bar';
+  }
+
+  bool get _isChomaZone {
+    final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();
+    return type == 'choma_zone';
+  }
+
+  bool get _isMainBar {
+    final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();
+    return type == 'main_bar' ||
+        type == 'kyogong_main_bar' ||
+        type == 'sports_bar' ||
+        type == 'kyogong_sports_bar';
+  }
+
   bool get _usesLightPalette {
     final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();
-    return type == 'restaurant' || type == 'main_bar';
+    return type == 'restaurant' ||
+        type == 'main_bar' ||
+        type == 'kyogong_main_bar' ||
+        type == 'sports_bar' ||
+        type == 'kyogong_sports_bar' ||
+        type == 'executive_bar' ||
+        type == 'kyogong_executive_bar' ||
+        type == 'choma_zone';
   }
 
   String _stationLabel(PosOutlet outlet) {
@@ -1536,7 +1564,7 @@ class _NoShiftBanner extends StatelessWidget {
         border: Border.all(color: _PosPalette.accent.withValues(alpha: 0.5)),
       ),
       child: Row(children: [
-        const Icon(Icons.lock_clock, color: _PosPalette.accent),
+        Icon(Icons.lock_clock, color: _PosPalette.accent),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -1666,16 +1694,71 @@ class _OrderContextPanel extends StatelessWidget {
 /// and avoids threading a palette object through every leaf widget below.
 class _PosPalette {
   static bool isDark = false;
+  static bool isExecutiveBar = false;
+  static bool isChomaZone = false;
+  static bool isMainBar = false;
 
-  static Color get canvas => isDark ? _darkCanvas : _lightCanvas;
-  static Color get surface => isDark ? _darkSurface : _lightSurface;
-  static Color get surfaceAlt => isDark ? _darkSurfaceAlt : _lightSurfaceAlt;
-  static Color get border => isDark ? _darkBorder : _lightBorder;
-  static const accent = Color(0xFFD9701F); // warm orange action, both themes
-  static const onAccent = Color(0xFFFFFFFF); // white text on orange buttons
-  static Color get text => isDark ? _darkText : _lightText;
-  static Color get textMuted => isDark ? _darkTextMuted : _lightTextMuted;
+  static Color get canvas => isMainBar
+      ? (isDark ? _mainBarDarkCanvas : _mainBarLightCanvas)
+      : isChomaZone
+          ? (isDark ? _chomaDarkCanvas : _chomaLightCanvas)
+          : isExecutiveBar
+              ? (isDark ? _execDarkCanvas : _execLightCanvas)
+              : (isDark ? _darkCanvas : _lightCanvas);
 
+  static Color get surface => isMainBar
+      ? (isDark ? _mainBarDarkSurface : _mainBarLightSurface)
+      : isChomaZone
+          ? (isDark ? _chomaDarkSurface : _chomaLightSurface)
+          : isExecutiveBar
+              ? (isDark ? _execDarkSurface : _execLightSurface)
+              : (isDark ? _darkSurface : _lightSurface);
+
+  static Color get surfaceAlt => isMainBar
+      ? (isDark ? _mainBarDarkSurfaceAlt : _mainBarLightSurfaceAlt)
+      : isChomaZone
+          ? (isDark ? _chomaDarkSurfaceAlt : _chomaLightSurfaceAlt)
+          : isExecutiveBar
+              ? (isDark ? _execDarkSurfaceAlt : _execLightSurfaceAlt)
+              : (isDark ? _darkSurfaceAlt : _lightSurfaceAlt);
+
+  static Color get border => isMainBar
+      ? (isDark ? _mainBarDarkBorder : _mainBarLightBorder)
+      : isChomaZone
+          ? (isDark ? _chomaDarkBorder : _chomaLightBorder)
+          : isExecutiveBar
+              ? (isDark ? _execDarkBorder : _execLightBorder)
+              : (isDark ? _darkBorder : _lightBorder);
+
+  static Color get accent => isMainBar
+      ? (isDark ? _mainBarDarkAccent : _mainBarLightAccent)
+      : isChomaZone
+          ? (isDark ? _chomaDarkAccent : _chomaLightAccent)
+          : isExecutiveBar
+              ? (isDark ? _execDarkAccent : _execLightAccent)
+              : const Color(0xFFD9701F); // warm orange action
+
+  static Color get onAccent => isChomaZone
+      ? const Color(0xFF3B1A04)
+      : const Color(0xFFFFFFFF); // white text on buttons
+
+  static Color get text => isMainBar
+      ? (isDark ? _mainBarDarkText : _mainBarLightText)
+      : isChomaZone
+          ? (isDark ? _chomaDarkText : _chomaLightText)
+          : isExecutiveBar
+              ? (isDark ? _execDarkText : _execLightText)
+              : (isDark ? _darkText : _lightText);
+
+  static Color get textMuted => isMainBar
+      ? (isDark ? _mainBarDarkTextMuted : _mainBarLightTextMuted)
+      : isChomaZone
+          ? (isDark ? _chomaDarkTextMuted : _chomaLightTextMuted)
+          : isExecutiveBar
+              ? (isDark ? _execDarkTextMuted : _execLightTextMuted)
+              : (isDark ? _darkTextMuted : _lightTextMuted);
+
+  // Standard Light (Soft Cream)
   static const _lightCanvas = Color(0xFFFAF7F2);
   static const _lightSurface = Color(0xFFFFFFFF);
   static const _lightSurfaceAlt = Color(0xFFF2ECE2);
@@ -1683,12 +1766,74 @@ class _PosPalette {
   static const _lightText = Color(0xFF3A2917); // warm dark brown (readable)
   static const _lightTextMuted = Color(0xFF8A7252);
 
+  // Standard Dark (Slate Blue)
   static const _darkCanvas = Color(0xFF2C3E50);
   static const _darkSurface = Color(0xFF34495E);
   static const _darkSurfaceAlt = Color(0xFF3D5266);
   static const _darkBorder = Color(0xFF4A6178);
   static const _darkText = Color(0xFFF5F7FA); // light text on dark slate
   static const _darkTextMuted = Color(0xFFAAB7C4);
+
+  // --- EXECUTIVE BAR WARM LIGHT BROWN THEME ---
+  static const _execLightCanvas = Color(0xFFE4B5A6);
+  static const _execLightSurface = Color(0xFFFFFFFF);
+  static const _execLightSurfaceAlt = Color(0xFFF9F2EF);
+  static const _execLightBorder = Color(0xFFD8A89A);
+  static const _execLightAccent = Color(0xFF8C4E3D);
+  static const _execLightText = Color(0xFF2B1D19);
+  static const _execLightTextMuted = Color(0xFF7D5144);
+
+  // --- EXECUTIVE BAR DEEP TERRACOTTA THEME ---
+  static const _execDarkCanvas = Color(0xFF8C4E3D);
+  static const _execDarkSurface = Color(0xFF3E221A);
+  static const _execDarkSurfaceAlt = Color(0xFF522E2B);
+  static const _execDarkBorder = Color(0xFF6E3C2F);
+  static const _execDarkAccent = Color(0xFFE4B5A6);
+  static const _execDarkText = Color(0xFFFFFFFF);
+  static const _execDarkTextMuted = Color(0xFFE4B5A6);
+
+  // --- CHOMA ZONE VIBRANT LIGHT YELLOW ACCENT THEME ---
+  static const _chomaLightCanvas = Color(0xFFFFFBEB);
+  static const _chomaLightSurface = Color(0xFFFFFFFF);
+  static const _chomaLightSurfaceAlt = Color(0xFFFEF3C7);
+  static const _chomaLightBorder = Color(0xFFFDE68A);
+  static const _chomaLightAccent = Color(0xFFEAB308); // Distinct Light Yellow Accent
+  static const _chomaLightText = Color(0xFF451A03);
+  static const _chomaLightTextMuted = Color(0xFF92400E);
+
+  // Choma Zone Dark Mode (Deep Roasted Amber)
+  static const _chomaDarkCanvas = Color(0xFF3B1A04);
+  static const _chomaDarkSurface = Color(0xFF271002);
+  static const _chomaDarkSurfaceAlt = Color(0xFF4D2409);
+  static const _chomaDarkBorder = Color(0xFF78350F);
+  static const _chomaDarkAccent = Color(0xFFF59E0B);
+  static const _chomaDarkText = Color(0xFFFFFBEB);
+  static const _chomaDarkTextMuted = Color(0xFFFDE68A);
+
+  // --- MAIN BAR LIGHT BLUE THEME ---
+  // Background: Soft Sky Ice Blue (#F0F8FF)
+  // Cards: Pure White (#FFFFFF)
+  // Surface Alt: Light Cyan/Sky Tint (#E0F2FE)
+  // Border: Soft Sky Blue Border (#BAE6FD)
+  // Accent: Vibrant Electric Light Blue (#0284C7)
+  // Text: Deep Slate Navy (#0F172A)
+  // Muted Text: Oceanic Blue (#0369A1)
+  static const _mainBarLightCanvas = Color(0xFFF0F8FF);
+  static const _mainBarLightSurface = Color(0xFFFFFFFF);
+  static const _mainBarLightSurfaceAlt = Color(0xFFE0F2FE);
+  static const _mainBarLightBorder = Color(0xFFBAE6FD);
+  static const _mainBarLightAccent = Color(0xFF0284C7);
+  static const _mainBarLightText = Color(0xFF0F172A);
+  static const _mainBarLightTextMuted = Color(0xFF0369A1);
+
+  // Main Bar Dark Mode (Deep Oceanic Navy)
+  static const _mainBarDarkCanvas = Color(0xFF0F172A);
+  static const _mainBarDarkSurface = Color(0xFF1E293B);
+  static const _mainBarDarkSurfaceAlt = Color(0xFF334155);
+  static const _mainBarDarkBorder = Color(0xFF475569);
+  static const _mainBarDarkAccent = Color(0xFF38BDF8);
+  static const _mainBarDarkText = Color(0xFFF8FAFC);
+  static const _mainBarDarkTextMuted = Color(0xFF7DD3FC);
 }
 
 class _Surface extends StatelessWidget {
@@ -1739,7 +1884,7 @@ class _Surface extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _PosPalette.accent),
+            borderSide: BorderSide(color: _PosPalette.accent),
           ),
         ),
         filledButtonTheme: FilledButtonThemeData(

@@ -2265,23 +2265,27 @@ export const createProductionRecipe = asyncWrap(async (req: Request, res: Respon
         prep_stage_code: resolvedPrepStageCode,
         prep_stage_group: resolvedPrepStageGroup,
         prep_stage_order: resolvedPrepStageOrder,
+        is_active: true,
+        updated_at: new Date().toISOString(),
         created_by: userId
     }));
 
     const { data, error } = await supabase
         .from('kitchen_production_recipes')
-        .insert(insertRows)
+        .upsert(insertRows, { onConflict: 'branch_id,raw_item_sku,produced_item_name' })
         .select();
     if (error) {
-        if (error.code === '23505') {
-            throw new AppError('A recipe standard for this raw stock item and output already exists in this branch.', 400);
-        }
         throw new AppError(error.message, 500);
     }
 
     // Insert inputs into the new table
+    const recipeIds = (data || []).map((r: any) => r.id);
+    if (recipeIds.length > 0) {
+        await supabase.from('kitchen_production_recipe_inputs').delete().in('recipe_id', recipeIds);
+    }
+
     const inputRows: any[] = [];
-    for (const recipe of data) {
+    for (const recipe of (data || [])) {
         for (const input of finalInputs) {
             inputRows.push({
                 recipe_id: recipe.id,
@@ -2292,8 +2296,10 @@ export const createProductionRecipe = asyncWrap(async (req: Request, res: Respon
             });
         }
     }
-    const { error: inputsError } = await supabase.from('kitchen_production_recipe_inputs').insert(inputRows);
-    if (inputsError) throw new AppError(inputsError.message, 500);
+    if (inputRows.length > 0) {
+        const { error: inputsError } = await supabase.from('kitchen_production_recipe_inputs').insert(inputRows);
+        if (inputsError) throw new AppError(inputsError.message, 500);
+    }
 
     await Promise.all(normalizedOutputs.map((output: any) =>
         applyPoolLink(output.pos_outlet_item_id, output.pool_item_id, output.pool_fraction)
