@@ -910,36 +910,63 @@ const recordKitchenConsumption = async (
       .eq('is_active', true)
       .maybeSingle();
     if (recipe && numberValue(recipe.produced_quantity) > 0) {
-      const rawQtyConsumed = (numberValue(recipe.raw_quantity) / numberValue(recipe.produced_quantity)) * portionsSold;
+      const producedQty = numberValue(recipe.produced_quantity);
 
-      await supabase.from('kitchen_shift_pos_consumption').insert({
-        shift_id: shift.id,
-        branch_id: branchId,
-        pos_shift_id: posShiftId,
-        pos_order_id: orderId,
-        pos_outlet_item_id: outletItemId,
-        item_index: itemIndex,
-        produced_item_sku: recipe.produced_item_sku,
-        produced_item_name: recipe.produced_item_name,
-        portions_sold: portionsSold,
-        raw_item_sku: recipe.raw_item_sku,
-        raw_item_name: recipe.raw_item_name,
-        raw_quantity_consumed: rawQtyConsumed,
-        raw_unit: recipe.raw_unit,
-        cost_price: numberValue(recipe.cost_per_output)
-      });
+      // Resolve ingredient list — single-input recipes store the SKU directly on the
+      // recipe row; multi-input recipes store 'MULTI' and list ingredients in
+      // kitchen_production_recipe_inputs. Both cases produce one consumption row per
+      // ingredient so the shift variance and void/reversal logic work uniformly.
+      let inputs: Array<{ raw_item_sku: string; raw_item_name: string; quantity: number; unit: string }>;
+      if (recipe.raw_item_sku && recipe.raw_item_sku !== 'MULTI') {
+        inputs = [{
+          raw_item_sku: recipe.raw_item_sku,
+          raw_item_name: recipe.raw_item_name,
+          quantity: numberValue(recipe.raw_quantity),
+          unit: recipe.raw_unit,
+        }];
+      } else {
+        const { data: recipeInputs } = await supabase
+          .from('kitchen_production_recipe_inputs')
+          .select('raw_item_sku, raw_item_name, quantity, unit')
+          .eq('recipe_id', recipe.id);
+        inputs = (recipeInputs || []).filter(
+          (i: any) => i.raw_item_sku && numberValue(i.quantity) > 0
+        );
+      }
 
-      const { data: shiftItem } = await supabase
-        .from('kitchen_shift_items')
-        .select('id, sold_quantity')
-        .eq('shift_id', shift.id)
-        .eq('item_sku', recipe.raw_item_sku)
-        .maybeSingle();
-      if (shiftItem) {
-        await supabase
+      for (const input of inputs) {
+        const rawQtyConsumed = (numberValue(input.quantity) / producedQty) * portionsSold;
+        if (rawQtyConsumed <= 0) continue;
+
+        await supabase.from('kitchen_shift_pos_consumption').insert({
+          shift_id: shift.id,
+          branch_id: branchId,
+          pos_shift_id: posShiftId,
+          pos_order_id: orderId,
+          pos_outlet_item_id: outletItemId,
+          item_index: itemIndex,
+          produced_item_sku: recipe.produced_item_sku,
+          produced_item_name: recipe.produced_item_name,
+          portions_sold: portionsSold,
+          raw_item_sku: input.raw_item_sku,
+          raw_item_name: input.raw_item_name,
+          raw_quantity_consumed: rawQtyConsumed,
+          raw_unit: input.unit,
+          cost_price: numberValue(recipe.cost_per_output),
+        });
+
+        const { data: shiftItem } = await supabase
           .from('kitchen_shift_items')
-          .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + rawQtyConsumed, updated_at: new Date().toISOString() })
-          .eq('id', shiftItem.id);
+          .select('id, sold_quantity')
+          .eq('shift_id', shift.id)
+          .eq('item_sku', input.raw_item_sku)
+          .maybeSingle();
+        if (shiftItem) {
+          await supabase
+            .from('kitchen_shift_items')
+            .update({ sold_quantity: numberValue(shiftItem.sold_quantity) + rawQtyConsumed, updated_at: new Date().toISOString() })
+            .eq('id', shiftItem.id);
+        }
       }
 
       continue;
