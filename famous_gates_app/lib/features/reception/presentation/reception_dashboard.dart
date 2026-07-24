@@ -1422,7 +1422,7 @@ class _RoomsSection extends ConsumerWidget {
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        childAspectRatio: 1.25,
+                        childAspectRatio: 0.95,
                       ),
                       itemBuilder: (context, index) {
                         final room = rooms[index];
@@ -3444,19 +3444,22 @@ class _RoomCard extends StatelessWidget {
         side: BorderSide(color: color.withValues(alpha: 0.45), width: 1.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               children: [
                 Text(room.displayNumber,
                     style: TextStyle(
-                        fontSize: 22,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900,
                         color: color)),
                 const Spacer(),
                 PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  iconSize: 18,
                   onSelected: onStatus,
                   itemBuilder: (context) => const [
                     PopupMenuItem(
@@ -3470,23 +3473,31 @@ class _RoomCard extends StatelessWidget {
                 ),
               ],
             ),
-            Text(room.type ?? 'Room',
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 8),
-            _StatusPill(room.status),
-            const Spacer(),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(room.type ?? 'Room',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.kTextSecondary)),
+                ),
+                const SizedBox(width: 4),
+                _StatusPill(room.status),
+              ],
+            ),
             Text(room.guestName ?? 'No guest',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontSize: 12, color: AppColors.kTextSecondary)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 6, runSpacing: 6, children: [
-              if (onQuickCheckIn != null)
-                _SmallAction('Quick check-in', Icons.login, onQuickCheckIn),
-              if (onCheckout != null)
-                _SmallAction('Checkout', Icons.logout, onCheckout),
-            ]),
+                    fontSize: 11, color: AppColors.kTextSecondary)),
+            if (onQuickCheckIn != null || onCheckout != null)
+              Wrap(spacing: 4, runSpacing: 4, children: [
+                if (onQuickCheckIn != null)
+                  _SmallAction('Quick check-in', Icons.login, onQuickCheckIn),
+                if (onCheckout != null)
+                  _SmallAction('Checkout', Icons.logout, onCheckout),
+              ]),
           ],
         ),
       ),
@@ -3521,7 +3532,7 @@ class _HousekeepingRoomGrid extends StatelessWidget {
           crossAxisCount: crossAxisCount,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.3,
+          childAspectRatio: 1.0,
         ),
         itemBuilder: (context, index) {
           final room = rooms[index];
