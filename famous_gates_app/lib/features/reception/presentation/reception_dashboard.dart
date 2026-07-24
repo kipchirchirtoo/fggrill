@@ -812,6 +812,20 @@ class _OverviewSection extends ConsumerWidget {
       title: 'Front Desk Dashboard',
       subtitle: DateFormat('EEEE, MMMM d • HH:mm').format(DateTime.now()),
       actions: [
+        ElevatedButton.icon(
+          onPressed: () => onAction(ReceptionSection.cashier),
+          icon: const Icon(Icons.point_of_sale, size: 16),
+          label: const Text('Cashier Station'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal.shade700,
+            foregroundColor: Colors.white,
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => context.go('/pos'),
+          icon: const Icon(Icons.receipt_long, size: 16),
+          label: const Text('POS Terminal'),
+        ),
         OutlinedButton.icon(
           onPressed: () => _showAttendanceDialog(context, ref),
           icon: const Icon(Icons.schedule, size: 16),
@@ -2749,6 +2763,14 @@ class _OperationsPulseSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final occupancy = (data.occupancyRate * 100).clamp(0, 100).round();
     final actionCues = [
+      _ActionCueData(
+        label: 'Cashier Station & POS',
+        value: 'KES ${_money(_num(data.cashierStats, ['today_payments', 'todayRevenue', 'today_collections']))}',
+        note: 'Point of sale billing, guest checkout folios & shift register',
+        icon: Icons.point_of_sale_outlined,
+        color: Colors.teal,
+        section: ReceptionSection.cashier,
+      ),
       _ActionCueData(
         label: 'Checkout balances',
         value: '${data.departuresWithBalance}',
