@@ -246,6 +246,16 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
             icon: Icons.bed_outlined,
             group: 'Front Desk'),
         MasterNavItem(
+            section: ReceptionSection.cashier,
+            label: 'Cashier',
+            icon: Icons.point_of_sale_outlined,
+            group: 'Cashier'),
+        MasterNavItem(
+            section: ReceptionSection.logbook,
+            label: 'Shift Logbook',
+            icon: Icons.fact_check_outlined,
+            group: 'Cashier'),
+        MasterNavItem(
             section: ReceptionSection.guests,
             label: 'Guests',
             icon: Icons.people_alt_outlined,
@@ -265,16 +275,6 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
             label: 'Catering',
             icon: Icons.room_service_outlined,
             group: 'Events'),
-        MasterNavItem(
-            section: ReceptionSection.cashier,
-            label: 'Cashier',
-            icon: Icons.point_of_sale_outlined,
-            group: 'Cashier'),
-        MasterNavItem(
-            section: ReceptionSection.logbook,
-            label: 'Shift Logbook',
-            icon: Icons.fact_check_outlined,
-            group: 'Cashier'),
         MasterNavItem(
             section: ReceptionSection.history,
             label: 'History',
@@ -2689,10 +2689,10 @@ class _StatGrid extends StatelessWidget {
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: width > 1000
-              ? 3.1
+              ? 2.45
               : width > 680
-                  ? 3.25
-                  : 3.2,
+                  ? 2.5
+                  : 2.5,
         ),
         itemBuilder: (context, index) {
           final card = cards[index];
