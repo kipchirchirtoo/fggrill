@@ -3946,28 +3946,70 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                 children: [
                   Row(children: [
                     Expanded(
-                        child: TextField(
-                      controller: _checkIn,
-                      readOnly: true,
-                      onTap: () => _pickStayDate(checkIn: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Check-in date',
-                        prefixIcon: Icon(Icons.calendar_today),
-                        suffixIcon: Icon(Icons.arrow_drop_down),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(left: 2, bottom: 6),
+                            child: Text(
+                              'Check-in Date',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.kTextPrimary),
+                            ),
+                          ),
+                          TextField(
+                            controller: _checkIn,
+                            readOnly: true,
+                            onTap: () => _pickStayDate(checkIn: true),
+                            decoration: InputDecoration(
+                              hintText: 'Select check-in date',
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              prefixIcon: const Icon(Icons.calendar_today,
+                                  size: 18),
+                              suffixIcon: const Icon(Icons.arrow_drop_down),
+                            ),
+                          ),
+                        ],
                       ),
-                    )),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                        child: TextField(
-                      controller: _checkOut,
-                      readOnly: true,
-                      onTap: () => _pickStayDate(checkIn: false),
-                      decoration: const InputDecoration(
-                        labelText: 'Check-out date',
-                        prefixIcon: Icon(Icons.event_available),
-                        suffixIcon: Icon(Icons.arrow_drop_down),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(left: 2, bottom: 6),
+                            child: Text(
+                              'Check-out Date',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.kTextPrimary),
+                            ),
+                          ),
+                          TextField(
+                            controller: _checkOut,
+                            readOnly: true,
+                            onTap: () => _pickStayDate(checkIn: false),
+                            decoration: InputDecoration(
+                              hintText: 'Select check-out date',
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              prefixIcon: const Icon(Icons.event_available,
+                                  size: 18),
+                              suffixIcon: const Icon(Icons.arrow_drop_down),
+                            ),
+                          ),
+                        ],
                       ),
-                    )),
+                    ),
                   ]),
                   const SizedBox(height: 12),
                   Row(children: [
@@ -4035,20 +4077,58 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
               isActive: _step == 2,
               content: Column(
                 children: [
-                  Row(children: [
-                    Expanded(
-                        child: TextField(
-                            controller: _guestSearch,
-                            decoration: const InputDecoration(
-                                labelText: 'Search guest'))),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                        onPressed: _searchGuests, child: const Text('Search')),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(left: 2, bottom: 6),
+                              child: Text(
+                                'Search Guest',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.kTextPrimary),
+                              ),
+                            ),
+                            TextField(
+                              controller: _guestSearch,
+                              decoration: InputDecoration(
+                                hintText: 'Enter guest name or phone...',
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 12),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8)),
+                                prefixIcon:
+                                    const Icon(Icons.search, size: 18),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _searchGuests,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                        ),
+                        child: const Text('Search'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
                         onPressed: _createGuestInline,
-                        child: const Text('New guest')),
-                  ]),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                        ),
+                        child: const Text('New guest'),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   SizedBox(
                     height: 180,
@@ -4079,10 +4159,26 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
               title: const Text('Confirm'),
               isActive: _step == 3,
               content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 2, bottom: 6),
+                    child: Text(
+                      'Meal Plan',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.kTextPrimary),
+                    ),
+                  ),
                   DropdownButtonFormField<String>(
                     initialValue: _mealPlan,
-                    decoration: const InputDecoration(labelText: 'Meal plan'),
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
                     items: const [
                       DropdownMenuItem(
                           value: 'room_only', child: Text('Room only')),
@@ -4098,17 +4194,52 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                         setState(() => _mealPlan = v ?? 'bed_breakfast'),
                   ),
                   const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, bottom: 6),
+                    child: Text(
+                      widget.isBookingMode
+                          ? 'Deposit / Payment Received (KES)'
+                          : 'Deposit / Hold Amount (KES)',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.kTextPrimary),
+                    ),
+                  ),
                   TextField(
-                      controller: _deposit,
-                      keyboardType: TextInputType.number,
-                      decoration:
-                          const InputDecoration(labelText: 'Deposit amount')),
+                    controller: _deposit,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      prefixText: 'KES ',
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
                   const SizedBox(height: 12),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 2, bottom: 6),
+                    child: Text(
+                      'Special Requests / Notes',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.kTextPrimary),
+                    ),
+                  ),
                   TextField(
-                      controller: _special,
-                      maxLines: 3,
-                      decoration:
-                          const InputDecoration(labelText: 'Special requests')),
+                    controller: _special,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: 'Guest preferences, estimated arrival time...',
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   _KeyValueList(rows: [
                     {
@@ -4377,20 +4508,49 @@ class _Counter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InputDecorator(
-      decoration: InputDecoration(labelText: label),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-              onPressed: value <= 0 ? null : () => onChanged(value - 1),
-              icon: const Icon(Icons.remove)),
-          Text('$value', style: const TextStyle(fontWeight: FontWeight.w800)),
-          IconButton(
-              onPressed: () => onChanged(value + 1),
-              icon: const Icon(Icons.add)),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          child: Text(
+            label,
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.kTextPrimary),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                onPressed: value <= 0 ? null : () => onChanged(value - 1),
+                icon: const Icon(Icons.remove, size: 18),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+              Text('$value',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 15)),
+              IconButton(
+                onPressed: () => onChanged(value + 1),
+                icon: const Icon(Icons.add, size: 18),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
