@@ -111,7 +111,12 @@ const allowedRoles = new Set([
   'kyogong_executive_bar_cashier',
   'kyogong_sports_bar_cashier',
   'kyogong_reception_cashier',
-  'choma_zone_cashier'
+  'choma_zone_cashier',
+  'receptionist',
+  'reception',
+  'front_desk',
+  'front_desk_supervisor',
+  'guest_services'
 ]);
 
 router.use(protect);
