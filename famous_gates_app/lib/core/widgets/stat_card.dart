@@ -23,19 +23,20 @@ class StatCard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final h = constraints.maxHeight;
-        // Very short tiles can't fit a stacked layout — go horizontal.
-        final tight = h.isFinite && h < 96;
-        final compact = h.isFinite && h < 150;
+        final w = constraints.maxWidth;
+        final effectiveH = h.isFinite ? h : (w.isFinite ? w / 2.5 : 120.0);
+        final tight = effectiveH < 96;
+        final compact = effectiveH < 150;
 
         if (tight) {
           return _buildTight(c);
         }
 
-        final padding = compact ? 14.0 : 20.0;
-        final iconPadding = compact ? 7.0 : 8.0;
-        final iconSize = compact ? 18.0 : 20.0;
-        final valueSize = compact ? 22.0 : 24.0;
-        final verticalGap = compact ? 10.0 : 16.0;
+        final padding = compact ? 10.0 : 16.0;
+        final iconPadding = compact ? 6.0 : 8.0;
+        final iconSize = compact ? 16.0 : 20.0;
+        final valueSize = compact ? 20.0 : 24.0;
+        final verticalGap = compact ? 4.0 : 10.0;
 
         return Container(
           padding: EdgeInsets.all(padding),
@@ -46,7 +47,7 @@ class StatCard extends StatelessWidget {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
@@ -74,27 +75,35 @@ class StatCard extends StatelessWidget {
                 ],
               ),
               SizedBox(height: verticalGap),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: valueSize,
-                    fontWeight: FontWeight.bold,
-                    color: c,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.kTextSecondary,
-                  fontSize: 12,
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: valueSize,
+                          fontWeight: FontWeight.bold,
+                          color: c,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.kTextSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
