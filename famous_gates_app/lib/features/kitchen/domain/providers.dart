@@ -71,6 +71,16 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
   }
 
   Future<void> _fetch() async {
+    // Skip network request when unauthenticated — avoids a 401 spam loop
+    // where the fallback timer keeps polling after session expiry. The
+    // auth interceptor handles the first 401, but because this provider is
+    // not autoDispose the timer outlives the KDS screen, so we guard here.
+    final storage = _ref.read(secureStorageProvider);
+    final jwt = await storage.read(key: AuthRepository.jwtKey);
+    final isLoggedIn =
+        jwt != null && jwt.trim().isNotEmpty && jwt.toLowerCase() != 'null';
+    if (!isLoggedIn) return;
+
     try {
       final repo = _ref.read(kitchenRepositoryProvider);
       final orders = await repo.getOrders();

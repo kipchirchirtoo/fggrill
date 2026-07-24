@@ -44,13 +44,16 @@ class AuthInterceptor extends Interceptor {
           message.contains('expired') ||
           message.contains('force logout') ||
           message.contains('token no longer valid');
-      if (hadToken && tokenRejected) {
+      // Force re-login when the token was explicitly rejected OR when no
+      // token was sent at all. The second case covers the race where a
+      // previous 401 already deleted the token but a concurrent poller
+      // (e.g. the KDS 2-second refresh) fires another request before the
+      // forceSessionExpired redirect lands — without this branch every
+      // subsequent unauthenticated request loops as 401 forever.
+      if ((hadToken && tokenRejected) || !hadToken) {
         final storage = _ref.read(secureStorageProvider);
         await storage.delete(key: AuthRepository.jwtKey);
         await storage.delete(key: AuthRepository.refreshKey);
-        // Without this, authNotifierProvider keeps reporting the stale
-        // logged-in user, so the router never redirects to /login — every
-        // subsequent request just 401s with "no token provided" forever.
         _ref.read(authNotifierProvider.notifier).forceSessionExpired();
       }
     }
