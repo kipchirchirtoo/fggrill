@@ -837,7 +837,7 @@ class _OverviewSection extends ConsumerWidget {
           label: const Text('Petty Cash'),
         ),
         ElevatedButton.icon(
-          onPressed: () => _showNewReservationDialog(context, ref, onRefresh),
+          onPressed: () => _showNewBookingDialog(context, ref, onRefresh),
           icon: const Icon(Icons.add, size: 16),
           label: const Text('New Booking'),
         ),
@@ -999,10 +999,15 @@ class _ReservationsSection extends ConsumerWidget {
           onPressed: () => _testSmtpConnection(context, ref),
           icon: const Icon(Icons.outgoing_mail, size: 20),
         ),
-        ElevatedButton.icon(
+        OutlinedButton.icon(
           onPressed: () => _showNewReservationDialog(context, ref, onRefresh),
-          icon: const Icon(Icons.add, size: 16),
+          icon: const Icon(Icons.bookmark_border, size: 16),
           label: const Text('New Reservation'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => _showNewBookingDialog(context, ref, onRefresh),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('New Booking'),
         ),
         OutlinedButton.icon(
           onPressed: () async {
@@ -1098,6 +1103,14 @@ class _ReservationsSection extends ConsumerWidget {
                                     Icons.edit_outlined,
                                     () => _showEditBookingDialog(
                                         context, ref, b, onRefresh)),
+                                if (b.status == 'pending' ||
+                                    b.status == 'unconfirmed' ||
+                                    b.status == 'awaiting_payment')
+                                  _SmallAction(
+                                      'Confirm Booking',
+                                      Icons.check_circle_outline,
+                                      () => _confirmBooking(
+                                          context, ref, b, onRefresh)),
                                 if (b.status == 'confirmed')
                                   _SmallAction(
                                       'Check in',
@@ -3809,8 +3822,12 @@ class _RecordDialogState extends State<_RecordDialog> {
 }
 
 class _NewReservationDialog extends ConsumerStatefulWidget {
-  const _NewReservationDialog({required this.onSuccess});
+  const _NewReservationDialog({
+    required this.onSuccess,
+    this.isBookingMode = false,
+  });
   final VoidCallback onSuccess;
+  final bool isBookingMode;
 
   @override
   ConsumerState<_NewReservationDialog> createState() =>
@@ -3893,8 +3910,27 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   @override
   Widget build(BuildContext context) {
     final total = _totalAmount();
+    final titleText = widget.isBookingMode
+        ? 'New Confirmed Booking'
+        : 'New Provisional Reservation';
+
     return AlertDialog(
-      title: const Text('New Reservation'),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(titleText, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text(
+            widget.isBookingMode
+                ? 'Creates a confirmed booking and blocks room (Status: Confirmed)'
+                : 'Creates a provisional room hold awaiting confirmation (Status: Pending)',
+            style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.normal),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 720,
         height: 560,
@@ -4108,7 +4144,13 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
         else
           ElevatedButton(
               onPressed: _busy ? null : _submit,
-              child: Text(_busy ? 'Creating...' : 'Create Reservation')),
+              child: Text(_busy
+                  ? (widget.isBookingMode
+                      ? 'Creating Booking...'
+                      : 'Creating Hold...')
+                  : (widget.isBookingMode
+                      ? 'Create Confirmed Booking'
+                      : 'Create Provisional Hold'))),
       ],
     );
   }
@@ -4181,6 +4223,7 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     if (_selectedRoom == null || _selectedGuest == null) return;
     setState(() => _busy = true);
     try {
+      final status = widget.isBookingMode ? 'confirmed' : 'pending';
       await ref.read(receptionRepositoryProvider).createBookingRow({
         'room_id': _text(_selectedRoom!, ['id']),
         'guest_id': _selectedGuest!.id,
@@ -4192,10 +4235,10 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
         'special_requests': _special.text,
         'total_amount': _totalAmount(),
         'amount_paid': num.tryParse(_deposit.text) ?? 0,
-        'status': 'confirmed',
+        'status': status,
       });
       final roomId = _text(_selectedRoom!, ['id']);
-      if (roomId != null) {
+      if (roomId != null && status == 'confirmed') {
         await ref
             .read(receptionRepositoryProvider)
             .updateRoomStatus(roomId, 'reserved');
@@ -4355,8 +4398,51 @@ class _Counter extends StatelessWidget {
 Future<void> _showNewReservationDialog(
     BuildContext context, WidgetRef ref, VoidCallback onSuccess) async {
   await showDialog<void>(
-      context: context,
-      builder: (_) => _NewReservationDialog(onSuccess: onSuccess));
+    context: context,
+    builder: (_) => _NewReservationDialog(
+      isBookingMode: false,
+      onSuccess: onSuccess,
+    ),
+  );
+}
+
+Future<void> _showNewBookingDialog(
+    BuildContext context, WidgetRef ref, VoidCallback onSuccess) async {
+  await showDialog<void>(
+    context: context,
+    builder: (_) => _NewReservationDialog(
+      isBookingMode: true,
+      onSuccess: onSuccess,
+    ),
+  );
+}
+
+Future<void> _confirmBooking(
+    BuildContext context, WidgetRef ref, Booking booking, VoidCallback onSuccess) async {
+  try {
+    await ref.read(receptionRepositoryProvider).updateBooking(booking.id, {
+      'status': 'confirmed',
+    });
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Reservation ${booking.confirmationNumber ?? booking.id} converted to Confirmed Booking!'),
+          backgroundColor: AppColors.kSuccess,
+        ),
+      );
+    }
+    onSuccess();
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to confirm booking: $e'),
+          backgroundColor: AppColors.kError,
+        ),
+      );
+    }
+  }
 }
 
 Future<void> _showEditBookingDialog(BuildContext context, WidgetRef ref,
