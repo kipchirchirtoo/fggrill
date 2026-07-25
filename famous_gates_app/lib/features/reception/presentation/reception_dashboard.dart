@@ -17,6 +17,8 @@ import '../../../core/widgets/stat_card.dart';
 import '../../cashier/presentation/cashier_dashboard.dart';
 import '../data/repository.dart';
 import '../domain/models.dart';
+import '../../templates/data/document_printer.dart';
+import '../../pos/domain/models.dart';
 import 'screens/screens.dart';
 
 enum ReceptionSection {
@@ -6933,6 +6935,52 @@ pw.Widget _pdfSummaryRow(String label, String value,
   );
 }
 
+Future<void> printReceptionPaymentReceipt({
+  required WidgetRef ref,
+  required Booking booking,
+  required num paymentAmount,
+  required String paymentMethod,
+  String? cashierName,
+  String? referenceCode,
+}) async {
+  final nights = booking.checkOut.difference(booking.checkIn).inDays;
+  final String refCode = referenceCode ??
+      booking.confirmationNumber ??
+      'REC-${booking.id.substring(0, 8)}';
+  final String roomStr = booking.roomNumber ?? 'Unassigned';
+  final String guestNameStr = booking.guestName ?? 'Guest';
+
+  await printCustomerDocument(
+    ref,
+    templateKey: 'customer_receipt',
+    fallbackTitle: 'CUSTOMER RECEIPT',
+    branchId: booking.raw['branch_id']?.toString() ?? '1',
+    sale: SaleResult(
+      transactionId: refCode,
+      createdAt: DateTime.now(),
+      receiptNumber: refCode,
+      cashierName: cashierName ?? 'Reception',
+      total: paymentAmount.toDouble(),
+      paymentMethod: _label(paymentMethod),
+    ),
+    items: [
+      CartItem(
+        productId: 'room_stay_${booking.id}',
+        name:
+            'Room $roomStr Accommodation Stay (${nights > 0 ? nights : 1} Night(s))',
+        unitPrice: paymentAmount.toDouble(),
+        qty: 1,
+      )
+    ],
+    branchName: 'FamousGate Hotels',
+    roomNumber: roomStr,
+    customerName: guestNameStr,
+    publicCode: refCode,
+    amountTendered: paymentAmount,
+    changeGiven: 0,
+  );
+}
+
 Future<void> _downloadCheckoutBill(
     BuildContext context, WidgetRef ref, Booking booking) async {
   try {
@@ -7013,9 +7061,9 @@ Future<void> _showFolioDialog(
   await showDialog<void>(
     context: context,
     builder: (_) => AlertDialog(
-      title: const Text('Folio Details'),
+      title: const Text('Folio & Billing Options'),
       content: SizedBox(
-        width: 420,
+        width: 440,
         child: _KeyValueList(rows: [
           {'label': 'Guest', 'value': booking.guestName ?? '-'},
           {'label': 'Room', 'value': booking.roomNumber ?? '-'},
@@ -7029,9 +7077,22 @@ Future<void> _showFolioDialog(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
         ),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.receipt, size: 16),
+          label: const Text('Print Receipt (Thermal)'),
+          onPressed: () async {
+            Navigator.pop(context);
+            await printReceptionPaymentReceipt(
+              ref: ref,
+              booking: booking,
+              paymentAmount: booking.amountPaid ?? 0,
+              paymentMethod: 'card_or_cash',
+            );
+          },
+        ),
         ElevatedButton.icon(
-          icon: const Icon(Icons.print, size: 16),
-          label: const Text('Print Official Invoice'),
+          icon: const Icon(Icons.picture_as_pdf, size: 16),
+          label: const Text('Print Bill / Invoice (PDF)'),
           onPressed: () {
             Navigator.pop(context);
             _downloadCheckoutBill(context, ref, booking);
