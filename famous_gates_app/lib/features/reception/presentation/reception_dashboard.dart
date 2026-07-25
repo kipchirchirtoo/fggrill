@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets' as pw;
+import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -448,6 +448,62 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
   }
 }
 
+class _BreakfastSummaryCard extends StatelessWidget {
+  const _BreakfastSummaryCard({
+    required this.title,
+    required this.mainText,
+    required this.subText,
+    required this.icon,
+  });
+
+  final String title;
+  final String mainText;
+  final String subText;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: AppColors.kPrimary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(mainText,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 2),
+          Text(subText,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        ],
+      ),
+    );
+  }
+}
+
 class _BreakfastPaxSection extends ConsumerStatefulWidget {
   const _BreakfastPaxSection();
 
@@ -598,6 +654,349 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: FutureBuilder<Map<String, dynamic>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const LoadingSkeleton(type: SkeletonType.list);
+          }
+          if (snapshot.hasError) {
+            return ErrorState(
+              message: apiErrorMessage(snapshot.error ?? 'Unknown error'),
+              onRetry: _refresh,
+            );
+          }
+
+          final data = snapshot.data ?? const <String, dynamic>{};
+          final checkedIn =
+              (data['checked_in_reservations'] as num?)?.toInt() ?? 0;
+          final eligible =
+              (data['eligible_reservations'] as num?)?.toInt() ?? 0;
+          final status =
+              (data['status']?.toString() ?? 'unconfirmed').toLowerCase();
+          final bookings =
+              (data['eligible_bookings'] as List?)?.whereType<Map>().toList() ??
+                  const <Map>[];
+
+          final typedBookings =
+              bookings.map((b) => Map<String, dynamic>.from(b)).toList();
+
+          int calcAdults = 0;
+          int calcChildren = 0;
+          final Set<String> occupiedRooms = {};
+          for (final b in typedBookings) {
+            calcAdults += (b['adults'] as num?)?.toInt() ??
+                (b['pax'] as num?)?.toInt() ??
+                1;
+            calcChildren += (b['children'] as num?)?.toInt() ?? 0;
+            final rm = b['room_number']?.toString() ?? b['room']?.toString();
+            if (rm != null && rm.isNotEmpty) occupiedRooms.add(rm);
+          }
+          final calcTotal = calcAdults + calcChildren;
+
+          final confAdults =
+              int.tryParse(_confirmedAdultsController.text) ?? calcAdults;
+          final confChildren =
+              int.tryParse(_confirmedChildrenController.text) ?? calcChildren;
+          final paidExtra = int.tryParse(_paidExtraController.text) ?? 0;
+          final compl = int.tryParse(_complimentaryController.text) ?? 0;
+          final excludedCount = _excludedBookingIds.length;
+          final finalConfirmedTotal =
+              confAdults + confChildren + paidExtra + compl - excludedCount;
+          final adjustment = finalConfirmedTotal - calcTotal;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Daily Breakfast Pax',
+                            style: TextStyle(
+                                fontSize: 24, fontWeight: FontWeight.w800)),
+                        SizedBox(height: 4),
+                        Text(
+                          'Reception confirms accommodation breakfast pax for the kitchen session and closing reconciliation.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 160,
+                    child: TextFormField(
+                      controller: _dateController,
+                      decoration: const InputDecoration(
+                        labelText: 'Breakfast date',
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      onFieldSubmitted: (_) => _refresh(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Reload'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _showExportPdfDialog(typedBookings),
+                    icon: const Icon(Icons.picture_as_pdf,
+                        size: 18, color: Colors.red),
+                    label: const Text('Export PDF'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _showVersionHistoryDialog,
+                    icon: const Icon(Icons.history, size: 18),
+                    label: const Text('View History'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
+                  _BreakfastSummaryCard(
+                    title: 'Checked-in bookings',
+                    mainText: '$checkedIn bookings',
+                    subText: '${occupiedRooms.length} occupied rooms',
+                    icon: Icons.hotel_outlined,
+                  ),
+                  _BreakfastSummaryCard(
+                    title: 'Breakfast-eligible stays',
+                    mainText: '$eligible stays',
+                    subText: 'BB, HB and FB plans',
+                    icon: Icons.people_alt_outlined,
+                  ),
+                  _BreakfastSummaryCard(
+                    title: 'Calculated pax',
+                    mainText: '$calcTotal',
+                    subText: '$calcAdults adults · $calcChildren children',
+                    icon: Icons.calculate_outlined,
+                  ),
+                  _BreakfastSummaryCard(
+                    title: 'Confirmed pax',
+                    mainText: '$finalConfirmedTotal',
+                    subText: status == 'confirmed'
+                        ? 'Confirmed (v${_versionsHistory.length})'
+                        : 'Status: ${status.toUpperCase()}',
+                    icon: Icons.verified_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: status == 'confirmed'
+                      ? Colors.green.shade50
+                      : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: status == 'confirmed'
+                        ? Colors.green.shade300
+                        : Colors.orange.shade300,
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: status == 'confirmed'
+                              ? Colors.green.shade100
+                              : Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Status: ${status.replaceAll('_', ' ').toUpperCase()}',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: status == 'confirmed'
+                                  ? Colors.green.shade900
+                                  : Colors.orange.shade900),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Text('Calculated: $calcTotal',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 14),
+                      _barInput('Confirmed Adults', _confirmedAdultsController, 85),
+                      const SizedBox(width: 8),
+                      _barInput('Confirmed Children', _confirmedChildrenController, 85),
+                      const SizedBox(width: 8),
+                      _barInput('Paid Extra', _paidExtraController, 75),
+                      const SizedBox(width: 8),
+                      _barInput('Complimentary', _complimentaryController, 85),
+                      const SizedBox(width: 14),
+                      Text('Confirmed Total: $finalConfirmedTotal',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.kPrimary)),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Adjustment: ${adjustment >= 0 ? "+$adjustment" : "$adjustment"}',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: adjustment == 0
+                                ? Colors.grey
+                                : (adjustment > 0
+                                    ? Colors.green.shade800
+                                    : Colors.red.shade800)),
+                      ),
+                      const SizedBox(width: 14),
+                      SizedBox(
+                        width: 220,
+                        child: TextField(
+                          controller: _reasonController,
+                          decoration: const InputDecoration(
+                            hintText: 'Adjustment reason...',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: _saving ? null : () => _save('draft'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black87),
+                        child: const Text('Save Draft'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _saving ? null : () => _save('confirmed'),
+                        child: const Text('Confirm for Kitchen'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _tabButton(0, 'Eligible Guests (${typedBookings.length})'),
+                  _tabButton(1, 'Expected Arrivals'),
+                  _tabButton(2, 'Checkout Today'),
+                  _tabButton(3, 'Paid & Complimentary (${_paidEntries.length + _complimentaryEntries.length})'),
+                  _tabButton(4, 'Changes / Audit (${_versionsHistory.length})'),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 260,
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Search room, guest, ref...',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  DropdownButton<String>(
+                    value: _mealPlanFilter,
+                    underline: const SizedBox(),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('All Meal Plans')),
+                      DropdownMenuItem(value: 'bed_breakfast', child: Text('Bed & Breakfast')),
+                      DropdownMenuItem(value: 'half_board', child: Text('Half Board')),
+                      DropdownMenuItem(value: 'full_board', child: Text('Full Board')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setState(() => _mealPlanFilter = val);
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  DropdownButton<String>(
+                    value: _quickFilter,
+                    underline: const SizedBox(),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('Quick Filter: All')),
+                      DropdownMenuItem(value: 'in_house', child: Text('In-House Only')),
+                      DropdownMenuItem(value: 'checkout_today', child: Text('Checkout Today')),
+                      DropdownMenuItem(value: 'dietary', child: Text('Special Dietary Notes')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setState(() => _quickFilter = val);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: _buildActiveTabBody(typedBookings),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Adults: $calcAdults | Children: $calcChildren | Excluded: $excludedCount | Paid Extra: $paidExtra | Complimentary: $compl',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    Text(
+                      'Final Confirmed Pax: $finalConfirmedTotal',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppColors.kPrimary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _showConfirmKitchenDialog() {
