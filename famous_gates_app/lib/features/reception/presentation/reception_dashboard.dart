@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets' as pw;
+import 'package:printing/printing.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/api_error_message.dart';
@@ -455,11 +458,32 @@ class _BreakfastPaxSection extends ConsumerStatefulWidget {
 
 class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
   late final TextEditingController _dateController;
-  final TextEditingController _confirmedController = TextEditingController();
+  final TextEditingController _confirmedAdultsController =
+      TextEditingController();
+  final TextEditingController _confirmedChildrenController =
+      TextEditingController();
+  final TextEditingController _paidExtraController =
+      TextEditingController(text: '0');
+  final TextEditingController _complimentaryController =
+      TextEditingController(text: '0');
   final TextEditingController _reasonController = TextEditingController();
-  bool _saving = false;
-  late Future<Map<String, dynamic>> _future;
+  final TextEditingController _searchController = TextEditingController();
 
+  bool _saving = false;
+  int _activeTab = 0;
+  String _mealPlanFilter = 'all';
+  String _quickFilter = 'all';
+
+  final Set<String> _expandedRowIds = {};
+  final Set<String> _excludedBookingIds = {};
+  final Set<String> _earlyBreakfastIds = {};
+  final Set<String> _packedBreakfastIds = {};
+  final Map<String, String> _dietaryNotes = {};
+  final List<Map<String, dynamic>> _paidEntries = [];
+  final List<Map<String, dynamic>> _complimentaryEntries = [];
+  final List<Map<String, dynamic>> _versionsHistory = [];
+
+  late Future<Map<String, dynamic>> _future;
   ReceptionRepository get _repo => ref.read(receptionRepositoryProvider);
 
   @override
@@ -467,8 +491,7 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     super.initState();
     final today = DateTime.now();
     _dateController = TextEditingController(
-      text:
-          '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}',
+      text: DateFormat('yyyy-MM-dd').format(today),
     );
     _future = _load();
   }
@@ -476,15 +499,35 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
   @override
   void dispose() {
     _dateController.dispose();
-    _confirmedController.dispose();
+    _confirmedAdultsController.dispose();
+    _confirmedChildrenController.dispose();
+    _paidExtraController.dispose();
+    _complimentaryController.dispose();
     _reasonController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   Future<Map<String, dynamic>> _load() async {
     final data = await _repo.getDailyBreakfastPax(date: _dateController.text);
-    _confirmedController.text =
-        '${(data['confirmed_pax'] as num?)?.toInt() ?? 0}';
+    final bookings =
+        (data['eligible_bookings'] as List?)?.whereType<Map>().toList() ?? [];
+
+    int calcAdults = 0;
+    int calcChildren = 0;
+    for (final b in bookings) {
+      calcAdults += (b['adults'] as num?)?.toInt() ??
+          (b['pax'] as num?)?.toInt() ??
+          1;
+      calcChildren += (b['children'] as num?)?.toInt() ?? 0;
+    }
+
+    if (_confirmedAdultsController.text.isEmpty) {
+      _confirmedAdultsController.text = '$calcAdults';
+    }
+    if (_confirmedChildrenController.text.isEmpty) {
+      _confirmedChildrenController.text = '$calcChildren';
+    }
     _reasonController.text = data['adjustment_reason']?.toString() ?? '';
     return data;
   }
@@ -495,243 +538,1189 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     });
   }
 
-  Future<void> _save(String status) async {
+  Future<void> _save(String statusTarget) async {
+    if (statusTarget == 'confirmed') {
+      _showConfirmKitchenDialog();
+      return;
+    }
+    await _executeSave('draft');
+  }
+
+  Future<void> _executeSave(String status) async {
     setState(() => _saving = true);
     try {
+      final adults = int.tryParse(_confirmedAdultsController.text) ?? 0;
+      final children = int.tryParse(_confirmedChildrenController.text) ?? 0;
+      final paid = int.tryParse(_paidExtraController.text) ?? 0;
+      final compl = int.tryParse(_complimentaryController.text) ?? 0;
+      final total =
+          adults + children + paid + compl - _excludedBookingIds.length;
+
       await _repo.saveDailyBreakfastPax(
         date: _dateController.text,
-        confirmedPax: int.tryParse(_confirmedController.text.trim()) ?? 0,
+        confirmedPax: total,
         status: status,
         adjustmentReason: _reasonController.text,
       );
+
+      final versionNum = _versionsHistory.length + 1;
+      _versionsHistory.insert(0, {
+        'version': versionNum,
+        'status': status,
+        'pax': total,
+        'adults': adults,
+        'children': children,
+        'reason': _reasonController.text.isEmpty
+            ? 'Routine pax confirmation'
+            : _reasonController.text,
+        'timestamp': DateFormat('HH:mm:ss').format(DateTime.now()),
+        'user': 'Reception User',
+      });
+
       _refresh();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: AppColors.kSuccess,
           content: Text(status == 'draft'
-              ? 'Breakfast pax draft saved.'
-              : 'Breakfast pax confirmed. Kitchen can now issue Accommodation Breakfast stock.'),
+              ? 'Breakfast pax draft saved successfully.'
+              : 'Breakfast pax (v$versionNum) confirmed and dispatched to Kitchen!'),
         ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(apiErrorMessage(error))),
+        SnackBar(
+          backgroundColor: AppColors.kError,
+          content: Text(apiErrorMessage(error)),
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: FutureBuilder<Map<String, dynamic>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const LoadingSkeleton(type: SkeletonType.list);
-          }
-          if (snapshot.hasError) {
-            return ErrorState(
-              message: apiErrorMessage(snapshot.error ?? 'Unknown error'),
-              onRetry: _refresh,
-            );
-          }
+  void _showConfirmKitchenDialog() {
+    final adults = int.tryParse(_confirmedAdultsController.text) ?? 0;
+    final children = int.tryParse(_confirmedChildrenController.text) ?? 0;
+    final paid = int.tryParse(_paidExtraController.text) ?? 0;
+    final compl = int.tryParse(_complimentaryController.text) ?? 0;
+    final finalPax =
+        adults + children + paid + compl - _excludedBookingIds.length;
 
-          final data = snapshot.data ?? const <String, dynamic>{};
-          final calculated = (data['calculated_pax'] as num?)?.toInt() ?? 0;
-          final confirmed = (data['confirmed_pax'] as num?)?.toInt() ?? 0;
-          final checkedIn =
-              (data['checked_in_reservations'] as num?)?.toInt() ?? 0;
-          final eligible =
-              (data['eligible_reservations'] as num?)?.toInt() ?? 0;
-          final status =
-              (data['status']?.toString() ?? 'unconfirmed').toLowerCase();
-          final bookings =
-              (data['eligible_bookings'] as List?)?.whereType<Map>().toList() ??
-                  const <Map>[];
-
-          return Column(
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.soup_kitchen, color: AppColors.kPrimary),
+            const SizedBox(width: 8),
+            Text('Confirm Breakfast Pax for Kitchen (${_dateController.text})'),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Column(
+                  children: [
+                    _dialogSummaryRow('Confirmed Adults', '$adults'),
+                    _dialogSummaryRow('Confirmed Children', '$children'),
+                    _dialogSummaryRow(
+                        'Excluded Pax', '-${_excludedBookingIds.length}'),
+                    _dialogSummaryRow('Paid Additional Pax', '+$paid'),
+                    _dialogSummaryRow('Complimentary Pax', '+$compl'),
+                    const Divider(),
+                    _dialogSummaryRow('Final Confirmed Total', '$finalPax',
+                        isBold: true),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Dietary & Special Entitlements:',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
                 children: [
-                  const Expanded(
-                    child: Column(
+                  Chip(
+                    avatar: const Icon(Icons.alarm, size: 16),
+                    label: Text('Early Breakfast: ${_earlyBreakfastIds.length}'),
+                  ),
+                  Chip(
+                    avatar: const Icon(Icons.takeout_dining, size: 16),
+                    label: Text('Packed Breakfast: ${_packedBreakfastIds.length}'),
+                  ),
+                  Chip(
+                    avatar: const Icon(Icons.note_alt, size: 16),
+                    label: Text('Dietary Notes: ${_dietaryNotes.length}'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_reasonController.text.trim().isEmpty &&
+                  _excludedBookingIds.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  color: Colors.amber.shade50,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.amber),
+                      SizedBox(width: 6),
+                      Expanded(
+                          child: Text(
+                        'Note: Please ensure an adjustment reason is provided if totals differ from calculated.',
+                        style: TextStyle(fontSize: 12),
+                      )),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _executeSave('draft');
+            },
+            child: const Text('Save Draft'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.send),
+            label: const Text('Confirm & Send to Kitchen'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _executeSave('confirmed');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dialogSummaryRow(String label, String value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                  fontSize: isBold ? 14 : 13)),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+                  fontSize: isBold ? 14 : 13,
+                  color: isBold ? AppColors.kPrimary : null)),
+        ],
+      ),
+    );
+  }
+
+  void _showVersionHistoryDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.history, color: AppColors.kPrimary),
+            SizedBox(width: 8),
+            Text('Breakfast Confirmation Version History'),
+          ],
+        ),
+        content: SizedBox(
+          width: 540,
+          height: 380,
+          child: _versionsHistory.isEmpty
+              ? const Center(
+                  child: Text(
+                      'No confirmation history recorded for this session date.'),
+                )
+              : ListView.separated(
+                  itemCount: _versionsHistory.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, idx) {
+                    final v = _versionsHistory[idx];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor:
+                            AppColors.kPrimary.withValues(alpha: 0.1),
+                        child: Text('v${v['version']}'),
+                      ),
+                      title: Text(
+                          'Version ${v['version']} - ${v['pax']} Confirmed Pax (${v['status'].toString().toUpperCase()})'),
+                      subtitle: Text(
+                          '${v['adults']} adults · ${v['children']} children\nReason: ${v['reason']}'),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(v['timestamp'] ?? ''),
+                          Text(v['user'] ?? '',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showExportPdfDialog(List<Map<String, dynamic>> bookings) async {
+    String reportType = 'confirmed_guest_list';
+    bool incGuestNames = true;
+    bool incBookingRefs = true;
+    bool incRoomNumbers = true;
+    bool incDietaryNotes = true;
+    bool incSignatureBlock = true;
+    String formatType = 'portrait';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.picture_as_pdf, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Export Breakfast Report'),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Report Type',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    initialValue: reportType,
+                    decoration:
+                        const InputDecoration(border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'confirmed_guest_list',
+                          child: Text('A. Confirmed Breakfast Guest List')),
+                      DropdownMenuItem(
+                          value: 'kitchen_plan',
+                          child: Text('B. Kitchen Breakfast Plan')),
+                      DropdownMenuItem(
+                          value: 'room_list',
+                          child: Text('C. Room-by-Room Breakfast List')),
+                      DropdownMenuItem(
+                          value: 'pax_summary',
+                          child: Text('D. Breakfast Pax Summary')),
+                      DropdownMenuItem(
+                          value: 'forecast',
+                          child: Text('E. Date-Range Breakfast Forecast')),
+                      DropdownMenuItem(
+                          value: 'group_report',
+                          child: Text('F. Group Breakfast Report')),
+                      DropdownMenuItem(
+                          value: 'audit_report',
+                          child: Text('G. Adjustments & Audit Report')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setModalState(() => reportType = val);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Include Details',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  CheckboxListTile(
+                    title: const Text('Guest Names'),
+                    value: incGuestNames,
+                    onChanged: (v) =>
+                        setModalState(() => incGuestNames = v ?? true),
+                  ),
+                  CheckboxListTile(
+                    title: const Text('Booking References'),
+                    value: incBookingRefs,
+                    onChanged: (v) =>
+                        setModalState(() => incBookingRefs = v ?? true),
+                  ),
+                  CheckboxListTile(
+                    title: const Text('Room Numbers'),
+                    value: incRoomNumbers,
+                    onChanged: (v) =>
+                        setModalState(() => incRoomNumbers = v ?? true),
+                  ),
+                  CheckboxListTile(
+                    title: const Text('Dietary & Special Notes'),
+                    value: incDietaryNotes,
+                    onChanged: (v) =>
+                        setModalState(() => incDietaryNotes = v ?? true),
+                  ),
+                  CheckboxListTile(
+                    title: const Text('Signature Block (Reception/Kitchen)'),
+                    value: incSignatureBlock,
+                    onChanged: (v) =>
+                        setModalState(() => incSignatureBlock = v ?? true),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Page Format',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text('A4 Portrait'),
+                          value: 'portrait',
+                          groupValue: formatType,
+                          onChanged: (v) =>
+                              setModalState(() => formatType = v!),
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text('A4 Landscape'),
+                          value: 'landscape',
+                          groupValue: formatType,
+                          onChanged: (v) =>
+                              setModalState(() => formatType = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.print),
+              label: const Text('Print / Save PDF'),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _printPdfReport(
+                  bookings: bookings,
+                  reportType: reportType,
+                  incGuestNames: incGuestNames,
+                  incBookingRefs: incBookingRefs,
+                  incRoomNumbers: incRoomNumbers,
+                  incDietaryNotes: incDietaryNotes,
+                  incSignatureBlock: incSignatureBlock,
+                  isLandscape: formatType == 'landscape',
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _printPdfReport({
+    required List<Map<String, dynamic>> bookings,
+    required String reportType,
+    required bool incGuestNames,
+    required bool incBookingRefs,
+    required bool incRoomNumbers,
+    required bool incDietaryNotes,
+    required bool incSignatureBlock,
+    required bool isLandscape,
+  }) async {
+    final pdf = pw.Document();
+    final pageFormat =
+        isLandscape ? PdfPageFormat.a4.landscape : PdfPageFormat.a4;
+
+    final adults = int.tryParse(_confirmedAdultsController.text) ?? 0;
+    final children = int.tryParse(_confirmedChildrenController.text) ?? 0;
+    final paid = int.tryParse(_paidExtraController.text) ?? 0;
+    final compl = int.tryParse(_complimentaryController.text) ?? 0;
+    final total =
+        adults + children + paid + compl - _excludedBookingIds.length;
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: pageFormat,
+        build: (pw.Context context) {
+          return [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('FAMOUS GATES HOTELS',
+                        style: pw.TextStyle(
+                            fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Breakfast Pax Operations Report',
+                        style: const pw.TextStyle(fontSize: 12)),
+                    pw.Text('Date: ${_dateController.text}',
+                        style: const pw.TextStyle(fontSize: 10)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                        'Report Type: ${reportType.replaceAll('_', ' ').toUpperCase()}',
+                        style: pw.TextStyle(
+                            fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(
+                        'Generated: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+                        style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('System: FG Hotels Management',
+                        style: const pw.TextStyle(fontSize: 9)),
+                  ],
+                ),
+              ],
+            ),
+            pw.Divider(),
+            pw.SizedBox(height: 10),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey400)),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  pw.Text('Adults: $adults'),
+                  pw.Text('Children: $children'),
+                  pw.Text('Excluded: ${_excludedBookingIds.length}'),
+                  pw.Text('Paid Extras: $paid'),
+                  pw.Text('Complimentary: $compl'),
+                  pw.Text('Total Pax: $total',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 14),
+            pw.TableHelper.fromTextArray(
+              headers: [
+                if (incRoomNumbers) 'Room',
+                if (incBookingRefs) 'Booking Ref',
+                if (incGuestNames) 'Guest Name',
+                'Plan',
+                'Adults',
+                'Children',
+                'Total',
+                if (incDietaryNotes) 'Dietary / Notes',
+              ],
+              data: bookings.map((b) {
+                final refStr = b['confirmation_number']?.toString() ?? '-';
+                final isExcluded = _excludedBookingIds.contains(refStr);
+                final notes = <String>[];
+                if (_earlyBreakfastIds.contains(refStr)) notes.add('Early');
+                if (_packedBreakfastIds.contains(refStr)) notes.add('Packed');
+                if (_dietaryNotes.containsKey(refStr)) {
+                  notes.add(_dietaryNotes[refStr]!);
+                }
+
+                return [
+                  if (incRoomNumbers)
+                    b['room_number']?.toString() ??
+                        b['room']?.toString() ??
+                        '-',
+                  if (incBookingRefs) refStr,
+                  if (incGuestNames)
+                    isExcluded
+                        ? '${b['guest_name']} (EXCLUDED)'
+                        : b['guest_name']?.toString() ?? 'Guest',
+                  b['meal_plan']?.toString() ?? 'BB',
+                  '${b['adults'] ?? 1}',
+                  '${b['children'] ?? 0}',
+                  '${(b['adults'] as num? ?? 1) + (b['children'] as num? ?? 0)}',
+                  if (incDietaryNotes) notes.isEmpty ? '-' : notes.join(', '),
+                ];
+              }).toList(),
+            ),
+            pw.SizedBox(height: 20),
+            if (incSignatureBlock)
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    children: [
+                      pw.Text('_________________________'),
+                      pw.Text('Prepared by (Reception)'),
+                    ],
+                  ),
+                  pw.Column(
+                    children: [
+                      pw.Text('_________________________'),
+                      pw.Text('Confirmed by (Manager)'),
+                    ],
+                  ),
+                  pw.Column(
+                    children: [
+                      pw.Text('_________________________'),
+                      pw.Text('Received by (Kitchen)'),
+                    ],
+                  ),
+                ],
+              ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Breakfast_Report_${_dateController.text}.pdf',
+    );
+  }
+
+  void _showAddPaidBreakfastDialog() {
+    final guestCtrl = TextEditingController();
+    final roomCtrl = TextEditingController();
+    final adultsCtrl = TextEditingController(text: '1');
+    final childCtrl = TextEditingController(text: '0');
+    final amountCtrl = TextEditingController(text: '1200');
+    String paymentMethod = 'cash';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Paid Extra Breakfast Ticket'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: guestCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Guest Name / Walk-in *',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: roomCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Room Number (Optional)',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: adultsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Adults', border: OutlineInputBorder()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: childCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Children', border: OutlineInputBorder()),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Total Amount (KES)',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: paymentMethod,
+                  decoration: const InputDecoration(
+                      labelText: 'Payment Method', border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                    DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                    DropdownMenuItem(value: 'card', child: Text('Card')),
+                    DropdownMenuItem(
+                        value: 'room_charge', child: Text('Room Charge')),
+                  ],
+                  onChanged: (v) => paymentMethod = v ?? 'cash',
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final a = int.tryParse(adultsCtrl.text) ?? 1;
+              final c = int.tryParse(childCtrl.text) ?? 0;
+              setState(() {
+                _paidEntries.add({
+                  'guest':
+                      guestCtrl.text.isEmpty ? 'Walk-in Guest' : guestCtrl.text,
+                  'room': roomCtrl.text,
+                  'adults': a,
+                  'children': c,
+                  'amount': amountCtrl.text,
+                  'method': paymentMethod,
+                  'time': DateFormat('HH:mm').format(DateTime.now()),
+                });
+                _paidExtraController.text =
+                    '${(int.tryParse(_paidExtraController.text) ?? 0) + a + c}';
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Add Paid Ticket'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddComplimentaryDialog() {
+    final guestCtrl = TextEditingController();
+    final roomCtrl = TextEditingController();
+    final adultsCtrl = TextEditingController(text: '1');
+    final childCtrl = TextEditingController(text: '0');
+    final reasonCtrl = TextEditingController();
+    final authCtrl = TextEditingController(text: 'GM / Reception');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Complimentary Breakfast Voucher'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: guestCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Guest Name *', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: roomCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Room Number / VIP', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: adultsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Adults', border: OutlineInputBorder()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: childCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Children', border: OutlineInputBorder()),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: reasonCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Reason (VIP / Service Recovery)',
+                      border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: authCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Authorized By', border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final a = int.tryParse(adultsCtrl.text) ?? 1;
+              final c = int.tryParse(childCtrl.text) ?? 0;
+              setState(() {
+                _complimentaryEntries.add({
+                  'guest':
+                      guestCtrl.text.isEmpty ? 'VIP Guest' : guestCtrl.text,
+                  'room': roomCtrl.text,
+                  'adults': a,
+                  'children': c,
+                  'reason': reasonCtrl.text,
+                  'auth': authCtrl.text,
+                  'time': DateFormat('HH:mm').format(DateTime.now()),
+                });
+                _complimentaryController.text =
+                    '${(int.tryParse(_complimentaryController.text) ?? 0) + a + c}';
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Add Voucher'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _barInput(
+      String label, TextEditingController controller, double width) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          border: const OutlineInputBorder(),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        ),
+      ),
+    );
+  }
+
+  Widget _tabButton(int index, String label) {
+    final active = _activeTab == index;
+    return InkWell(
+      onTap: () => setState(() => _activeTab = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        margin: const EdgeInsets.only(right: 6),
+        decoration: BoxDecoration(
+          color: active ? AppColors.kPrimary : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: active ? FontWeight.bold : FontWeight.w600,
+            color: active ? Colors.white : Colors.grey.shade800,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTabBody(List<Map<String, dynamic>> typedBookings) {
+    switch (_activeTab) {
+      case 0:
+        return _buildEligibleGuestsTab(typedBookings);
+      case 1:
+        return _buildExpectedArrivalsTab(typedBookings);
+      case 2:
+        return _buildCheckoutTodayTab(typedBookings);
+      case 3:
+        return _buildPaidAndComplimentaryTab();
+      case 4:
+        return _buildChangesAuditTab();
+      default:
+        return _buildEligibleGuestsTab(typedBookings);
+    }
+  }
+
+  Widget _buildEligibleGuestsTab(List<Map<String, dynamic>> bookings) {
+    var filtered = bookings.where((b) {
+      final q = _searchController.text.toLowerCase();
+      final guest = (b['guest_name'] ?? '').toString().toLowerCase();
+      final room = (b['room_number'] ?? b['room'] ?? '').toString().toLowerCase();
+      final refStr = (b['confirmation_number'] ?? '').toString().toLowerCase();
+      if (q.isNotEmpty &&
+          !guest.contains(q) &&
+          !room.contains(q) &&
+          !refStr.contains(q)) {
+        return false;
+      }
+      final plan = (b['meal_plan'] ?? '').toString().toLowerCase();
+      if (_mealPlanFilter != 'all' && !plan.contains(_mealPlanFilter)) {
+        return false;
+      }
+      final refKey = b['confirmation_number']?.toString() ?? '';
+      if (_quickFilter == 'dietary' && !_dietaryNotes.containsKey(refKey)) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return const Center(
+        child: Text('No breakfast-eligible guests match the current filters.'),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: filtered.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final b = filtered[index];
+        final refStr = b['confirmation_number']?.toString() ?? '-';
+        final isExpanded = _expandedRowIds.contains(refStr);
+        final isExcluded = _excludedBookingIds.contains(refStr);
+
+        return Column(
+          children: [
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: isExcluded
+                    ? Colors.red.shade100
+                    : AppColors.kPrimary.withValues(alpha: 0.1),
+                child: Text(b['room_number']?.toString() ?? 'R'),
+              ),
+              title: Text(
+                'Room ${b['room_number'] ?? '-'} • ${b['guest_name'] ?? 'Guest'}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  decoration: isExcluded ? TextDecoration.lineThrough : null,
+                ),
+              ),
+              subtitle: Text(
+                  'Ref: $refStr • Plan: ${b['meal_plan'] ?? 'BB'} • Stay: ${b['check_in_date'] ?? '-'} to ${b['check_out_date'] ?? '-'}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isExcluded
+                          ? Colors.red.shade50
+                          : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isExcluded
+                          ? 'Excluded'
+                          : '${(b['adults'] ?? 1) + (b['children'] ?? 0)} pax',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isExcluded
+                              ? Colors.red.shade800
+                              : Colors.green.shade800),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(isExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down),
+                    onPressed: () {
+                      setState(() {
+                        if (isExpanded) {
+                          _expandedRowIds.remove(refStr);
+                        } else {
+                          _expandedRowIds.add(refStr);
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            if (isExpanded)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                color: Colors.grey.shade50,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Daily Breakfast Pax',
-                            style: TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.w800)),
-                        SizedBox(height: 4),
-                        Text(
-                          'Reception confirms accommodation breakfast pax for the kitchen session and closing reconciliation.',
-                          style: TextStyle(color: Colors.grey),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Booking Info',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                              Text('Adults: ${b['adults'] ?? 1}'),
+                              Text('Children: ${b['children'] ?? 0}'),
+                              Text('Status: ${b['status'] ?? 'Checked-In'}'),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Special Instructions',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _earlyBreakfastIds.contains(refStr),
+                                    onChanged: (v) => setState(() {
+                                      if (v == true) {
+                                        _earlyBreakfastIds.add(refStr);
+                                      } else {
+                                        _earlyBreakfastIds.remove(refStr);
+                                      }
+                                    }),
+                                  ),
+                                  const Text('Early Breakfast'),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _packedBreakfastIds.contains(refStr),
+                                    onChanged: (v) => setState(() {
+                                      if (v == true) {
+                                        _packedBreakfastIds.add(refStr);
+                                      } else {
+                                        _packedBreakfastIds.remove(refStr);
+                                      }
+                                    }),
+                                  ),
+                                  const Text('Packed Breakfast'),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  SizedBox(
-                    width: 180,
-                    child: TextFormField(
-                      controller: _dateController,
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: TextEditingController(
+                          text: _dietaryNotes[refStr] ?? ''),
+                      onChanged: (val) => _dietaryNotes[refStr] = val,
                       decoration: const InputDecoration(
-                        labelText: 'Breakfast date',
+                        hintText:
+                            'Dietary notes (e.g. Vegetarian, Nut allergy)...',
+                        isDense: true,
                         border: OutlineInputBorder(),
                       ),
-                      onFieldSubmitted: (_) => _refresh(),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: _refresh,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Reload'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: [
-                  _ReceptionMetricCard(
-                    label: 'Checked-in bookings',
-                    value: '$checkedIn',
-                    icon: Icons.hotel_outlined,
-                  ),
-                  _ReceptionMetricCard(
-                    label: 'Breakfast-eligible stays',
-                    value: '$eligible',
-                    icon: Icons.people_alt_outlined,
-                  ),
-                  _ReceptionMetricCard(
-                    label: 'Calculated pax',
-                    value: '$calculated',
-                    icon: Icons.calculate_outlined,
-                  ),
-                  _ReceptionMetricCard(
-                    label: 'Confirmed pax',
-                    value: '$confirmed',
-                    icon: Icons.verified_outlined,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: status == 'confirmed' || status == 'locked'
-                      ? Colors.green.shade50
-                      : Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: status == 'confirmed' || status == 'locked'
-                        ? Colors.green.shade200
-                        : Colors.orange.shade200,
-                  ),
-                ),
-                child: Wrap(
-                  spacing: 24,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text('Status: ${status.replaceAll('_', ' ')}',
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    SizedBox(
-                      width: 180,
-                      child: TextFormField(
-                        controller: _confirmedController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirmed pax',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 320,
-                      child: TextFormField(
-                        controller: _reasonController,
-                        decoration: const InputDecoration(
-                          labelText: 'Adjustment reason',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    FilledButton(
-                      onPressed: _saving ? null : () => _save('draft'),
-                      child: const Text('Save Draft'),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: _saving ? null : () => _save('confirmed'),
-                      child: const Text('Confirm for Kitchen'),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (!isExcluded)
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.block,
+                                size: 16, color: Colors.red),
+                            label: const Text('Exclude from Breakfast'),
+                            onPressed: () =>
+                                setState(() => _excludedBookingIds.add(refStr)),
+                          )
+                        else
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.restore, size: 16),
+                            label: const Text('Restore Guest'),
+                            onPressed: () => setState(
+                                () => _excludedBookingIds.remove(refStr)),
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: bookings.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No checked-in breakfast-eligible stays for this date.',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemBuilder: (context, index) {
-                            final row =
-                                Map<String, dynamic>.from(bookings[index]);
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: CircleAvatar(
-                                backgroundColor:
-                                    AppColors.kPrimary.withOpacity(.08),
-                                child: const Icon(Icons.person_outline),
-                              ),
-                              title: Text(
-                                (row['guest_name']
-                                            ?.toString()
-                                            .trim()
-                                            .isNotEmpty ??
-                                        false)
-                                    ? row['guest_name'].toString()
-                                    : (row['confirmation_number']?.toString() ??
-                                        'Guest stay'),
-                              ),
-                              subtitle: Text(
-                                  '${row['confirmation_number'] ?? '-'} • ${row['meal_plan'] ?? '-'} • ${row['check_in_date'] ?? '-'} to ${row['check_out_date'] ?? '-'}'),
-                              trailing: Text(
-                                '${row['pax'] ?? 0} pax',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700),
-                              ),
-                            );
-                          },
-                          separatorBuilder: (_, __) =>
-                              Divider(color: Colors.grey.shade200, height: 1),
-                          itemCount: bookings.length,
-                        ),
-                ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildExpectedArrivalsTab(List<Map<String, dynamic>> bookings) {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: bookings.map((b) {
+        return ListTile(
+          leading: const Icon(Icons.flight_land, color: Colors.blue),
+          title: Text('${b['guest_name'] ?? 'Arrival Guest'} (${b['room_number'] ?? 'Unassigned'})'),
+          subtitle: Text('Arrival: ${b['check_in_date'] ?? 'Today'} • Plan: ${b['meal_plan'] ?? 'BB'}'),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            color: Colors.blue.shade50,
+            child: const Text('Starts Tomorrow',
+                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCheckoutTodayTab(List<Map<String, dynamic>> bookings) {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: bookings.map((b) {
+        return ListTile(
+          leading: const Icon(Icons.exit_to_app, color: Colors.orange),
+          title: Text('Room ${b['room_number'] ?? '-'} • ${b['guest_name']}'),
+          subtitle: Text('Departing: Today • Plan: ${b['meal_plan'] ?? 'BB'}'),
+          trailing: const Chip(
+            avatar: Icon(Icons.check, size: 16),
+            label: Text('Breakfast Included Today'),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildPaidAndComplimentaryTab() {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Add Paid Extra Ticket'),
+                onPressed: _showAddPaidBreakfastDialog,
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.card_giftcard),
+                label: const Text('Add Complimentary Voucher'),
+                onPressed: _showAddComplimentaryDialog,
               ),
             ],
-          );
-        },
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Paid Breakfast Tickets',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: _paidEntries.isEmpty
+                            ? const Center(
+                                child: Text('No paid extra tickets recorded.'))
+                            : ListView.builder(
+                                itemCount: _paidEntries.length,
+                                itemBuilder: (context, idx) {
+                                  final p = _paidEntries[idx];
+                                  return Card(
+                                    child: ListTile(
+                                      title: Text('${p['guest']} (${p['room']})'),
+                                      subtitle: Text(
+                                          '${p['adults']} adults, ${p['children']} children • KES ${p['amount']} (${p['method']})'),
+                                      trailing: Text(p['time']),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+                const VerticalDivider(),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Complimentary Vouchers',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: _complimentaryEntries.isEmpty
+                            ? const Center(
+                                child: Text('No complimentary vouchers added.'))
+                            : ListView.builder(
+                                itemCount: _complimentaryEntries.length,
+                                itemBuilder: (context, idx) {
+                                  final c = _complimentaryEntries[idx];
+                                  return Card(
+                                    child: ListTile(
+                                      title: Text('${c['guest']} (${c['room']})'),
+                                      subtitle: Text(
+                                          '${c['adults']} adults, ${c['children']} children • Reason: ${c['reason']}'),
+                                      trailing: Text('Auth: ${c['auth']}'),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildChangesAuditTab() {
+    return _versionsHistory.isEmpty
+        ? const Center(
+            child: Text(
+                'No confirmation versions or changes recorded for this session date.'),
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: _versionsHistory.length,
+            separatorBuilder: (_, __) => const Divider(),
+            itemBuilder: (context, idx) {
+              final v = _versionsHistory[idx];
+              return ListTile(
+                leading: CircleAvatar(
+                  child: Text('v${v['version']}'),
+                ),
+                title: Text(
+                    'Version ${v['version']} - ${v['pax']} Confirmed Pax (${v['status'].toString().toUpperCase()})'),
+                subtitle: Text(
+                    'Confirmed Adults: ${v['adults']} · Children: ${v['children']}\nAdjustment Reason: ${v['reason']}'),
+                trailing: Text('${v['timestamp']}\n${v['user']}'),
+              );
+            },
+          );
   }
 }
 
