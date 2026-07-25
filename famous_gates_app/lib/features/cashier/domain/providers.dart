@@ -61,7 +61,7 @@ final cashierStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
 
 /// Streams unpaid POS orders for the cashier station. When PowerSync hot-reads
 /// are enabled this updates in real-time without any manual refresh. Falls back
-/// to a one-shot REST call otherwise.
+/// to a polling REST fetch every 30 s so captain orders appear automatically.
 final cashierUnpaidBillsProvider = StreamProvider.autoDispose
     .family<List<Map<String, dynamic>>, CashierBillFilters>((ref, filters) async* {
   final powerSync = ref.watch(powerSyncServiceProvider);
@@ -72,14 +72,23 @@ final cashierUnpaidBillsProvider = StreamProvider.autoDispose
     );
     return;
   }
-  // Fallback: one-shot REST fetch.
-  final rows = await ref.watch(cashierRepositoryProvider).getUnpaidBills(
+  // Fallback: poll every 30 s so new captain orders surface without a manual
+  // pull-to-refresh. autoDispose cancels the loop when the screen closes.
+  final repo = ref.watch(cashierRepositoryProvider);
+  var cancelled = false;
+  ref.onDispose(() => cancelled = true);
+  while (!cancelled) {
+    try {
+      final rows = await repo.getUnpaidBills(
         status: filters.status,
         billType: filters.billType,
         search: filters.search,
         date: filters.date,
       );
-  yield rows;
+      yield rows;
+    } catch (_) {}
+    if (!cancelled) await Future.delayed(const Duration(seconds: 30));
+  }
 });
 
 final cashierVoidedOrdersProvider = FutureProvider.autoDispose

@@ -46,7 +46,52 @@ function Reveal({ children, delay = 0, className = '', style = {} }: { children:
   );
 }
 
-// Types removed as they are now imported from @/types
+// ——— Per-category room config (descriptions, amenities, meal basis) ———
+const ROOM_TYPE_CONFIG: Record<string, { description: string; amenities: string[]; mealBasis: string }> = {
+  Standard: {
+    description: 'A clean, comfortable room designed for relaxed rest. Ideal for solo travellers and budget-conscious guests seeking quality without compromise.',
+    amenities: ['Private En-Suite Bathroom', 'Hot Shower', 'Comfortable Bedding', 'Flat-Screen TV', 'Writing Desk', 'Daily Housekeeping'],
+    mealBasis: 'Bed Only',
+  },
+  Deluxe: {
+    description: 'A spacious deluxe room featuring premium furnishings, warm lighting, and an elegant en-suite bathroom. Includes a hearty breakfast each morning.',
+    amenities: ['En-Suite Bathroom', 'Premium Bedding', 'Hot Shower', 'Free Wi-Fi', 'Flat-Screen TV', 'Writing Desk', 'Daily Housekeeping', 'Breakfast Included'],
+    mealBasis: 'Bed & Breakfast',
+  },
+  'Deluxe Twin': {
+    description: 'A generously sized twin room perfect for two guests travelling together. Features two full beds, shared amenities, and a warm, welcoming atmosphere.',
+    amenities: ['Twin Beds', 'En-Suite Bathroom', 'Hot Shower', 'Free Wi-Fi', 'Flat-Screen TV', 'Sitting Area', 'Daily Housekeeping', 'Breakfast Included'],
+    mealBasis: 'Bed & Breakfast',
+  },
+  Executive: {
+    description: 'Our premium executive room offers superior furnishings, a work desk, and enhanced amenities for business and leisure guests who expect the very best.',
+    amenities: ['King Bed', 'Luxury En-Suite Bathroom', 'Hot Shower', 'Free Wi-Fi', 'Smart TV', 'Mini-Fridge', 'Room Service', 'Work Desk', 'Daily Housekeeping', 'Breakfast Included'],
+    mealBasis: 'Bed & Breakfast',
+  },
+  VIP: {
+    description: 'Our exclusive VIP room features elegant décor, premium bedding, and carefully selected fixtures that offer a distinctive and memorable stay.',
+    amenities: ['Premium Bedding', 'Luxury En-Suite Bathroom', 'Hot Shower', 'Free Wi-Fi', 'Smart TV', 'Mini-Bar', 'Room Service', 'Daily Housekeeping', 'Premium Toiletries', 'Breakfast Included'],
+    mealBasis: 'Bed & Breakfast',
+  },
+};
+
+const getRoomTypeName = (room: any): string =>
+  room.room_type || room.type?.name || room.type?.type_name || 'Luxury Room';
+
+const getRoomConfig = (room: any) =>
+  ROOM_TYPE_CONFIG[getRoomTypeName(room)] ?? {
+    description: 'A carefully appointed room offering comfort and quality for every guest.',
+    amenities: ['Private Bathroom', 'Hot Shower', 'Comfortable Bedding', 'Daily Housekeeping'],
+    mealBasis: 'Bed Only',
+  };
+
+// Effective nightly rate: room-level override wins, falls back to type base_rate
+const getRoomRate = (room: any): number =>
+  room.price_override ||
+  room.type?.base_rate ||
+  room.type?.price_per_night ||
+  room.type?.rate ||
+  2000;
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -67,6 +112,7 @@ export default function Home() {
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  const [roomDetailRoom, setRoomDetailRoom] = useState<any>(null);
 
   const [guestInfo, setGuestInfo] = useState({
     firstName: '',
@@ -727,45 +773,54 @@ export default function Home() {
             </Reveal>
 
             <div className="lp-results__grid">
-              {availableRooms.map((room, i) => (
-                <Reveal key={room.id} delay={i * 100} className="lp-room-card">
-                  <div className="lp-room-card__header">
-                    <div className="lp-room-card__type">{room.type?.name || 'Luxury Room'}</div>
-                    <h3 className="lp-room-card__title">Room {room.room_number}</h3>
-                  </div>
-                  <div className="lp-room-card__body">
-                    <div className="lp-room-card__price">
-                      <span className="lp-room-card__price-val">KES {room.type?.base_price?.toLocaleString() || '3,000'}</span>
-                      <span className="lp-room-card__price-unit">/ night</span>
+              {availableRooms.map((room, i) => {
+                const cfg = getRoomConfig(room);
+                const rate = getRoomRate(room);
+                const previewAmenities = cfg.amenities.slice(0, 4);
+                return (
+                  <Reveal key={room.id} delay={i * 100} className="lp-room-card">
+                    <div className="lp-room-card__header">
+                      <div className="lp-room-card__type-row">
+                        <div className="lp-room-card__type">{getRoomTypeName(room)}</div>
+                        <span className="lp-room-card__meal">{cfg.mealBasis}</span>
+                      </div>
+                      <h3 className="lp-room-card__title">Room {room.room_number}</h3>
+                      <p className="lp-room-card__desc">{cfg.description}</p>
                     </div>
-                    <ul className="lp-room-card__features">
-                      <li className="lp-room-card__feature"><span>✦</span> King Bed</li>
-                      <li className="lp-room-card__feature"><span>✦</span> Free Wifi</li>
-                      <li className="lp-room-card__feature"><span>✦</span> Smart TV</li>
-                      <li className="lp-room-card__feature"><span>✦</span> Minibar</li>
-                    </ul>
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      <button
-                        className="lp-btn lp-btn--outline"
-                        style={{ flex: 1, textAlign: 'center' }}
-                        onClick={() => setShowGallery(true)}
-                      >
-                        View Room
-                      </button>
-                      <button
-                        className="lp-btn lp-btn--primary"
-                        style={{ flex: 1 }}
-                        onClick={() => {
-                          setSelectedRoom(room);
-                          setShowModal(true);
-                        }}
-                      >
-                        Reserve This Room
-                      </button>
+                    <div className="lp-room-card__body">
+                      <div className="lp-room-card__price">
+                        <span className="lp-room-card__price-val">KES {rate.toLocaleString()}</span>
+                        <span className="lp-room-card__price-unit">/ night</span>
+                        {room.price_override && <span className="lp-room-card__override">Custom Rate</span>}
+                      </div>
+                      <ul className="lp-room-card__features">
+                        {previewAmenities.map((a) => (
+                          <li key={a} className="lp-room-card__feature"><span>✦</span> {a}</li>
+                        ))}
+                      </ul>
+                      {cfg.amenities.length > 4 && (
+                        <p className="lp-room-card__more">+{cfg.amenities.length - 4} more amenities</p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                        <button
+                          className="lp-btn lp-btn--view"
+                          style={{ flex: 1 }}
+                          onClick={() => setRoomDetailRoom(room)}
+                        >
+                          View Room
+                        </button>
+                        <button
+                          className="lp-btn lp-btn--primary"
+                          style={{ flex: 1 }}
+                          onClick={() => { setSelectedRoom(room); setShowModal(true); }}
+                        >
+                          Reserve
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </Reveal>
-              ))}
+                  </Reveal>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -785,50 +840,59 @@ export default function Home() {
             </Reveal>
 
             <div className="lp-results__grid">
-              {allRooms.slice(0, 12).map((room, i) => (
-                <Reveal key={room.id} delay={i * 100} className="lp-room-card">
-                  <div className="lp-room-card__header">
-                    <div className="lp-room-card__type">{room.type?.name || 'Luxury Room'}</div>
-                    <h3 className="lp-room-card__title">Room {room.room_number}</h3>
-                  </div>
-                  <div className="lp-room-card__body">
-                    <div className="lp-room-card__price">
-                      <span className="lp-room-card__price-val">KES {room.type?.base_price?.toLocaleString() || '3,000'}</span>
-                      <span className="lp-room-card__price-unit">/ night</span>
+              {allRooms.slice(0, 12).map((room, i) => {
+                const cfg = getRoomConfig(room);
+                const rate = getRoomRate(room);
+                const previewAmenities = cfg.amenities.slice(0, 4);
+                return (
+                  <Reveal key={room.id} delay={i * 100} className="lp-room-card">
+                    <div className="lp-room-card__header">
+                      <div className="lp-room-card__type-row">
+                        <div className="lp-room-card__type">{getRoomTypeName(room)}</div>
+                        <span className="lp-room-card__meal">{cfg.mealBasis}</span>
+                      </div>
+                      <h3 className="lp-room-card__title">Room {room.room_number}</h3>
+                      <p className="lp-room-card__desc">{cfg.description}</p>
                     </div>
-                    <ul className="lp-room-card__features">
-                      <li className="lp-room-card__feature"><span>✦</span> King Bed</li>
-                      <li className="lp-room-card__feature"><span>✦</span> Free Wifi</li>
-                      <li className="lp-room-card__feature"><span>✦</span> Smart TV</li>
-                      <li className="lp-room-card__feature"><span>✦</span> Minibar</li>
-                    </ul>
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      <button
-                        className="lp-btn lp-btn--outline"
-                        style={{ flex: 1, textAlign: 'center' }}
-                        onClick={() => setShowGallery(true)}
-                      >
-                        View Room
-                      </button>
-                      <a
-                        href="#reservations"
-                        className="lp-btn lp-btn--primary"
-                        style={{ flex: 1, textAlign: 'center', display: 'block' }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          document.getElementById('reservations')?.scrollIntoView({ behavior: 'smooth' });
-                          toast('Please select dates to check availability for this room', {
-                            icon: 'ℹ️',
-                            duration: 4000
-                          });
-                        }}
-                      >
-                        Reserve Now
-                      </a>
+                    <div className="lp-room-card__body">
+                      <div className="lp-room-card__price">
+                        <span className="lp-room-card__price-val">KES {rate.toLocaleString()}</span>
+                        <span className="lp-room-card__price-unit">/ night</span>
+                        {room.price_override && <span className="lp-room-card__override">Custom Rate</span>}
+                      </div>
+                      <ul className="lp-room-card__features">
+                        {previewAmenities.map((a) => (
+                          <li key={a} className="lp-room-card__feature"><span>✦</span> {a}</li>
+                        ))}
+                      </ul>
+                      {cfg.amenities.length > 4 && (
+                        <p className="lp-room-card__more">+{cfg.amenities.length - 4} more amenities</p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                        <button
+                          className="lp-btn lp-btn--view"
+                          style={{ flex: 1 }}
+                          onClick={() => setRoomDetailRoom(room)}
+                        >
+                          View Room
+                        </button>
+                        <a
+                          href="#reservations"
+                          className="lp-btn lp-btn--primary"
+                          style={{ flex: 1, textAlign: 'center', display: 'block' }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            document.getElementById('reservations')?.scrollIntoView({ behavior: 'smooth' });
+                            toast('Please select dates to check availability for this room', { icon: 'ℹ️', duration: 4000 });
+                          }}
+                        >
+                          Reserve Now
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                </Reveal>
-              ))}
+                  </Reveal>
+                );
+              })}
             </div>
 
             {allRooms.length > 12 && (
@@ -841,6 +905,85 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      {/* ===== ROOM DETAIL MODAL ===== */}
+      {roomDetailRoom && (() => {
+        const room = roomDetailRoom;
+        const cfg = getRoomConfig(room);
+        const rate = getRoomRate(room);
+        return (
+          <div className="lp-modal-overlay" onClick={() => setRoomDetailRoom(null)}>
+            <div className="lp-modal lp-modal--detail" onClick={(e) => e.stopPropagation()}>
+              <button className="lp-modal__close" onClick={() => setRoomDetailRoom(null)}>&times;</button>
+
+              {/* Header band */}
+              <div className="lp-room-detail__band">
+                <div className="lp-room-detail__band-type">{getRoomTypeName(room)}</div>
+                <span className="lp-room-detail__band-meal">{cfg.mealBasis}</span>
+              </div>
+
+              <h2 className="lp-room-detail__title">Room <em>{room.room_number}</em></h2>
+
+              {/* Building / Floor */}
+              <div className="lp-room-detail__meta">
+                {room.building && <span>Building {room.building}</span>}
+                {room.floor && <span>Floor {room.floor}</span>}
+                {room.max_occupancy && <span>Up to {room.max_occupancy} guests</span>}
+              </div>
+
+              {/* Price block */}
+              <div className="lp-room-detail__price-block">
+                <span className="lp-room-detail__price">KES {rate.toLocaleString()}</span>
+                <span className="lp-room-detail__price-label">per night</span>
+                {room.price_override && (
+                  <span className="lp-room-detail__override-badge">Room-specific rate</span>
+                )}
+              </div>
+
+              {/* Description */}
+              <div className="lp-divider" style={{ margin: '1.5rem 0' }} />
+              <p className="lp-room-detail__desc">{cfg.description}</p>
+
+              {/* Amenities */}
+              <div className="lp-divider" style={{ margin: '1.5rem 0' }} />
+              <p className="lp-eyebrow" style={{ marginBottom: '1rem' }}>Room Amenities</p>
+              <ul className="lp-room-detail__amenities">
+                {cfg.amenities.map((a) => (
+                  <li key={a} className="lp-room-detail__amenity">
+                    <span className="lp-room-detail__amenity-dot">✦</span>
+                    {a}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Meal basis note */}
+              <div className="lp-room-detail__meal-note">
+                <strong>Meal Basis:</strong> {cfg.mealBasis === 'Bed & Breakfast'
+                  ? 'Bed & Breakfast — A hearty breakfast is included with your stay each morning.'
+                  : 'Bed Only — Meals are not included. Our restaurant is open for all meals.'}
+              </div>
+
+              {/* CTA */}
+              <button
+                className="lp-btn lp-btn--gold"
+                style={{ width: '100%', marginTop: '2rem' }}
+                onClick={() => {
+                  setRoomDetailRoom(null);
+                  setSelectedRoom(room);
+                  if (checkIn && checkOut) {
+                    setShowModal(true);
+                  } else {
+                    document.getElementById('reservations')?.scrollIntoView({ behavior: 'smooth' });
+                    toast('Please select your dates first', { icon: 'ℹ️', duration: 4000 });
+                  }
+                }}
+              >
+                Reserve This Room
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ===== BOOKING MODAL ===== */}
       {showModal && selectedRoom && (
@@ -897,15 +1040,27 @@ export default function Home() {
               <div className="lp-modal__summary">
                 <div className="lp-modal__summary-row">
                   <span>Stay Duration:</span>
-                  <span>{checkIn} to {checkOut}</span>
+                  <span>{checkIn} → {checkOut}</span>
+                </div>
+                <div className="lp-modal__summary-row">
+                  <span>Nights:</span>
+                  <span>{checkIn && checkOut ? Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : '—'}</span>
+                </div>
+                <div className="lp-modal__summary-row">
+                  <span>Rate per night:</span>
+                  <span>KES {getRoomRate(selectedRoom).toLocaleString()}</span>
                 </div>
                 <div className="lp-modal__summary-row">
                   <span>Guests:</span>
                   <span>{guests} Person(s)</span>
                 </div>
+                <div className="lp-modal__summary-row">
+                  <span>Meal Basis:</span>
+                  <span>{getRoomConfig(selectedRoom).mealBasis}</span>
+                </div>
                 <div className="lp-modal__summary-row lp-modal__summary-total">
-                  <span>Total Amount (Est):</span>
-                  <span>KES {selectedRoom.type?.base_price?.toLocaleString() || '3,000'}</span>
+                  <span>Total Estimate:</span>
+                  <span>KES {(getRoomRate(selectedRoom) * Math.max(1, checkIn && checkOut ? Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000) : 1)).toLocaleString()}</span>
                 </div>
               </div>
 

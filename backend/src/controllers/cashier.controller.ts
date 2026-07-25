@@ -829,7 +829,7 @@ function buildOutletPosBillResponse(resolution: OutletPosOrderResolution): Recor
     const items = Array.isArray(posOrder.items) ? posOrder.items : [];
     const totalAmount = Number(posOrder.total_amount || 0);
     const amountPaid = Number(posOrder.amount_paid || 0);
-    const balance = Number(posOrder.balance_amount ?? Math.max(0, totalAmount - amountPaid));
+    const balance = Math.max(0, totalAmount - amountPaid);
     const outlet = Array.isArray(resolution.shift?.outlet)
         ? resolution.shift.outlet[0]
         : resolution.shift?.outlet;
@@ -1542,7 +1542,7 @@ export const getBillDetails = async (
             const items = Array.isArray(posOrder.items) ? posOrder.items : [];
             const totalAmount = Number(posOrder.total_amount || 0);
             const amountPaid = Number(posOrder.amount_paid || 0);
-            const balance = Number(posOrder.balance_amount ?? Math.max(0, totalAmount - amountPaid));
+            const balance = Math.max(0, totalAmount - amountPaid);
 
             res.json({
                 success: true,
@@ -8794,7 +8794,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 customer_name: o.guest_name || 'Walk-in',
                 total_amount: Number(o.total_amount || 0),
                 paid_amount: Number(o.amount_paid || 0),
-                balance_amount: Number(o.balance_amount || o.total_amount || 0),
+                balance_amount: Math.max(0, Number(o.total_amount || 0) - Number(o.amount_paid || 0)),
                 payment_status: o.payment_status,
                 status: o.payment_status,
                 created_at: o.created_at,
@@ -8828,7 +8828,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 customer_name: o.guest_name || 'Bar Customer',
                 total_amount: Number(o.total || 0),
                 paid_amount: Number(o.amount_paid || 0),
-                balance_amount: Number(o.balance_amount || o.total || 0),
+                balance_amount: Math.max(0, Number(o.total || 0) - Number(o.amount_paid || 0)),
                 payment_status: o.payment_status,
                 status: o.payment_status,
                 created_at: o.created_at,
@@ -8876,7 +8876,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     customer_name: o.customer_name || 'Walk-in',
                     total_amount: isItemLevelVoid ? voidedAmount : Number(o.total_amount || 0),
                     paid_amount: Number(o.amount_paid || 0),
-                    balance_amount: (isVoided || isItemLevelVoid) ? 0 : Number(o.balance_amount || o.total_amount || 0),
+                    balance_amount: (isVoided || isItemLevelVoid) ? 0 : Math.max(0, Number(o.total_amount || 0) - Number(o.amount_paid || 0)),
                     payment_status: isVoided ? 'voided' : (isItemLevelVoid ? 'item_voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status)),
                     status: isVoided ? 'voided' : (isItemLevelVoid ? 'item_voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status)),
                     created_at: o.created_at,

@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'package:dio/dio.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/powersync/powersync_service.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -1374,9 +1376,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
     final loaded = await _lookupBill();
     if (!mounted || loaded == null) return;
     final balance = _balanceFromBill(loaded);
+    // Always refresh the list so the card shows the current balance (not stale
+    // data from the last poll cycle).
+    ref.invalidate(cashierUnpaidBillsProvider);
     if (balance <= 0) {
       _snack('This bill is already cleared');
-      ref.invalidate(cashierUnpaidBillsProvider);
     } else {
       _snack('Bill loaded for clearance');
     }

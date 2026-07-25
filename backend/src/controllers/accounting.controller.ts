@@ -461,8 +461,7 @@ const getOrCreateAccountingCustomer = async (
   const { data: created, error } = await supabase
     .from('accounting_customers')
     .insert([{
-      customer_code: `CUST-${Date.now()}`,
-      customer_name: customerName,
+        customer_name: customerName,
       email,
       phone: source.customer_phone || null,
       is_active: true,
@@ -759,7 +758,6 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
         const { data: newCustomer, error: createError } = await supabase
           .from('accounting_customers')
           .insert([{
-            customer_code: `CUST-${Date.now()}`,
             customer_name,
             email: customer_email,
             is_active: true,
@@ -789,17 +787,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
         if (existing) {
           resolvedCustomerId = existing.id;
         } else {
-          // 2. Check if it's a customer_code (external ID)
-          const { data: mapped } = await supabase
-            .from('accounting_customers')
-            .select('id')
-            .eq('customer_code', customer_id)
-            .maybeSingle();
-
-          if (mapped) {
-            resolvedCustomerId = mapped.id;
-          } else {
-            // 3. Not mapped, try to find in source table
+            // 2. Not mapped by ID — try to find in source customers table
             const { data: source } = await supabase
               .from('customers')
               .select('*')
@@ -810,7 +798,6 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
               const { data: created, error: cError } = await supabase
                 .from('accounting_customers')
                 .insert([{
-                  customer_code: source.id,
                   customer_name: source.name || `${source.first_name} ${source.last_name}`,
                   contact_person: source.contact_person,
                   email: source.email,
@@ -833,22 +820,10 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
             } else {
               logger.error('Customer not found in source table:', customer_id);
             }
-          }
         }
       } else {
-        // Non-UUID: Check if it's a customer_code
-        const { data: mapped } = await supabase
-          .from('accounting_customers')
-          .select('id')
-          .eq('customer_code', customer_id)
-          .maybeSingle();
-
-        if (mapped) {
-          resolvedCustomerId = mapped.id;
-        } else {
-          // Look up by customer_code equivalent if applicable
-          logger.warn(`Non-UUID customer_id provided but no mapping found: ${customer_id}`);
-        }
+        // Non-UUID: no customer_code column — log and skip
+        logger.warn(`Non-UUID customer_id provided but no mapping found: ${customer_id}`);
       }
     }
 
@@ -861,7 +836,7 @@ export const createInvoice = async (req: Request, res: Response, next: NextFunct
         due_date,
         subtotal,
         tax_amount,
-        total_amount,
+        total: total_amount,
         balance: total_amount,
         status: 'unpaid',
         reference,
@@ -971,15 +946,7 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
         .eq('id', resolvedCustomerId)
         .maybeSingle();
 
-      if (!exists) {
-        // Try mapping code
-        const { data: mapped } = await applyBranchFilter(supabase
-          .from('accounting_customers'), req)
-          .select('id')
-          .eq('customer_code', resolvedCustomerId)
-          .maybeSingle();
-        if (mapped) resolvedCustomerId = mapped.id;
-      }
+      // customer_code column does not exist — skip code-based lookup
     }
 
     let query = supabase
@@ -2240,8 +2207,8 @@ export const getBookingInvoiceQueue = async (
       service_date: invoice.invoice_date,
       end_date: invoice.due_date,
       description: invoice.notes || invoice.type || 'Customer invoice',
-      total_amount: money(invoice.total_amount),
-      amount_paid: money(invoice.paid_amount),
+      total_amount: money(invoice.total),
+      amount_paid: money(invoice.amount_paid),
       balance: money(invoice.balance),
       status: invoice.status || 'unpaid',
       payment_status: invoice.status || 'unpaid',
@@ -2398,8 +2365,8 @@ export const createInvoiceFromBookingSource = async (
         due_date: req.body.due_date ? dateOnly(req.body.due_date) : addDays(14),
         subtotal: total,
         tax_amount: 0,
-        total_amount: total,
-        paid_amount: paid,
+        total,
+        amount_paid: paid,
         balance,
         status: balance <= 0 ? 'paid' : paid > 0 ? 'partially_paid' : 'unpaid',
         reference,
@@ -2515,14 +2482,14 @@ export const recordInvoicePayment = async (req: Request, res: Response, next: Ne
 
     // 2. Update invoice balance and status
     const paymentAmount = Number(amount);
-    const newPaidAmount = (invoice.paid_amount || 0) + paymentAmount;
-    const newBalance = invoice.total_amount - newPaidAmount;
+    const newPaidAmount = (invoice.amount_paid || 0) + paymentAmount;
+    const newBalance = invoice.total - newPaidAmount;
     const newStatus = newBalance <= 0 ? 'paid' : (newPaidAmount > 0 ? 'partially_paid' : 'unpaid');
 
     const { error: updateError } = await supabase
       .from('accounting_ar_invoices')
       .update({
-        paid_amount: newPaidAmount,
+        amount_paid: newPaidAmount,
         balance: newBalance,
         status: newStatus,
         updated_at: new Date().toISOString()
@@ -2710,14 +2677,9 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
         vendor_id: resolvedVendorId,
         bill_date,
         due_date,
-        subtotal,
-        tax_amount,
-        total_amount,
+        total: total_amount,
         balance: total_amount,
         status: 'unpaid',
-        reference,
-        notes,
-        items, // Save items as JSONB
         created_by: req.user?.id,
         branch_id: req.user?.branch_id
       }])
@@ -2827,14 +2789,14 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
 
     // 2. Update bill balance and status
     const paymentAmount = Number(amount);
-    const newPaidAmount = (bill.paid_amount || 0) + paymentAmount;
-    const newBalance = bill.total_amount - newPaidAmount;
+    const newPaidAmount = (bill.amount_paid || 0) + paymentAmount;
+    const newBalance = bill.total - newPaidAmount;
     const newStatus = newBalance <= 0 ? 'paid' : (newPaidAmount > 0 ? 'partially_paid' : 'unpaid');
 
     const { error: updateError } = await supabase
       .from('accounting_ap_bills')
       .update({
-        paid_amount: newPaidAmount,
+        amount_paid: newPaidAmount,
         balance: newBalance,
         status: newStatus,
         updated_at: new Date().toISOString()
@@ -2935,7 +2897,7 @@ export const submitInvoiceForAudit = async (req: Request, res: Response, next: N
       status: 'pending',
       requested_by: userId,
       branch_id: invoice.branch_id,
-      amount: invoice.total_amount,
+      amount: invoice.total,
       description: `Audit request for invoice ${invoice.invoice_number}`,
       notes,
       metadata: { invoice_id: id }
@@ -3005,7 +2967,7 @@ export const submitBillForAudit = async (req: Request, res: Response, next: Next
       status: 'pending',
       requested_by: userId,
       branch_id: bill.branch_id,
-      amount: bill.total_amount,
+      amount: bill.total,
       description: `Audit request for bill ${bill.bill_number}`,
       notes,
       metadata: { bill_id: id }
@@ -3155,12 +3117,12 @@ export const getAccountingDashboard = async (req: Request, res: Response, next: 
     // Get AR summary
     const { data: invoices } = await applyBranchFilter(supabase
       .from('accounting_ar_invoices'), req)
-      .select('total_amount, paid_amount, balance, status, due_date');
+      .select('total, amount_paid, balance, status, due_date');
 
     // Get AP summary
     const { data: bills } = await applyBranchFilter(supabase
       .from('accounting_ap_bills'), req)
-      .select('total_amount, paid_amount, balance, status, due_date');
+      .select('total, amount_paid, balance, status, due_date');
 
     // Get bank balances
     const { data: bankAccounts } = await applyBranchFilter(supabase
