@@ -110,11 +110,13 @@ import restaurantBillsRoutes from './restaurant-bills.routes';
 import kitchenWastageRoutes from './kitchen-wastage.routes';
 import powerSyncRoutes from './powersync.routes';
 import branchHealthRoutes from './branch-health.routes';
+import branchFeaturesRoutes from './branch-features.routes';
+import roomChargeRoutes from './room-charge.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
 
-// Maintenance mode gate — checks req.user?.role (safe even before protect() runs, uses optional chaining)
+// Maintenance mode gate
 router.use(maintenanceMode);
 
 // Health check
@@ -130,81 +132,69 @@ router.get('/health', (req, res) => {
       SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
       SUPABASE_JWT_SECRET: !!process.env.SUPABASE_JWT_SECRET,
       JWT_SECRET: !!process.env.JWT_SECRET,
-      JWT_SECRET_value: process.env.JWT_SECRET === 'your_jwt_secret_key' ? 'PLACEHOLDER' : (process.env.JWT_SECRET ? 'SET' : 'MISSING'),
     }
   });
 });
 
-// Public ID verification (no auth required)
-router.use('/verify', verifyRoutes);
-
-// API routes
-router.use('/staff/performance', staffPerformanceRoutes); // Must come BEFORE /staff
-router.use('/staff/simple-payroll', payrollSimpleRoutes); // Must come BEFORE /staff
-router.use('/staff', staffAuditRoutes);
-router.use('/staff', staffRoutes);
+// Route mounts
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/bookings', bookingRoutes);
-router.use('/rate-plans', ratePlanRoutes);
-router.use('/pricing', pricingRoutes);
-router.use('/documents', documentRoutes);
 router.use('/rooms', roomRoutes);
-router.use('/guests', guestRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/inventory-foundation', inventoryFoundationRoutes);
 router.use('/inventory-governance', inventoryGovernanceRoutes);
 router.use('/housekeeping', housekeepingRoutes);
 router.use('/maintenance', maintenanceRoutes);
 router.use('/reports', reportRoutes);
-router.use('/store', storekeepingRoutes);
-router.use('/store', stockAnalyticsRoutes);
+router.use('/storekeeping', storekeepingRoutes);
+router.use('/stock-analytics', stockAnalyticsRoutes);
 router.use('/finance', financeRoutes);
-router.use('/finance', revenueOversightRoutes);
-router.use('/finance', profitLossRoutes);
+router.use('/revenue-oversight', revenueOversightRoutes);
 router.use('/system', systemRoutes);
 router.use('/fleet', fleetRoutes);
 router.use('/bar', barRoutes);
-router.use('/restaurant/bills', restaurantBillsRoutes);
+router.use('/bar-stock-requests', barStockRequestsRoutes);
 router.use('/restaurant', restaurantRoutes);
-router.use('/restaurant', waiterSalesRoutes);
 router.use('/restaurant/reservations', restaurantReservationRoutes);
 router.use('/restaurant/tables', restaurantTableRoutes);
-router.use('/payments', paymentRoutes);
+router.use('/waiter-sales', waiterSalesRoutes);
+router.use('/email', emailRoutes);
+router.use('/landing-email', landingEmailRoutes);
+router.use('/payment', paymentRoutes);
+router.use('/barcode', barcodeRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/folios', folioRoutes);
+router.use('/guests', guestRoutes);
 router.use('/audit', auditRoutes);
 router.use('/maintenance-enhanced', maintenanceEnhancedRoutes);
 router.use('/auditor', auditorRoutes);
-router.use('/auditor', auditorVoidBillsRoutes);
 router.use('/accounting', accountingRoutes);
 router.use('/receipts', receiptsRoutes);
 router.use('/branch-operations', branchOperationsRoutes);
 router.use('/automation', automationRoutes);
-router.use('/forecasting', mlForecastingRoutes);
-router.use('/vendors', vendorPerformanceRoutes);
+router.use('/ml-forecasting', mlForecastingRoutes);
+router.use('/vendor-performance', vendorPerformanceRoutes);
 router.use('/facilities', facilitiesRoutes);
 router.use('/admin', adminRoutes);
-router.use('/communications', communicationsRoutes);
+router.use('/rate-plans', ratePlanRoutes);
+router.use('/pricing', pricingRoutes);
+router.use('/documents', documentRoutes);
+router.use('/communication', communicationRoutes);
 router.use('/channel-manager', channelManagerRoutes);
 router.use('/employee-portal', employeePortalRoutes);
 router.use('/guest-portal', guestPortalRoutes);
-router.use('/payroll', payrollRoutes);
-router.use('/payroll/simple', payrollSimpleRoutes);
-router.use('/email', emailRoutes);
-router.use('/landing-email', landingEmailRoutes);
-router.use('/barcode', barcodeRoutes);
-router.use('/storekeeping', storekeepingEnhancedRoutes);
+router.use('/staff', staffRoutes);
+router.use('/staff-performance', staffPerformanceRoutes);
+router.use('/staff-audit', staffAuditRoutes);
+router.use('/storekeeping-enhanced', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
-router.use('/cashier', cashierClearanceRoutes);
-router.use('/pos', outletPosRoutes);
-// Backward-compatible alias for older desktop builds/screens that still call
-// /api/outlet-pos/... while the canonical route is /api/pos/....
+router.use('/cashier-clearance', cashierClearanceRoutes);
 router.use('/outlet-pos', outletPosRoutes);
+router.use('/profit-loss', profitLossRoutes);
 router.use('/wastage', wastageRoutes);
 router.use('/kitchen-ledger', kitchenLedgerRoutes);
 router.use('/additional-services', additionalServicesRoutes);
-router.use('/reports/auditor', auditorReportsRoutes);
 router.use('/auditor-reports', auditorReportsRoutes);
 router.use('/conference', conferenceRoutes);
 router.use('/catering', cateringRoutes);
@@ -212,11 +202,14 @@ router.use('/attendance', attendanceRoutes);
 router.use('/petty-cash', pettyCashRoutes);
 router.use('/credit', creditRoutes);
 router.use('/kitchen', kitchenRoutes);
-router.use('/kitchen/shifts', kitchenShiftRoutes);
-router.use('/kitchen/wastage', kitchenWastageRoutes);
+router.use('/kitchen-shift', kitchenShiftRoutes);
+router.use('/payroll', payrollRoutes);
+router.use('/payroll-simple', payrollSimpleRoutes);
 router.use('/procurement', procurementRoutes);
 router.use('/hr-reports', hrReportRoutes);
-router.use('/stock-takes', stockTakeRoutes);
+router.use('/stock-take', stockTakeRoutes);
+router.use('/verify', verifyRoutes);
+router.use('/auditor-void-bills', auditorVoidBillsRoutes);
 router.use('/kyogong', kyogongRoutes);
 router.use('/banking', bankingRoutes);
 router.use('/suppliers', suppliersRoutes);
@@ -242,6 +235,8 @@ router.use('/branch-search', branchSearchRoutes);
 router.use('/branch-payments', branchPaymentRoutes);
 router.use('/powersync', powerSyncRoutes);
 router.use('/branches', branchHealthRoutes);
+router.use('/branch-features', branchFeaturesRoutes);
+router.use('/room-charge', roomChargeRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);
@@ -253,7 +248,7 @@ router.post('/email/send-invoice/:bookingId', sendInvoiceEmail);
 router.post('/email/send-checkin-reminder/:bookingId', sendCheckInReminderEmail);
 router.post('/email/send-checkout-reminder/:bookingId', sendCheckOutReminderEmail);
 
-// Legacy M-Pesa Route Fix (for cached clients calling /api/mpesa/initiate)
+// Legacy M-Pesa Route Fix
 import { initiateMpesaPayment, mpesaCallback } from '../controllers/payment.controller';
 import { protect } from '../middleware/auth.middleware';
 router.post('/mpesa/initiate', protect, initiateMpesaPayment);

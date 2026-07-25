@@ -102,30 +102,30 @@ class SuperAdminNavItem {
         SuperAdminNavGroup(
           label: 'POS & Sales Setup',
           items: [
-            const SuperAdminNavItem(
+            SuperAdminNavItem(
                 section: SuperAdminSection.posConfiguration,
-                label: 'POS Configuration',
-                icon: Icons.point_of_sale),
+                label: 'Cashier Station POS',
+                icon: PhosphorIcons.desktop()),
+            SuperAdminNavItem(
+                section: SuperAdminSection.cashierStationConfig,
+                label: 'Station & Printer Config',
+                icon: PhosphorIcons.printer()),
             SuperAdminNavItem(
                 section: SuperAdminSection.restaurantMenu,
                 label: 'Restaurant Menu',
-                icon: PhosphorIcons.bookOpen()),
+                icon: PhosphorIcons.forkKnife()),
             SuperAdminNavItem(
                 section: SuperAdminSection.barMenu,
                 label: 'Bar Menu',
                 icon: PhosphorIcons.wine()),
             SuperAdminNavItem(
                 section: SuperAdminSection.menuPricing,
-                label: 'Menu Pricing & Cost',
+                label: 'Menu Pricing & Variants',
                 icon: PhosphorIcons.tag()),
             SuperAdminNavItem(
                 section: SuperAdminSection.kyogongServices,
-                label: 'Kyogong Services',
+                label: 'Kyogong POS Services',
                 icon: PhosphorIcons.sparkle()),
-            SuperAdminNavItem(
-                section: SuperAdminSection.cashierStationConfig,
-                label: 'Cashier Station Config',
-                icon: PhosphorIcons.creditCard()),
             SuperAdminNavItem(
                 section: SuperAdminSection.nonConsumablesCatalog,
                 label: 'Non-Consumables POS',
@@ -219,6 +219,10 @@ class SuperAdminNavItem {
                 label: 'Feature Flags',
                 icon: PhosphorIcons.slidersHorizontal()),
             SuperAdminNavItem(
+                section: SuperAdminSection.toggleSettings,
+                label: 'Toggle Settings',
+                icon: PhosphorIcons.toggleRight()),
+            SuperAdminNavItem(
                 section: SuperAdminSection.announcements,
                 label: 'Announcements',
                 icon: PhosphorIcons.megaphone()),
@@ -283,46 +287,63 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
                     height: 40,
                     decoration: BoxDecoration(
                       color: AppColors.kPrimary,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Center(
-                      child: Text('S',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 20)),
+                      child: Text(
+                        'FG',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   )
-                : Row(children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
+                : Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
                           color: AppColors.kPrimary,
-                          borderRadius: BorderRadius.all(Radius.circular(10))),
-                      child: const Center(
-                        child: Text('S',
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'FG',
                             style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 20)),
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('SuperAdmin',
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'FamousGate',
                               style: TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 15)),
-                          Text('Famous Gates',
-                              style:
-                                  TextStyle(fontSize: 11, color: Colors.grey)),
-                        ],
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'SuperAdmin Console',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ]),
+                    ],
+                  ),
           ),
           const Divider(height: 1),
 
@@ -331,141 +352,104 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: groups.length,
-              itemBuilder: (_, gi) {
-                final group = groups[gi];
+              itemBuilder: (context, groupIdx) {
+                final group = groups[groupIdx];
                 final isGroupCollapsed = _collapsedGroups.contains(group.label);
 
-                if (widget.isCollapsed) {
-                  // Icon-only mode
-                  return Column(children: [
-                    ...group.items.map((item) {
-                      final isActive = item.section == currentSection;
-                      return Tooltip(
-                        message: item.label,
-                        preferBelow: false,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => ref
-                                .read(superAdminSectionProvider.notifier)
-                                .state = item.section,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: isActive
-                                    ? AppColors.kPrimary.withValues(alpha: 0.1)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Center(
-                                child: Icon(item.icon,
-                                    color: isActive
-                                        ? AppColors.kPrimary
-                                        : Colors.grey.shade500,
-                                    size: 20),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                    if (gi < groups.length - 1)
-                      const Divider(height: 1, indent: 12, endIndent: 12),
-                  ]);
-                }
-
-                // Expanded mode with group header
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    InkWell(
-                      onTap: () => setState(() {
-                        if (isGroupCollapsed) {
-                          _collapsedGroups.remove(group.label);
-                        } else {
-                          _collapsedGroups.add(group.label);
-                        }
-                      }),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 12, 4),
-                        child: Row(children: [
-                          Expanded(
-                            child: Text(
-                              group.label.toUpperCase(),
-                              style: TextStyle(
-                                  fontSize: 9,
+                    if (!widget.isCollapsed)
+                      InkWell(
+                        onTap: () => setState(() {
+                          if (isGroupCollapsed) {
+                            _collapsedGroups.remove(group.label);
+                          } else {
+                            _collapsedGroups.add(group.label);
+                          }
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                group.label.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade400,
-                                  letterSpacing: 1.2),
-                            ),
-                          ),
-                          Icon(
-                            isGroupCollapsed
-                                ? PhosphorIcons.caretRight()
-                                : PhosphorIcons.caretDown(),
-                            size: 11,
-                            color: Colors.grey.shade400,
-                          ),
-                        ]),
-                      ),
-                    ),
-                    if (!isGroupCollapsed)
-                      ...group.items.map((item) {
-                        final isActive = item.section == currentSection;
-                        return Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => ref
-                                .read(superAdminSectionProvider.notifier)
-                                .state = item.section,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
-                              margin: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: isActive
-                                    ? AppColors.kPrimary.withValues(alpha: 0.1)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(children: [
-                                Icon(item.icon,
-                                    color: isActive
-                                        ? AppColors.kPrimary
-                                        : Colors.grey.shade500,
-                                    size: 17),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    item.label,
-                                    style: TextStyle(
-                                        fontSize: 12.5,
-                                        fontWeight: isActive
-                                            ? FontWeight.w600
-                                            : FontWeight.w500,
-                                        color: isActive
-                                            ? AppColors.kPrimary
-                                            : Colors.grey.shade700),
-                                  ),
+                                  color: Colors.grey,
+                                  letterSpacing: 1.2,
                                 ),
-                                if (isActive)
-                                  Container(
-                                    width: 5,
-                                    height: 5,
-                                    decoration: const BoxDecoration(
-                                        color: AppColors.kPrimary,
-                                        shape: BoxShape.circle),
+                              ),
+                              const Spacer(),
+                              Icon(
+                                isGroupCollapsed
+                                    ? PhosphorIcons.caretDown()
+                                    : PhosphorIcons.caretUp(),
+                                size: 12,
+                                color: Colors.grey,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (!isGroupCollapsed || widget.isCollapsed)
+                      ...group.items.map((item) {
+                        final isSelected = currentSection == item.section;
+                        return InkWell(
+                          onTap: () => ref
+                              .read(superAdminSectionProvider.notifier)
+                              .state = item.section,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: widget.isCollapsed ? 12 : 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.kPrimary.withValues(alpha: 0.1)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  item.icon,
+                                  size: 20,
+                                  color: isSelected
+                                      ? AppColors.kPrimary
+                                      : Colors.grey.shade700,
+                                ),
+                                if (!widget.isCollapsed) ...[
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      item.label,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: isSelected
+                                            ? AppColors.kPrimary
+                                            : Colors.grey.shade800,
+                                      ),
+                                    ),
                                   ),
-                              ]),
+                                ],
+                              ],
                             ),
                           ),
                         );
                       }),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 8),
                   ],
                 );
               },
@@ -473,24 +457,39 @@ class _SuperAdminSideNavState extends ConsumerState<SuperAdminSideNav> {
           ),
 
           const Divider(height: 1),
-
-          // Logout
+          // Footer / Logout
           Padding(
             padding: const EdgeInsets.all(12),
-            child: widget.isCollapsed
-                ? IconButton(
-                    onPressed: handleLogout,
-                    icon: Icon(PhosphorIcons.signOut(),
-                        color: Colors.grey.shade600),
-                    tooltip: 'Logout',
-                  )
-                : OutlinedButton.icon(
-                    onPressed: handleLogout,
-                    icon: Icon(PhosphorIcons.signOut(), size: 16),
-                    label: const Text('Logout'),
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 40)),
-                  ),
+            child: InkWell(
+              onTap: handleLogout,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: widget.isCollapsed ? 12 : 16,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      PhosphorIcons.signOut(),
+                      size: 20,
+                      color: Colors.red.shade600,
+                    ),
+                    if (!widget.isCollapsed) ...[
+                      const SizedBox(width: 12),
+                      Text(
+                        'Sign Out',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),

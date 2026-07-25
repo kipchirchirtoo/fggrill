@@ -1149,6 +1149,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 _methodChip('mpesa_manual', 'M-Pesa', Icons.phone_android),
                 _methodChip('card_manual', 'Card', Icons.credit_card),
                 _methodChip('credit_bill', 'Credit Bill', Icons.badge),
+                _methodChip('room_charge', 'Charge to Room', Icons.bedroom_parent),
               ],
             ),
             const SizedBox(height: 16),
@@ -1387,6 +1388,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
     final amount = num.tryParse(_amountController.text.trim()) ?? 0;
     if (amount <= 0) return _snack('Enter a valid amount');
 
+    if (_method == 'room_charge') {
+      _showRoomChargeModal(context, ref, bill, amount);
+      return;
+    }
+
     if (_method == 'mpesa_manual' && _referenceController.text.trim().isEmpty) {
       return _snack('Enter the M-Pesa reference code to clear this bill');
     }
@@ -1507,6 +1513,291 @@ class _StationTabState extends ConsumerState<_StationTab> {
       await _lookupBill();
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _showRoomChargeModal(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> bill, num amount) async {
+    final nav = ref.read(dashboardNavProvider);
+    final branchId = nav.user?.branchId ?? 1;
+
+    final searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> eligibleGuests = [];
+    bool searching = false;
+    Map<String, dynamic>? selectedGuest;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> searchGuests(String q) async {
+              setModalState(() => searching = true);
+              try {
+                final dio = Dio();
+                final res = await dio.get(
+                  '${AppConfig.apiUrl}/room-charge/eligible-guests',
+                  queryParameters: {'branch_id': branchId, 'query': q},
+                );
+                if (res.data['success'] == true) {
+                  setModalState(() {
+                    eligibleGuests = List<Map<String, dynamic>>.from(res.data['guests'] ?? []);
+                  });
+                }
+              } catch (e) {
+                _snack('Error searching guests: $e');
+              } finally {
+                setModalState(() => searching = false);
+              }
+            }
+
+            if (eligibleGuests.isEmpty && !searching && searchCtrl.text.isEmpty) {
+              searchGuests('');
+            }
+
+            if (selectedGuest != null) {
+              final guestName = selectedGuest!['guest_name'] ?? 'Guest';
+              final roomNo = selectedGuest!['room_number'] ?? '-';
+              final bookingRef = selectedGuest!['confirmation_number'] ?? '-';
+              final folioBal = _money(selectedGuest!['folio_balance'] ?? 0);
+              final outletName = _text(bill, ['outlet_name', 'outletName']) ?? 'Restaurant POS';
+              final billNo = _text(bill, ['bill_number', 'short_code', 'id']) ?? 'BILL';
+
+              return AlertDialog(
+                title: const Row(
+                  children: [
+                    Icon(Icons.bedroom_parent, color: AppColors.kPrimary),
+                    SizedBox(width: 8),
+                    Text('Confirm Room Charge'),
+                  ],
+                ),
+                content: SizedBox(
+                  width: 520,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('GUEST INFORMATION',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+                            const SizedBox(height: 6),
+                            Text('Guest Name: $guestName', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Room Number: $roomNo • Ref: $bookingRef'),
+                            Text('Current Folio Balance: $folioBal', style: TextStyle(color: Colors.grey.shade700)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('BILL INFORMATION',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+                            const SizedBox(height: 6),
+                            Text('Outlet: $outletName • Bill #: $billNo'),
+                            Text('Amount to Charge: ${_money(amount)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.kPrimary, fontSize: 16)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Text(
+                          'This bill will be posted to Room $roomNo under $guestName and added to the guest’s final accommodation charges.',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.amber.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => setModalState(() => selectedGuest = null),
+                    child: const Text('Back'),
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.check_circle, size: 16),
+                    label: const Text('Confirm Room Charge'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.kPrimary,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(dialogCtx);
+                      await _postRoomChargeTransaction(
+                        bill: bill,
+                        bookingId: selectedGuest!['booking_id'],
+                        roomNumber: roomNo,
+                        guestName: guestName,
+                        amount: amount,
+                      );
+                    },
+                  ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.bedroom_parent, color: AppColors.kPrimary),
+                  SizedBox(width: 8),
+                  Text('Charge Bill to Guest Room'),
+                ],
+              ),
+              content: SizedBox(
+                width: 520,
+                height: 480,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: searchCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Search room #, guest name, booking ref, phone...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.arrow_forward),
+                          onPressed: () => searchGuests(searchCtrl.text.trim()),
+                        ),
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onSubmitted: (q) => searchGuests(q.trim()),
+                    ),
+                    const SizedBox(height: 12),
+                    if (searching)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(),
+                      )
+                    else if (eligibleGuests.isEmpty)
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'No checked-in guests found matching search.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: eligibleGuests.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, idx) {
+                            final g = eligibleGuests[idx];
+                            final roomStr = g['room_number'] ?? '-';
+                            final gName = g['guest_name'] ?? 'Guest';
+                            final bRef = g['confirmation_number'] ?? '-';
+                            final bal = _money(g['folio_balance'] ?? 0);
+                            final meal = g['meal_plan'] ?? 'Room Only';
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                                child: Text(
+                                  roomStr,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.kPrimary),
+                                ),
+                              ),
+                              title: Text(gName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Ref: $bRef • Meal: $meal • Bal: $bal'),
+                              trailing: ElevatedButton(
+                                child: const Text('Select'),
+                                onPressed: () {
+                                  setModalState(() => selectedGuest = g);
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _postRoomChargeTransaction({
+    required Map<String, dynamic> bill,
+    required String bookingId,
+    required String roomNumber,
+    required String guestName,
+    required num amount,
+  }) async {
+    setState(() => _loading = true);
+    try {
+      final nav = ref.read(dashboardNavProvider);
+      final branchId = nav.user?.branchId ?? 1;
+      final outletName = _text(bill, ['outlet_name', 'outletName']) ?? 'Restaurant POS';
+      final billNo = _text(bill, ['bill_number', 'short_code', 'id']) ?? 'BILL';
+
+      final dio = Dio();
+      final response = await dio.post(
+        '${AppConfig.apiUrl}/room-charge/post',
+        data: {
+          'branch_id': branchId,
+          'outlet_name': outletName,
+          'outlet_type': 'POS',
+          'bill_id': _billId(bill),
+          'bill_number': billNo,
+          'order_number': billNo,
+          'booking_id': bookingId,
+          'room_number': roomNumber,
+          'guest_name': guestName,
+          'total_amount': amount,
+          'items': _billItems(bill),
+          'waiter_name': nav.user?.name ?? 'Staff',
+        },
+      );
+
+      if (response.data['success'] == true) {
+        _snack('Bill $billNo charged to Room $roomNumber ($guestName) successfully!');
+        setState(() {
+          _bill = null;
+          _amountController.clear();
+          _referenceController.clear();
+        });
+        ref.invalidate(cashierUnpaidBillsProvider);
+      } else {
+        _snack('Failed to charge room: ${response.data['message']}');
+      }
+    } catch (e) {
+      _snack('Error posting room charge: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

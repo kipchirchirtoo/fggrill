@@ -7058,47 +7058,226 @@ Future<void> _downloadConferenceInvoice(
 
 Future<void> _showFolioDialog(
     BuildContext context, WidgetRef ref, Booking booking) async {
+  List<Map<String, dynamic>> folioTransactions = [];
+  bool loadingTransactions = true;
+
+  try {
+    final dio = Dio();
+    final res = await dio.get(
+      '${AppConfig.apiUrl}/room-charge/reports',
+      queryParameters: {
+        'room_number': booking.roomNumber,
+        'status': 'all',
+      },
+    );
+    if (res.data['success'] == true) {
+      folioTransactions =
+          List<Map<String, dynamic>>.from(res.data['transactions'] ?? []);
+    }
+  } catch (_) {}
+  loadingTransactions = false;
+
   await showDialog<void>(
     context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('Folio & Billing Options'),
-      content: SizedBox(
-        width: 440,
-        child: _KeyValueList(rows: [
-          {'label': 'Guest', 'value': booking.guestName ?? '-'},
-          {'label': 'Room', 'value': booking.roomNumber ?? '-'},
-          {'label': 'Total', 'value': _money(booking.totalAmount ?? 0)},
-          {'label': 'Paid', 'value': _money(booking.amountPaid ?? 0)},
-          {'label': 'Balance', 'value': _money(booking.balance)},
-        ]),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.receipt, size: 16),
-          label: const Text('Print Receipt (Thermal)'),
-          onPressed: () async {
-            Navigator.pop(context);
-            await printReceptionPaymentReceipt(
-              ref: ref,
-              booking: booking,
-              paymentAmount: booking.amountPaid ?? 0,
-              paymentMethod: 'card_or_cash',
-            );
-          },
-        ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.picture_as_pdf, size: 16),
-          label: const Text('Print Bill / Invoice (PDF)'),
-          onPressed: () {
-            Navigator.pop(context);
-            _downloadCheckoutBill(context, ref, booking);
-          },
-        ),
-      ],
+    builder: (dialogCtx) => StatefulBuilder(
+      builder: (context, setFolioState) {
+        return AlertDialog(
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.receipt_long, color: AppColors.kPrimary),
+                  const SizedBox(width: 8),
+                  Text(
+                      'Guest Folio — Room ${booking.roomNumber ?? ''} (${booking.guestName ?? 'Guest'})'),
+                ],
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 720,
+            height: 520,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Booking Ref: ${booking.confirmationNumber ?? '-'}',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('Total: ${_money(booking.totalAmount ?? 0)}'),
+                      Text('Paid: ${_money(booking.amountPaid ?? 0)}'),
+                      Text('Balance Due: ${_money(booking.balance)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.kPrimary)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('FOLIO CHARGES BREAKDOWN',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                        letterSpacing: 0.8)),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: loadingTransactions
+                      ? const Center(child: CircularProgressIndicator())
+                      : folioTransactions.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No external outlet charges posted yet. Accommodation charges only.',
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: folioTransactions.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, idx) {
+                                final trans = folioTransactions[idx];
+                                final isReversed =
+                                    trans['status'] == 'reversed';
+                                final desc =
+                                    trans['description'] ?? 'Charge';
+                                final cat = trans['category'] ?? 'Outlet';
+                                final amt = _money(trans['amount'] ?? 0);
+                                final dateStr = trans['created_at'] != null
+                                    ? DateFormat('dd MMM, HH:mm').format(
+                                        DateTime.parse(trans['created_at']))
+                                    : '-';
+                                final List items =
+                                    trans['items_snapshot'] is List
+                                        ? trans['items_snapshot']
+                                        : [];
+
+                                return ExpansionTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: isReversed
+                                          ? Colors.red.shade50
+                                          : AppColors.kPrimary
+                                              .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Icon(
+                                      isReversed ? Icons.undo : Icons.store,
+                                      size: 18,
+                                      color: isReversed
+                                          ? Colors.red
+                                          : AppColors.kPrimary,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    desc,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      decoration: isReversed
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                      color: isReversed
+                                          ? Colors.grey
+                                          : Colors.black87,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                      '$dateStr • Category: $cat • Posted by: ${trans['posted_by_name'] ?? 'Staff'}'),
+                                  trailing: Text(
+                                    amt,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: isReversed
+                                          ? Colors.red
+                                          : AppColors.kPrimary,
+                                    ),
+                                  ),
+                                  children: [
+                                    if (items.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 8),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Item Snapshot:',
+                                                style: TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                    fontSize: 12)),
+                                            const SizedBox(height: 4),
+                                            ...items.map((it) {
+                                              final iName = it['name'] ??
+                                                  it['product_name'] ??
+                                                  'Item';
+                                              final iQty = it['qty'] ??
+                                                  it['quantity'] ??
+                                                  1;
+                                              final iPrice = _money(
+                                                  it['unitPrice'] ??
+                                                      it['price'] ??
+                                                      0);
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    left: 8, bottom: 2),
+                                                child: Text(
+                                                    '• $iQty × $iName @ $iPrice',
+                                                    style: const TextStyle(
+                                                        fontSize: 12)),
+                                              );
+                                            }),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Close'),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.receipt, size: 16),
+              label: const Text('Print Receipt (Thermal)'),
+              onPressed: () async {
+                Navigator.pop(dialogCtx);
+                await printReceptionPaymentReceipt(
+                  ref: ref,
+                  booking: booking,
+                  paymentAmount: booking.amountPaid ?? 0,
+                  paymentMethod: 'card_or_cash',
+                );
+              },
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.picture_as_pdf, size: 16),
+              label: const Text('Print Bill / Invoice (PDF)'),
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                _downloadCheckoutBill(context, ref, booking);
+              },
+            ),
+          ],
+        );
+      },
     ),
   );
 }

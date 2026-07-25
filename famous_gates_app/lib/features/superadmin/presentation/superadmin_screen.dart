@@ -20,6 +20,7 @@ import 'sections/operations_sections.dart';
 import 'sections/configuration_sections.dart';
 import 'sections/impersonation_section.dart';
 import 'sections/feature_flags_section.dart';
+import 'sections/toggle_settings_section.dart';
 import 'sections/non_consumables_catalog_section.dart';
 import 'sections/kitchen_ledger_items_section.dart';
 import 'sections/pos_outlet_menu_section.dart';
@@ -172,6 +173,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       // God Controls
       SuperAdminSection.impersonation: const ImpersonationSection(),
       SuperAdminSection.featureFlags: const FeatureFlagsSection(),
+      SuperAdminSection.toggleSettings: const ToggleSettingsSection(),
       SuperAdminSection.announcements: const AnnouncementsSection(),
       SuperAdminSection.emergencyControls: const EmergencyControlsSection(),
       SuperAdminSection.dataOverrides: const DataOverrideSection(),
