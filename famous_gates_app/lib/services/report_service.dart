@@ -95,7 +95,7 @@ class ReportService {
                     style: const pw.TextStyle(
                         fontSize: 10, color: PdfColors.grey700)),
                 pw.Text(
-                    'Tel: +254 706 782 828 | Email: info@famousgatehotels.com',
+                    'Tel: +254 706 782 828 | Email: info@famousgatehotels.com | Web: www.famousgatehotels.com',
                     style: const pw.TextStyle(
                         fontSize: 9, color: PdfColors.grey600)),
               ],

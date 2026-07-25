@@ -10,9 +10,9 @@ interface InvoiceItem {
     item_name?: string;
     quantity: number;
     unit_price: number;
-    vat_rate: number;
-    vat_amount: number;
-    total_amount: number;
+    vat_rate?: number;
+    vat_amount?: number;
+    total_amount?: number;
     item?: { name: string };
 }
 
@@ -26,6 +26,9 @@ interface InvoiceData {
     total_amount: number;
     vat_amount?: number;
     subtotal?: number;
+    paid_amount?: number;
+    amount_paid?: number;
+    balance_due?: number;
     reference?: string;
     supplier_name?: string;
     other_supplier_name?: string;
@@ -61,48 +64,30 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
         console.warn('Skipping logo:', e);
     }
 
+    // 2. Header Title & Company Contact Details with Website
     doc.setFontSize(22);
     doc.setTextColor(44, 62, 80);
     doc.text('INVOICE', 190, cursorY + 5, { align: 'right' });
 
-    // 2.1 Barcode (with timeout)
-    try {
-        const barcodeUrl = `${PYTHON_SERVICE_URL}/api/barcode/barcode-image/${invoice.invoice_number}?format=code128&include_text=true`;
-        const response = await Promise.race([
-            fetch(barcodeUrl),
-            new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('Barcode timeout')), 3000))
-        ]) as Response;
-
-        if (response.ok) {
-            const blob = await response.blob();
-            const base64 = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-            doc.addImage(base64, 'PNG', 140, 30, 50, 15);
-        }
-    } catch (e) {
-        console.warn('Skipping barcode:', e);
-    }
-
     doc.setFontSize(10);
     doc.setTextColor(100);
     cursorY += 15;
-    doc.text(invoice.branch?.name || 'FamousGate Hotels', 190, cursorY + 15, { align: 'right' });
+    doc.text(invoice.branch?.name || 'FamousGate Hotels', 190, cursorY + 10, { align: 'right' });
     cursorY += 5;
-    doc.text(invoice.branch?.address || 'Bomet, Kenya', 190, cursorY + 15, { align: 'right' });
+    doc.text(invoice.branch?.address || 'Bomet, Kenya', 190, cursorY + 10, { align: 'right' });
     cursorY += 5;
-    doc.text(invoice.branch?.phone || '0706782828', 190, cursorY + 15, { align: 'right' });
+    doc.text(invoice.branch?.phone || 'Tel: 0706782828', 190, cursorY + 10, { align: 'right' });
     cursorY += 5;
-    doc.text(invoice.branch?.email || 'famousgatesbmt@gmail.com', 190, cursorY + 15, { align: 'right' });
+    doc.text(invoice.branch?.email || 'Email: famousgatesbmt@gmail.com', 190, cursorY + 10, { align: 'right' });
+    cursorY += 5;
+    doc.text('www.famousgatehotels.com', 190, cursorY + 10, { align: 'right' });
 
-    cursorY = 75;
+    cursorY = 70;
     doc.setDrawColor(200);
     doc.line(margin, cursorY, 190, cursorY);
     cursorY += 10;
 
-    // 3. Billing Details
+    // 3. Billing Details Block
     doc.setFontSize(12);
     doc.setTextColor(44, 62, 80);
 
@@ -151,21 +136,20 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
     const tableData = (invoice.items || []).map(item => {
         const qty = Number(item.quantity) || Number(item.qty) || 0;
         const price = Number(item.unit_price) || Number(item.unitPrice) || Number(item.price) || 0;
-        const vatRate = Number(item.vat_rate) || Number(item.vatRate) || 16;
         const total = Number(item.total_amount) || Number(item.totalAmount) || Number(item.amount) || (qty * price);
 
         return [
             item.description || item.item_name || item.item?.name || 'Item',
             qty,
             new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(price).replace('KES', 'Ksh'),
-            `${vatRate}%`,
+            '16%',
             new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(total).replace('KES', 'Ksh')
         ];
     });
 
     autoTable(doc, {
         startY: cursorY,
-        head: [['Description', 'Qty', 'Unit Price', 'VAT', 'Total']],
+        head: [['Description', 'Qty', 'Unit Price (KES)', 'VAT', 'Total Amount']],
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: [44, 62, 80], textColor: 255 },
@@ -178,112 +162,99 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
         cursorY += (tableData.length * 10) + 20;
     }
 
-    // 5. Totals
-    const totalLabelX = 110;
+    // 5. Totals Breakdown with Inclusive Tax & Levy Calculations
+    const totalLabelX = 100;
     const totalValueX = 190;
 
-    // Recalculate totals using inclusive logic as requested: 16% is inside the amount
+    // Inclusive math for VAT (16%), CL (Catering Levy 2.00%), SC (Service Charge 3.00%)
     let totalGross = 0;
-    let totalVat = 0;
-    let totalNet = 0;
-
     (invoice.items || []).forEach(item => {
         const qty = Number(item.quantity) || Number(item.qty) || 0;
         const price = Number(item.unit_price) || Number(item.unitPrice) || Number(item.price) || 0;
-        const vatRate = Number(item.vat_rate) || Number(item.vatRate) || 16;
         const lineGross = Number(item.total_amount) || Number(item.totalAmount) || Number(item.amount) || (qty * price);
-
-        // Inclusive VAT calculation: Line Net = Total / (1 + VAT Rate / 100)
-        const lineNet = lineGross / (1 + (vatRate / 100));
-        const lineVat = lineGross - lineNet;
-
         totalGross += lineGross;
-        totalVat += lineVat;
-        totalNet += lineNet;
     });
 
-    // Use calculated values to ensure consistency with inclusive logic
-    const subtotal = totalNet;
-    const vatAmount = totalVat;
-    const totalAmount = totalGross;
+    if (totalGross === 0 && invoice.total_amount) {
+        totalGross = Number(invoice.total_amount);
+    }
+
+    const vatRate = 0.16;
+    const clRate = 0.02;
+    const scRate = 0.03;
+    const combinedRate = vatRate + clRate + scRate; // 0.21
+
+    // Net Subtotal = Total Gross / (1 + 0.16 + 0.02 + 0.03)
+    const netSubtotal = totalGross / (1 + combinedRate);
+    const vatAmount = netSubtotal * vatRate;
+    const clAmount = netSubtotal * clRate;
+    const scAmount = netSubtotal * scRate;
+    const grandTotal = totalGross;
+
+    const paidAmount = Number(invoice.paid_amount) || Number(invoice.amount_paid) || Number((invoice as any).total_paid) || (invoice.status === 'paid' ? grandTotal : 0);
+    const balanceDue = Number(invoice.balance_due) ?? Math.max(0, grandTotal - paidAmount);
 
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(val || 0).replace('KES', 'Ksh');
     };
 
     doc.setFont('helvetica', 'normal');
-    doc.text('Subtotal (Excl. VAT):', totalLabelX, cursorY);
-    doc.text(formatCurrency(subtotal), totalValueX, cursorY, { align: 'right' });
+    doc.setFontSize(10);
+    doc.text('Subtotal (Excl. Tax & Levies):', totalLabelX, cursorY);
+    doc.text(formatCurrency(netSubtotal), totalValueX, cursorY, { align: 'right' });
 
-    cursorY += 10;
-    doc.text('VAT Amount (16%):', totalLabelX, cursorY);
+    cursorY += 7;
+    doc.text('VAT Amount (16.00%):', totalLabelX, cursorY);
     doc.text(formatCurrency(vatAmount), totalValueX, cursorY, { align: 'right' });
 
-    cursorY += 15;
-    doc.setFontSize(14);
+    cursorY += 7;
+    doc.text('Catering Levy (CL 2.00%):', totalLabelX, cursorY);
+    doc.text(formatCurrency(clAmount), totalValueX, cursorY, { align: 'right' });
+
+    cursorY += 7;
+    doc.text('Service Charge (SC 3.00%):', totalLabelX, cursorY);
+    doc.text(formatCurrency(scAmount), totalValueX, cursorY, { align: 'right' });
+
+    cursorY += 10;
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('GRAND TOTAL:', totalLabelX, cursorY);
-    doc.text(formatCurrency(totalAmount), totalValueX, cursorY, { align: 'right' });
+    doc.text(formatCurrency(grandTotal), totalValueX, cursorY, { align: 'right' });
+
+    cursorY += 8;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(34, 139, 34); // Green for payments
+    doc.text('Total Payment Done:', totalLabelX, cursorY);
+    doc.text(formatCurrency(paidAmount), totalValueX, cursorY, { align: 'right' });
+
+    cursorY += 7;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(balanceDue > 0 ? 178 : 34, balanceDue > 0 ? 34 : 139, 34);
+    doc.text('Balance Due:', totalLabelX, cursorY);
+    doc.text(formatCurrency(balanceDue), totalValueX, cursorY, { align: 'right' });
 
     // 6. Notes
     if (invoice.notes) {
-        cursorY += 20;
+        cursorY += 15;
         doc.setFontSize(10);
-        doc.text('Notes:', margin, cursorY);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(44, 62, 80);
+        doc.text('Notes / Instructions:', margin, cursorY);
         cursorY += 5;
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100);
         doc.text(invoice.notes, margin, cursorY, { maxWidth: 170 });
     }
 
-    // 7. Bank Details + Branch
-    cursorY += invoice.notes ? 20 : 20;
-    if (cursorY > 240) { doc.addPage(); cursorY = 20; }
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(44, 62, 80);
-    doc.text('PAYMENT DETAILS:', margin, cursorY);
-    cursorY += 6;
-
-    const bankDetails = [
-        ['AC Name:', 'FAMOUS GATES LIMITED'],
-        ['AC No:', '2041305757'],
-        ['Bank:', 'ABSA BANK'],
-        ['Branch:', 'BOMET'],
-    ];
-
-    autoTable(doc, {
-        startY: cursorY,
-        body: bankDetails,
-        theme: 'plain',
-        styles: { fontSize: 9, cellPadding: 2 },
-        columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 35, textColor: [44, 62, 80] },
-            1: { cellWidth: 95 }
-        },
-        margin: { left: margin, right: margin }
-    });
-
-    if ((doc as any).lastAutoTable) {
-        cursorY = (doc as any).lastAutoTable.finalY + 5;
-    } else {
-        cursorY += 30;
-    }
-
-    // Branch info
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(120);
-    doc.text('Issued by: FamousGate Hote', margin, cursorY);
-
-    // Footer
+    // 7. Footer
     const pageCount = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text('FamousGate Hotels - Finance System', 105, 285, { align: 'center' });
+        doc.text('FamousGate Hotels - Finance System | www.famousgatehotels.com', 105, 285, { align: 'center' });
         doc.text(`Page ${i} of ${pageCount}`, 190, 285, { align: 'right' });
     }
 
@@ -293,7 +264,6 @@ export const generateInvoicePDF = async (invoice: InvoiceData) => {
 export const downloadInvoicePDF = async (invoice: InvoiceData) => {
     try {
         const doc = await generateInvoicePDF(invoice);
-        // Sanitize filename: replace slashes and other non-filename chars
         const safeId = (invoice.invoice_number || 'Invoice').replace(/[/\\?%*:|"<>]/g, '_');
         doc.save(`Invoice_${safeId}.pdf`);
         return true;
