@@ -193,7 +193,7 @@ initializeApp().then(({ app, httpServer }) => {
 
   // Relaxed Helmet for development
   app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
     contentSecurityPolicy: false // Disable CSP for development
   }));
 
@@ -208,26 +208,36 @@ initializeApp().then(({ app, httpServer }) => {
   // Static files
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-  // Rate limiting — Redis-backed Upstash sliding window (see src/middleware/rateLimiter.ts)
-  // All limiters fail-open if Redis is down.
+  // ── Rate limiting ─────────────────────────────────────────────────────────────
+  // Redis-backed Upstash sliding window (see src/middleware/rateLimiter.ts).
+  // All Upstash limiters fail-open if Redis is down.
+  //
+  // express-rate-limit backup for financial endpoints. Threshold is generous
+  // (300/min) because the Branch Accountant dashboard fires 8+ concurrent
+  // requests on mount. The Upstash globalLimiter (500/15 min per IP) provides
+  // the real production ceiling.
+  // In development the financialLimiter is completely skipped so hot-reload
+  // cycles and dashboard loads don't trip the limiter and return 429.
   const financialLimiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: 30, // 30 requests per minute
-    message: 'Too many requests to financial endpoints',
+    windowMs: 1 * 60 * 1000, // 1 minute window
+    max: 300,                  // 300 req/min in production
+    skip: () => process.env.NODE_ENV === 'development',
+    message: 'Too many requests to financial endpoints — please try again shortly.',
     standardHeaders: true,
     legacyHeaders: false,
   });
 
   // Route-specific limiters (tightest first)
-  app.use('/api/auth', authLimiter);       // 20 req / 5 min per IP
-  app.use('/api/pos', posLimiter);         // 300 req / 5 min per branch
-  app.use('/api/orders', posLimiter);      // POS orders share the same limit
+  app.use('/api/auth', authLimiter);         // 20 req / 5 min per IP (Upstash)
+  app.use('/api/pos', posLimiter);           // 300 req / 5 min per branch (Upstash)
+  app.use('/api/orders', posLimiter);        // POS orders share the same limit
   app.use('/api/payment', financialLimiter);
   app.use('/api/accounting', financialLimiter);
   app.use('/api/finance', financialLimiter);
   app.use('/api/cashier', financialLimiter);
   // Global limiter applied last — catches all other routes
-  app.use(globalLimiter);                  // 500 req / 15 min per IP
+  app.use(globalLimiter);                    // 500 req / 15 min per IP (Upstash)
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // API routes
   app.use('/api', routes);
@@ -243,9 +253,10 @@ initializeApp().then(({ app, httpServer }) => {
   });
 
   // Handle unhandled routes
-  app.use((req, res) => {
+  app.use((_req, res) => {
     res.status(404).json({ message: 'Route not found' });
   });
+
   logger.info('Starting server initialization...');
 
   // Log environment variables (excluding sensitive data)
@@ -256,6 +267,7 @@ initializeApp().then(({ app, httpServer }) => {
   });
 
   logger.info('App initialized successfully');
+
   // Start server
   const PORT = process.env.PORT || 5000;
   httpServer.on('error', (error: NodeJS.ErrnoException) => {

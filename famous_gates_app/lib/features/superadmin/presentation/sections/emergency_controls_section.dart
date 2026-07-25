@@ -387,7 +387,7 @@ class _EmergencyControlsSectionState
   Widget _buildForceLogoutUserCard() {
     final usersAsync = ref.watch(globalUsersProvider);
     final users = usersAsync.maybeWhen(
-      data: (data) {
+      data: (Map<String, dynamic> data) {
         final rawUsers = data['data'] as List<dynamic>? ?? [];
         return rawUsers.whereType<Map>().map((u) {
           return Map<String, dynamic>.from(u);
@@ -489,7 +489,7 @@ class _EmergencyControlsSectionState
   Widget _buildBranchLockdownCard() {
     final branchesAsync = ref.watch(allBranchesProvider);
     final branches = branchesAsync.maybeWhen(
-      data: (data) {
+      data: (Map<String, dynamic> data) {
         final raw = data['data'] as List<dynamic>? ?? [];
         return raw.whereType<Map>().map((b) {
           return Map<String, dynamic>.from(b);

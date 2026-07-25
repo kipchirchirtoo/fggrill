@@ -10,7 +10,27 @@ export const migratePendingBills = async (branchId?: number) => {
     try {
         logger.info(`Starting pending bills migration job${branchId ? ` for branch ${branchId}` : ''}...`);
 
-        // 1. Define tables and their mapping for migration
+        // ── AUTO-MIGRATION DISABLED ───────────────────────────────────────────
+        // Pending orders (restaurant, bar, POS, Captain POS) are intentionally
+        // NOT auto-migrated to unpaid_bills. Cashiers and accountants handle
+        // clearances manually. Remove the early-return below to re-enable.
+        logger.info('Auto-migration of pending orders to unpaid bills is disabled — skipping.');
+        await recordVoidBills();
+        logger.info('Pending bills migration job completed (void-audit only).');
+        return;
+        // ─────────────────────────────────────────────────────────────────────
+
+        /* eslint-disable no-unreachable */
+        // Map of raw table names → valid bill_type values that satisfy the unpaid_bills
+        // check constraint. If the constraint changes, update this map.
+        const BILL_TYPE_MAP: Record<string, string> = {
+            restaurant_orders: 'restaurant_order',
+            bar_orders: 'bar_order',
+            pos_transactions: 'pos_transaction',
+            pos_shift_orders: 'pos_order',
+        };
+
+        // Define tables and their mapping for migration
         const migrationTargets = [
             {
                 table: 'restaurant_orders',
@@ -38,7 +58,7 @@ export const migratePendingBills = async (branchId?: number) => {
                 waiterField: 'cashier_id',
                 amountField: 'total_amount',
                 numberField: 'transaction_number',
-                locationFields: [], // POS might not have table/room directly
+                locationFields: [],
                 statusValue: 'pending',
                 typeLabel: 'POS Transaction'
             },
@@ -53,6 +73,7 @@ export const migratePendingBills = async (branchId?: number) => {
                 typeLabel: 'Captain POS Order'
             }
         ];
+        /* eslint-enable no-unreachable */
 
         // If branchId is provided, we might want to skip the 8-hour check for immediate migration
         // But usually we should still check if they are pending.
@@ -104,20 +125,23 @@ export const migratePendingBills = async (branchId?: number) => {
                     try {
                         const itemWaiter = Array.isArray(item.waiter) ? item.waiter[0] : item.waiter;
                         const waiterUserId = item[target.waiterField];
-                        const { data: staffProfile, error: staffError } = await supabase
+                        type StaffRow = { id: string; first_name: string; last_name: string };
+                        const { data: _rawProfile, error: staffError } = await supabase
                             .from('staff_profiles')
                             .select('id, first_name, last_name')
                             .or(`user_id.eq.${waiterUserId},id.eq.${waiterUserId}`)
                             .maybeSingle();
+                        const staffProfile = _rawProfile as StaffRow | null;
 
                         if (staffError) {
                             logger.error(`Error resolving staff profile for ${target.table} ${item[target.idField]}:`, staffError);
                             continue;
                         }
-                        if (!staffProfile?.id) {
+                        if (!staffProfile || !staffProfile!.id) {
                             logger.warn(`No staff profile found for waiter/user ${waiterUserId}; skipping ${target.table} ${item[target.idField]}`);
                             continue;
                         }
+                        const sp = staffProfile!;
 
                         const location = target.locationFields
                             .map(field => item[field] ? `${field.replace('_', ' ')} ${item[field]}` : null)
@@ -136,10 +160,10 @@ export const migratePendingBills = async (branchId?: number) => {
                             .from('unpaid_bills')
                             .insert({
                                 bill_number: migratedBillNumber,
-                                bill_type: target.table,
+                                bill_type: BILL_TYPE_MAP[target.table] ?? target.table,
                                 source_id: item[target.idField],
-                                customer_name: `${staffProfile.first_name || itemWaiter?.first_name || ''} ${staffProfile.last_name || itemWaiter?.last_name || ''}`.trim() || 'Waiter',
-                                waiter_id: staffProfile.id,
+                                customer_name: `${sp.first_name || itemWaiter?.first_name || ''} ${sp.last_name || itemWaiter?.last_name || ''}`.trim() || 'Waiter',
+                                waiter_id: sp.id,
                                 branch_id: item.branch_id,
                                 total_amount: amount,
                                 amount_paid: 0,

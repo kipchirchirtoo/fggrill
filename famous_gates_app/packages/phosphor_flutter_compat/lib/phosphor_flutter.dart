@@ -548,4 +548,18 @@ class PhosphorIcons {
   /// school (0xe80c)
   static IconData certificate([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
       const IconData(0xe80c, fontFamily: 'MaterialIcons');
+  /// desktop (0xe1b8)
+  static IconData desktop([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
+      const IconData(0xe1b8, fontFamily: 'MaterialIcons');
+  /// toggle_on (0xe9f6)
+  static IconData toggleRight([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
+      const IconData(0xe9f6, fontFamily: 'MaterialIcons');
+  /// toggle_off (0xe9f5)
+  static IconData toggleLeft([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
+      const IconData(0xe9f5, fontFamily: 'MaterialIcons');
+  /// subdirectory_arrow_right (0xe5da)
+  static IconData cornerDownRight([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
+      const IconData(0xe5da, fontFamily: 'MaterialIcons');
+  static IconData arrowElbowDownRight([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
+      const IconData(0xe5da, fontFamily: 'MaterialIcons');
 }

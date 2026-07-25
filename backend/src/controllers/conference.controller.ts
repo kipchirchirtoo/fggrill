@@ -411,6 +411,42 @@ export const createConferenceBooking = async (
         }
 
         // =====================================================
+        // EVENT ORDERS & CHANNEL INTEGRATION
+        // =====================================================
+        try {
+            const menuPkg = req.body.menu_package || (meal_plan_details && meal_plan_details[0]?.name) || 'Half day';
+            const { data: pkgDef } = await supabase
+                .from('channel_package_definitions')
+                .select('id')
+                .eq('branch_id', branch_id)
+                .eq('channel', 'conference_event')
+                .eq('package_name', menuPkg)
+                .maybeSingle();
+
+            await supabase.from('event_orders').insert([{
+                event_number: `EO-${invoice_number}`,
+                event_name: `Conference - ${customer_name}`,
+                client_name: customer_name,
+                event_type: 'conference',
+                branch_id,
+                event_date: start_date.slice(0, 10),
+                pax: num_participants || 0,
+                menu_package: menuPkg,
+                package_definition_id: pkgDef?.id || null,
+                charge_per_pax: amount_per_pax || 0,
+                total_amount: calculatedTotal || req.body.total_amount || 0,
+                amount_paid: 0,
+                payment_status: 'pending',
+                payment_method: (payment_mode || 'cash').toLowerCase() === 'mpesa' ? 'mpesa' : 'cash',
+                notes: notesWithMetadata,
+                conference_hall_id,
+                conference_booking_id: booking.id
+            }]);
+        } catch (eoErr: any) {
+            logger.error(`Event orders sync notice: ${eoErr?.message}`);
+        }
+
+        // =====================================================
         // PHASE 2: KITCHEN INTEGRATION
         // =====================================================
         if (meal_plan_details && Array.isArray(meal_plan_details) && meal_plan_details.length > 0) {

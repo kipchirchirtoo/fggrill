@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
@@ -1068,9 +1068,9 @@ class _SecurityCenterSectionState extends ConsumerState<SecurityCenterSection> {
     final apiLogsAsync = ref.watch(apiSecurityLogsProvider);
 
     return apiLogsAsync.when(
-      data: (data) {
-        final metrics = data['data'] is Map<String, dynamic>
-            ? data['data'] as Map<String, dynamic>
+      data: (Map<String, dynamic> data) {
+        final Map<String, dynamic> metrics = data['data'] is Map
+            ? Map<String, dynamic>.from(data['data'] as Map)
             : data;
         final endpoints = metrics['endpoints'] as List<dynamic>? ?? [];
         return Container(

@@ -3,11 +3,14 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/api_error_message.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
@@ -467,7 +470,7 @@ class _BreakfastSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 220,
+      width: 240,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -485,11 +488,11 @@ class _BreakfastSummaryCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                      color: Colors.grey.shade800),
+                  maxLines: 2,
+                  softWrap: true,
                 ),
               ),
             ],
@@ -844,41 +847,104 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                       Text('Calculated: $calcTotal',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(width: 14),
-                      _barInput('Confirmed Adults', _confirmedAdultsController, 85),
-                      const SizedBox(width: 8),
-                      _barInput('Confirmed Children', _confirmedChildrenController, 85),
-                      const SizedBox(width: 8),
-                      _barInput('Paid Extra', _paidExtraController, 75),
-                      const SizedBox(width: 8),
-                      _barInput('Complimentary', _complimentaryController, 85),
-                      const SizedBox(width: 14),
-                      Text('Confirmed Total: $finalConfirmedTotal',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.kPrimary)),
+                      _barInput('Confirmed Adults', _confirmedAdultsController, 125),
                       const SizedBox(width: 10),
-                      Text(
-                        'Adjustment: ${adjustment >= 0 ? "+$adjustment" : "$adjustment"}',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: adjustment == 0
-                                ? Colors.grey
-                                : (adjustment > 0
-                                    ? Colors.green.shade800
-                                    : Colors.red.shade800)),
+                      _barInput('Confirmed Children', _confirmedChildrenController, 130),
+                      const SizedBox(width: 10),
+                      _barInput('Paid Extra', _paidExtraController, 105),
+                      const SizedBox(width: 10),
+                      _barInput('Complimentary', _complimentaryController, 115),
+                      const SizedBox(width: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Confirmed Total',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '$finalConfirmedTotal pax',
+                            style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.kPrimary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Adjustment',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${adjustment >= 0 ? "+$adjustment" : "$adjustment"}',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: adjustment == 0
+                                    ? Colors.grey
+                                    : (adjustment > 0
+                                        ? Colors.green.shade800
+                                        : Colors.red.shade800)),
+                          ),
+                        ],
                       ),
                       const SizedBox(width: 14),
                       SizedBox(
                         width: 220,
-                        child: TextField(
-                          controller: _reasonController,
-                          decoration: const InputDecoration(
-                            hintText: 'Adjustment reason...',
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Adjustment Reason',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF334155),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            TextField(
+                              controller: _reasonController,
+                              style: const TextStyle(fontSize: 12),
+                              decoration: InputDecoration(
+                                hintText: 'Adjustment reason...',
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                  borderSide: const BorderSide(color: AppColors.kPrimary, width: 1.5),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 7),
+                                fillColor: Colors.white,
+                                filled: true,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1914,17 +1980,47 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
       String label, TextEditingController controller, double width) {
     return SizedBox(
       width: width,
-      child: TextField(
-        controller: controller,
-        keyboardType: TextInputType.number,
-        onChanged: (_) => setState(() {}),
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: const OutlineInputBorder(),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF334155),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.visible,
+          ),
+          const SizedBox(height: 3),
+          TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            onChanged: (_) => setState(() {}),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: AppColors.kPrimary, width: 1.5),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              fillColor: Colors.white,
+              filled: true,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3427,57 +3523,53 @@ class _ConferenceSection extends ConsumerWidget {
     return _PageScaffold(
       title: 'Conference Halls & Bookings',
       subtitle:
-          'Hall availability, conference bookings, payment status and invoice handoff.',
+          'Book halls, manage reservations, record payments and track occupancy.',
       actions: [
         OutlinedButton.icon(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('Refresh')),
         ElevatedButton.icon(
-          onPressed: () => _showConferenceBookingDialog(
-              context, ref, data.conferenceHalls, onRefresh),
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Book Conference Hall'),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const ConferenceBookingScreen(),
+            ),
+          ).then((_) => onRefresh()),
+          icon: const Icon(Icons.meeting_room_outlined, size: 16),
+          label: const Text('Manage Conference Halls'),
         ),
       ],
       child: _ResponsivePair(
         left: _CardPanel(
-          title: 'Available Halls',
+          title: 'Hall Status (${data.conferenceHalls.length} halls)',
           child: data.conferenceHalls.isEmpty
               ? const EmptyState(message: 'No conference halls found')
               : _RecordList(
                   rows: data.conferenceHalls.map((hall) {
                     final id = _text(hall, ['id']);
+                    final status = _text(hall, ['status']) ?? 'available';
+                    final capacity = _num(hall, ['capacity']).toInt();
+                    final priceDay = _num(
+                        hall, ['base_price_per_day', 'price_per_day', 'rate']);
                     return _RecordTileData(
                       title: _text(hall, ['name']) ?? 'Conference hall',
-                      subtitle: 'Capacity ${_text(hall, [
-                                'capacity'
-                              ]) ?? '-'} • ${_money(_num(hall, [
-                            'base_price_per_day',
-                            'rate'
-                          ]))}/day',
-                      trailing:
-                          _StatusPill(_text(hall, ['status']) ?? 'available'),
+                      subtitle:
+                          '$capacity pax${priceDay > 0 ? ' • ${_money(priceDay)}/day' : ''}',
+                      trailing: _StatusPill(status),
                       actions: [
-                        for (final status in const [
-                          'available',
-                          'occupied',
-                          'maintenance'
-                        ])
-                          _SmallAction(
-                              status,
-                              Icons.flag_outlined,
-                              id == null
-                                  ? null
-                                  : () async {
-                                      await ref
-                                          .read(receptionRepositoryProvider)
-                                          .updateConferenceHall(
-                                              id, {'status': status});
-                                      if (!context.mounted) return;
-                                      onRefresh();
-                                      _snack(context, 'Hall status updated');
-                                    }),
+                        _SmallAction(
+                          'Open',
+                          Icons.open_in_new,
+                          () => showDialog<void>(
+                            context: context,
+                            builder: (_) => ConferenceBookingDialog(
+                              halls: data.conferenceHalls,
+                              repo: ref.read(receptionRepositoryProvider),
+                              onSuccess: onRefresh,
+                              initialHall: hall,
+                            ),
+                          ),
+                        ),
                       ],
                     );
                   }).toList(),
@@ -3485,9 +3577,29 @@ class _ConferenceSection extends ConsumerWidget {
         ),
         leftFlex: 1,
         right: _CardPanel(
-          title: 'Active & Upcoming Bookings',
+          title:
+              'Active & Upcoming Bookings (${data.conferenceBookings.length})',
           child: data.conferenceBookings.isEmpty
-              ? const EmptyState(message: 'No conference bookings found')
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const EmptyState(
+                        message: 'No active conference bookings'),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => ConferenceBookingDialog(
+                          halls: data.conferenceHalls,
+                          repo: ref.read(receptionRepositoryProvider),
+                          onSuccess: onRefresh,
+                        ),
+                      ),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Book a Hall'),
+                    ),
+                  ],
+                )
               : _SimpleRows(
                   rows: data.conferenceBookings,
                   fields: const [
@@ -3504,12 +3616,14 @@ class _ConferenceSection extends ConsumerWidget {
                     final invoice = _text(booking, ['invoice_number']);
                     return Wrap(spacing: 6, children: [
                       _SmallAction(
-                          'PDF',
-                          Icons.download,
-                          id == null
-                              ? null
-                              : () =>
-                                  _downloadConferenceInvoice(context, ref, id)),
+                          'Details',
+                          Icons.open_in_new,
+                          () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ConferenceBookingScreen(),
+                                ),
+                              ).then((_) => onRefresh())),
                       _SmallAction(
                           'Pay',
                           Icons.point_of_sale,
@@ -7062,9 +7176,9 @@ Future<void> _showFolioDialog(
   bool loadingTransactions = true;
 
   try {
-    final dio = Dio();
+    final dio = ref.read(dioProvider);
     final res = await dio.get(
-      '${AppConfig.apiUrl}/room-charge/reports',
+      '/room-charge/reports',
       queryParameters: {
         'room_number': booking.roomNumber,
         'status': 'all',

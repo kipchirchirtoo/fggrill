@@ -187,10 +187,17 @@ router.use('/guest-portal', guestPortalRoutes);
 router.use('/staff', staffRoutes);
 router.use('/staff-performance', staffPerformanceRoutes);
 router.use('/staff-audit', staffAuditRoutes);
+// storekeeping-enhanced sub-router (bar-stocktake, kitchen-stocktake, store-stocktake, spoilage, etc.)
+// Also mounted directly under /storekeeping so the mobile app can reach these routes
+// at both /api/storekeeping/bar-stocktake and /api/storekeeping-enhanced/bar-stocktake.
 router.use('/storekeeping-enhanced', storekeepingEnhancedRoutes);
+router.use('/storekeeping', storekeepingEnhancedRoutes);
 router.use('/cashier', cashierRoutes);
+router.use('/cashier', cashierClearanceRoutes);
 router.use('/cashier-clearance', cashierClearanceRoutes);
+// outlet-pos routes accessible as both /outlet-pos (legacy) and /pos (mobile app expects /pos/outlets)
 router.use('/outlet-pos', outletPosRoutes);
+router.use('/pos', outletPosRoutes);
 router.use('/profit-loss', profitLossRoutes);
 router.use('/wastage', wastageRoutes);
 router.use('/kitchen-ledger', kitchenLedgerRoutes);
@@ -202,7 +209,9 @@ router.use('/attendance', attendanceRoutes);
 router.use('/petty-cash', pettyCashRoutes);
 router.use('/credit', creditRoutes);
 router.use('/kitchen', kitchenRoutes);
+// kitchen-shift routes accessible as both /kitchen-shift (legacy) and /kitchen/shifts (mobile app)
 router.use('/kitchen-shift', kitchenShiftRoutes);
+router.use('/kitchen/shifts', kitchenShiftRoutes);
 router.use('/payroll', payrollRoutes);
 router.use('/payroll-simple', payrollSimpleRoutes);
 router.use('/procurement', procurementRoutes);

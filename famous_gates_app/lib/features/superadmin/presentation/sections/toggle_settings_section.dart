@@ -71,7 +71,7 @@ class _ToggleSettingsSectionState extends ConsumerState<ToggleSettingsSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Icon(PhosphorIcons.toggleRight(), color: AppColors.kPrimary, size: 28),
+              Icon(PhosphorIcons.toggleLeft(), color: AppColors.kPrimary, size: 28),
               const SizedBox(width: 10),
               const Text(
                 'Toggle Settings',
@@ -339,7 +339,7 @@ class _ToggleSettingsSectionState extends ConsumerState<ToggleSettingsSection> {
                   child: Row(
                     children: [
                       if (parentKey != null)
-                        Icon(PhosphorIcons.cornerDownRight(), size: 16, color: Colors.grey.shade400),
+                        Icon(PhosphorIcons.arrowElbowDownRight(), size: 16, color: Colors.grey.shade400),
                       if (parentKey != null) const SizedBox(width: 8),
 
                       Expanded(

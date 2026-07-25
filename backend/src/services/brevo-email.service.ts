@@ -1,7 +1,30 @@
+/**
+ * brevo-email.service.ts
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Brevo Transactional Email API client (REST, not SMTP).
+ *
+ * This service uses the Brevo API SDK for sending transactional emails and
+ * PDF-attached booking confirmations. It complements email.service.ts (SMTP)
+ * and is the preferred method for landing-page booking confirmations since the
+ * Brevo API gives delivery receipts and open-tracking out of the box.
+ *
+ * Security posture:
+ *  • API key read exclusively from process.env.BREVO_API_KEY
+ *  • fromEmail read from process.env.SMTP_FROM_EMAIL (validated at config level)
+ *  • Recipient address validated before any API call
+ *  • HTML sanitised before sending
+ *  • No credentials or full addresses in logs (masked)
+ *  • Raw Brevo error body NEVER dumped to console / logs in production
+ *  • PDF content validated as base64 before attaching
+ * ──────────────────────────────────────────────────────────────────────────────
+ */
+
 import { BrevoClient } from '@getbrevo/brevo';
-import { logger } from '../utils/logger';
 import axios from 'axios';
+import { logger } from '../utils/logger';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EmailOptions {
   to: string;
@@ -9,85 +32,167 @@ interface EmailOptions {
   html: string;
   text?: string;
   attachment?: {
-    content: string; // Base64 encoded
+    /** Base64-encoded file content */
+    content: string;
     name: string;
   };
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Validates a recipient email address and guards against header injection. */
+function isValidEmail(email: string): boolean {
+  if (/[\r\n]/.test(email)) return false;
+  return /^[^\s@"'<>]{1,64}@[^\s@"'<>]{1,255}\.[^\s@"'<>]{2,}$/.test(email.trim());
+}
+
+/** Masks email for safe logging: info@example.com → i***@example.com */
+function maskEmail(email: string): string {
+  if (!email.includes('@')) return '***';
+  const [local, domain] = email.split('@');
+  return `${local[0]}${'*'.repeat(Math.max(0, local.length - 1))}@${domain}`;
+}
+
+/** Strips dangerous HTML constructs from email body (defence-in-depth). */
+function sanitiseHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+    .replace(/href\s*=\s*(['"])\s*javascript:/gi, 'href=$1#');
+}
+
+/** Strips HTML tags to produce a plain-text fallback. */
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '');
+}
+
+/**
+ * Validates that a string is valid base64 content.
+ * Returns false for obviously malformed content to prevent API errors.
+ */
+function isValidBase64(str: string): boolean {
+  try {
+    return /^[A-Za-z0-9+/]+=*$/.test(str) && str.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+
 class BrevoEmailService {
-  private client: BrevoClient | null;
-  private fromEmail: string;
-  private fromName: string;
+  private client: BrevoClient | null = null;
+  private readonly fromEmail: string;
+  private readonly fromName: string;
+  private readonly isProd: boolean;
 
   constructor() {
+    this.isProd = process.env.NODE_ENV === 'production';
+    this.fromEmail = (process.env.SMTP_FROM_EMAIL || 'info@famousgatehotels.com').trim();
+    this.fromName  = (process.env.SMTP_FROM_NAME  || 'Famous Gate Hotels').trim();
+
     const apiKey = process.env.BREVO_API_KEY;
-    this.fromEmail = 'info@famousgatehotels.com';
-    this.fromName = 'FamousGate Hotels';
 
     if (!apiKey) {
-      this.client = null;
-      logger.warn('BREVO_API_KEY is not configured. Email delivery is disabled, but the API will continue running.');
+      logger.warn('[BrevoEmailService] BREVO_API_KEY not set – Brevo API delivery disabled.');
       return;
     }
 
     this.client = new BrevoClient({ apiKey });
-    logger.info(`Brevo Email Service initialized. FROM: ${this.fromName} <${this.fromEmail}>`);
+    logger.info('[BrevoEmailService] Brevo API client ready', {
+      fromName: this.fromName,
+      fromEmail: maskEmail(this.fromEmail)
+    });
   }
 
-  async sendEmail(options: EmailOptions): Promise<void> {
-    try {
-      if (!this.client) {
-        logger.warn(`Email not sent to ${options.to}: BREVO_API_KEY is not configured.`);
-        return;
-      }
+  // ── Core send ──────────────────────────────────────────────────────────────
 
+  async sendEmail(options: EmailOptions): Promise<void> {
+    if (!this.client) {
+      logger.warn('[BrevoEmailService] Email not sent – BREVO_API_KEY not configured', {
+        to: maskEmail(options.to)
+      });
+      return;
+    }
+
+    // ── Input validation ─────────────────────────────────────────────────────
+    if (!isValidEmail(options.to)) {
+      logger.error('[BrevoEmailService] Rejected invalid recipient', { to: maskEmail(options.to) });
+      throw new Error('Invalid recipient email address.');
+    }
+    if (/[\r\n]/.test(options.subject)) {
+      logger.error('[BrevoEmailService] Rejected email with newline in subject');
+      throw new Error('Invalid email subject.');
+    }
+
+    const safeHtml = sanitiseHtml(options.html);
+
+    try {
       const emailData: any = {
-        sender: {
-          name: this.fromName,
-          email: this.fromEmail
-        },
-        to: [{
-          email: options.to
-        }],
-        subject: options.subject,
-        htmlContent: options.html,
-        textContent: options.text || this.stripHtml(options.html)
+        sender: { name: this.fromName, email: this.fromEmail },
+        to: [{ email: options.to.trim() }],
+        subject: options.subject.trim(),
+        htmlContent: safeHtml,
+        textContent: options.text || stripHtml(safeHtml)
       };
 
-      // Add attachment if provided
+      // ── Attachment ─────────────────────────────────────────────────────────
       if (options.attachment) {
-        emailData.attachment = [{
-          content: options.attachment.content,
-          name: options.attachment.name
-        }];
+        if (!isValidBase64(options.attachment.content)) {
+          logger.warn('[BrevoEmailService] Attachment skipped – invalid base64 content');
+        } else {
+          emailData.attachment = [{
+            content: options.attachment.content,
+            name: options.attachment.name
+          }];
+        }
       }
 
-      logger.info(`Sending email via Brevo API to ${options.to}`);
-      logger.info(`Subject: ${options.subject}`);
-      if (options.attachment) {
-        logger.info(`With attachment: ${options.attachment.name}`);
-      }
+      logger.info('[BrevoEmailService] Sending email via Brevo API', {
+        to: maskEmail(options.to),
+        subject: options.subject,
+        hasAttachment: !!options.attachment
+      });
 
       const result = await this.client.transactionalEmails.sendTransacEmail(emailData);
 
-      logger.info(`✅ Email sent successfully via Brevo API to ${options.to}`);
-      logger.info(`Message ID: ${result.messageId}`);
-    } catch (error: any) {
-      logger.error('❌ Error sending email via Brevo API:', error);
-      console.error('RAW BREVO ERROR:', JSON.stringify(error, null, 2));
-      logger.error('Error details:', {
-        message: error.message,
-        body: error.body
+      logger.info('[BrevoEmailService] Email sent successfully', {
+        to: maskEmail(options.to),
+        // Truncate messageId to avoid leaking internal Brevo routing info
+        messageId: result.messageId ? `<${String(result.messageId).slice(0, 12)}…>` : 'n/a'
       });
+    } catch (error: any) {
+      // ── Safe error logging – never log the full error body in production ──
+      const safeError: Record<string, any> = {
+        message: error.message,
+        code: error.code,
+        status: error.status
+      };
+
+      if (!this.isProd && error.body) {
+        // In development only, include body for easier debugging
+        try {
+          safeError.body = typeof error.body === 'string'
+            ? JSON.parse(error.body)
+            : error.body;
+        } catch { /* ignore JSON parse errors */ }
+      }
+
+      logger.error('[BrevoEmailService] Failed to send email', safeError);
       throw new Error(`Email could not be sent: ${error.message}`);
     }
   }
+
+  // ── Booking confirmation ────────────────────────────────────────────────────
 
   async sendLandingBookingConfirmation(email: string, details: any): Promise<void> {
     try {
       const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
 
-      logger.info(`📧 Preparing booking confirmation email for ${email}`);
+      logger.info('[BrevoEmailService] Preparing booking confirmation', {
+        to: maskEmail(email),
+        ref: details.confirmationNumber
+      });
 
       const html = landingEmailTemplates.bookingConfirmation({
         guestName: `${details.firstName} ${details.lastName}`,
@@ -103,15 +208,15 @@ class BrevoEmailService {
         hotelEmail: 'info@famousgatehotels.com'
       });
 
-      // Fetch the branded PDF invoice from the Python service (same branded,
-      // thermal-style generator used for the cashier receipt / checkout bill)
-      let pdfAttachment;
+      // ── PDF invoice ────────────────────────────────────────────────────────
+      let pdfAttachment: { content: string; name: string } | undefined;
       try {
-        logger.info(`📄 Fetching branded PDF invoice from Python service...`);
         const nights = Math.max(1, Math.ceil(
-          (new Date(details.checkOutDate).getTime() - new Date(details.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
+          (new Date(details.checkOutDate).getTime() - new Date(details.checkInDate).getTime())
+          / (1000 * 60 * 60 * 24)
         ));
         const depositAmount = details.depositAmount || 0;
+
         const pdfResponse = await axios.post(
           `${PYTHON_SERVICE_URL}/api/reports/generate/booking-confirmation-invoice`,
           {
@@ -131,50 +236,45 @@ class BrevoEmailService {
             payment_method: details.paymentMethod || '',
             branch_name: details.branchName
           },
-          {
-            responseType: 'arraybuffer'
-          }
+          { responseType: 'arraybuffer', timeout: 15_000 }
         );
 
-        // Convert PDF buffer to base64
         const pdfBase64 = Buffer.from(pdfResponse.data).toString('base64');
         pdfAttachment = {
           content: pdfBase64,
           name: `invoice_${details.confirmationNumber}.pdf`
         };
-        logger.info(`✅ PDF invoice generated successfully`);
+        logger.info('[BrevoEmailService] PDF invoice generated');
       } catch (pdfError: any) {
-        logger.error('⚠️ Failed to generate PDF invoice:', pdfError.message);
-        if (pdfError.response) {
-          // responseType is 'arraybuffer', so the error body (a JSON error
-          // from Flask) arrives as raw bytes - decode it for a readable log
-          // instead of dumping a {"0": 123, "1": 34, ...} byte-index object.
-          const rawBody = Buffer.isBuffer(pdfError.response.data)
-            ? pdfError.response.data.toString('utf-8')
-            : pdfError.response.data;
-          logger.error('Python service response:', rawBody);
-          logger.error('Python service status:', pdfError.response.status);
-        }
-        logger.warn('Continuing to send email without PDF attachment');
-        // Continue without PDF attachment
+        const rawBody = Buffer.isBuffer(pdfError.response?.data)
+          ? pdfError.response.data.toString('utf-8')
+          : pdfError.response?.data;
+
+        logger.error('[BrevoEmailService] PDF generation failed', {
+          error: pdfError.message,
+          status: pdfError.response?.status,
+          // Only log body in dev
+          body: this.isProd ? '[redacted]' : rawBody
+        });
+        logger.warn('[BrevoEmailService] Sending email without PDF attachment');
       }
 
       await this.sendEmail({
         to: email,
-        subject: `Booking Confirmation - ${details.confirmationNumber} - ${details.branchName || 'Famous Gate Hotel'}`,
+        subject: `Booking Confirmation – ${details.confirmationNumber} – ${details.branchName || 'Famous Gate Hotel'}`,
         html,
         attachment: pdfAttachment
       });
 
-      logger.info(`✅ Booking confirmation email sent successfully to ${email}`);
+      logger.info('[BrevoEmailService] Booking confirmation sent', {
+        to: maskEmail(email),
+        ref: details.confirmationNumber,
+        hasPdf: !!pdfAttachment
+      });
     } catch (error: any) {
-      logger.error('❌ Error sending landing booking confirmation:', error);
+      logger.error('[BrevoEmailService] sendLandingBookingConfirmation error:', error.message);
       throw error;
     }
-  }
-
-  private stripHtml(html: string): string {
-    return html.replace(/<[^>]*>/g, '');
   }
 }
 

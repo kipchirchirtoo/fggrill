@@ -221,7 +221,7 @@ class SuperAdminNavItem {
             SuperAdminNavItem(
                 section: SuperAdminSection.toggleSettings,
                 label: 'Toggle Settings',
-                icon: PhosphorIcons.toggleRight()),
+                icon: PhosphorIcons.toggleLeft()),
             SuperAdminNavItem(
                 section: SuperAdminSection.announcements,
                 label: 'Announcements',

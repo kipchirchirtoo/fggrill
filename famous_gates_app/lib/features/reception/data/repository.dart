@@ -345,6 +345,10 @@ class ReceptionRepository {
         .patch('/conference/bookings/$id/status', data: {'status': status});
   }
 
+  Future<void> cancelConferenceBooking(String id) async {
+    await updateConferenceBookingStatus(id, 'cancelled');
+  }
+
   Future<void> addConferencePayment(
       String id, Map<String, dynamic> data) async {
     await _dio.post('/conference/bookings/$id/payments', data: data);

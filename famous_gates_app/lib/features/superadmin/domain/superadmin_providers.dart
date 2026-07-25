@@ -3,6 +3,8 @@ import '../../../core/services/services.dart';
 import '../../../core/network/dio_client.dart';
 import '../data/superadmin_god_repository.dart';
 
+export '../data/superadmin_god_repository.dart';
+
 // SuperAdmin Navigation Sections
 enum SuperAdminSection {
   // Command
@@ -69,14 +71,137 @@ enum SuperAdminSection {
 final superAdminSectionProvider =
     StateProvider<SuperAdminSection>((ref) => SuperAdminSection.adminDashboard);
 
-// AI Anomalies Provider
+// ── SuperAdmin God Repository Provider ─────────────────────────────────────
+final superadminGodRepositoryProvider = Provider<SuperadminGodRepository>((ref) {
+  return SuperadminGodRepository(ref.read(dioProvider));
+});
+
+// ── Impersonation Session Provider ──────────────────────────────────────────
+final impersonationSessionProvider =
+    StateProvider<Map<String, dynamic>?>((ref) => null);
+
+// Helper wrapper to sanitize responses into Map<String, dynamic>
+Map<String, dynamic> _toMap(dynamic val, String key) {
+  if (val is Map<String, dynamic>) return val;
+  if (val is Map) return Map<String, dynamic>.from(val);
+  if (val is List) return {key: val, 'data': val};
+  return {'data': val};
+}
+
+// ── Security Providers ──────────────────────────────────────────────────────
+final securityLogsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return _toMap(await repo.getSuperadminAuditLog(), 'logs');
+});
+
+final securityStatsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return repo.getSecurityConfig();
+});
+
+final securityThreatsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final service = ref.read(securityServiceProvider);
+  return _toMap(await service.getAnomalies(), 'threats');
+});
+
+final blockedIPsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final service = ref.read(securityServiceProvider);
+  return _toMap(await service.getBlockedIPs(), 'ips');
+});
+
+final activeSessionsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final service = ref.read(securityServiceProvider);
+  return _toMap(await service.getActiveSessions(), 'sessions');
+});
+
+final rlsPoliciesProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return _toMap(await repo.getSuperadminAuditLog(), 'policies');
+});
+
+final securityConfigProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return repo.getSecurityConfig();
+});
+
+final apiSecurityLogsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return _toMap(await repo.getSuperadminAuditLog(), 'logs');
+});
+
+final godSecurityConfigProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return repo.getSecurityConfig();
+});
+
+// ── System Health Provider ──────────────────────────────────────────────────
+final systemHealthProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return repo.getSecurityConfig();
+});
+
+// ── Global Users Provider ───────────────────────────────────────────────────
+final globalUsersProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  final branches = await repo.getBranches();
+  return {'users': [], 'data': branches};
+});
+
+// ── Branches Provider ───────────────────────────────────────────────────────
+final allBranchesProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  final branches = await repo.getBranches();
+  return {'branches': branches, 'data': branches};
+});
+
+// ── System Logs Provider ────────────────────────────────────────────────────
+final systemLogsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  final logs = await repo.getSuperadminAuditLog();
+  return {'logs': logs, 'data': logs};
+});
+
+// ── Feature Flags Provider ──────────────────────────────────────────────────
+final featureFlagsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return repo.getFeatureFlags();
+});
+
+// ── Announcements Provider ──────────────────────────────────────────────────
+final announcementsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return repo.getAnnouncements();
+});
+
+// ── God Audit Log Provider ──────────────────────────────────────────────────
+final godAuditLogProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final repo = ref.read(superadminGodRepositoryProvider);
+  return repo.getSuperadminAuditLog();
+});
+
+// ── AI Legacy Providers ─────────────────────────────────────────────────────
 final aiAnomaliesProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final service = ref.read(securityServiceProvider);
   return service.getAnomalies(limit: 100);
 });
 
-// AI Insights Provider
 final aiInsightsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final service = ref.read(securityServiceProvider);
@@ -86,7 +211,6 @@ final aiInsightsProvider =
       : response;
 });
 
-// AI Stats Provider
 final aiStatsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final service = ref.read(securityServiceProvider);

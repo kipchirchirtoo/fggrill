@@ -20,6 +20,7 @@ class AppConfig {
     defaultValue: 'https://api.hirall.com/api',
   );
   static const String mainApiUrl = mainApiBaseUrl;
+  static const String apiUrl = mainApiBaseUrl;
 
   static const String pythonServicesBaseUrl = String.fromEnvironment(
     'PYTHON_SERVICES_URL',

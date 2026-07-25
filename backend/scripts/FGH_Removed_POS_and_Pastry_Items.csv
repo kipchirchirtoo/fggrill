@@ -1,0 +1,173 @@
+﻿old_sku,item_name,old_category,unit,cost,retail,qty,removal_type,reason
+FGH-CHB-0012,1 Kg Chicken Dry Fry,KITCHEN MENU,portion,0.0,1400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0006,1 Kg Chicken Pan Fry,KITCHEN MENU,portion,0.0,1600.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0003,1 Kg Chicken Wet Fry,KITCHEN MENU,portion,0.0,1400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0011,1/2 Kg Chicken Dry Fry,KITCHEN MENU,portion,0.0,700.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0005,1/2 Kg Chicken Pan Fry,KITCHEN MENU,portion,0.0,800.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0002,1/2 Kg Chicken Wet Fry,KITCHEN MENU,portion,0.0,700.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0011,1/2 Kg Kuku Kienyeji Dry Fry,KITCHEN MENU,portion,0.0,1000.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0005,1/2 Kg Kuku Kienyeji Pan Fry,KITCHEN MENU,portion,0.0,1100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0002,1/2 Kg Kuku Kienyeji Wet Fry,KITCHEN MENU,portion,0.0,1100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-797692d9-1146-4c86-b348-fe3774a733f1,1/4 Kg Chicken Dry Fry,KITCHEN MENU,each,0.0,350.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0004,1/4 Kg Chicken Pan Fry,KITCHEN MENU,portion,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0001,1/4 Kg Chicken Wet Fry,KITCHEN MENU,portion,0.0,350.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CHB-0010,1/4 Kg Kienyeji Chicken Boiled,KITCHEN MENU,portion,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0010,1/4 Kg Kuku Kienyeji Dry Fry,KITCHEN MENU,portion,0.0,500.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0004,1/4 Kg Kuku Kienyeji Pan Fry,KITCHEN MENU,portion,0.0,550.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0001,1/4 Kg Kuku Kienyeji Wet Fry,KITCHEN MENU,portion,0.0,550.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-36d1b188-928d-40d6-86d1-b50a992fd9a0,20 Litre Container,KITCHEN MENU,each,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BSD-0004,Banana 2 Pieces,KITCHEN MENU,portion,0.0,40.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-71b4c3b0-288c-4efb-bfc7-021b203bc2e4,Beans,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0005,Beef Pan Fry 1 Kg,KITCHEN MENU,portion,0.0,1600.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0004,Beef Pan Fry 1/2 Kg,KITCHEN MENU,portion,0.0,800.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0003,Beef Pan Fry 1/4 Kg,KITCHEN MENU,portion,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0002,Beef Stew 1 Kg,KITCHEN MENU,portion,0.0,1600.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-c89e6e19-0b4c-489b-9688-02fa6c2c90ae,Beef Stew 1/2 Kg,KITCHEN MENU,each,0.0,800.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0001,Beef Stew 1/4 Kg,KITCHEN MENU,portion,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0008,Beef Wet Fry 1 Kg,KITCHEN MENU,portion,0.0,1600.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0007,Beef Wet Fry 1/2 Kg,KITCHEN MENU,portion,0.0,800.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BEF-0006,Beef Wet Fry 1/4 Kg,KITCHEN MENU,portion,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-79eebd8c-8969-431e-a8f7-49defee12b7a,Bhajia,KITCHEN MENU,portion,0.0,250.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0016,Black Coffee,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0003,Black Tea,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0005,Boiled Eggs Broiler,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0006,Boiled Eggs Kienyeji,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0004,Brown Chapati,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-FST-0007,Burger,KITCHEN MENU,portion,0.0,300.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-5f348f46-12d2-4caa-bebe-5d2a0f67399c,Cabbage Mixed,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-7bcf03d1-b7ed-434c-83a3-aa34653ece71,Cabbage Plain,KITCHEN MENU,each,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0003,Chapati,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SWR-0003,Chapati Roll Broiler,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SWR-0004,Chapati Roll Kienyeji,KITCHEN MENU,portion,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-FST-0001,Chips,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-FST-0005,Chips Gizzard,KITCHEN MENU,portion,0.0,300.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-FST-0006,Chips Liver,KITCHEN MENU,portion,0.0,300.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-3a25aaf6-80b3-484e-8936-017c6e07013f,Chips Masala,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0017,Chocolate / Milo,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0010,Cocoa,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-cb48a0e0-8aea-460a-a9d1-2f0fbd2bce0a,Coffee Cup,KITCHEN MENU,each,0.0,20.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0013,Cookies Pair,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0010,Corn Flakes,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0009,Dawa,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0010,Delmonte Juice 1 Litre,KITCHEN MENU,portion,0.0,350.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0008,Dried Chapati,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0009,Egg Fry Macho,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SWR-0001,Egg Sandwich,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BRK-0001,FG Breakfast,KITCHEN MENU,portion,0.0,300.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BRK-0002,FG Special,KITCHEN MENU,portion,0.0,500.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-FSH-0001,Fish Dry Whole,KITCHEN MENU,portion,0.0,550.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-FSH-0002,Fish Wet Whole,KITCHEN MENU,portion,0.0,600.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SWR-0005,French Toast,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0011,Fresh Juice Passion/Mango,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0005,Fresh Milk Glass,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0007,Fried Eggs Broiler,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0008,Fried Eggs Kienyeji,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0012,Full Kuku Kienyeji Dry Fry,KITCHEN MENU,portion,0.0,2000.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0006,Full Kuku Kienyeji Pan Fry,KITCHEN MENU,portion,0.0,2200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-00b69d3b-1829-453c-8aa5-53109fd90bad,Garlic Chips,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0008,Ginger Tea,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-96b1112c-12ba-402c-8fa3-181a1289853b,Githeri,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0012,Half Cake,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0007,Honey Plain,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0012,Hot Lemon,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0007,KCC Mala,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0006,KCC Milk Packet,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0017,Kebab,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-KUK-0003,Kuku Kienyeji Wet Fry FULL,KITCHEN MENU,portion,0.0,2200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0006,Lemon Coffee Honey,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0004,Lemon Tea,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0005,Lemon Tea Honey,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0001,Mahamri,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-d4e8a5eb-b27d-427b-9841-6bec2971d290,Managu Mixed,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-84ac0dab-a119-484b-b476-a5a9a9962133,Managu Plain,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0011,Marble Cake,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-032e785f-4334-481a-82c0-a542ae0fce32,Mashed Potatoes,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-83899057-ec37-450d-8e9e-4935237dbcd7,Matoke,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0012,Mbuzi Boiled 1 Kg,KITCHEN MENU,portion,0.0,1400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0011,Mbuzi Boiled 1/2 Kg,KITCHEN MENU,portion,0.0,700.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0010,Mbuzi Boiled 1/4 Kg,KITCHEN MENU,portion,0.0,350.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0009,Mbuzi Choma 1 Kg,KITCHEN MENU,portion,0.0,1400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0008,Mbuzi Choma 1/2 Kg,KITCHEN MENU,portion,0.0,700.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0007,Mbuzi Choma 1/4 Kg,KITCHEN MENU,portion,0.0,350.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0006,Mbuzi Pan Fry 1 Kg,KITCHEN MENU,portion,0.0,1600.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0005,Mbuzi Pan Fry 1/2 Kg,KITCHEN MENU,portion,0.0,800.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0004,Mbuzi Pan Fry 1/4 Kg,KITCHEN MENU,portion,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0003,Mbuzi Wet Fry 1 Kg,KITCHEN MENU,portion,0.0,1600.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0002,Mbuzi Wet Fry 1/2 Kg,KITCHEN MENU,portion,0.0,800.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-MBZ-0001,Mbuzi Wet Fry 1/4 Kg,KITCHEN MENU,portion,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0012,Milk Shake,KITCHEN MENU,portion,0.0,250.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0009,Minute Maid 500ml,KITCHEN MENU,portion,0.0,120.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-97eed7f9-e5ae-42ad-9779-e89caf4a1fab,Mixed Veg,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-ab60542e-924c-4cfc-99a5-d1fbe637f700,Mokimo,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0008,Mursik Glass,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0002,Ndazi,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BSD-0003,Nduma,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0007,Pancake,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-ad0ec5a8-e5f8-4a1f-8c7e-10a4f4c0dac4,Peas Miji,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-567129d9-2756-4400-9138-aebeedff03be,Pilau,KITCHEN MENU,each,0.0,250.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-PLT-0001,Platter For 2,KITCHEN MENU,portion,0.0,1500.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-PLT-0002,Platter For 4,KITCHEN MENU,portion,0.0,4000.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-PLT-0003,Platter For 6,KITCHEN MENU,portion,0.0,6000.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-PLT-0004,Platter For 9,KITCHEN MENU,portion,0.0,9000.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0010,Poached Eggs,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BSD-0001,Porridge,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-c32bc4eb-3b3c-431b-91dc-406f30026c33,Potato Wedges,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0015,Queen Cakes,KITCHEN MENU,portion,0.0,80.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-3ca0c9db-f527-48f4-bfd0-9d0baa23906a,Rice Plain,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-6c395b7a-2ea3-4b50-90a5-e7be98c34354,Roast Potatoes,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0005,Samosa,KITCHEN MENU,portion,0.0,60.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0006,Sausage,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-2d48e94a-4323-4449-8bc6-5af685dad747,Saute Potatoes,KITCHEN MENU,each,0.0,250.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0014,Scones,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0002,Scrambled Eggs Broiler,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0001,Scrambled Eggs Kienyeji,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0013,Smoothies,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0001,Soda 300ml,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0002,Soda 300ml Take Away,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-daa046f2-fbcc-4333-8802-9830644103ec,Spaghetti Bolognalae,KITCHEN MENU,each,0.0,300.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-1235a28d-cac7-4eed-a5d1-a5842657d587,Spaghetti Napolitan,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0004,Spanish Omelette Broiler,KITCHEN MENU,portion,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-EGD-0003,Spanish Omelette Kienyeji,KITCHEN MENU,portion,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-72e13ecc-a28c-4441-b2f8-0fe13e232cfe,Special Cabbage,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-a0c97bba-5472-4091-99b8-ae7da0eba286,Special Chicken,KITCHEN MENU,each,0.0,400.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-7c8c778f-4d7b-469d-b5c4-a807306e3d92,Special Githeri,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-64f2df66-d9a8-481f-b715-d21cc725a77b,Special Kebab,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-1e478299-1a83-4024-ad28-45ad4a6e9a9d,Special Managu,KITCHEN MENU,portion,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-10f37d06-71fa-4e76-8061-1c743dd8c49f,Special Mayai,KITCHEN MENU,each,0.0,200.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-599af8b0-60cf-487d-bb58-132e6dc24f64,Special Mix Managu,KITCHEN MENU,portion,0.0,270.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-73e5f78d-35a6-4a0e-a655-77b60b2a5d01,Special Pilau,KITCHEN MENU,portion,0.0,300.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-e40c8658-a434-4535-bd5e-5807c5a118bd,Special Samosa,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-1fbd380f-abe2-466b-8a15-5bc2ca69efa5,Special Sausage,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-0b9a60e7-c84c-4ae0-90f2-61944032f83b,Special Sukuma,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0013,Special Tea,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-9c1e74a2-c183-45d5-962b-e9b8b7276197,Sukuma Mixed,KITCHEN MENU,each,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-83b5c8a6-a1bf-4dbd-af0b-38ff60c1e502,Sukuma Plain,KITCHEN MENU,each,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-BSD-0002,Sweet Potatoes,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0011,Tea Masala,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0001,Tea Mug,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0002,Tea Pot,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0016,Tea Scones 2 Pieces,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-37d93f18-2e99-407f-9bfb-84ad3087d21c,Tins,KITCHEN MENU,each,0.0,20.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SNP-0009,Toasted Bread,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-a49f3c09-5410-4b5b-b959-269a9893fdfa,Ugali Brown,KITCHEN MENU,each,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+MENU-37f9f25d-e9c1-48a0-ba9d-a7b469c4f5ff,Ugali White,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-SWR-0002,Vegetable Sandwich,KITCHEN MENU,portion,0.0,150.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0004,Water 1L,KITCHEN MENU,portion,0.0,100.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-CBV-0003,Water 500ml,KITCHEN MENU,portion,0.0,50.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0015,White Coffee,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FGH-HBV-0014,White Tea,KITCHEN MENU,portion,0.0,70.0,1000.0,POS OUTLET ITEM,Remove from master inventory and branch stock linkage. Retain the menu definition only in the POS/menu tables.
+FG-PSTRY-002,Brown Chapati,PASTRY,pcs,0.0,70.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-013,Cookies,PASTRY,pcs,0.0,0.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-012,Croissant,PASTRY,pcs,0.0,0.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-006,Doughnut,PASTRY,pcs,0.0,0.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-017,Kebab,PASTRY,pcs,0.0,100.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-007,Mahamri,PASTRY,pcs,0.0,50.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-018,Mandazi Bites,PASTRY,pcs,0.0,0.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-001,Marble Cake,PASTRY,pcs,0.0,100.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-004,Ndazi,PASTRY,pcs,0.0,50.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-014,Queen Cakes,PASTRY,pcs,0.0,80.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-005,Samosa,PASTRY,pcs,0.0,60.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-008,Sausage Roll,PASTRY,pcs,0.0,0.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-010,Scones,PASTRY,pcs,0.0,70.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-011,Tea Scones,PASTRY,pcs,0.0,100.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.
+FG-PSTRY-003,White Chapati,PASTRY,pcs,0.0,0.0,1000.0,NON-BREAD PASTRY,Remove from master inventory and branch stock linkage. Only bread products remain as pastry stock items.

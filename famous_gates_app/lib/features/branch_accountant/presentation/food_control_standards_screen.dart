@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -873,13 +873,13 @@ class _ChannelPackageStandardsTabState
                                     'These are the menu items the guest/event package serves in the POS outlet.',
                                 addLabel: 'Add Menu Item Line',
                                 header: const [
-                                  _MatrixColumn(label: '#', flex: 1),
-                                  _MatrixColumn(label: 'POS Item Search', flex: 4),
-                                  _MatrixColumn(label: 'Item Name', flex: 3),
-                                  _MatrixColumn(label: 'SKU', flex: 2),
-                                  _MatrixColumn(label: 'Unit', flex: 1),
-                                  _MatrixColumn(label: 'Qty / Pax', flex: 1),
-                                  _MatrixColumn(label: '', flex: 1),
+                                  _MatrixColumn(label: '#', width: 48),
+                                  _MatrixColumn(label: 'POS Item Search', width: 320),
+                                  _MatrixColumn(label: 'Item Name', width: 240),
+                                  _MatrixColumn(label: 'SKU', width: 140),
+                                  _MatrixColumn(label: 'Unit', width: 110),
+                                  _MatrixColumn(label: 'Qty / Pax', width: 110),
+                                  _MatrixColumn(label: '', width: 48),
                                 ],
                                 onAddLine: () => setState(
                                   () => _menuRows.add(_ChannelMenuDraftRow()),
@@ -928,13 +928,13 @@ class _ChannelPackageStandardsTabState
                                     'These are the raw stock items required per pax for this package.',
                                 addLabel: 'Add Raw Item Line',
                                 header: const [
-                                  _MatrixColumn(label: '#', flex: 1),
-                                  _MatrixColumn(label: 'Raw Item Search', flex: 4),
-                                  _MatrixColumn(label: 'Item Name', flex: 3),
-                                  _MatrixColumn(label: 'SKU', flex: 2),
-                                  _MatrixColumn(label: 'Unit', flex: 1),
-                                  _MatrixColumn(label: 'Qty / Pax', flex: 1),
-                                  _MatrixColumn(label: '', flex: 1),
+                                  _MatrixColumn(label: '#', width: 48),
+                                  _MatrixColumn(label: 'Raw Item Search', width: 320),
+                                  _MatrixColumn(label: 'Item Name', width: 240),
+                                  _MatrixColumn(label: 'SKU', width: 140),
+                                  _MatrixColumn(label: 'Unit', width: 110),
+                                  _MatrixColumn(label: 'Qty / Pax', width: 110),
+                                  _MatrixColumn(label: '', width: 48),
                                 ],
                                 onAddLine: () => setState(
                                   () =>
@@ -1032,7 +1032,7 @@ class _ChannelPackageStandardsTabState
                               style: const TextStyle(fontWeight: FontWeight.w700),
                             ),
                             subtitle: Text(
-                              '$packageName â€¢ ${servedItems.length} menu item(s) â€¢ ${rawItems.length} raw item(s)',
+                              '$packageName · ${servedItems.length} menu item(s) · ${rawItems.length} raw item(s)',
                             ),
                             childrenPadding:
                                 const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1054,7 +1054,7 @@ class _ChannelPackageStandardsTabState
                                   return ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     title: Text(itemName.isEmpty ? sku : itemName),
-                                    subtitle: Text('$sku â€¢ $unit'),
+                                    subtitle: Text('$sku · $unit'),
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -1105,7 +1105,7 @@ class _ChannelPackageStandardsTabState
                                   return ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     title: Text(itemName.isEmpty ? sku : itemName),
-                                    subtitle: Text('$sku â€¢ $unit'),
+                                    subtitle: Text('$sku · $unit'),
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -1196,10 +1196,10 @@ class _ChannelMenuDraftRow {
 }
 
 class _MatrixColumn {
-  const _MatrixColumn({required this.label, required this.flex});
+  const _MatrixColumn({required this.label, required this.width});
 
   final String label;
-  final int flex;
+  final double width;
 }
 
 class _EditorMatrixSection extends StatelessWidget {
@@ -1245,7 +1245,7 @@ class _EditorMatrixSection extends StatelessWidget {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 1040),
+                constraints: const BoxConstraints(minWidth: 1020),
                 child: Column(
                   children: [
                     Container(
@@ -1262,13 +1262,14 @@ class _EditorMatrixSection extends StatelessWidget {
                       child: Row(
                         children: [
                           for (final column in header)
-                            Expanded(
-                              flex: column.flex,
+                            SizedBox(
+                              width: column.width,
                               child: Text(
                                 column.label,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w700,
+                                  fontSize: 13,
                                 ),
                               ),
                             ),
@@ -1361,7 +1362,7 @@ class _ChannelMenuDraftRowWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           SizedBox(
@@ -1371,108 +1372,140 @@ class _ChannelMenuDraftRowWidget extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
-          Expanded(
-            flex: 4,
-            child: Autocomplete<Map<String, dynamic>>(
-              optionsBuilder: (textEditingValue) {
-                final q = textEditingValue.text.trim().toLowerCase();
-                final filtered = menuCandidates.where((item) {
-                  final id = '${item['id'] ?? ''}'.trim();
-                  if (id.isNotEmpty && selectedIds.contains(id)) return false;
-                  final sku = '${item['sku'] ?? ''}'.toLowerCase();
-                  final name =
-                      '${item['name'] ?? item['item_name'] ?? ''}'.toLowerCase();
-                  return q.isEmpty || sku.contains(q) || name.contains(q);
-                });
-                return filtered.take(20);
-              },
-              displayStringForOption: (option) =>
-                  '${option['name'] ?? option['item_name'] ?? option['sku']}',
-              fieldViewBuilder:
-                  (context, controller, focusNode, onEditingComplete) {
-                if (controller.text.isEmpty && row.selectedItem != null) {
-                  controller.text =
-                      '${row.selectedItem!['name'] ?? row.selectedItem!['item_name'] ?? row.selectedItem!['sku']}';
-                }
-                return TextFormField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  decoration: const InputDecoration(
-                    hintText: 'Search menu item by name or SKU',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                );
-              },
-              optionsViewBuilder: (context, onSelected, options) {
-                final list = options.toList();
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    borderRadius: BorderRadius.circular(12),
-                    child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxWidth: 460, maxHeight: 260),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: list.length,
-                        itemBuilder: (context, index) {
-                          final option = list[index];
-                          return ListTile(
-                            title: Text(
-                              '${option['name'] ?? option['item_name'] ?? option['sku'] ?? 'POS Item'}',
-                            ),
-                            subtitle: Text(
-                              '${option['sku'] ?? ''} â€¢ ${option['unit'] ?? 'pcs'}',
-                            ),
-                            onTap: () => onSelected(option),
-                          );
-                        },
+          SizedBox(
+            width: 320,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Autocomplete<Map<String, dynamic>>(
+                optionsBuilder: (textEditingValue) {
+                  final q = textEditingValue.text.trim().toLowerCase();
+                  final filtered = menuCandidates.where((item) {
+                    final id = '${item['id'] ?? ''}'.trim();
+                    if (id.isNotEmpty && selectedIds.contains(id)) return false;
+                    final sku = '${item['sku'] ?? ''}'.toLowerCase();
+                    final name =
+                        '${item['name'] ?? item['item_name'] ?? ''}'.toLowerCase();
+                    return q.isEmpty || sku.contains(q) || name.contains(q);
+                  });
+                  return filtered.take(20);
+                },
+                displayStringForOption: (option) =>
+                    '${option['name'] ?? option['item_name'] ?? option['sku']}',
+                fieldViewBuilder:
+                    (context, controller, focusNode, onEditingComplete) {
+                  if (controller.text.isEmpty && row.selectedItem != null) {
+                    controller.text =
+                        '${row.selectedItem!['name'] ?? row.selectedItem!['item_name'] ?? row.selectedItem!['sku']}';
+                  }
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Search menu item by name or SKU',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                    ),
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  final list = options.toList();
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: 460, maxHeight: 260),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: list.length,
+                          itemBuilder: (context, index) {
+                            final option = list[index];
+                            return ListTile(
+                              title: Text(
+                                '${option['name'] ?? option['item_name'] ?? option['sku'] ?? 'POS Item'}',
+                              ),
+                              subtitle: Text(
+                                '${option['sku'] ?? ''} · ${option['unit'] ?? 'pcs'}',
+                              ),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-              onSelected: row.applyItem,
+                  );
+                },
+                onSelected: row.applyItem,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 3,
-            child: Text(
-              '${row.selectedItem?['name'] ?? row.selectedItem?['item_name'] ?? '-'}',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+          SizedBox(
+            width: 240,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                '${row.selectedItem?['name'] ?? row.selectedItem?['item_name'] ?? '-'}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: Text(
-              '${row.selectedItem?['sku'] ?? '-'}',
-              overflow: TextOverflow.ellipsis,
+          SizedBox(
+            width: 140,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                '${row.selectedItem?['sku'] ?? '-'}',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextFormField(
-              controller: row.unitController,
-              decoration: const InputDecoration(hintText: 'Unit'),
+          SizedBox(
+            width: 110,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: TextFormField(
+                controller: row.unitController,
+                decoration: InputDecoration(
+                  hintText: 'Unit',
+                  isDense: true,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextFormField(
-              controller: row.quantityController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-              ],
-              decoration: const InputDecoration(hintText: '0.00'),
+          SizedBox(
+            width: 110,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: TextFormField(
+                controller: row.quantityController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                ],
+                decoration: InputDecoration(
+                  hintText: '0.00',
+                  isDense: true,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
           SizedBox(
             width: 48,
             child: IconButton(
@@ -1755,7 +1788,7 @@ class _AddDirectMappingDialogState
                       '${row['item_name'] ?? row['name'] ?? ''} ${row['sku'] ?? ''}'
                           .toLowerCase(),
                   subtitleBuilder: (row) =>
-                      '${row['sku'] ?? ''} â€¢ ${row['unit'] ?? row['unit_of_measure'] ?? 'unit'}'
+                      '${row['sku'] ?? ''} · ${row['unit'] ?? row['unit_of_measure'] ?? 'unit'}'
                           .trim(),
                   onChanged: (row) => setState(() => _selectedRawItem = row),
                 ),
@@ -1769,7 +1802,7 @@ class _AddDirectMappingDialogState
                   searchTextBuilder: (row) =>
                       '${row['name'] ?? ''} ${row['sku'] ?? ''}'.toLowerCase(),
                   subtitleBuilder: (row) =>
-                      '${row['sku'] ?? ''} â€¢ ${row['unit'] ?? 'pcs'}'.trim(),
+                      '${row['sku'] ?? ''} · ${row['unit'] ?? 'pcs'}'.trim(),
                   onChanged: (row) => setState(() => _selectedPosItem = row),
                 ),
                 const SizedBox(height: 16),
@@ -1996,7 +2029,7 @@ class _ChannelStandardDraftRowWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           SizedBox(
@@ -2004,102 +2037,134 @@ class _ChannelStandardDraftRowWidget extends StatelessWidget {
             child: Text('${index + 1}',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
-          Expanded(
-            flex: 4,
-            child: Autocomplete<Map<String, dynamic>>(
-              optionsBuilder: (textEditingValue) {
-                final q = textEditingValue.text.trim().toLowerCase();
-                if (q.isEmpty) return rawCandidates.take(20);
-                return rawCandidates.where((item) {
-                  final sku = '${item['sku'] ?? ''}'.toLowerCase();
-                  final name = '${item['item_name'] ?? ''}'.toLowerCase();
-                  return sku.contains(q) || name.contains(q);
-                }).take(20);
-              },
-              displayStringForOption: (option) =>
-                  '${option['item_name'] ?? option['sku']}',
-              fieldViewBuilder:
-                  (context, controller, focusNode, onEditingComplete) {
-                if (controller.text.isEmpty && row.selectedItem != null) {
-                  controller.text =
-                      '${row.selectedItem!['item_name'] ?? row.selectedItem!['sku']}';
-                }
-                return TextFormField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  decoration: const InputDecoration(
-                    hintText: 'Search item by name or SKU',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                );
-              },
-              optionsViewBuilder: (context, onSelected, options) {
-                final list = options.toList();
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    borderRadius: BorderRadius.circular(12),
-                    child: ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxWidth: 420, maxHeight: 260),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: list.length,
-                        itemBuilder: (context, index) {
-                          final option = list[index];
-                          return ListTile(
-                            title: Text('${option['item_name'] ?? 'Unnamed'}'),
-                            subtitle: Text(
-                                '${option['sku'] ?? ''} â€¢ ${option['unit'] ?? option['unit_of_measure'] ?? ''}'),
-                            onTap: () => onSelected(option),
-                          );
-                        },
+          SizedBox(
+            width: 320,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Autocomplete<Map<String, dynamic>>(
+                optionsBuilder: (textEditingValue) {
+                  final q = textEditingValue.text.trim().toLowerCase();
+                  if (q.isEmpty) return rawCandidates.take(20);
+                  return rawCandidates.where((item) {
+                    final sku = '${item['sku'] ?? ''}'.toLowerCase();
+                    final name = '${item['item_name'] ?? ''}'.toLowerCase();
+                    return sku.contains(q) || name.contains(q);
+                  }).take(20);
+                },
+                displayStringForOption: (option) =>
+                    '${option['item_name'] ?? option['sku']}',
+                fieldViewBuilder:
+                    (context, controller, focusNode, onEditingComplete) {
+                  if (controller.text.isEmpty && row.selectedItem != null) {
+                    controller.text =
+                        '${row.selectedItem!['item_name'] ?? row.selectedItem!['sku']}';
+                  }
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Search item by name or SKU',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                    ),
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  final list = options.toList();
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: 420, maxHeight: 260),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: list.length,
+                          itemBuilder: (context, index) {
+                            final option = list[index];
+                            return ListTile(
+                              title: Text('${option['item_name'] ?? 'Unnamed'}'),
+                              subtitle: Text(
+                                  '${option['sku'] ?? ''} · ${option['unit'] ?? option['unit_of_measure'] ?? ''}'),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-              onSelected: row.applyItem,
+                  );
+                },
+                onSelected: row.applyItem,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: Text(
-              '${row.selectedItem?['item_name'] ?? '-'}',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+          SizedBox(
+            width: 240,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                '${row.selectedItem?['item_name'] ?? '-'}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '${row.selectedItem?['sku'] ?? '-'}',
-              overflow: TextOverflow.ellipsis,
+          SizedBox(
+            width: 140,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                '${row.selectedItem?['sku'] ?? '-'}',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextFormField(
-              controller: row.unitController,
-              decoration: const InputDecoration(hintText: 'Unit'),
+          SizedBox(
+            width: 110,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: TextFormField(
+                controller: row.unitController,
+                decoration: InputDecoration(
+                  hintText: 'Unit',
+                  isDense: true,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextFormField(
-              controller: row.quantityController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-              ],
-              decoration: const InputDecoration(hintText: '0.00'),
+          SizedBox(
+            width: 110,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: TextFormField(
+                controller: row.quantityController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                ],
+                decoration: InputDecoration(
+                  hintText: '0.00',
+                  isDense: true,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
           SizedBox(
             width: 48,
             child: IconButton(
@@ -3617,3 +3682,5 @@ class _ComplexOutputRow {
     qtyController.dispose();
   }
 }
+
+

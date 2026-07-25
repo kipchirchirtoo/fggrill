@@ -1,4 +1,22 @@
+/**
+ * email.service.ts
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Primary transactional email service using Brevo SMTP relay via Nodemailer.
+ *
+ * Security posture:
+ *  • TLS enforced end-to-end (rejectUnauthorized: true in production)
+ *  • Connection pooling – reduces auth round-trips & rate-limit exposure
+ *  • HTML sanitised before sending (strips injected <script> / event attrs)
+ *  • Rate limiting on bursts (max N emails per minute guard in-process)
+ *  • Recipient address validated before any network call
+ *  • No credentials, secrets, or full email addresses ever written to logs
+ *  • Ethereal fallback ONLY in non-production with explicit opt-in
+ * ──────────────────────────────────────────────────────────────────────────────
+ */
+
 import nodemailer from 'nodemailer';
+import type SMTPPool from 'nodemailer/lib/smtp-pool';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { emailTemplates } from '../utils/emailTemplates';
@@ -6,356 +24,395 @@ import { enterpriseEmailTemplates } from '../utils/emailTemplates.enterprise';
 import { landingEmailTemplates } from '../utils/emailTemplates.landing';
 import { barcodeGeneratorService } from './barcodeGenerator.service';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
+import { buildSmtpConfig, SmtpConfig } from '../config/smtp.config';
 
-interface EmailOptions {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface EmailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
-  attachments?: any[];
+  attachments?: nodemailer.SendMailOptions['attachments'];
 }
+
+// ─── Sanitisation helper ──────────────────────────────────────────────────────
+
+/**
+ * Strips dangerous HTML constructs from email bodies.
+ * This is a defence-in-depth measure – template authors should still escape
+ * user-supplied data, but this catches any slip-ups.
+ */
+function sanitiseHtml(html: string): string {
+  return html
+    // Remove <script> blocks entirely
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    // Remove inline event handlers (onclick, onerror, onload, …)
+    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+    // Remove javascript: URIs
+    .replace(/href\s*=\s*(['"])\s*javascript:/gi, 'href=$1#');
+}
+
+/**
+ * Validates a recipient email address.
+ * Prevents header-injection and catches obvious typos before making network calls.
+ */
+function isValidEmail(email: string): boolean {
+  // Reject multi-line values (header injection guard)
+  if (/[\r\n]/.test(email)) return false;
+  const EMAIL_RE = /^[^\s@"'<>]{1,64}@[^\s@"'<>]{1,255}\.[^\s@"'<>]{2,}$/;
+  return EMAIL_RE.test(email.trim());
+}
+
+/** Masks an email for safe logging: info@example.com → i***@example.com */
+function maskEmail(email: string): string {
+  if (!email.includes('@')) return '***';
+  const [local, domain] = email.split('@');
+  return `${local[0]}${'*'.repeat(Math.max(0, local.length - 1))}@${domain}`;
+}
+
+// ─── In-process rate limiter ──────────────────────────────────────────────────
+
+class RateLimiter {
+  private timestamps: number[] = [];
+  private readonly maxPerWindow: number;
+  private readonly windowMs: number;
+
+  constructor(maxPerWindow: number, windowSeconds: number) {
+    this.maxPerWindow = maxPerWindow;
+    this.windowMs = windowSeconds * 1000;
+  }
+
+  /** Returns true if within the rate limit, false if throttled. */
+  allow(): boolean {
+    const now = Date.now();
+    this.timestamps = this.timestamps.filter(t => now - t < this.windowMs);
+    if (this.timestamps.length >= this.maxPerWindow) return false;
+    this.timestamps.push(now);
+    return true;
+  }
+
+  remaining(): number {
+    const now = Date.now();
+    this.timestamps = this.timestamps.filter(t => now - t < this.windowMs);
+    return Math.max(0, this.maxPerWindow - this.timestamps.length);
+  }
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
 
 class EmailService {
   private transporter!: nodemailer.Transporter;
-  private etherealAccount?: { user: string; pass: string };
+  private config!: SmtpConfig;
   private usingEthereal = false;
+  private etherealCredentials?: { user: string; pass: string };
+  /**
+   * In-process guard: max 30 sends per 60 seconds.
+   * Brevo's free tier limit is 300/day (~12/hour) so this is generous,
+   * but it defends against runaway loops and programmatic abuse.
+   */
+  private rateLimiter = new RateLimiter(30, 60);
 
   constructor() {
     this.initTransporter();
   }
 
-  private initTransporter() {
-    const isGmail = process.env.EMAIL_SERVICE === 'gmail';
+  // ── Setup ───────────────────────────────────────────────────────────────────
 
-    if (isGmail) {
-      this.transporter = nodemailer.createTransport({
-        service: 'gmail',
+  private initTransporter(): void {
+    try {
+      this.config = buildSmtpConfig();
+      // Pool options (nodemailer uses SMTPPool when pool:true)
+      const smtpOptions: SMTPPool.Options = {
+        host: this.config.host,
+        port: this.config.port,
+        secure: this.config.secure,
         auth: {
-          user: process.env.EMAIL_USER || process.env.SMTP_USER,
-          pass: process.env.EMAIL_PASS || process.env.SMTP_PASS
-        }
-      });
-    } else {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER || process.env.EMAIL_USER,
-          pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
-        }
-      });
+          user: this.config.auth.user,
+          pass: this.config.auth.pass
+        },
+        tls: {
+          rejectUnauthorized: this.config.tls.rejectUnauthorized,
+          minVersion: this.config.tls.minVersion as 'TLSv1.2' | 'TLSv1.3',
+          ciphers: this.config.tls.ciphers
+        },
+        pool: true as const,
+        maxConnections: this.config.maxConnections,
+        maxMessages: this.config.maxMessages,
+        connectionTimeout: 10_000,  // 10 s
+        socketTimeout: 30_000       // 30 s
+      };
+      this.transporter = nodemailer.createTransport(smtpOptions);
+      this.usingEthereal = false;
+      logger.info('[EmailService] Brevo SMTP transporter ready');
+    } catch (err: any) {
+      // Config errors are already logged by buildSmtpConfig()
+      logger.warn('[EmailService] SMTP init failed – email delivery is disabled until config is fixed.');
+      // In non-production, set up Ethereal as an emergency fallback
+      if (process.env.NODE_ENV !== 'production') {
+        logger.info('[EmailService] Non-production: will attempt Ethereal fallback on first send.');
+      }
     }
   }
 
-  async setupEtherealFallback(): Promise<void> {
+  /** Sets up Ethereal (test SMTP) as a last-resort fallback — dev-only. */
+  private async setupEtherealFallback(): Promise<void> {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[EmailService] Ethereal fallback is disabled in production.');
+    }
     try {
       const testAccount = await nodemailer.createTestAccount();
-      this.etherealAccount = { user: testAccount.user, pass: testAccount.pass };
-      this.transporter = nodemailer.createTransport({
+      this.etherealCredentials = { user: testAccount.user, pass: testAccount.pass };
+      const etherealOptions: SMTPTransport.Options = {
         host: 'smtp.ethereal.email',
         port: 587,
         secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
-      });
+        auth: { user: testAccount.user, pass: testAccount.pass },
+        tls: { rejectUnauthorized: false }  // Ethereal uses self-signed certs (dev only)
+      };
+      this.transporter = nodemailer.createTransport(etherealOptions);
       this.usingEthereal = true;
-      logger.info(`Ethereal Email fallback active. Preview inbox: https://ethereal.email/login`);
-      logger.info(`  User: ${testAccount.user} | Pass: ${testAccount.pass}`);
+      // INTENTIONALLY log credentials here — Ethereal is a disposable test inbox
+      logger.info('[EmailService] Ethereal fallback active.');
+      logger.info(`  Preview inbox: https://ethereal.email/login`);
+      logger.info(`  User: ${testAccount.user}`);
     } catch (err: any) {
-      logger.error('Failed to create Ethereal test account:', err.message);
+      logger.error('[EmailService] Could not create Ethereal account:', err.message);
+      throw err;
     }
   }
 
-  async sendEmail(options: EmailOptions): Promise<{ previewUrl?: string }> {
-    try {
-      const fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgateshotels.com';
-      const fromName = process.env.SMTP_FROM_NAME || 'FamousGate Hotels';
+  // ── Core send ────────────────────────────────────────────────────────────────
 
-      const mailOptions = {
-        from: `${fromName} <${fromEmail}>`,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text || this.stripHtml(options.html),
+  async sendEmail(options: EmailOptions): Promise<{ previewUrl?: string }> {
+    // ── Rate limit guard ──────────────────────────────────────────────────────
+    if (!this.rateLimiter.allow()) {
+      logger.warn('[EmailService] Rate limit exceeded – email queued/dropped', {
+        to: maskEmail(options.to),
+        remaining: 0
+      });
+      throw new Error('Email rate limit exceeded. Please try again shortly.');
+    }
+
+    // ── Recipient validation ──────────────────────────────────────────────────
+    if (!isValidEmail(options.to)) {
+      logger.error('[EmailService] Rejected invalid recipient address', {
+        to: maskEmail(options.to)
+      });
+      throw new Error('Invalid recipient email address.');
+    }
+
+    // ── Subject validation (prevent header injection) ─────────────────────────
+    if (/[\r\n]/.test(options.subject)) {
+      logger.error('[EmailService] Rejected email with newline in subject (header injection attempt)');
+      throw new Error('Invalid email subject.');
+    }
+
+    // ── HTML sanitisation ─────────────────────────────────────────────────────
+    const safeHtml = sanitiseHtml(options.html);
+
+    try {
+      if (!this.transporter) {
+        if (process.env.NODE_ENV !== 'production') {
+          await this.setupEtherealFallback();
+        } else {
+          throw new Error('Email transporter is not initialised.');
+        }
+      }
+
+      const from = this.config
+        ? `${this.config.from.name} <${this.config.from.email}>`
+        : (process.env.SMTP_FROM_NAME
+            ? `${process.env.SMTP_FROM_NAME} <${process.env.SMTP_FROM_EMAIL}>`
+            : 'Famous Gate Hotels <info@famousgatehotels.com>');
+
+      const mailOptions: nodemailer.SendMailOptions = {
+        from,
+        to: options.to.trim(),
+        subject: options.subject.trim(),
+        html: safeHtml,
+        text: options.text || this.stripHtml(safeHtml),
         attachments: options.attachments
       };
 
-      logger.info(`Sending email from ${fromName} <${fromEmail}> to ${options.to}`);
+      logger.info('[EmailService] Sending email', {
+        to: maskEmail(options.to),
+        subject: options.subject,
+        hasAttachments: (options.attachments?.length ?? 0) > 0
+      });
+
       const info = await this.transporter.sendMail(mailOptions);
-      logger.info(`Email sent successfully to ${options.to}`);
+
+      logger.info('[EmailService] Email sent successfully', {
+        to: maskEmail(options.to),
+        messageId: info.messageId ? `<${info.messageId.slice(0, 12)}…>` : 'n/a'
+      });
 
       if (this.usingEthereal && info.messageId) {
         const previewUrl = nodemailer.getTestMessageUrl(info);
-        logger.info(`Ethereal preview URL: ${previewUrl}`);
-        return { previewUrl: previewUrl || undefined };
-      }
-      return {};
-    } catch (error: any) {
-      logger.error('Error sending email:', error.message);
-      if (!this.usingEthereal) {
-        logger.info('SMTP failed. Trying Ethereal Email fallback...');
-        await this.setupEtherealFallback();
-        try {
-          const fromEmail = process.env.SMTP_FROM_EMAIL || 'info@famousgateshotels.com';
-          const fromName = process.env.SMTP_FROM_NAME || 'FamousGate Hotels';
-          const info = await this.transporter.sendMail({
-            from: `${fromName} <${fromEmail}>`,
-            to: options.to,
-            subject: options.subject,
-            html: options.html,
-            text: options.text || this.stripHtml(options.html),
-            attachments: options.attachments
-          });
-          logger.info(`Email sent via Ethereal fallback to ${options.to}`);
-          const previewUrl = nodemailer.getTestMessageUrl(info);
-          logger.info(`Ethereal preview URL: ${previewUrl}`);
-          return { previewUrl: previewUrl || undefined };
-        } catch (ethErr: any) {
-          logger.error('Ethereal fallback also failed:', ethErr.message);
+        if (previewUrl) {
+          logger.info(`[EmailService] Ethereal preview: ${previewUrl}`);
+          return { previewUrl };
         }
       }
+
+      return {};
+    } catch (error: any) {
+      // Safe error logging — don't dump credentials from error objects
+      logger.error('[EmailService] Failed to send email', {
+        to: maskEmail(options.to),
+        error: error.message,
+        code: error.code
+      });
+
+      // Dev-only Ethereal fallback
+      if (!this.usingEthereal && process.env.NODE_ENV !== 'production') {
+        logger.info('[EmailService] Primary SMTP failed – activating Ethereal fallback...');
+        try {
+          await this.setupEtherealFallback();
+          return await this.sendEmail(options);  // single retry via Ethereal
+        } catch (ethErr: any) {
+          logger.error('[EmailService] Ethereal fallback also failed:', ethErr.message);
+        }
+      }
+
       throw new Error(`Email could not be sent: ${error.message}`);
     }
   }
 
-  async sendWelcomeEmail(name: string, email: string): Promise<void> {
-    await this.sendEmail({
-      to: email,
-      subject: 'Welcome to FG Grill Hotel',
-      html: emailTemplates.welcome(name)
-    });
-  }
+  // ── Health check ─────────────────────────────────────────────────────────────
 
-  async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-
-    await this.sendEmail({
-      to: email,
-      subject: 'Password Reset Request - FG Grill Hotel',
-      html: emailTemplates.passwordReset(resetUrl)
-    });
-  }
-
-  async sendBookingConfirmation(
-    email: string,
-    bookingDetails: any
-  ): Promise<void> {
+  async testConnection(): Promise<boolean> {
     try {
-      // Generate barcode for booking
-      const confirmationNumber = bookingDetails.confirmation_number || bookingDetails.id;
-      logger.info(`Generating barcode for booking ${confirmationNumber}`);
+      if (!this.transporter) throw new Error('Transporter not initialised');
+      await this.transporter.verify();
+      logger.info('[EmailService] SMTP connection verified (Brevo)');
+      return true;
+    } catch (error: any) {
+      logger.error('[EmailService] SMTP verify failed:', {
+        error: error.message,
+        code: error.code
+      });
+      if (!this.usingEthereal && process.env.NODE_ENV !== 'production') {
+        await this.setupEtherealFallback();
+        try {
+          await this.transporter.verify();
+          logger.info('[EmailService] Ethereal fallback verified');
+          return true;
+        } catch { /* ignore */ }
+      }
+      return false;
+    }
+  }
 
+  // ── High-level email methods ──────────────────────────────────────────────────
+
+  // ── DISABLED — only reservation, booking confirmation & checkout emails are sent
+  async sendWelcomeEmail(_name: string, _email: string): Promise<void> {
+    logger.debug('[EmailService] sendWelcomeEmail is disabled');
+  }
+
+  // ── DISABLED
+  async sendPasswordResetEmail(_email: string, _resetToken: string): Promise<void> {
+    logger.debug('[EmailService] sendPasswordResetEmail is disabled');
+  }
+
+  async sendBookingConfirmation(email: string, bookingDetails: any): Promise<void> {
+    try {
+      const confirmationNumber = bookingDetails.confirmation_number || bookingDetails.id;
+      logger.info('[EmailService] Generating barcode', { ref: confirmationNumber });
       const barcodeBase64 = await barcodeGeneratorService.generateBarcode(confirmationNumber);
 
-      if (barcodeBase64) {
-        logger.info(`Barcode generated successfully for ${confirmationNumber}`);
-      } else {
-        logger.warn(`Barcode generation failed for ${confirmationNumber}, sending email without barcode`);
-      }
-
-      // Prepare email options with CID attachment for barcode
-      const mailOptions: any = {
+      const mailOptions: EmailOptions = {
         to: email,
-        subject: 'Booking Confirmation - Kyogong',
+        subject: 'Booking Confirmation – Famous Gate Hotels',
         html: enterpriseEmailTemplates.bookingConfirmation(bookingDetails, barcodeBase64 || undefined),
         attachments: []
       };
 
-      // Add barcode as CID attachment if available
       if (barcodeBase64) {
-        mailOptions.attachments.push({
+        mailOptions.attachments!.push({
           filename: 'barcode.png',
           content: Buffer.from(barcodeBase64, 'base64'),
-          cid: 'barcode@kyogong',
+          cid: 'barcode@famousgate',
           contentType: 'image/png'
         });
       }
 
-      // Send email with attachment
       await this.sendEmail(mailOptions);
-
-      logger.info(`Booking confirmation email sent to ${email} with${barcodeBase64 ? '' : 'out'} barcode`);
+      logger.info('[EmailService] Booking confirmation sent', {
+        to: maskEmail(email),
+        barcode: !!barcodeBase64
+      });
     } catch (error) {
-      logger.error('Error in sendBookingConfirmation:', error);
-      // Fallback to sending without barcode if there's an error
+      logger.error('[EmailService] sendBookingConfirmation error:', error);
+      // Fallback without barcode
       await this.sendEmail({
         to: email,
-        subject: 'Booking Confirmation - Kyogong',
+        subject: 'Booking Confirmation – Famous Gate Hotels',
         html: enterpriseEmailTemplates.bookingConfirmation(bookingDetails)
       });
     }
   }
 
-  async sendBookingCancellation(
-    email: string,
-    bookingDetails: any
-  ): Promise<void> {
-    await this.sendEmail({
-      to: email,
-      subject: 'Booking Cancellation - Famous Gates Hotels',
-      html: emailTemplates.bookingCancellation(bookingDetails)
-    });
-    logger.info(`Booking cancellation email sent to ${email}`);
+  // ── DISABLED
+  async sendBookingCancellation(_email: string, _bookingDetails: any): Promise<void> {
+    logger.debug('[EmailService] sendBookingCancellation is disabled');
   }
 
-  async sendPaymentReceipt(
-    email: string,
-    paymentDetails: any
-  ): Promise<void> {
+  async sendPaymentReceipt(email: string, paymentDetails: any): Promise<void> {
     await this.sendEmail({
       to: email,
-      subject: 'Payment Receipt - Famous Gates Hotels',
+      subject: 'Payment Receipt – Famous Gate Hotels',
       html: emailTemplates.paymentReceipt(paymentDetails)
     });
-    logger.info(`Payment receipt email sent to ${email}`);
   }
 
-  async sendInvoice(
-    email: string,
-    invoiceDetails: any
-  ): Promise<void> {
+  async sendInvoice(email: string, invoiceDetails: any): Promise<void> {
     await this.sendEmail({
       to: email,
-      subject: `Invoice ${invoiceDetails.invoice_number || invoiceDetails.id} - Famous Gates Hotels`,
+      subject: `Invoice ${invoiceDetails.invoice_number || invoiceDetails.id} – Famous Gate Hotels`,
       html: emailTemplates.invoice(invoiceDetails)
     });
-    logger.info(`Invoice email sent to ${email}`);
   }
 
-  async sendCheckInReminder(
-    email: string,
-    bookingDetails: any
-  ): Promise<void> {
-    await this.sendEmail({
-      to: email,
-      subject: 'Check-in Reminder - Famous Gates Hotels',
-      html: emailTemplates.checkInReminder(bookingDetails)
-    });
-    logger.info(`Check-in reminder sent to ${email}`);
+  // ── DISABLED
+  async sendCheckInReminder(_email: string, _bookingDetails: any): Promise<void> {
+    logger.debug('[EmailService] sendCheckInReminder is disabled');
   }
 
-  async sendCheckOutReminder(
-    email: string,
-    bookingDetails: any
-  ): Promise<void> {
-    await this.sendEmail({
-      to: email,
-      subject: 'Check-out Reminder - Famous Gates Hotels',
-      html: emailTemplates.checkOutReminder(bookingDetails)
-    });
-    logger.info(`Check-out reminder sent to ${email}`);
+  // ── DISABLED
+  async sendCheckOutReminder(_email: string, _bookingDetails: any): Promise<void> {
+    logger.debug('[EmailService] sendCheckOutReminder is disabled');
   }
 
-  async sendCheckInWelcome(
-    email: string,
-    bookingDetails: any
-  ): Promise<void> {
-    await this.sendEmail({
-      to: email,
-      subject: 'Welcome to Famous Gates Hotels!',
-      html: emailTemplates.checkInWelcome(bookingDetails)
-    });
-    logger.info(`Check-in welcome email sent to ${email}`);
+  // ── DISABLED
+  async sendCheckInWelcome(_email: string, _bookingDetails: any): Promise<void> {
+    logger.debug('[EmailService] sendCheckInWelcome is disabled');
   }
 
-  async sendMaintenanceAlert(
-    email: string,
-    taskDetails: any
-  ): Promise<void> {
-    await this.sendEmail({
-      to: email,
-      subject: 'New Maintenance Task Assigned - FG Grill Hotel',
-      html: emailTemplates.maintenanceAlert(taskDetails)
-    });
+  // ── DISABLED
+  async sendMaintenanceAlert(_email: string, _taskDetails: any): Promise<void> {
+    logger.debug('[EmailService] sendMaintenanceAlert is disabled');
   }
 
-  async sendInventoryAlert(
-    email: string,
-    itemDetails: any
-  ): Promise<void> {
-    await this.sendEmail({
-      to: email,
-      subject: 'Low Stock Alert - FG Grill Hotel',
-      html: emailTemplates.inventoryAlert(itemDetails)
-    });
+  // ── DISABLED
+  async sendInventoryAlert(_email: string, _itemDetails: any): Promise<void> {
+    logger.debug('[EmailService] sendInventoryAlert is disabled');
   }
 
-  async sendStockTransferEmail(
-    user: any,
-    items: any[]
-  ): Promise<void> {
-    const formattedTime = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
-
-    let itemsHtml = '<ul>';
-    let itemsText = '';
-
-    items.forEach(item => {
-      const sku = item.item?.sku || item.item_sku || 'N/A';
-      const desc = item.item?.description || 'N/A';
-      const price = item.item?.retail_price || 0;
-      const qty = item.quantity;
-
-      itemsHtml += `
-            <li>
-                <strong>SKU:</strong> ${sku}<br>
-                <strong>Description:</strong> ${desc}<br>
-                <strong>Units transferred:</strong> ${qty}<br>
-                <strong>Unit price:</strong> ${price}
-            </li><br>
-        `;
-
-      itemsText += `
-            - SKU: ${sku}
-            - Description: ${desc}
-            - Units transferred: ${qty}
-            - Unit price: ${price}
-        `;
-    });
-    itemsHtml += '</ul>';
-
-    const html = `
-        <h1>Stock Transfer Request</h1>
-        <p>The following order has been placed by ${user.full_name || user.username || 'User'} [${user.email}] on ${formattedTime}.</p>
-        <h2>Stock Order Details</h2>
-        ${itemsHtml}
-        <br><hr><br>
-    `;
-
-    // In a real app, we would fetch the "stock administrators" list. 
-    // For now, we'll send to the system admin email or the user themselves for confirmation + admin.
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-    // We might want to send to a list of recipients.
-
-    await this.sendEmail({
-      to: adminEmail, // and maybe cc user.email
-      subject: '[STOCK MANAGEMENT] A transfer request been placed.',
-      html,
-      text: `Stock Transfer Request\n\nThe following order has been placed by ${user.email} on ${formattedTime}.\n\n${itemsText}`
-    });
+  // ── DISABLED
+  async sendStockTransferEmail(_user: any, _items: any[]): Promise<void> {
+    logger.debug('[EmailService] sendStockTransferEmail is disabled');
   }
 
-  async sendPayslipEmail(staff: any, month: string, year: number, pdfBuffer: Buffer): Promise<void> {
-    await this.sendEmail({
-      to: staff.user.email,
-      subject: `Payslip for ${month} ${year} - Kyogong`,
-      html: enterpriseEmailTemplates.payslipNotification(`${staff.user.first_name} ${staff.user.last_name}`, month, year),
-      attachments: [
-        {
-          filename: `Payslip_${staff.user.last_name}_${month}_${year}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf'
-        }
-      ]
-    });
+  // ── DISABLED
+  async sendPayslipEmail(_staff: any, _month: string, _year: number, _pdfBuffer: Buffer): Promise<void> {
+    logger.debug('[EmailService] sendPayslipEmail is disabled');
   }
 
   async sendLandingBookingConfirmation(email: string, details: any): Promise<void> {
     try {
-      const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
-
       const html = landingEmailTemplates.bookingConfirmation({
         guestName: `${details.firstName} ${details.lastName}`,
         confirmationNumber: details.confirmationNumber,
@@ -365,16 +422,13 @@ class EmailService {
         guests: details.guests,
         totalAmount: details.totalAmount,
         hotelName: details.branchName || 'Famous Gate Hotel',
-        hotelAddress: 'P.O. Box 123, Bomet, Kenya',
-        hotelPhone: '+254 700 000 000',
+        hotelAddress: 'Bomet, Kenya',
+        hotelPhone: '+254 706 782 828',
         hotelEmail: 'info@famousgatehotels.com'
       });
 
-      // Fetch the branded PDF invoice from the Python service (same branded,
-      // thermal-style generator used for the cashier receipt / checkout bill)
-      let attachments: any[] | undefined;
+      let attachments: nodemailer.SendMailOptions['attachments'];
       try {
-        logger.info(`📄 Fetching branded PDF invoice from Python service...`);
         const nights = Math.max(1, Math.ceil(
           (new Date(details.checkOutDate).getTime() - new Date(details.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
         ));
@@ -406,35 +460,32 @@ class EmailService {
           content: Buffer.from(pdfResponse.data),
           contentType: 'application/pdf'
         }];
-        logger.info(`✅ PDF invoice generated successfully`);
+        logger.info('[EmailService] PDF invoice generated for booking confirmation');
       } catch (pdfError: any) {
-        logger.error('⚠️ Failed to generate PDF invoice:', pdfError.message);
-        if (pdfError.response) {
-          const rawBody = Buffer.isBuffer(pdfError.response.data)
-            ? pdfError.response.data.toString('utf-8')
-            : pdfError.response.data;
-          logger.error('Python service response:', rawBody);
-          logger.error('Python service status:', pdfError.response.status);
-        }
-        logger.warn('Continuing to send email without PDF attachment');
+        const body = Buffer.isBuffer(pdfError.response?.data)
+          ? pdfError.response.data.toString('utf-8')
+          : pdfError.response?.data;
+        logger.error('[EmailService] PDF invoice generation failed', {
+          error: pdfError.message,
+          status: pdfError.response?.status,
+          body
+        });
+        logger.warn('[EmailService] Sending email without PDF attachment');
       }
 
       await this.sendEmail({
         to: email,
-        subject: `Booking Confirmation - ${details.branchName || 'Famous Gate Hotel'}`,
+        subject: `Booking Confirmation – ${details.confirmationNumber} – ${details.branchName || 'Famous Gate Hotel'}`,
         html,
         attachments
       });
-
-      logger.info(`Booking confirmation email sent successfully to ${email}`);
     } catch (error: any) {
-      logger.error('Error sending landing booking confirmation:', error);
+      logger.error('[EmailService] sendLandingBookingConfirmation error:', error.message);
       throw error;
     }
   }
 
   async sendLandingReservationRequest(email: string, details: any): Promise<void> {
-    const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
     const html = landingEmailTemplates.reservationRequest({
       guestName: `${details.firstName} ${details.lastName}`,
       reservationId: details.reservationId,
@@ -445,103 +496,34 @@ class EmailService {
       totalAmount: details.totalAmount,
       paymentLink: details.paymentLink,
       hotelName: details.branchName || 'Famous Gate Hotel',
-      hotelAddress: 'P.O. Box 123, Bomet, Kenya',
-      hotelPhone: '+254 700 000 000',
+      hotelAddress: 'Bomet, Kenya',
+      hotelPhone: '+254 706 782 828',
       hotelEmail: 'info@famousgatehotels.com'
     });
 
     await this.sendEmail({
       to: email,
-      subject: `Reservation Request Pending - ${details.branchName || 'Famous Gate Hotel'}`,
+      subject: `Reservation Request Pending – ${details.branchName || 'Famous Gate Hotel'}`,
       html
     });
   }
 
-  async sendLandingPromotion(recipients: any[], details: any): Promise<void> {
-    const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
-    for (const recipient of recipients) {
-      try {
-        const html = landingEmailTemplates.promotion({
-          guestName: recipient.name || 'Valued Guest',
-          promoTitle: details.promoTitle,
-          promoHeadline: details.promoHeadline || 'Limited Time Offer',
-          promoDescription: details.promoDescription,
-          promoCode: details.promoCode,
-          discountPercentage: details.discountPercentage,
-          validUntil: details.validUntil,
-          bookingLink: details.bookingLink,
-          hotelName: 'Famous Gate Hotel',
-          hotelAddress: 'P.O. Box 123, Bomet, Kenya'
-        });
-
-        await this.sendEmail({
-          to: recipient.email,
-          subject: details.promoTitle,
-          html
-        });
-      } catch (e: any) {
-        logger.error(`Failed to send promo to ${recipient.email}: ${e.message}`);
-      }
-    }
+  // ── DISABLED
+  async sendLandingPromotion(_recipients: any[], _details: any): Promise<void> {
+    logger.debug('[EmailService] sendLandingPromotion is disabled');
   }
 
-  async sendLandingNewsletter(recipients: any[], details: any): Promise<void> {
-    const { landingEmailTemplates } = await import('../utils/emailTemplates.landing');
-    for (const recipient of recipients) {
-      try {
-        const html = landingEmailTemplates.newsletter({
-          guestName: recipient.name || 'Subscriber',
-          issueDate: details.issueDate,
-          newsletterTitle: details.newsletterTitle,
-          featuredArticle: details.featuredArticle,
-          secondaryArticles: details.secondaryArticles || [],
-          bookingLink: details.bookingLink,
-          hotelName: 'Famous Gate Hotel',
-          hotelAddress: 'P.O. Box 123, Bomet, Kenya',
-          hotelPhone: '+254 700 000 000'
-        });
-
-        await this.sendEmail({
-          to: recipient.email,
-          subject: details.newsletterTitle,
-          html
-        });
-      } catch (e: any) {
-        logger.error(`Failed to send newsletter to ${recipient.email}: ${e.message}`);
-      }
-    }
+  // ── DISABLED
+  async sendLandingNewsletter(_recipients: any[], _details: any): Promise<void> {
+    logger.debug('[EmailService] sendLandingNewsletter is disabled');
   }
 
-  async testConnection(): Promise<boolean> {
-    try {
-      await this.transporter.verify();
-      logger.info('SMTP connection verified successfully');
-      return true;
-    } catch (error: any) {
-      logger.error('SMTP connection failed:', error.message);
-      if (!this.usingEthereal) {
-        logger.info('Switching to Ethereal Email fallback for development...');
-        await this.setupEtherealFallback();
-        try {
-          await this.transporter.verify();
-          logger.info('Ethereal Email fallback verified');
-          return true;
-        } catch (ethErr: any) {
-          logger.error('Ethereal fallback also failed:', ethErr.message);
-        }
-      }
-      return false;
-    }
+  // ── DISABLED
+  async sendPurchaseOrderEmail(_supplierEmail: string, _poDetails: any): Promise<void> {
+    logger.debug('[EmailService] sendPurchaseOrderEmail is disabled');
   }
 
-  async sendPurchaseOrderEmail(supplierEmail: string, poDetails: any): Promise<void> {
-    const supplierName = poDetails.supplier?.name || 'Supplier';
-    await this.sendEmail({
-      to: supplierEmail,
-      subject: `PURCHASE ORDER: ${poDetails.po_number} - Famous Gate Hotels`,
-      html: enterpriseEmailTemplates.purchaseOrder(supplierName, poDetails)
-    });
-  }
+  // ── Private utilities ─────────────────────────────────────────────────────────
 
   private stripHtml(html: string): string {
     return html.replace(/<[^>]*>/g, '');

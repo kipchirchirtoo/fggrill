@@ -337,7 +337,7 @@ class _FeatureFlagsSectionState extends ConsumerState<FeatureFlagsSection> {
 
     List<Map<String, dynamic>> branches = [];
     try {
-      final data = await ref.read(allBranchesProvider.future);
+      final Map<String, dynamic> data = await ref.read(allBranchesProvider.future);
       final rawBranches = data['data'] as List<dynamic>? ?? const [];
       branches = rawBranches
           .whereType<Map>()

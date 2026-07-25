@@ -859,7 +859,9 @@ export const getAvailableRooms = async (
     }
 
     const isGlobal = isGlobalRole(req.user?.role);
-    const branchId = isGlobal ? req.query.branch_id : req.user?.branch_id;
+    // req.query.branch_id is honoured for all callers (including the unauthenticated
+    // public landing page). Authenticated non-global users fall back to their assigned branch.
+    const branchId = req.query.branch_id || (isGlobal ? undefined : req.user?.branch_id);
     if (branchId) {
       query = query.eq('branch_id', branchId);
     }
