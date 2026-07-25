@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -1357,6 +1358,13 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     final pageFormat =
         isLandscape ? PdfPageFormat.a4.landscape : PdfPageFormat.a4;
 
+    pw.MemoryImage? logoImage;
+    try {
+      final logoBytes =
+          await rootBundle.load('assets/frontend_public/fglogo.png');
+      logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+    } catch (_) {}
+
     final adults = int.tryParse(_confirmedAdultsController.text) ?? 0;
     final children = int.tryParse(_confirmedChildrenController.text) ?? 0;
     final paid = int.tryParse(_paidExtraController.text) ?? 0;
@@ -1364,127 +1372,297 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     final total =
         adults + children + paid + compl - _excludedBookingIds.length;
 
+    String titleMap;
+    String subtitleMap;
+    switch (reportType) {
+      case 'kitchen_plan':
+        titleMap = 'B. Kitchen Breakfast Operations Plan';
+        subtitleMap =
+            'Operational kitchen breakdown for food preparation & portioning control.';
+        break;
+      case 'room_list':
+        titleMap = 'C. Room-by-Room Breakfast Entrance List';
+        subtitleMap =
+            'Sequential room verification checklist for breakfast service counter.';
+        break;
+      case 'pax_summary':
+        titleMap = 'D. Daily Breakfast Pax Executive Summary';
+        subtitleMap =
+            'Operational & Closing reconciliation breakdown of accommodation pax.';
+        break;
+      case 'forecast':
+        titleMap = 'E. Multi-Day Breakfast Pax Forecast Report';
+        subtitleMap =
+            'Confirmed vs. Tentative upcoming breakfast pax projection.';
+        break;
+      case 'group_report':
+        titleMap = 'F. Conference & Group Breakfast Manifest';
+        subtitleMap =
+            'Dedicated guest list and dietary requirements for groups & events.';
+        break;
+      case 'audit_report':
+        titleMap = 'G. Breakfast Pax Adjustments & Audit Trail';
+        subtitleMap =
+            'Complete audit log of reception edits, overrides, and version changes.';
+        break;
+      case 'confirmed_guest_list':
+      default:
+        titleMap = 'A. Confirmed Breakfast Guest List';
+        subtitleMap =
+            'Official reception guest manifest for accommodation breakfast session.';
+        break;
+    }
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 28),
         build: (pw.Context context) {
           return [
+            // Standard Payroll/HR Header Block
             pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text('FAMOUS GATES HOTELS',
-                        style: pw.TextStyle(
-                            fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('Breakfast Pax Operations Report',
-                        style: const pw.TextStyle(fontSize: 12)),
-                    pw.Text('Date: ${_dateController.text}',
-                        style: const pw.TextStyle(fontSize: 10)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text(
-                        'Report Type: ${reportType.replaceAll('_', ' ').toUpperCase()}',
-                        style: pw.TextStyle(
-                            fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(
-                        'Generated: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                        style: const pw.TextStyle(fontSize: 9)),
-                    pw.Text('System: FG Hotels Management',
-                        style: const pw.TextStyle(fontSize: 9)),
-                  ],
+                if (logoImage != null)
+                  pw.Image(logoImage, width: 72, height: 50)
+                else
+                  pw.Container(width: 72),
+                pw.SizedBox(width: 16),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('FamousGate Hotels',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                      pw.Text('Bomet, Kenya',
+                          style: const pw.TextStyle(
+                              fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text(
+                          'Tel: +254 706 782 828 | Email: info@famousgatehotels.com',
+                          style: const pw.TextStyle(
+                              fontSize: 9, color: PdfColors.grey600)),
+                    ],
+                  ),
                 ),
               ],
             ),
-            pw.Divider(),
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 12),
+
+            // Banner Title Box (Payroll grey200 style)
             pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey400)),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(10),
+              decoration: const pw.BoxDecoration(
+                color: PdfColors.grey200,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Column(
                 children: [
-                  pw.Text('Adults: $adults'),
-                  pw.Text('Children: $children'),
-                  pw.Text('Excluded: ${_excludedBookingIds.length}'),
-                  pw.Text('Paid Extras: $paid'),
-                  pw.Text('Complimentary: $compl'),
-                  pw.Text('Total Pax: $total',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text(titleMap,
+                      style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold, fontSize: 15)),
+                  pw.SizedBox(height: 3),
+                  pw.Text(subtitleMap,
+                      style: const pw.TextStyle(
+                          fontSize: 10, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 4),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.center,
+                    children: [
+                      pw.Text('Breakfast Date: ${_dateController.text}  |  ',
+                          style: const pw.TextStyle(
+                              fontSize: 9, color: PdfColors.grey800)),
+                      pw.Text(
+                          'Status: ${_versionsHistory.isEmpty ? "UNCONFIRMED" : "CONFIRMED (v${_versionsHistory.length})"}  |  ',
+                          style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.grey800)),
+                      pw.Text(
+                          'Printed: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+                          style: const pw.TextStyle(
+                              fontSize: 9, color: PdfColors.grey600)),
+                    ],
+                  ),
                 ],
               ),
             ),
-            pw.SizedBox(height: 14),
-            pw.TableHelper.fromTextArray(
-              headers: [
-                if (incRoomNumbers) 'Room',
-                if (incBookingRefs) 'Booking Ref',
-                if (incGuestNames) 'Guest Name',
-                'Plan',
-                'Adults',
-                'Children',
-                'Total',
-                if (incDietaryNotes) 'Dietary / Notes',
-              ],
-              data: bookings.map((b) {
-                final refStr = b['confirmation_number']?.toString() ?? '-';
-                final isExcluded = _excludedBookingIds.contains(refStr);
-                final notes = <String>[];
-                if (_earlyBreakfastIds.contains(refStr)) notes.add('Early');
-                if (_packedBreakfastIds.contains(refStr)) notes.add('Packed');
-                if (_dietaryNotes.containsKey(refStr)) {
-                  notes.add(_dietaryNotes[refStr]!);
-                }
+            pw.SizedBox(height: 12),
 
-                return [
-                  if (incRoomNumbers)
-                    b['room_number']?.toString() ??
-                        b['room']?.toString() ??
-                        '-',
-                  if (incBookingRefs) refStr,
-                  if (incGuestNames)
-                    isExcluded
-                        ? '${b['guest_name']} (EXCLUDED)'
-                        : b['guest_name']?.toString() ?? 'Guest',
-                  b['meal_plan']?.toString() ?? 'BB',
-                  '${b['adults'] ?? 1}',
-                  '${b['children'] ?? 0}',
-                  '${(b['adults'] as num? ?? 1) + (b['children'] as num? ?? 0)}',
-                  if (incDietaryNotes) notes.isEmpty ? '-' : notes.join(', '),
-                ];
-              }).toList(),
+            // Operational KPI Summary Box
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                color: PdfColors.grey100,
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                children: [
+                  pw.Text('Adults: $adults',
+                      style: pw.TextStyle(
+                          fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Children: $children',
+                      style: pw.TextStyle(
+                          fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Excluded: ${_excludedBookingIds.length}',
+                      style: const pw.TextStyle(
+                          fontSize: 9, color: PdfColors.red800)),
+                  pw.Text('Paid Extras: $paid',
+                      style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text('Complimentary: $compl',
+                      style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text('Final Confirmed Pax: $total',
+                      style: pw.TextStyle(
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.black)),
+                ],
+              ),
             ),
-            pw.SizedBox(height: 20),
-            if (incSignatureBlock)
+            pw.SizedBox(height: 12),
+
+            // Main Table styled like Payroll (Grey300 headers, alternating rows)
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                  children: [
+                    if (incRoomNumbers)
+                      _tableHeaderCell('Room'),
+                    if (incBookingRefs)
+                      _tableHeaderCell('Booking Ref'),
+                    if (incGuestNames && reportType != 'kitchen_plan')
+                      _tableHeaderCell('Guest Name'),
+                    _tableHeaderCell('Meal Plan'),
+                    _tableHeaderCell('Adults'),
+                    _tableHeaderCell('Children'),
+                    _tableHeaderCell('Total Pax'),
+                    if (incDietaryNotes)
+                      _tableHeaderCell('Dietary / Notes'),
+                  ],
+                ),
+                ...bookings.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final b = entry.value;
+                  final refStr = b['confirmation_number']?.toString() ?? '-';
+                  final isExcluded = _excludedBookingIds.contains(refStr);
+
+                  final notes = <String>[];
+                  if (_earlyBreakfastIds.contains(refStr)) notes.add('Early');
+                  if (_packedBreakfastIds.contains(refStr)) notes.add('Packed');
+                  if (_dietaryNotes.containsKey(refStr)) {
+                    notes.add(_dietaryNotes[refStr]!);
+                  }
+
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: idx.isOdd ? PdfColors.grey100 : PdfColors.white,
+                    ),
+                    children: [
+                      if (incRoomNumbers)
+                        _tableDataCell(b['room_number']?.toString() ??
+                            b['room']?.toString() ??
+                            '-'),
+                      if (incBookingRefs)
+                        _tableDataCell(refStr),
+                      if (incGuestNames && reportType != 'kitchen_plan')
+                        _tableDataCell(isExcluded
+                            ? '${b['guest_name']} [EXCLUDED]'
+                            : (b['guest_name']?.toString() ?? 'Guest')),
+                      _tableDataCell(b['meal_plan']?.toString() ?? 'BB'),
+                      _tableDataCell('${b['adults'] ?? 1}'),
+                      _tableDataCell('${b['children'] ?? 0}'),
+                      _tableDataCell(
+                          '${(b['adults'] as num? ?? 1) + (b['children'] as num? ?? 0)}',
+                          isBold: true),
+                      if (incDietaryNotes)
+                        _tableDataCell(
+                            notes.isEmpty ? '-' : notes.join(', ')),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+
+            // Optional Payroll Signature Block
+            if (incSignatureBlock) ...[
+              pw.SizedBox(height: 10),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('_________________________'),
-                      pw.Text('Prepared by (Reception)'),
+                      pw.Text('Prepared by (Reception):',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      pw.SizedBox(height: 20),
+                      pw.Text('_____________________________',
+                          style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text('Name / Signature / Date',
+                          style: const pw.TextStyle(
+                              fontSize: 7, color: PdfColors.grey600)),
                     ],
                   ),
                   pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('_________________________'),
-                      pw.Text('Confirmed by (Manager)'),
+                      pw.Text('Confirmed by (Duty Manager):',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      pw.SizedBox(height: 20),
+                      pw.Text('_____________________________',
+                          style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text('Name / Signature / Date',
+                          style: const pw.TextStyle(
+                              fontSize: 7, color: PdfColors.grey600)),
                     ],
                   ),
                   pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('_________________________'),
-                      pw.Text('Received by (Kitchen)'),
+                      pw.Text('Received by (Chef / Kitchen):',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      pw.SizedBox(height: 20),
+                      pw.Text('_____________________________',
+                          style: const pw.TextStyle(fontSize: 8)),
+                      pw.Text('Name / Signature / Date',
+                          style: const pw.TextStyle(
+                              fontSize: 7, color: PdfColors.grey600)),
                     ],
                   ),
                 ],
               ),
+            ],
           ];
+        },
+        footer: (pw.Context ctx) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(top: 10),
+            padding: const pw.EdgeInsets.only(top: 6),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+              ),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                    'FamousGate Hotels | Confidential Operations Report | Generated by FG Systems',
+                    style: const pw.TextStyle(
+                        fontSize: 7, color: PdfColors.grey600)),
+                pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                    style: const pw.TextStyle(
+                        fontSize: 7, color: PdfColors.grey600)),
+              ],
+            ),
+          );
         },
       ),
     );
@@ -1492,6 +1670,32 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
       name: 'Breakfast_Report_${_dateController.text}.pdf',
+    );
+  }
+
+  pw.Widget _tableHeaderCell(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold,
+            fontSize: 8,
+            color: PdfColors.black),
+      ),
+    );
+  }
+
+  pw.Widget _tableDataCell(String text, {bool isBold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 8,
+          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
     );
   }
 
