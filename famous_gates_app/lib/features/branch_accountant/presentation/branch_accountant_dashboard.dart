@@ -21733,6 +21733,8 @@ class _BranchBarMenuSectionState
       final repo = ref.read(branchAccountantRepositoryProvider);
       final branchId = await repo.getBranchId();
       final dio = ref.read(dioProvider);
+
+      // Primary: legacy bar_drinks table.
       final res = await dio.get('/bar/drinks',
           queryParameters: {
             if (branchId.isNotEmpty) 'branch_id': branchId,
@@ -21750,6 +21752,51 @@ class _BranchBarMenuSectionState
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+
+      // Fallback / merge: POS outlet items for bar-type outlets (covers
+      // branches like Kyogong that manage their menu through pos_outlet_items).
+      if (items.isEmpty && branchId.isNotEmpty) {
+        final outletsRes = await dio.get('/pos/outlets',
+            queryParameters: {'branch_id': branchId});
+        final outletsData = outletsRes.data;
+        final outletsList = outletsData is List
+            ? outletsData
+            : (outletsData is Map
+                ? (outletsData['data'] ?? outletsData['outlets'] ?? []) as List
+                : []);
+        const barTypes = {
+          'main_bar', 'executive_bar', 'kyogong_executive_bar',
+          'kyogong_sports_bar', 'choma_zone', 'bar',
+        };
+        final seenNames = <String>{};
+        for (final outlet in outletsList) {
+          if (outlet is! Map) continue;
+          final ot = '${outlet['outlet_type'] ?? ''}'.toLowerCase();
+          if (!barTypes.contains(ot)) continue;
+          final outletId = '${outlet['id'] ?? ''}';
+          if (outletId.isEmpty) continue;
+          try {
+            final itemsRes = await dio.get('/pos/outlets/$outletId/items');
+            final itemsData = itemsRes.data;
+            final rawItems = itemsData is List
+                ? itemsData
+                : (itemsData is Map
+                    ? (itemsData['data'] ?? itemsData['items'] ?? []) as List
+                    : []);
+            for (final it in rawItems) {
+              if (it is! Map) continue;
+              final name = '${it['name'] ?? ''}'.toLowerCase().trim();
+              if (name.isEmpty || seenNames.contains(name)) continue;
+              seenNames.add(name);
+              items.add(Map<String, dynamic>.from(it)
+                ..['_source'] = 'pos'
+                ..['_outlet_id'] = outletId
+                ..['price'] = it['price'] ?? it['unit_price'] ?? 0);
+            }
+          } catch (_) {}
+        }
+      }
+
       final cats = <String>{'All'};
       for (final item in items) {
         final c = '${item['category'] ?? ''}';
@@ -21788,7 +21835,13 @@ class _BranchBarMenuSectionState
     if (id.isEmpty) return;
     try {
       final dio = ref.read(dioProvider);
-      await dio.put('/bar/drinks/$id/toggle');
+      if (item['_source'] == 'pos') {
+        final outletId = '${item['_outlet_id'] ?? ''}';
+        await dio.patch('/pos/outlets/$outletId/items/$id',
+            data: {'is_active': !(item['is_active'] as bool? ?? true)});
+      } else {
+        await dio.put('/bar/drinks/$id/toggle');
+      }
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -21840,12 +21893,20 @@ class _BranchBarMenuSectionState
                       setDlgState(() => saving = true);
                       try {
                         final dio = ref.read(dioProvider);
-                        await dio.put('/bar/drinks/$id', data: {
-                          'name': nameCtrl.text.trim(),
-                          'category': catCtrl.text.trim(),
-                          'price': double.tryParse(priceCtrl.text) ??
-                              item['price'],
-                        });
+                        if (item['_source'] == 'pos') {
+                          final outletId = '${item['_outlet_id'] ?? ''}';
+                          await dio.patch('/pos/outlets/$outletId/items/$id', data: {
+                            'name': nameCtrl.text.trim(),
+                            'category': catCtrl.text.trim(),
+                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                          });
+                        } else {
+                          await dio.put('/bar/drinks/$id', data: {
+                            'name': nameCtrl.text.trim(),
+                            'category': catCtrl.text.trim(),
+                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                          });
+                        }
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         await _load();
@@ -22150,6 +22211,51 @@ class _BranchRestaurantMenuSectionState
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+
+      // Fallback: load from POS restaurant outlets when legacy table is empty
+      if (items.isEmpty && branchId.isNotEmpty) {
+        const barTypes = {
+          'main_bar', 'executive_bar', 'kyogong_executive_bar',
+          'kyogong_sports_bar', 'choma_zone', 'bar',
+        };
+        try {
+          final outletsRes = await dio.get('/pos/outlets',
+              queryParameters: {'branch_id': branchId});
+          final outletsData = outletsRes.data;
+          final outletList = outletsData is List
+              ? outletsData
+              : outletsData is Map
+                  ? ((outletsData['data'] ?? outletsData['outlets'] ?? []) as List)
+                  : <dynamic>[];
+          final restaurantOutlets = outletList
+              .whereType<Map>()
+              .where((o) => !barTypes.contains(
+                  (o['outlet_type'] as String? ?? '').toLowerCase()))
+              .toList();
+          for (final outlet in restaurantOutlets) {
+            final outletId = '${outlet['id'] ?? ''}';
+            if (outletId.isEmpty) continue;
+            try {
+              final itemsRes =
+                  await dio.get('/pos/outlets/$outletId/items');
+              final itemsData = itemsRes.data;
+              final rawItems = itemsData is List
+                  ? itemsData
+                  : itemsData is Map
+                      ? ((itemsData['data'] ?? itemsData['items'] ?? []) as List)
+                      : <dynamic>[];
+              for (final it in rawItems.whereType<Map>()) {
+                items.add({
+                  ...Map<String, dynamic>.from(it),
+                  '_source': 'pos',
+                  '_outlet_id': outletId,
+                });
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
       final cats = <String>{'All'};
       for (final item in items) {
         final c = _menuCategoryName(item['category']);
@@ -22187,7 +22293,13 @@ class _BranchRestaurantMenuSectionState
     if (id.isEmpty) return;
     try {
       final dio = ref.read(dioProvider);
-      await dio.put('/restaurant/menu/items/$id/toggle');
+      if (item['_source'] == 'pos') {
+        final outletId = '${item['_outlet_id'] ?? ''}';
+        await dio.patch('/pos/outlets/$outletId/items/$id',
+            data: {'is_active': !(item['is_active'] as bool? ?? true)});
+      } else {
+        await dio.put('/restaurant/menu/items/$id/toggle');
+      }
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -22286,13 +22398,24 @@ class _BranchRestaurantMenuSectionState
                       if (id.isEmpty) return;
                       setDlgState(() => saving = true);
                       try {
-                        await dio.put('/restaurant/menu/items/$id', data: {
-                          'name': nameCtrl.text.trim(),
-                          'category_id': selectedCategoryId,
-                          'price': double.tryParse(priceCtrl.text) ?? item['price'],
-                          if (costCtrl.text.trim().isNotEmpty)
-                            'cost_price': double.tryParse(costCtrl.text) ?? 0,
-                        });
+                        if (item['_source'] == 'pos') {
+                          final outletId = '${item['_outlet_id'] ?? ''}';
+                          await dio.patch('/pos/outlets/$outletId/items/$id', data: {
+                            'name': nameCtrl.text.trim(),
+                            'category': selectedCategoryId,
+                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                            if (costCtrl.text.trim().isNotEmpty)
+                              'cost_price': double.tryParse(costCtrl.text) ?? 0,
+                          });
+                        } else {
+                          await dio.put('/restaurant/menu/items/$id', data: {
+                            'name': nameCtrl.text.trim(),
+                            'category_id': selectedCategoryId,
+                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                            if (costCtrl.text.trim().isNotEmpty)
+                              'cost_price': double.tryParse(costCtrl.text) ?? 0,
+                          });
+                        }
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         await _load();

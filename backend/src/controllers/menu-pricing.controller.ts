@@ -82,6 +82,11 @@ const buildRow = (
   };
 };
 
+const BAR_OUTLET_TYPES = new Set([
+  'main_bar', 'executive_bar', 'kyogong_executive_bar',
+  'kyogong_sports_bar', 'choma_zone', 'bar',
+]);
+
 const fetchBranchPricing = async (
   branchId: number,
   typeFilter?: string
@@ -101,6 +106,8 @@ const fetchBranchPricing = async (
   }
 
   const rows: MergedPricingRow[] = [];
+  // Track names already added from legacy tables to avoid POS duplicates.
+  const seenKeys = new Set<string>();
 
   if (wantRestaurant) {
     const { data, error } = await supabase
@@ -111,19 +118,15 @@ const fetchBranchPricing = async (
     if (error) throw error;
     for (const it of (data || []) as Array<Record<string, any>>) {
       const cat = it.category as Record<string, any> | null;
-      rows.push(
-        buildRow(
-          'restaurant',
-          String(it.id),
-          it.name || 'Item',
-          cat?.name ?? null,
-          'each',
-          num(it.selling_price),
-          num(it.cost_price),
-          it.is_available !== false,
-          overrideMap.get(`restaurant:${it.id}`)
-        )
+      const row = buildRow(
+        'restaurant', String(it.id), it.name || 'Item',
+        cat?.name ?? null, 'each',
+        num(it.selling_price), num(it.cost_price),
+        it.is_available !== false,
+        overrideMap.get(`restaurant:${it.id}`)
       );
+      rows.push(row);
+      seenKeys.add(`restaurant:${(it.name || '').toLowerCase().trim()}`);
     }
   }
 
@@ -136,23 +139,73 @@ const fetchBranchPricing = async (
     if (error) throw error;
     for (const it of (data || []) as Array<Record<string, any>>) {
       const cat = it.category as Record<string, any> | null;
-      rows.push(
-        buildRow(
-          'bar',
-          String(it.id),
-          it.name || 'Drink',
-          cat?.name ?? null,
-          it.unit || 'each',
-          num(it.price),
-          num(it.cost_price),
-          it.is_available !== false,
-          overrideMap.get(`bar:${it.id}`)
-        )
+      const row = buildRow(
+        'bar', String(it.id), it.name || 'Drink',
+        cat?.name ?? null, it.unit || 'each',
+        num(it.price), num(it.cost_price),
+        it.is_available !== false,
+        overrideMap.get(`bar:${it.id}`)
       );
+      rows.push(row);
+      seenKeys.add(`bar:${(it.name || '').toLowerCase().trim()}`);
     }
   }
 
-  return rows;
+  // POS outlet items — covers branches (e.g. Kyogong) that manage their full
+  // menu through pos_outlet_items rather than the legacy bar_drinks /
+  // restaurant_menu_items tables.
+  try {
+    const { data: outlets } = await supabase
+      .from('pos_outlets')
+      .select('id, outlet_type, name')
+      .eq('branch_id', branchId)
+      .eq('is_active', true);
+
+    const relevantOutlets = (outlets || []).filter((o: any) => {
+      const ot = String(o.outlet_type || '').toLowerCase();
+      if (wantBar && BAR_OUTLET_TYPES.has(ot)) return true;
+      if (wantRestaurant && !BAR_OUTLET_TYPES.has(ot)) return true;
+      return false;
+    });
+
+    if (relevantOutlets.length) {
+      const outletIds = relevantOutlets.map((o: any) => o.id);
+      const outletMap = new Map(relevantOutlets.map((o: any) => [o.id, o]));
+
+      const { data: posItems } = await supabase
+        .from('pos_outlet_items')
+        .select('id, name, price, unit_price, cost_price, unit, category, is_active, outlet_id')
+        .in('outlet_id', outletIds)
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+
+      for (const it of (posItems || []) as Array<Record<string, any>>) {
+        const outlet = outletMap.get(it.outlet_id) as any;
+        const ot = String(outlet?.outlet_type || '').toLowerCase();
+        const itemType: 'restaurant' | 'bar' = BAR_OUTLET_TYPES.has(ot) ? 'bar' : 'restaurant';
+        const dedupeKey = `${itemType}:${(it.name || '').toLowerCase().trim()}`;
+        if (seenKeys.has(dedupeKey)) continue;
+        seenKeys.add(dedupeKey);
+        rows.push(
+          buildRow(
+            itemType,
+            `pos:${it.id}`,
+            it.name || 'Item',
+            it.category ? String(it.category) : null,
+            it.unit || 'each',
+            num(it.price ?? it.unit_price),
+            num(it.cost_price),
+            it.is_active !== false,
+            overrideMap.get(`${itemType}:pos:${it.id}`)
+          )
+        );
+      }
+    }
+  } catch (posErr) {
+    logger.warn('fetchBranchPricing: failed to load POS outlet items (non-fatal):', posErr);
+  }
+
+  return rows.sort((a, b) => a.name.localeCompare(b.name));
 };
 
 // @desc    List every menu item for a branch with its effective cost/selling/margin
