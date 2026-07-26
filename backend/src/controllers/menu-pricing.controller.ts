@@ -90,7 +90,8 @@ const BAR_OUTLET_TYPES = new Set([
 
 const fetchBranchPricing = async (
   branchId: number,
-  typeFilter?: string
+  typeFilter?: string,
+  jwtBranchId?: number | null
 ): Promise<MergedPricingRow[]> => {
   const wantRestaurant = !typeFilter || typeFilter === 'restaurant';
   const wantBar = !typeFilter || typeFilter === 'bar';
@@ -155,56 +156,71 @@ const fetchBranchPricing = async (
   // POS outlet items — covers branches (e.g. Kyogong) that manage their full
   // menu through pos_outlet_items rather than the legacy bar_drinks /
   // restaurant_menu_items tables.
+  // Use both the URL param branchId AND the JWT branchId (jwtBranchId) to
+  // handle cases where they differ; whichever matches pos_outlets wins.
+  const posQueryBranchIds = Array.from(
+    new Set([branchId, jwtBranchId].filter((id): id is number => typeof id === 'number' && id > 0))
+  );
   try {
-    const { data: outlets } = await supabase
+    const { data: outlets, error: outletErr } = await supabase
       .from('pos_outlets')
-      .select('id, outlet_type, name')
-      .eq('branch_id', branchId)
-      .eq('is_active', true);
+      .select('id, outlet_type, name, branch_id')
+      .in('branch_id', posQueryBranchIds)
+      .or('is_active.is.null,is_active.eq.true');
 
-    const relevantOutlets = (outlets || []).filter((o: any) => {
-      const ot = String(o.outlet_type || '').toLowerCase();
-      if (wantBar && BAR_OUTLET_TYPES.has(ot)) return true;
-      if (wantRestaurant && !BAR_OUTLET_TYPES.has(ot)) return true;
-      return false;
-    });
+    if (outletErr) {
+      logger.warn('fetchBranchPricing: pos_outlets query failed:', outletErr.message);
+    } else {
+      const relevantOutlets = (outlets || []).filter((o: any) => {
+        const ot = String(o.outlet_type || '').toLowerCase();
+        if (wantBar && BAR_OUTLET_TYPES.has(ot)) return true;
+        if (wantRestaurant && !BAR_OUTLET_TYPES.has(ot)) return true;
+        return false;
+      });
 
-    if (relevantOutlets.length) {
-      const outletIds = relevantOutlets.map((o: any) => o.id);
-      const outletMap = new Map(relevantOutlets.map((o: any) => [o.id, o]));
+      if (relevantOutlets.length) {
+        const outletIds = relevantOutlets.map((o: any) => o.id);
+        const outletMap = new Map(relevantOutlets.map((o: any) => [o.id, o]));
 
-      const { data: posItems } = await supabase
-        .from('pos_outlet_items')
-        .select('id, name, price, unit_price, cost_price, unit, category, is_active, outlet_id')
-        .in('outlet_id', outletIds)
-        .eq('is_active', true)
-        .order('name', { ascending: true });
+        const { data: posItems, error: itemsErr } = await supabase
+          .from('pos_outlet_items')
+          .select('id, name, price, unit_price, cost_price, unit, category, is_active, outlet_id')
+          .in('outlet_id', outletIds)
+          .or('is_active.is.null,is_active.eq.true')
+          .order('name', { ascending: true });
 
-      for (const it of (posItems || []) as Array<Record<string, any>>) {
-        const outlet = outletMap.get(it.outlet_id) as any;
-        const ot = String(outlet?.outlet_type || '').toLowerCase();
-        const itemType: 'restaurant' | 'bar' = BAR_OUTLET_TYPES.has(ot) ? 'bar' : 'restaurant';
-        const dedupeKey = `${itemType}:${(it.name || '').toLowerCase().trim()}`;
-        if (seenKeys.has(dedupeKey)) continue;
-        seenKeys.add(dedupeKey);
-        rows.push({
-          ...buildRow(
-            itemType,
-            `pos:${it.id}`,
-            it.name || 'Item',
-            it.category ? String(it.category) : null,
-            it.unit || 'each',
-            num(it.price ?? it.unit_price),
-            num(it.cost_price),
-            it.is_active !== false,
-            overrideMap.get(`${itemType}:pos:${it.id}`)
-          ),
-          outlet_id: it.outlet_id,
-        });
+        if (itemsErr) {
+          logger.warn('fetchBranchPricing: pos_outlet_items query failed:', itemsErr.message);
+        } else {
+          for (const it of (posItems || []) as Array<Record<string, any>>) {
+            const outlet = outletMap.get(it.outlet_id) as any;
+            const ot = String(outlet?.outlet_type || '').toLowerCase();
+            const itemType: 'restaurant' | 'bar' = BAR_OUTLET_TYPES.has(ot) ? 'bar' : 'restaurant';
+            const dedupeKey = `${itemType}:${(it.name || '').toLowerCase().trim()}`;
+            if (seenKeys.has(dedupeKey)) continue;
+            seenKeys.add(dedupeKey);
+            rows.push({
+              ...buildRow(
+                itemType,
+                `pos:${it.id}`,
+                it.name || 'Item',
+                it.category ? String(it.category) : null,
+                it.unit || 'each',
+                num(it.price ?? it.unit_price),
+                num(it.cost_price),
+                it.is_active !== false,
+                overrideMap.get(`${itemType}:pos:${it.id}`)
+              ),
+              outlet_id: it.outlet_id,
+            });
+          }
+        }
+      } else {
+        logger.info(`fetchBranchPricing: no POS outlets found for branch_ids=${posQueryBranchIds.join(',')}`);
       }
     }
   } catch (posErr) {
-    logger.warn('fetchBranchPricing: failed to load POS outlet items (non-fatal):', posErr);
+    logger.warn('fetchBranchPricing: unexpected error loading POS outlet items:', posErr);
   }
 
   return rows.sort((a, b) => a.name.localeCompare(b.name));
@@ -225,7 +241,8 @@ export const getBranchMenuPricing = async (
       return;
     }
     const typeFilter = typeof req.query.type === 'string' ? req.query.type : undefined;
-    const rows = await fetchBranchPricing(branchId, typeFilter);
+    const jwtBranchId = parseBranchId((req as any).user?.branch_id ?? (req as any).user?.branchId);
+    const rows = await fetchBranchPricing(branchId, typeFilter, jwtBranchId);
 
     const priced = rows.filter((r) => r.effective_cost > 0);
     const avgMarginPct =
