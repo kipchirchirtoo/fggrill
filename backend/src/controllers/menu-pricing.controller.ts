@@ -85,7 +85,7 @@ const buildRow = (
 
 const BAR_OUTLET_TYPES = new Set([
   'main_bar', 'executive_bar', 'kyogong_executive_bar',
-  'kyogong_sports_bar', 'choma_zone', 'bar',
+  'kyogong_sports_bar', 'sports_bar', 'choma_zone', 'bar',
 ]);
 
 const fetchBranchPricing = async (
@@ -184,7 +184,7 @@ const fetchBranchPricing = async (
 
         const { data: posItems, error: itemsErr } = await supabase
           .from('pos_outlet_items')
-          .select('id, name, price, unit_price, cost_price, unit, category, is_active, outlet_id')
+          .select('id, name, selling_price, cost_price, unit, category, is_active, outlet_id')
           .in('outlet_id', outletIds)
           .or('is_active.is.null,is_active.eq.true')
           .order('name', { ascending: true });
@@ -206,7 +206,7 @@ const fetchBranchPricing = async (
                 it.name || 'Item',
                 it.category ? String(it.category) : null,
                 it.unit || 'each',
-                num(it.price ?? it.unit_price),
+                num(it.selling_price),
                 num(it.cost_price),
                 it.is_active !== false,
                 overrideMap.get(`${itemType}:pos:${it.id}`)
