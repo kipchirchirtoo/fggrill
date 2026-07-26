@@ -24054,8 +24054,8 @@ class _BranchMenuPricingSectionState
   bool _branchLoading = true;
   bool _saving = false;
 
-  // key ('itemType:itemId') → pending cost + selling edit
-  final Map<String, ({double cost, double? selling})> _pending = {};
+  // key ('itemType:itemId') → pending cost + selling edit (outletId set for POS items)
+  final Map<String, ({double cost, double? selling, String? outletId})> _pending = {};
 
   @override
   void initState() {
@@ -24082,8 +24082,8 @@ class _BranchMenuPricingSectionState
   static String _fmt(double v) =>
       v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
-  void _onRowChanged(String key, double cost, double? selling) {
-    _pending[key] = (cost: cost, selling: selling);
+  void _onRowChanged(String key, double cost, double? selling, {String? outletId}) {
+    _pending[key] = (cost: cost, selling: selling, outletId: outletId);
     setState(() {});
   }
 
@@ -24121,7 +24121,14 @@ class _BranchMenuPricingSectionState
         final itemId = parts.sublist(1).join(':');
         final cost = entry.value.cost;
         final selling = entry.value.selling;
-        if (itemType == 'restaurant') {
+        final outletId = entry.value.outletId;
+        if (itemId.startsWith('pos:') && outletId != null && outletId.isNotEmpty) {
+          final posId = itemId.substring(4);
+          await dio.patch('/pos/outlets/$outletId/items/$posId', data: {
+            if (selling != null) 'price': selling,
+            'cost_price': cost,
+          });
+        } else if (itemType == 'restaurant') {
           await dio.put('/restaurant/menu/items/$itemId', data: {
             if (selling != null) 'price': selling,
             'cost_price': cost,
@@ -24377,7 +24384,7 @@ class _EditablePricingRow extends StatefulWidget {
   });
 
   final BranchMenuItemPricing item;
-  final void Function(String key, double cost, double? selling) onChanged;
+  final void Function(String key, double cost, double? selling, {String? outletId}) onChanged;
   final VoidCallback onReset;
 
   @override
@@ -24425,7 +24432,8 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
       _effSelling > 0 ? (_margin / _effSelling) * 100 : 0;
 
   void _emit() {
-    widget.onChanged(widget.item.key, _costVal, _sellVal);
+    widget.onChanged(widget.item.key, _costVal, _sellVal,
+        outletId: widget.item.outletId);
     setState(() {});
   }
 

@@ -42,6 +42,7 @@ interface MergedPricingRow {
   margin: number;
   margin_pct: number;
   is_available: boolean;
+  outlet_id?: string;
 }
 
 const buildRow = (
@@ -186,8 +187,8 @@ const fetchBranchPricing = async (
         const dedupeKey = `${itemType}:${(it.name || '').toLowerCase().trim()}`;
         if (seenKeys.has(dedupeKey)) continue;
         seenKeys.add(dedupeKey);
-        rows.push(
-          buildRow(
+        rows.push({
+          ...buildRow(
             itemType,
             `pos:${it.id}`,
             it.name || 'Item',
@@ -197,8 +198,9 @@ const fetchBranchPricing = async (
             num(it.cost_price),
             it.is_active !== false,
             overrideMap.get(`${itemType}:pos:${it.id}`)
-          )
-        );
+          ),
+          outlet_id: it.outlet_id,
+        });
       }
     }
   } catch (posErr) {

@@ -20,6 +20,7 @@ class BranchMenuItemPricing {
     required this.margin,
     required this.marginPct,
     required this.isAvailable,
+    this.outletId,
   });
 
   final String itemType; // 'restaurant' | 'bar'
@@ -37,6 +38,7 @@ class BranchMenuItemPricing {
   final double margin;
   final double marginPct;
   final bool isAvailable;
+  final String? outletId;
 
   static double _d(dynamic v) {
     if (v is num) return v.toDouble();
@@ -66,6 +68,7 @@ class BranchMenuItemPricing {
       margin: _d(j['margin']),
       marginPct: _d(j['margin_pct']),
       isAvailable: j['is_available'] != false,
+      outletId: j['outlet_id']?.toString(),
     );
   }
 
