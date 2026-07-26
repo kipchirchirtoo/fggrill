@@ -52,7 +52,7 @@ class BarRepository {
     final branchId = await _branchId;
     
     // First, get the main bar POS outlet for this branch
-    final outletsResponse = await _dio.get('/outlets/pos/outlets', queryParameters: {
+    final outletsResponse = await _dio.get('/pos/outlets', queryParameters: {
       if (branchId.isNotEmpty) 'branch_id': branchId,
       'outlet_type': 'main_bar',
     });
@@ -74,7 +74,7 @@ class BarRepository {
     final outletId = outlets.first['id'].toString();
     
     // Fetch POS outlet items with real-time stock
-    final response = await _dio.get('/outlets/pos/outlets/$outletId/items');
+    final response = await _dio.get('/pos/outlets/$outletId/items');
     final list = _unwrapList(response.data);
     
     // Map POS outlet items to BarDrink format
