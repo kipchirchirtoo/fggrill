@@ -56,6 +56,43 @@ const canAccessRecordBranch = (req: Request, recordBranchId: unknown): boolean =
 const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stocktakeDate: string): Promise<any> =>
     getLastClosedCashierShiftWindow(supabase, branchId, BAR_CASHIER_ROLES_BY_LOCATION[barLocation] || [], stocktakeDate);
 
+// Today's OPENING stock for each item is the PHYSICAL count from the previous
+// approved stocktake (what was actually on the shelf at last close), so the
+// chain is continuous: if yesterday had no variance, opening == yesterday's
+// closing; if it did, opening is the real counted stock, not a drifted system
+// figure. Returns item_id -> previous physical count. Empty for the first count.
+const loadPreviousApprovedCounts = async (
+    branchId: number,
+    barLocation: string,
+    stocktakeDate: string
+): Promise<Map<string, number>> => {
+    const map = new Map<string, number>();
+    const { data: prev } = await supabase
+        .from('bar_stocktake_records')
+        .select('stocktake_date')
+        .eq('branch_id', branchId)
+        .eq('bar_location', barLocation)
+        .eq('status', 'approved')
+        .lt('stocktake_date', stocktakeDate)
+        .order('stocktake_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (!prev?.stocktake_date) return map;
+    const { data: rows } = await supabase
+        .from('bar_stocktake_records')
+        .select('item_id, physical_quantity')
+        .eq('branch_id', branchId)
+        .eq('bar_location', barLocation)
+        .eq('status', 'approved')
+        .eq('stocktake_date', prev.stocktake_date);
+    for (const r of (rows || [])) {
+        if ((r as any).item_id != null && (r as any).physical_quantity != null) {
+            map.set(String((r as any).item_id), num((r as any).physical_quantity));
+        }
+    }
+    return map;
+};
+
 // Additions/sales must be summed over everything since opening_stock was last
 // reset — i.e. since the last APPROVED stocktake for this branch/location —
 // not just "the last closed shift". A single shift window misses restocks/
@@ -523,6 +560,8 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             sumWindow.from,
             sumWindow.to
         );
+        // Previous approved stocktake's physical counts → today's opening.
+        const prevCountByInvId = await loadPreviousApprovedCounts(branchId, locationFilter, rawDate);
         const additionsByInvId = new Map<string, number>();
         const salesByInvId = new Map<string, number>();
         for (const d of drinkRows) {
@@ -552,7 +591,11 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                 const additions = additionsByInvId.get(invId) ?? 0;
                 const sales = salesByInvId.get(invId) ?? 0;
                 const sysQty = num(r.system_quantity);
-                const opening = Math.max(0, sysQty - additions + sales);
+                // Opening = previous approved stocktake's physical count; only
+                // reverse-compute for the very first count (no prior record).
+                const opening = prevCountByInvId.has(invId)
+                    ? prevCountByInvId.get(invId)!
+                    : Math.max(0, sysQty - additions + sales);
                 return {
                     ...r,
                     item_name: r.item?.item_name || r.item_name || null,
@@ -573,7 +616,11 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             const currentStock = stockByDrinkId.get(did) ?? 0;
             const additions = additionsByInvId.get(invId) ?? 0;
             const sales = salesByInvId.get(invId) ?? 0;
-            const opening = Math.max(0, currentStock - additions + sales);
+            // Opening = previous approved stocktake's physical count; reverse-
+            // compute only for the very first count (no prior record).
+            const opening = prevCountByInvId.has(invId)
+                ? prevCountByInvId.get(invId)!
+                : Math.max(0, currentStock - additions + sales);
             const system = currentStock;
             return {
                 id: invId,

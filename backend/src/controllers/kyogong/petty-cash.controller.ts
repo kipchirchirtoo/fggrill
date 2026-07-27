@@ -64,7 +64,7 @@ export const recordPettyCash = async (req: Request, res: Response) => {
     // `shift_reconciliation_expenses` table (NOT petty_cash_ledger, which is a
     // double-entry accounting ledger). This is the same table the branch
     // accountant reads at reconciliation, so figures always agree.
-    const { data: entry, error } = await supabase
+    let { data: entry, error } = await supabase
       .from('shift_reconciliation_expenses')
       .insert({
         branch_id,
@@ -80,7 +80,41 @@ export const recordPettyCash = async (req: Request, res: Response) => {
       .select('*')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // If DB has legacy CHECK constraint shift_reconciliation_expenses_category_check
+      // (code 23514), fallback to 'other' or 'petty_cash' while preserving category in description.
+      if (error.code === '23514') {
+        const allowedCategories = ['petty_cash', 'transaction_cost', 'other'];
+        const fallbackCat = allowedCategories.includes(String(finalCategory).toLowerCase())
+          ? String(finalCategory).toLowerCase()
+          : 'other';
+
+        const fallbackDesc = finalDescription.toLowerCase().includes(String(finalCategory).toLowerCase())
+          ? finalDescription
+          : `[${finalCategory}] ${finalDescription}`;
+
+        const fallbackRes = await supabase
+          .from('shift_reconciliation_expenses')
+          .insert({
+            branch_id,
+            shift_id,
+            amount,
+            category: fallbackCat,
+            description: fallbackDesc,
+            paid_to_name: paid_to_name || null,
+            receipt_number: receipt_number || null,
+            po_reference: po_reference || null,
+            recorded_by
+          })
+          .select('*')
+          .single();
+
+        if (fallbackRes.error) throw fallbackRes.error;
+        entry = fallbackRes.data;
+      } else {
+        throw error;
+      }
+    }
 
     res.json({
       success: true,

@@ -1239,41 +1239,57 @@ const seedOutletItemsFromExistingMenus = async (
       .trim();
   };
 
-  if (outletType === 'restaurant') {
+  if (outletType === 'restaurant' || outletType === 'choma_zone') {
     let query = supabase
       .from('restaurant_menu_items')
       .select('id, name, price, selling_price, cost_price, category_id, category, metadata, is_available, is_active, branch_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
-    if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+    
+    // For restaurant outlets, filter by branch; for choma_zone, include accompaniments and branch items
+    if (branchId && outletType === 'restaurant') {
+      query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+    }
     const { data, error } = await query;
     if (error) throw error;
     sourceRows = ((data || []) as Array<Record<string, any>>)
       .filter((item) => {
         const routedTo = seededOutletType(item);
+        const cat = String(item.category || '').toLowerCase();
+        if (outletType === 'choma_zone') {
+          return (
+            routedTo === 'choma_zone' ||
+            cat.includes('choma') ||
+            cat.includes('accomp')
+          );
+        }
         return !routedTo || routedTo === 'restaurant';
       })
       .map((item) => {
-      const sku = `R-${item.id}`;
-      const existing = existingBySku.get(sku);
-      return {
-        outlet_id: outlet.id,
-        source_table: 'restaurant_menu_items',
-        source_item_id: item.id,
-        sku,
-        name: item.name,
-        category: categoryText(item.category) || 'Restaurant',
-        unit: 'each',
-        cost_price: item.cost_price || 0,
-        selling_price: item.price ?? item.selling_price ?? 0,
-        opening_stock: 0,
-        current_stock: existing?.current_stock ?? 0,
-        track_stock: existing?.track_stock ?? true,
-        is_active: item.is_active !== false,
-        is_available: item.is_available !== false,
-        branch_id: item.branch_id ?? outlet.branch_id ?? null
-      };
-    });
+        const sku = `R-${item.id}`;
+        const existing = existingBySku.get(sku);
+        let rawCat = categoryText(item.category) || '';
+        if (!rawCat || rawCat.toLowerCase().includes('accomp')) {
+          rawCat = 'Accompaniments';
+        }
+        return {
+          outlet_id: outlet.id,
+          source_table: 'restaurant_menu_items',
+          source_item_id: item.id,
+          sku,
+          name: item.name,
+          category: rawCat || (outletType === 'choma_zone' ? 'Accompaniments' : 'Restaurant'),
+          unit: 'each',
+          cost_price: item.cost_price || 0,
+          selling_price: item.price ?? item.selling_price ?? 0,
+          opening_stock: 0,
+          current_stock: existing?.current_stock ?? 0,
+          track_stock: existing?.track_stock ?? (outletType === 'choma_zone' ? false : true),
+          is_active: item.is_active !== false,
+          is_available: item.is_available !== false,
+          branch_id: item.branch_id ?? outlet.branch_id ?? null
+        };
+      });
   }
 
   if (outletType === 'main_bar' || outletType === 'executive_bar' ||
@@ -1542,7 +1558,15 @@ const loadActiveOutletItems = async (
     .order('category', { ascending: true })
     .order('name', { ascending: true });
   if (error) throw error;
-  const items = (data || []) as Array<Record<string, any>>;
+  let items = (data || []) as Array<Record<string, any>>;
+
+  if (String(outlet.outlet_type || '') === 'choma_zone') {
+    const hasAccompaniments = items.some((i) => String(i.category || '').toLowerCase().includes('accomp'));
+    if (!hasAccompaniments) {
+      items = await seedOutletItemsFromExistingMenus(outlet);
+    }
+  }
+
   return items.length ? items : await seedOutletItemsFromExistingMenus(outlet);
 };
 

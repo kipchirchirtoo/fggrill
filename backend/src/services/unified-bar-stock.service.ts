@@ -496,12 +496,28 @@ export async function recordBarStockMovement(
       if (countRow?.id) {
         let newSold = toNumber(countRow.sold_quantity);
         let newAdditions = toNumber(countRow.additions);
+        const mt = String(movementType || '').toLowerCase();
+        const qty = Math.abs(quantityDelta);
 
-        if (quantityDelta < 0) {
-          newSold = Math.max(0, newSold + Math.abs(quantityDelta));
+        if (mt === 'sale') {
+          // A real sale reduces stock and IS revenue.
+          newSold = Math.max(0, newSold + qty);
+        } else if (
+          mt === 'sale_reversal' || mt === 'void' || mt === 'void_reversal' ||
+          mt === 'waste' || mt === 'spoilage'
+        ) {
+          // A VOID must never count as a sale. Reverse the original sale.
+          //  - returned-to-stock: the item is back, so reducing sold raises the
+          //    system closing again (net stock effect zero).
+          //  - broken/wasted: it's not revenue either; the stock loss surfaces
+          //    as a physical-count variance the accountant can mark as spoilage.
+          newSold = Math.max(0, newSold - qty);
         } else if (quantityDelta > 0) {
+          // Genuine restock / production receipt into the outlet.
           newAdditions = newAdditions + quantityDelta;
         }
+        // Any other negative adjustment intentionally leaves sold/additions
+        // untouched so it never inflates sales; it surfaces via variance.
 
         const newSysClosing = toNumber(countRow.opening_stock) + newAdditions - newSold;
 

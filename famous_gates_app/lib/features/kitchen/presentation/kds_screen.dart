@@ -12,7 +12,7 @@ import '../domain/display_scope.dart';
 import '../domain/models.dart';
 import '../domain/providers.dart';
 
-enum KitchenKdsSection { orders, voidRequests, history, analytics, notifications }
+enum KitchenKdsSection { orders, voidRequests, history, analytics, notifications, settings }
 
 // Africa/Nairobi is a fixed UTC+3 offset (no DST), so a printed-time label
 // always shows Kenyan local time regardless of the device clock's timezone.
@@ -46,6 +46,11 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   late KitchenKdsSection _section;
   late Future<_KitchenModuleSnapshot> _future;
   String _notificationStatus = 'unread';
+
+  // Live-orders filters (mockup top tabs + bottom table strip).
+  // _statusFilter: all | new | preparing | ready | recalled | void_pending
+  String _statusFilter = 'all';
+  String? _tableFilter; // null = all tables
 
   // Forces a rebuild every minute purely so the "stale order" cutoff below
   // (orders older than _kStaleOrderMinutes that were never cleared/served)
@@ -135,6 +140,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
         return '$base/analytics';
       case KitchenKdsSection.notifications:
         return '$base/notifications';
+      case KitchenKdsSection.settings:
+        // No dedicated route — Settings is an in-app section; keep scope
+        // switching anchored to the orders base to avoid a 404.
+        return base;
     }
   }
 
@@ -186,27 +195,27 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           group: 'Kitchen Display',
         ),
         MasterNavItem(
-          section: KitchenKdsSection.voidRequests,
-          label: 'Void Requests',
-          icon: Icons.remove_circle_outline,
-          group: 'Kitchen Display',
-        ),
-        MasterNavItem(
           section: KitchenKdsSection.history,
           label: 'History',
           icon: Icons.history_outlined,
           group: 'Kitchen Display',
         ),
         MasterNavItem(
-          section: KitchenKdsSection.analytics,
-          label: 'Order Intelligence',
-          icon: Icons.insights_outlined,
+          section: KitchenKdsSection.voidRequests,
+          label: 'Void',
+          icon: Icons.remove_circle_outline,
           group: 'Kitchen Display',
         ),
         MasterNavItem(
           section: KitchenKdsSection.notifications,
-          label: 'Notifications',
+          label: 'Alerts',
           icon: Icons.notifications_active_outlined,
+          group: 'Kitchen Display',
+        ),
+        MasterNavItem(
+          section: KitchenKdsSection.settings,
+          label: 'Settings',
+          icon: Icons.settings_outlined,
           group: 'Kitchen Display',
         ),
       ],
@@ -244,6 +253,8 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
                         return _analytics(data);
                       case KitchenKdsSection.notifications:
                         return _notifications(data);
+                      case KitchenKdsSection.settings:
+                        return _settings(data);
                     }
                   },
                 ),
@@ -264,6 +275,79 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     );
   }
 
+  Widget _settings(_KitchenModuleSnapshot data) {
+    return _Page(
+      title: 'Settings',
+      subtitle: 'Kitchen display preferences',
+      actions: [_scopeSwitcher(), const _RealtimeLiveDot()],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionCard(
+            title: 'Display scope',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                    'Choose which kitchen this display shows live orders for.'),
+                const SizedBox(height: 12),
+                _scopeSwitcher(),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _SectionCard(
+            title: 'Live orders',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                    'Orders update in real time. Force a reload, or open Order '
+                    'Intelligence for prep-time and volume analytics.'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Refresh now'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => setState(
+                          () => _section = KitchenKdsSection.analytics),
+                      icon: const Icon(Icons.insights_outlined, size: 18),
+                      label: const Text('Order Intelligence'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Whether an order matches the active top status-filter tab.
+  bool _matchesStatus(KitchenOrder o, String filter) {
+    switch (filter) {
+      case 'new':
+        return o.status == 'pending' || o.status == 'confirmed';
+      case 'preparing':
+        return o.status == 'preparing';
+      case 'ready':
+        return o.status == 'ready';
+      case 'recalled':
+        return o.hasRecalledItems;
+      case 'void_pending':
+        return o.hasPendingVoidRequest;
+      default:
+        return true; // 'all'
+    }
+  }
+
   Widget _orders(List<KitchenOrder> rawActiveOrders) {
     // The backend's active-orders feed already excludes anything cleared
     // (kitchen_status served/completed) — so anything still in this list
@@ -277,9 +361,12 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             DateTime.now().difference(order.effectiveCreatedAt).inMinutes <=
             _kStaleOrderMinutes)
         .toList();
-    // Newest orders first so chefs always see fresh tickets at the top.
+    // Oldest orders first (FIFO): the longest-waiting ticket sits at the front
+    // and freshly-arrived orders queue behind it, so the kitchen works tickets
+    // in the order they came in. effectiveCreatedAt keeps a recalled order's
+    // clock (reset to its recall time) consistent with the displayed timer.
     final orders = [...activeOrders]
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      ..sort((a, b) => a.effectiveCreatedAt.compareTo(b.effectiveCreatedAt));
     final pending = activeOrders
         .where(
             (order) => order.status == 'pending' || order.status == 'confirmed')
@@ -291,13 +378,23 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     final voidPending =
         activeOrders.where((order) => order.hasPendingVoidRequest).length;
     final voided = activeOrders.where((order) => order.isVoided).length;
-    final avgWait = activeOrders.isEmpty
-        ? 0
-        : (activeOrders
-                    .map((order) => order.elapsed.inMinutes)
-                    .reduce((a, b) => a + b) /
-                activeOrders.length)
-            .round();
+    final recalled = activeOrders.where((o) => o.hasRecalledItems).length;
+    // Orders visible after applying the top status filter + bottom table filter.
+    final visibleOrders = orders
+        .where((o) =>
+            _matchesStatus(o, _statusFilter) &&
+            (_tableFilter == null || '${o.tableNumber ?? ''}' == _tableFilter))
+        .toList();
+    // Distinct tables among the status-filtered orders → bottom table strip.
+    final tableStrip = <MapEntry<String, String>>[];
+    final seenTables = <String>{};
+    for (final o in orders.where((o) => _matchesStatus(o, _statusFilter))) {
+      final t = '${o.tableNumber ?? ''}'.trim();
+      if (t.isEmpty || seenTables.contains(t)) continue;
+      seenTables.add(t);
+      tableStrip.add(MapEntry(
+          t, (o.shortCode?.isNotEmpty ?? false) ? o.shortCode! : o.orderNumber));
+    }
 
     return _Page(
       title: widget.scope.ordersTitle,
@@ -322,29 +419,39 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _StatTile('Pending', '$pending'),
-              _StatTile('Preparing', '$preparing'),
-              _StatTile('Ready', '$ready'),
-              _StatTile('Void Pending', '$voidPending'),
-              _StatTile('Voided', '$voided'),
-              _StatTile('Avg Wait', '${avgWait}m'),
-            ],
+          // ── Top status filter tabs (ALL / NEW / PREPARING / READY / …) ──
+          _KdsStatusTabs(
+            active: _statusFilter,
+            counts: {
+              'all': orders.length,
+              'new': pending,
+              'preparing': preparing,
+              'ready': ready,
+              'recalled': recalled,
+              'void_pending': voidPending,
+            },
+            onSelected: (s) => setState(() => _statusFilter = s),
           ),
-          const SizedBox(height: 24),
-          if (orders.isEmpty)
-            EmptyState(message: widget.scope.emptyOrdersMessage)
+          const SizedBox(height: 16),
+          // ── Orders grid (filtered) ──────────────────────────────────
+          if (visibleOrders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: EmptyState(
+                message: _statusFilter == 'all' && _tableFilter == null
+                    ? widget.scope.emptyOrdersMessage
+                    : 'No orders match this filter.',
+              ),
+            )
           else
             LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                // Big-screen friendly: keep each ticket a comfortable, readable
-                // width (~360px) so a wall-mounted display fits several columns
-                // without shrinking text.
-                final columns = (width / 360).floor().clamp(1, 6);
+                // 3 tickets per row on a wall-mounted display (wide, readable
+                // cards). Degrade to 2 or 1 only on genuinely narrow screens so
+                // cards never get cut off.
+                final columns =
+                    width >= 1080 ? 3 : (width / 360).floor().clamp(1, 3);
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -354,11 +461,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
                     mainAxisSpacing: 16,
                     mainAxisExtent: 460,
                   ),
-                  itemCount: orders.length,
+                  itemCount: visibleOrders.length,
                   itemBuilder: (context, index) {
-                    final order = orders[index];
-                    // Index within the newest-first list — the first few are
-                    // highlighted as freshly arrived.
+                    final order = visibleOrders[index];
+                    // Oldest-first: queue position 1 is the longest-waiting.
                     return _OrderTicket(
                       order: order,
                       queuePosition: index + 1,
@@ -377,6 +483,16 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
                 );
               },
             ),
+          // ── Bottom table strip (T1 #code · T2 #code · …) ─────────────
+          if (tableStrip.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _KdsTableStrip(
+              tables: tableStrip,
+              active: _tableFilter,
+              onSelected: (t) => setState(
+                  () => _tableFilter = (t == _tableFilter) ? null : t),
+            ),
+          ],
         ],
       ),
     );
@@ -1358,13 +1474,19 @@ class _OrderTicket extends StatelessWidget {
                       ]),
                       const SizedBox(height: 4),
                       Text(
-                        'Order ${order.orderNumber}',
+                        // Show the customer-facing SHORT CODE as the ticket's
+                        // primary identifier (falls back to the order number
+                        // only when a short code isn't present).
+                        (order.shortCode != null && order.shortCode!.isNotEmpty)
+                            ? order.shortCode!
+                            : order.orderNumber,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
-                          fontSize: 24,
+                          fontSize: 28,
+                          letterSpacing: 2,
                           height: 1.1,
                           decoration:
                               isStopTicket ? TextDecoration.lineThrough : null,
@@ -1474,24 +1596,6 @@ class _OrderTicket extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (order.shortCode != null && order.shortCode!.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.kPrimary,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          order.shortCode!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -1686,22 +1790,24 @@ class _OrderTicket extends StatelessWidget {
                           ],
                         ),
                       ),
-                      IconButton(
-                        tooltip:
-                            item.isReady ? 'Item ready' : 'Mark item ready',
-                        onPressed: item.isReady ||
-                                order.hasPendingVoidRequest ||
-                                order.isVoided ||
-                                isItemVoidActive
-                            ? null
-                            : () => onItemReady(item),
-                        icon: Icon(
-                          item.isReady
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                          color: item.isReady
-                              ? AppColors.kSuccess
-                              : AppColors.kTextSecondary,
+                      // Checkbox to mark this item ready (large, wall-display
+                      // friendly). Once ready it stays checked and locked.
+                      Transform.scale(
+                        scale: 1.4,
+                        child: Checkbox(
+                          value: item.isReady,
+                          onChanged: (item.isReady ||
+                                  order.hasPendingVoidRequest ||
+                                  order.isVoided ||
+                                  isItemVoidActive)
+                              ? null
+                              : (_) => onItemReady(item),
+                          activeColor: AppColors.kSuccess,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
                       ),
                     ],
@@ -2083,4 +2189,184 @@ class _TopItem {
   const _TopItem(this.name, this.quantity);
   final String name;
   final int quantity;
+}
+
+// ── Live-orders top status filter tabs ───────────────────────────────────────
+class _KdsStatusTabs extends StatelessWidget {
+  const _KdsStatusTabs({
+    required this.active,
+    required this.counts,
+    required this.onSelected,
+  });
+
+  final String active;
+  final Map<String, int> counts;
+  final ValueChanged<String> onSelected;
+
+  // (key, label, colour)
+  static const List<(String, String, Color)> _tabs = [
+    ('all', 'ALL', Color(0xFF6B7280)),
+    ('new', 'NEW', Color(0xFFF59E0B)),
+    ('preparing', 'PREPARING', Color(0xFF2563EB)),
+    ('ready', 'READY', Color(0xFF16A34A)),
+    ('recalled', 'RECALLED', Color(0xFFDC2626)),
+    ('void_pending', 'VOID PENDING', Color(0xFF7F1D1D)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _tabs.map((t) {
+          final key = t.$1;
+          final label = t.$2;
+          final color = t.$3;
+          final selected = active == key;
+          final count = counts[key] ?? 0;
+          return Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => onSelected(key),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color:
+                      selected ? color : color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: color.withValues(alpha: selected ? 1 : 0.45),
+                      width: 1.4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: selected ? Colors.white : color,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? Colors.white.withValues(alpha: 0.25)
+                            : color,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ── Live-orders bottom table strip (T1 #code · T2 #code · …) ──────────────────
+class _KdsTableStrip extends StatelessWidget {
+  const _KdsTableStrip({
+    required this.tables,
+    required this.active,
+    required this.onSelected,
+  });
+
+  final List<MapEntry<String, String>> tables; // table number -> order code
+  final String? active;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Icon(Icons.table_restaurant,
+                  color: Colors.white54, size: 18),
+            ),
+            ...tables.map((e) {
+              final table = e.key;
+              final code = e.value;
+              final selected = active == table;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => onSelected(table),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.kAccent
+                          : Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: selected
+                              ? AppColors.kAccent
+                              : Colors.white24),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'T$table',
+                          style: TextStyle(
+                            color: selected
+                                ? const Color(0xFF1A1A2E)
+                                : Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '#$code',
+                          style: TextStyle(
+                            color: selected
+                                ? const Color(0xFF1A1A2E)
+                                : Colors.white70,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
 }
