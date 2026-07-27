@@ -496,57 +496,91 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         const rawDate = (stocktake_date as string) || (date as string) || new Date().toISOString().split('T')[0];
         const locationFilter = bar_location ? String(bar_location) : 'main_bar';
 
-        // 1. Use bar_drinks as the authoritative catalog — bar_stock only has rows
-        //    for items the storekeeper has formally received, so using it as the
-        //    source silently drops every item not yet restocked.  bar_drinks holds
-        //    ALL items for the branch regardless of stock movement history.
+        // The stocktake items come straight from THIS bar's own POS outlet —
+        // the Kyogong (or any branch) Main Bar / Executive Bar POS. Name, SKU,
+        // unit, price and current stock all read from that outlet's
+        // pos_outlet_items; the drink catalog (bar_drinks) is used ONLY to
+        // resolve the inventory_item_id the stocktake ledger keys on, never for
+        // display. So a branch whose bar POS reuses another branch's drink
+        // catalog still lists exactly what its own POS sells.
         const outlet = await resolveBarOutlet(branchId, locationFilter);
-        const [{ data: allDrinks, error: drinksErr }, { data: posRows, error: stockErr }] = await Promise.all([
-            supabase
-                .from('bar_drinks')
-                .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id')
-                .eq('branch_id', branchId)
-                .eq('is_active', true)
-                .order('name'),
-            supabase
-                .from('pos_outlet_items')
-                .select('source_item_id, sku, current_stock')
-                .eq('outlet_id', outlet?.id || '00000000-0000-0000-0000-000000000000')
-                .eq('source_table', 'bar_drinks'),
-        ]);
-        if (drinksErr) throw drinksErr;
-        if (stockErr) throw stockErr;
+        const { data: outletItems, error: oiErr } = await supabase
+            .from('pos_outlet_items')
+            .select('id, name, sku, unit, current_stock, cost_price, selling_price, source_item_id')
+            .eq('outlet_id', outlet?.id || '00000000-0000-0000-0000-000000000000')
+            .eq('source_table', 'bar_drinks')
+            .eq('is_active', true)
+            .order('name');
+        if (oiErr) throw oiErr;
 
-        // Some branches (e.g. Kyogong) run their bar POS off ANOTHER branch's
-        // bar_drinks catalog, so a pure `branch_id = branchId` filter returns
-        // nothing and the stocktake shows "No items". Also pull in every drink
-        // this outlet actually sells — resolved via its pos_outlet_items
-        // (source_item_id -> bar_drinks.id) — regardless of the drink's catalog
-        // branch, then merge/dedupe. Additive, so branch-scoped catalogs are
-        // unaffected.
-        const outletDrinkIds = Array.from(new Set(
-            (posRows || [])
+        // Resolve inventory_item_id per drink (linkage only) from bar_drinks.
+        const posDrinkIds = Array.from(new Set(
+            (outletItems || [])
                 .map((r: any) => String(r.source_item_id || '').trim())
                 .filter(Boolean)
         ));
-        let outletDrinks: Array<Record<string, any>> = [];
-        if (outletDrinkIds.length > 0) {
-            const { data: od, error: odErr } = await supabase
+        const invIdFromCatalog = new Map<string, string>();
+        if (posDrinkIds.length > 0) {
+            const { data: bd } = await supabase
                 .from('bar_drinks')
-                .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id')
-                .in('id', outletDrinkIds)
-                .eq('is_active', true);
-            if (odErr) throw odErr;
-            outletDrinks = (od || []) as Array<Record<string, any>>;
+                .select('id, inventory_item_id')
+                .in('id', posDrinkIds);
+            for (const d of (bd || [])) {
+                if ((d as any).inventory_item_id) {
+                    invIdFromCatalog.set(String((d as any).id), String((d as any).inventory_item_id));
+                }
+            }
         }
-        const drinkById = new Map<string, Record<string, any>>();
-        for (const d of [...((allDrinks || []) as Array<Record<string, any>>), ...outletDrinks]) {
-            drinkById.set(String(d.id), d);
+
+        // One stocktake row per drink (keyed by drink id = source_item_id), with
+        // POS-sourced display fields; stock is summed if a drink is exposed under
+        // more than one POS item in the outlet.
+        const drinkByDrinkId = new Map<string, Record<string, any>>();
+        for (const oi of ((outletItems || []) as Array<Record<string, any>>)) {
+            const did = String(oi.source_item_id || '').trim();
+            if (!did) continue;
+            const existing = drinkByDrinkId.get(did);
+            if (existing) {
+                existing.current_stock = num(existing.current_stock) + num(oi.current_stock);
+                continue;
+            }
+            drinkByDrinkId.set(did, {
+                id: did,
+                name: oi.name,
+                sku: oi.sku,
+                unit: oi.unit || 'bottle',
+                cost_price: num(oi.cost_price),
+                selling_price: num(oi.selling_price),
+                inventory_item_id: invIdFromCatalog.get(did) || null,
+                current_stock: num(oi.current_stock),
+            });
         }
-        const drinkRows = Array.from(drinkById.values());
-        // Build a quick lookup: drink_id → current_stock (0 if no bar_stock row yet)
+        let drinkRows = Array.from(drinkByDrinkId.values());
+
+        // Fallback only if this outlet has no POS items yet: use the branch's
+        // own bar_drinks catalog so the stocktake still isn't empty.
+        if (drinkRows.length === 0) {
+            const { data: catalog } = await supabase
+                .from('bar_drinks')
+                .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id, stock_quantity')
+                .eq('branch_id', branchId)
+                .eq('is_active', true)
+                .order('name');
+            drinkRows = ((catalog || []) as Array<Record<string, any>>).map((d) => ({
+                id: String(d.id),
+                name: d.name,
+                sku: d.sku,
+                unit: d.unit || 'bottle',
+                cost_price: num(d.cost_price),
+                selling_price: num(d.selling_price),
+                inventory_item_id: d.inventory_item_id || null,
+                current_stock: num(d.stock_quantity),
+            }));
+        }
+
+        // drink_id → current_stock (straight from the POS outlet item).
         const stockByDrinkId = new Map<string, number>(
-            (posRows || []).map((r: any) => [String(r.source_item_id), num(r.current_stock)])
+            drinkRows.map((d) => [String(d.id), num(d.current_stock)])
         );
 
         // inventory_item_id is populated by the unification migration.

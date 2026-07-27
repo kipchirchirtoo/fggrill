@@ -360,15 +360,14 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     // otherwise a bill recalled after 90 minutes would vanish again in 10.
     final activeOrders = rawActiveOrders
         .where((order) =>
-            DateTime.now().difference(order.effectiveCreatedAt).inMinutes <=
+            DateTime.now().difference(order.createdAt).inMinutes <=
             _kStaleOrderMinutes)
         .toList();
     // Oldest orders first (FIFO): the longest-waiting ticket sits at the front
     // and freshly-arrived orders queue behind it, so the kitchen works tickets
-    // in the order they came in. effectiveCreatedAt keeps a recalled order's
-    // clock (reset to its recall time) consistent with the displayed timer.
+    // in the order they came in.
     final orders = [...activeOrders]
-      ..sort((a, b) => a.effectiveCreatedAt.compareTo(b.effectiveCreatedAt));
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final pending = activeOrders
         .where(
             (order) => order.status == 'pending' || order.status == 'confirmed')
@@ -1652,19 +1651,27 @@ class _OrderTicket extends StatelessWidget {
           ),
           const Divider(height: 1),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: order.items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final item = order.items[index];
-                final isRecalledItem = item.isRecalledItem;
-                // On a recalled ticket, items that aren't part of this recall
-                // were already prepared before the recall happened — cross
-                // them out so the kitchen knows to only cook the new lines.
-                final isAlreadyMade = hasRecalledTicket && !isRecalledItem;
-                final itemVoid = item.voidRequest;
-                final isItemVoidActive = itemVoid?.isActive ?? false;
+            child: Builder(
+              builder: (context) {
+                // Sort items so original/old items start first, followed by recalled/new items
+                final sortedItems = [...order.items]
+                  ..sort((a, b) {
+                    if (a.isRecalledItem != b.isRecalledItem) {
+                      return a.isRecalledItem ? 1 : -1;
+                    }
+                    return 0;
+                  });
+                return ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: sortedItems.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = sortedItems[index];
+                    final isRecalledItem = item.isRecalledItem;
+                    // Only mark/cross out an item if it was explicitly marked as ready/served
+                    final isAlreadyMade = item.isReady;
+                    final itemVoid = item.voidRequest;
+                    final isItemVoidActive = itemVoid?.isActive ?? false;
                 return Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -1816,8 +1823,10 @@ class _OrderTicket extends StatelessWidget {
                   ),
                 );
               },
-            ),
-          ),
+            );
+          },
+        ),
+      ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: _ticketAction(status),
