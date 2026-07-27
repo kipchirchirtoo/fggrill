@@ -1624,6 +1624,41 @@ export const updateStockTake = async (req: Request, res: Response): Promise<Resp
     const { status, notes, items } = req.body;
     const userId = (req as any).user?.id;
 
+    // Bar stocktake annotations: the accountant review screen reuses this
+    // generic endpoint, but bar counts live in bar_stocktake_records (not
+    // stock_takes). If the id is a bar record, persist explanation/action_taken
+    // there and return. The frontend loops one call per record id (each with the
+    // full items payload), so update just THIS record using the payload entry
+    // that matches its item_id — keeping it to one write per call.
+    const { data: barRecord } = await supabase
+      .from('bar_stocktake_records')
+      .select('id, item_id, branch_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (barRecord) {
+      const role = String((req as any).user?.role || '').toLowerCase();
+      const userBranch = Number((req as any).user?.branch_id ?? (req as any).user?.branchId);
+      const globalRole = ['super_admin', 'auditor', 'general_manager'].includes(role);
+      if (!globalRole && Number.isInteger(userBranch) && Number(barRecord.branch_id) !== userBranch) {
+        return res.status(403).json({ success: false, message: 'Forbidden: stocktake belongs to another branch' });
+      }
+      const match = Array.isArray(items)
+        ? items.find((it: any) => String(it.id ?? it.item_id) === String(barRecord.item_id))
+        : null;
+      const barUpdate: any = {};
+      const expl = match?.explanation ?? (notes !== undefined ? notes : undefined);
+      if (expl !== undefined) barUpdate.explanation = expl || null;
+      if (match?.action_taken !== undefined) barUpdate.action_taken = match.action_taken || null;
+      if (Object.keys(barUpdate).length > 0) {
+        const { error: barErr } = await supabase
+          .from('bar_stocktake_records')
+          .update(barUpdate)
+          .eq('id', id);
+        if (barErr) throw barErr;
+      }
+      return res.json({ success: true, message: 'Bar stocktake annotation saved' });
+    }
+
     // Try new stock_takes table first, fall back to legacy stock_takes
     const { data: existingCount, error: existingCountError } = await supabase
       .from('stock_takes')

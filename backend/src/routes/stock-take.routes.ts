@@ -39,6 +39,16 @@ const STOREKEEPER_ROLES = [
     UserRole.BRANCH_MANAGER
 ];
 
+// Accountants/auditors annotate variances (explanation / action taken) while
+// reviewing a submitted stock take — and updateStockTake already permits them
+// to edit submitted counts — so the bulk-update route must allow them too.
+// Excluding them here is what produced the 403 on "Save changes".
+const UPDATE_ROLES = [
+    ...STOREKEEPER_ROLES,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.AUDITOR,
+];
+
 // Get all stock takes
 router.get('/',
     authorize(AUDIT_ROLES),
@@ -72,7 +82,7 @@ router.post('/',
 // Update stock take (Bulk items update / Progress save)
 // Frontend uses PUT /api/stock-takes/:id
 router.put('/:id',
-    authorize(STOREKEEPER_ROLES),
+    authorize(UPDATE_ROLES),
     updateStockTake
 );
 
