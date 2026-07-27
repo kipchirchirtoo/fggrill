@@ -62,6 +62,7 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
     this.palette,
     this.initialSidebarCollapsed = false,
     this.allowSidebarCollapse = true,
+    this.enableHorizontalAccess = true,
     this.sidebarTitle,
     this.sidebarSubtitle,
     this.sidebarInitials,
@@ -79,6 +80,7 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
   final ShellPalette? palette;
   final bool initialSidebarCollapsed;
   final bool allowSidebarCollapse;
+  final bool enableHorizontalAccess;
   final String? sidebarTitle;
   final String? sidebarSubtitle;
   final String? sidebarInitials;
@@ -158,21 +160,35 @@ class _MasterDashboardShellState<T>
                       isMobile ? () => _showMobileNav(context, ref) : null,
                 ),
                 Expanded(
-                  child: DashboardHorizontalAccess(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      layoutBuilder: (currentChild, previousChildren) {
-                        return Stack(
-                          alignment: Alignment.topLeft,
-                          children: [
-                            ...previousChildren,
-                            if (currentChild != null) currentChild,
-                          ],
-                        );
-                      },
-                      child: widget.child,
-                    ),
-                  ),
+                  child: widget.enableHorizontalAccess
+                      ? DashboardHorizontalAccess(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            layoutBuilder: (currentChild, previousChildren) {
+                              return Stack(
+                                alignment: Alignment.topLeft,
+                                children: [
+                                  ...previousChildren,
+                                  if (currentChild != null) currentChild,
+                                ],
+                              );
+                            },
+                            child: widget.child,
+                          ),
+                        )
+                      : AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.topLeft,
+                              children: [
+                                ...previousChildren,
+                                if (currentChild != null) currentChild,
+                              ],
+                            );
+                          },
+                          child: widget.child,
+                        ),
                 ),
               ],
             ),
@@ -258,7 +274,7 @@ class _MasterSideNav<T> extends ConsumerWidget {
         right: false,
         child: Column(
           children: [
-            Container(
+            SizedBox(
               height: 60,
               child: LayoutBuilder(
                 builder: (context, constraints) {

@@ -172,6 +172,8 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   @override
   Widget build(BuildContext context) {
     return MasterDashboardShell<KitchenKdsSection>(
+      initialSidebarCollapsed: true,
+      enableHorizontalAccess: false,
       title: widget.scope.shellTitle,
       subtitle: widget.scope.shellSubtitle,
       initials: widget.scope.initials,

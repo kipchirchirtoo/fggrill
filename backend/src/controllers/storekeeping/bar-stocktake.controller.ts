@@ -517,7 +517,33 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         if (drinksErr) throw drinksErr;
         if (stockErr) throw stockErr;
 
-        const drinkRows = (allDrinks || []) as Array<Record<string, any>>;
+        // Some branches (e.g. Kyogong) run their bar POS off ANOTHER branch's
+        // bar_drinks catalog, so a pure `branch_id = branchId` filter returns
+        // nothing and the stocktake shows "No items". Also pull in every drink
+        // this outlet actually sells — resolved via its pos_outlet_items
+        // (source_item_id -> bar_drinks.id) — regardless of the drink's catalog
+        // branch, then merge/dedupe. Additive, so branch-scoped catalogs are
+        // unaffected.
+        const outletDrinkIds = Array.from(new Set(
+            (posRows || [])
+                .map((r: any) => String(r.source_item_id || '').trim())
+                .filter(Boolean)
+        ));
+        let outletDrinks: Array<Record<string, any>> = [];
+        if (outletDrinkIds.length > 0) {
+            const { data: od, error: odErr } = await supabase
+                .from('bar_drinks')
+                .select('id, name, sku, unit, cost_price, selling_price, inventory_item_id')
+                .in('id', outletDrinkIds)
+                .eq('is_active', true);
+            if (odErr) throw odErr;
+            outletDrinks = (od || []) as Array<Record<string, any>>;
+        }
+        const drinkById = new Map<string, Record<string, any>>();
+        for (const d of [...((allDrinks || []) as Array<Record<string, any>>), ...outletDrinks]) {
+            drinkById.set(String(d.id), d);
+        }
+        const drinkRows = Array.from(drinkById.values());
         // Build a quick lookup: drink_id → current_stock (0 if no bar_stock row yet)
         const stockByDrinkId = new Map<string, number>(
             (posRows || []).map((r: any) => [String(r.source_item_id), num(r.current_stock)])
