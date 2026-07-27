@@ -62,7 +62,7 @@ class MasterDashboardShell<T> extends ConsumerStatefulWidget {
     this.palette,
     this.initialSidebarCollapsed = false,
     this.allowSidebarCollapse = true,
-    this.enableHorizontalAccess = true,
+    this.enableHorizontalAccess = false,
     this.sidebarTitle,
     this.sidebarSubtitle,
     this.sidebarInitials,

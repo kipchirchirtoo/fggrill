@@ -10,9 +10,9 @@ class DashboardHorizontalAccess extends StatelessWidget {
   const DashboardHorizontalAccess({
     super.key,
     required this.child,
-    this.minContentWidth = 1560,
-    this.activationBreakpoint = 1480,
-    this.overflowPadding = 220,
+    this.minContentWidth = 0,
+    this.activationBreakpoint = 0,
+    this.overflowPadding = 0,
     this.bottomSpacing = 10,
     this.topSpacing = 10,
   });
@@ -26,6 +26,10 @@ class DashboardHorizontalAccess extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (minContentWidth <= 0 || activationBreakpoint <= 0) {
+      return child;
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final viewportWidth = constraints.maxWidth.isFinite
