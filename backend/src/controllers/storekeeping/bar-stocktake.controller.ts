@@ -57,11 +57,20 @@ const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stoc
     getLastClosedCashierShiftWindow(supabase, branchId, BAR_CASHIER_ROLES_BY_LOCATION[barLocation] || [], stocktakeDate);
 
 // Today's OPENING stock for each item is the PHYSICAL count from the previous
-// approved stocktake (what was actually on the shelf at last close), so the
-// chain is continuous: if yesterday had no variance, opening == yesterday's
-// closing; if it did, opening is the real counted stock, not a drifted system
-// figure. Returns item_id -> previous physical count. Empty for the first count.
-const loadPreviousApprovedCounts = async (
+// stocktake (what was actually on the shelf at last close), so the chain is
+// continuous: if yesterday had no variance, opening == yesterday's closing; if
+// it did, opening is the real counted stock, not a drifted system figure.
+//
+// IMPORTANT: the previous count is used whether it is already 'approved' by the
+// accountant OR still 'pending'/'submitted'. Storekeepers submit daily and the
+// opening for the next day must reflect the last SUBMITTED count immediately —
+// waiting for accountant approval left every following day's opening stuck at a
+// reverse-computed (drifting) figure, which is the "not fetching all the
+// submitted stock" bug. Returns item_id -> previous physical count. Empty for
+// the first count. When a prior date somehow has both a pending and an approved
+// row for the same item, the later-recorded one wins.
+const COUNTED_STATUSES = ['approved', 'submitted', 'pending', 'reviewed'];
+const loadPreviousStocktakeCounts = async (
     branchId: number,
     barLocation: string,
     stocktakeDate: string
@@ -72,7 +81,7 @@ const loadPreviousApprovedCounts = async (
         .select('stocktake_date')
         .eq('branch_id', branchId)
         .eq('bar_location', barLocation)
-        .eq('status', 'approved')
+        .in('status', COUNTED_STATUSES)
         .lt('stocktake_date', stocktakeDate)
         .order('stocktake_date', { ascending: false })
         .limit(1)
@@ -80,11 +89,12 @@ const loadPreviousApprovedCounts = async (
     if (!prev?.stocktake_date) return map;
     const { data: rows } = await supabase
         .from('bar_stocktake_records')
-        .select('item_id, physical_quantity')
+        .select('item_id, physical_quantity, recorded_at')
         .eq('branch_id', branchId)
         .eq('bar_location', barLocation)
-        .eq('status', 'approved')
-        .eq('stocktake_date', prev.stocktake_date);
+        .in('status', COUNTED_STATUSES)
+        .eq('stocktake_date', prev.stocktake_date)
+        .order('recorded_at', { ascending: true });
     for (const r of (rows || [])) {
         if ((r as any).item_id != null && (r as any).physical_quantity != null) {
             map.set(String((r as any).item_id), num((r as any).physical_quantity));
@@ -112,7 +122,7 @@ const getSinceLastApprovalWindow = async (
         .select('recorded_at')
         .eq('branch_id', branchId)
         .eq('bar_location', barLocation)
-        .eq('status', 'approved')
+        .in('status', COUNTED_STATUSES)
         .lt('stocktake_date', stocktakeDate)
         .order('stocktake_date', { ascending: false })
         .limit(1)
@@ -620,15 +630,21 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             sumWindow.from,
             sumWindow.to
         );
-        // Previous approved stocktake's physical counts → today's opening.
-        const prevCountByInvId = await loadPreviousApprovedCounts(branchId, locationFilter, rawDate);
-        const additionsByInvId = new Map<string, number>();
+        // Previous stocktake's physical counts → today's opening (submitted or
+        // approved — see loadPreviousStocktakeCounts).
+        const prevCountByInvId = await loadPreviousStocktakeCounts(branchId, locationFilter, rawDate);
         const salesByInvId = new Map<string, number>();
+        // Shift-count additions are only used to seed opening for the FIRST-EVER
+        // count (no prior stocktake). For every later count, additions is DERIVED
+        // from the outlet's authoritative current/system stock so that stock
+        // issued to the bar shows up even when no cashier shift was open at issue
+        // time — additions = closing − opening + sales.
+        const shiftAdditionsByInvId = new Map<string, number>();
         for (const d of drinkRows) {
             const invId = invIdByDrinkId.get(String(d.id));
             if (!invId) continue;
-            additionsByInvId.set(invId, additionsByDrinkId.get(String(d.id)) ?? 0);
             salesByInvId.set(invId, salesByDrinkId.get(String(d.id)) ?? 0);
+            shiftAdditionsByInvId.set(invId, additionsByDrinkId.get(String(d.id)) ?? 0);
         }
 
         // 2. Check for existing bar_stocktake_records for this branch/date/location
@@ -648,14 +664,17 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         if (existingRecords && existingRecords.length > 0) {
             const rawResult = existingRecords.map((r: any) => {
                 const invId = String(r.item_id);
-                const additions = additionsByInvId.get(invId) ?? 0;
                 const sales = salesByInvId.get(invId) ?? 0;
                 const sysQty = num(r.system_quantity);
-                // Opening = previous approved stocktake's physical count; only
-                // reverse-compute for the very first count (no prior record).
+                // Opening = previous stocktake's physical count; only reverse-
+                // compute (using shift additions) for the very first count.
                 const opening = prevCountByInvId.has(invId)
                     ? prevCountByInvId.get(invId)!
-                    : Math.max(0, sysQty - additions + sales);
+                    : Math.max(0, sysQty - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
+                // Additions DERIVED from the identity closing = opening + adds −
+                // sales, so every unit issued into the bar is reflected even if
+                // no shift was open when it was issued.
+                const additions = Math.max(0, sysQty - opening + sales);
                 return {
                     ...r,
                     item_name: r.item?.item_name || r.item_name || null,
@@ -674,13 +693,15 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             if (!invId) return null;
             const did = String(d.id);
             const currentStock = stockByDrinkId.get(did) ?? 0;
-            const additions = additionsByInvId.get(invId) ?? 0;
             const sales = salesByInvId.get(invId) ?? 0;
-            // Opening = previous approved stocktake's physical count; reverse-
-            // compute only for the very first count (no prior record).
+            // Opening = previous stocktake's physical count; reverse-compute
+            // (using shift additions) only for the very first count.
             const opening = prevCountByInvId.has(invId)
                 ? prevCountByInvId.get(invId)!
-                : Math.max(0, currentStock - additions + sales);
+                : Math.max(0, currentStock - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
+            // Additions DERIVED from live outlet stock so issues into the bar are
+            // always reflected: additions = current − opening + sales.
+            const additions = Math.max(0, currentStock - opening + sales);
             const system = currentStock;
             return {
                 id: invId,
@@ -807,12 +828,16 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
         const stockByDrinkId = new Map<string, number>(
             (posRows || []).map((r: any) => [String(r.source_item_id), num(r.current_stock)])
         );
-        const additionsByInvId = new Map<string, number>();
+        // Shift additions only seed opening for the first-ever count; later
+        // additions are derived from stock so shift-less issues still show.
+        const shiftAdditionsByInvId = new Map<string, number>();
         const salesByInvId = new Map<string, number>();
         for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
-            additionsByInvId.set(invId, additionsByDrinkId.get(String(drinkId)) ?? 0);
+            shiftAdditionsByInvId.set(invId, additionsByDrinkId.get(String(drinkId)) ?? 0);
             salesByInvId.set(invId, salesByDrinkId.get(String(drinkId)) ?? 0);
         }
+        // Previous stocktake's physical count → today's opening (submitted too).
+        const prevCountByInvId = await loadPreviousStocktakeCounts(branchId, bar_location, stocktakeDate);
 
         const stockByInvId = new Map<string, number>();
         for (const [invId, drinkId] of Array.from(drinkIdByInvId.entries())) {
@@ -825,9 +850,14 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             const invId = String(it.item_id);
             const invItem = invById.get(invId);
             const currentStock = stockByInvId.get(invId) ?? 0;
-            const additions = additionsByInvId.get(invId) ?? 0;
             const sales = salesByInvId.get(invId) ?? 0;
-            const opening = Math.max(0, currentStock - additions + sales);
+            // Opening = previous stocktake's physical count; reverse-compute with
+            // shift additions only for the first-ever count.
+            const opening = prevCountByInvId.has(invId)
+                ? prevCountByInvId.get(invId)!
+                : Math.max(0, currentStock - (shiftAdditionsByInvId.get(invId) ?? 0) + sales);
+            // Additions derived so bar issues are reflected even without a shift.
+            const additions = Math.max(0, currentStock - opening + sales);
             // Must match the candidate-list formula (which resolves to currentStock)
             const sysQty = currentStock;
 

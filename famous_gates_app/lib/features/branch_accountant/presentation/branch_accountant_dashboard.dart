@@ -22740,15 +22740,25 @@ class _BranchRestaurantMenuSectionState
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
 
-      // Fallback: load from POS restaurant outlets when legacy table is empty
-      if (items.isEmpty && branchId.isNotEmpty) {
-        const barTypes = {
-          'main_bar',
-          'executive_bar',
-          'kyogong_executive_bar',
-          'kyogong_sports_bar',
+      // Track names already present so POS items don't duplicate a legacy row.
+      final seenNames = <String>{};
+      for (final it in items) {
+        final n = '${it['name'] ?? ''}'.trim().toLowerCase();
+        if (n.isNotEmpty) seenNames.add(n);
+      }
+
+      // ALWAYS merge POS food-outlet items (restaurant + choma_zone). Kyogong
+      // and other POS-driven branches keep their real menu in pos_outlet_items,
+      // not the legacy restaurant_menu_items table, so we always pull them in.
+      // Choma Zone sells food and belongs on the restaurant menu; bars,
+      // cashier, spa and other outlets are excluded via the allow-list.
+      if (branchId.isNotEmpty) {
+        const foodOutletTypes = {
+          'restaurant',
           'choma_zone',
-          'bar',
+          'dining',
+          'room_service',
+          'kitchen',
         };
         try {
           final outletsRes = await dio
@@ -22760,14 +22770,22 @@ class _BranchRestaurantMenuSectionState
                   ? ((outletsData['data'] ?? outletsData['outlets'] ?? [])
                       as List)
                   : <dynamic>[];
-          final restaurantOutlets = outletList
+          final foodOutlets = outletList
               .whereType<Map>()
-              .where((o) => !barTypes
+              .where((o) => foodOutletTypes
                   .contains((o['outlet_type'] as String? ?? '').toLowerCase()))
               .toList();
-          for (final outlet in restaurantOutlets) {
+          // Collect every POS candidate first, then dedupe preferring the
+          // ACTIVE copy. A dish can exist as a disabled duplicate in one outlet
+          // and the live copy in another (e.g. choma items were moved out of the
+          // restaurant outlet into the choma_zone outlet) — the active copy must
+          // win so the real, sellable item is what shows.
+          final posCandidates = <Map<String, dynamic>>[];
+          for (final outlet in foodOutlets) {
             final outletId = '${outlet['id'] ?? ''}';
             if (outletId.isEmpty) continue;
+            final outletType =
+                (outlet['outlet_type'] as String? ?? '').toLowerCase();
             try {
               final itemsRes = await dio.get('/pos/outlets/$outletId/items');
               final itemsData = itemsRes.data;
@@ -22778,13 +22796,28 @@ class _BranchRestaurantMenuSectionState
                           as List)
                       : <dynamic>[];
               for (final it in rawItems.whereType<Map>()) {
-                items.add({
+                posCandidates.add({
                   ...Map<String, dynamic>.from(it),
                   '_source': 'pos',
                   '_outlet_id': outletId,
+                  '_outlet_type': outletType,
                 });
               }
             } catch (_) {}
+          }
+          // Active items first so a live copy is picked over a disabled dupe.
+          posCandidates.sort((a, b) {
+            final aActive = a['is_active'] != false;
+            final bActive = b['is_active'] != false;
+            if (aActive == bActive) return 0;
+            return aActive ? -1 : 1;
+          });
+          for (final it in posCandidates) {
+            final name = '${it['name'] ?? ''}'.trim();
+            final key = name.toLowerCase();
+            if (key.isEmpty || seenNames.contains(key)) continue;
+            seenNames.add(key);
+            items.add(it);
           }
         } catch (_) {}
       }
@@ -22795,10 +22828,18 @@ class _BranchRestaurantMenuSectionState
         if (c.isNotEmpty) cats.add(c);
       }
       if (!mounted) return;
+      final effectiveFilter =
+          cats.contains(_categoryFilter) ? _categoryFilter : 'All';
       setState(() {
         _all = items;
         _categories = cats.toList();
-        _filtered = items;
+        _categoryFilter = effectiveFilter;
+        _filtered = effectiveFilter == 'All'
+            ? items
+            : items
+                .where((i) =>
+                    _menuCategoryName(i['category']) == effectiveFilter)
+                .toList();
         _loading = false;
       });
     } catch (e) {
@@ -23201,9 +23242,10 @@ class _BranchRestaurantMenuSectionState
                   final name = '${item['name'] ?? '—'}';
                   final catName = _menuCategoryName(item['category']);
                   final category = catName.isNotEmpty ? catName : '—';
-                  final price = item['price'];
+                  final price = item['price'] ?? item['selling_price'];
                   final available = item['available'] != false &&
-                      item['is_available'] != false;
+                      item['is_available'] != false &&
+                      item['is_active'] != false;
                   return ListTile(
                     leading: const CircleAvatar(
                       child: Icon(Icons.restaurant_menu, size: 20),

@@ -83,9 +83,12 @@ const buildRow = (
   };
 };
 
+// Choma Zone sells FOOD (grilled meat, kachumbari, etc.) and runs under the
+// restaurant station everywhere else in the system, so it is intentionally NOT
+// a bar outlet type here — its POS items load under Restaurant in menu pricing.
 const BAR_OUTLET_TYPES = new Set([
   'main_bar', 'executive_bar', 'kyogong_executive_bar',
-  'kyogong_sports_bar', 'sports_bar', 'choma_zone', 'bar',
+  'kyogong_sports_bar', 'sports_bar', 'bar',
 ]);
 
 const fetchBranchPricing = async (
