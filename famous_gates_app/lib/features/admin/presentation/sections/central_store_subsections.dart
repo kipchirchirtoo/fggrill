@@ -3027,6 +3027,7 @@ class RequisitionsSection extends ConsumerWidget {
                 builder: (row) {
                   final status = _text(row, ['status'], 'PENDING');
                   return _rowTile(
+                    trailingMaxWidth: 540,
                     icon: PhosphorIcons.clipboardText(),
                     title: _text(row, ['request_number', 'id']),
                     subtitle: '${_text(row, [
@@ -3036,28 +3037,48 @@ class RequisitionsSection extends ConsumerWidget {
                         ])} • ${_text(row, [
                           'priority'
                         ], 'normal')} • ${_date(row['created_at'])}',
-                    trailing: Wrap(spacing: 6, children: [
-                      _statusChip(status),
-                      OutlinedButton.icon(
-                        onPressed: () => _printRequisitionNote(context, row),
-                        icon: Icon(PhosphorIcons.printer(), size: 14),
-                        label: const Text('Print'),
-                      ),
-                      OutlinedButton(
-                        onPressed: () =>
-                            _showRequisitionDetails(context, ref, row),
-                        child: const Text('View'),
-                      ),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.bolt, size: 14),
-                        label: const Text('Process All'),
-                        style: ElevatedButton.styleFrom(
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _statusChip(status),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _printRequisitionNote(context, row),
+                          icon: Icon(PhosphorIcons.printer(), size: 14),
+                          label: const Text('Print'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        OutlinedButton(
+                          onPressed: () =>
+                              _showRequisitionDetails(context, ref, row),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('View'),
+                        ),
+                        const SizedBox(width: 6),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.bolt, size: 14),
+                          label: const Text('Process All'),
+                          style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
-                            foregroundColor: Colors.white),
-                        onPressed: () =>
-                            _processRequisitionNow(context, ref, row),
-                      ),
-                    ]),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () =>
+                              _processRequisitionNow(context, ref, row),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),

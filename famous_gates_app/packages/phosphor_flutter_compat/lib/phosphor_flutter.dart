@@ -288,9 +288,9 @@ class PhosphorIcons {
   /// inventory_2 (0xe1b8)
   static IconData cube([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
       const IconData(0xe1b8, fontFamily: 'MaterialIcons');
-  /// inventory (0xe1b7)
+  /// inventory (0xe1b9)
   static IconData package([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
-      const IconData(0xe1b7, fontFamily: 'MaterialIcons');
+      const IconData(0xe1b9, fontFamily: 'MaterialIcons');
   /// move_to_inbox (0xe168)
   static IconData packageArrowUp([PhosphorIconsStyle style = PhosphorIconsStyle.regular]) =>
       const IconData(0xe168, fontFamily: 'MaterialIcons');
