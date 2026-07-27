@@ -660,11 +660,16 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
         // issued to the bar shows up even when no cashier shift was open at issue
         // time — additions = closing − opening + sales.
         const shiftAdditionsByInvId = new Map<string, number>();
+        // Live POS current_stock per inventory item — used to repair the displayed
+        // system quantity for records that were stored with system_quantity=0
+        // (POS-driven branches before the outlet-sourcing fix).
+        const liveStockByInvId = new Map<string, number>();
         for (const d of drinkRows) {
             const invId = invIdByDrinkId.get(String(d.id));
             if (!invId) continue;
             salesByInvId.set(invId, salesByDrinkId.get(String(d.id)) ?? 0);
             shiftAdditionsByInvId.set(invId, additionsByDrinkId.get(String(d.id)) ?? 0);
+            liveStockByInvId.set(invId, stockByDrinkId.get(String(d.id)) ?? 0);
         }
 
         // 2. Check for existing bar_stocktake_records for this branch/date/location
@@ -685,7 +690,13 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
             const rawResult = existingRecords.map((r: any) => {
                 const invId = String(r.item_id);
                 const sales = salesByInvId.get(invId) ?? 0;
-                const sysQty = num(r.system_quantity);
+                // Stored system_quantity is authoritative, but fall back to the
+                // live POS stock when it's 0 — POS-driven branches (Kyogong) saved
+                // 0 before the outlet-sourcing fix, which made every count a false
+                // +variance. A genuinely 0-stock drink has ~0 live stock too, so
+                // this only repairs the broken-zero case.
+                const storedSys = num(r.system_quantity);
+                const sysQty = storedSys > 0 ? storedSys : (liveStockByInvId.get(invId) ?? 0);
                 // Opening = previous stocktake's physical count; only reverse-
                 // compute (using shift additions) for the very first count.
                 const opening = prevCountByInvId.has(invId)
@@ -701,6 +712,7 @@ export const listBarStocktakes = async (req: Request, res: Response, next: NextF
                     additions,
                     sales,
                     opening_stock: opening,
+                    system_quantity: sysQty,
                 };
             });
             const result = await enrichWithShiftInfo(rawResult);
@@ -786,18 +798,55 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             .in('id', invIds);
         const invById = new Map((invRows || []).map((i: any) => [i.id, i]));
 
-        // Fetch ALL active bar_drinks for this branch (mirrors the GET approach).
-        // We cannot filter by inventory_item_id IN invIds because many branches
-        // (e.g. Sotik) have drinks without inventory_item_id stamped yet — those
-        // drinks are resolved via name/SKU fallback in ensureInventoryItems during
-        // the GET, which stamps the id back, but until that stamp propagates the
-        // POST must also handle the fallback path.
-        const { data: allBranchDrinks } = await supabase
-            .from('bar_drinks')
-            .select('id, inventory_item_id, name, unit, sku, cost_price, selling_price')
-            .eq('branch_id', branchId)
-            .eq('is_active', true);
-        const branchDrinks = (allBranchDrinks || []) as Array<Record<string, any>>;
+        // Source the drinks straight from THIS bar's own POS outlet, exactly like
+        // the GET (listBarStocktakes). The outlet's pos_outlet_items define what
+        // the bar actually sells and carry the live current_stock; bar_drinks is
+        // used ONLY to resolve inventory_item_id, looked up by the POS item's
+        // source_item_id REGARDLESS of branch. POS-driven branches (e.g. Kyogong)
+        // reuse another branch's drink catalog and have ZERO bar_drinks of their
+        // own — the old `bar_drinks WHERE branch_id` query returned nothing, so
+        // system/opening/additions all stored as 0 and every count looked like a
+        // full +variance. Sourcing from the outlet fixes that.
+        const outlet = await resolveBarOutlet(branchId, bar_location);
+        const { data: outletItemRows } = outlet?.id
+            ? await supabase
+                .from('pos_outlet_items')
+                .select('id, name, sku, unit, current_stock, cost_price, selling_price, source_item_id')
+                .eq('outlet_id', outlet.id)
+                .eq('source_table', 'bar_drinks')
+                .eq('is_active', true)
+            : { data: [] as any[] };
+        const outletItems = (outletItemRows || []) as Array<Record<string, any>>;
+
+        // current_stock summed per drink id (a drink may sit under >1 POS item).
+        const posStockByDrinkId = new Map<string, number>();
+        const posDrinkIdSet = new Set<string>();
+        for (const oi of outletItems) {
+            const did = String(oi.source_item_id || '').trim();
+            if (!did) continue;
+            posDrinkIdSet.add(did);
+            posStockByDrinkId.set(did, num(posStockByDrinkId.get(did)) + num(oi.current_stock));
+        }
+        const posDrinkIds = Array.from(posDrinkIdSet);
+
+        // Resolve those drinks (inventory_item_id/name/sku) by id — NOT by branch.
+        const { data: outletDrinkRows } = posDrinkIds.length > 0
+            ? await supabase
+                .from('bar_drinks')
+                .select('id, inventory_item_id, name, unit, sku, cost_price, selling_price')
+                .in('id', posDrinkIds)
+            : { data: [] as any[] };
+        let branchDrinks = (outletDrinkRows || []) as Array<Record<string, any>>;
+
+        // Fallback to the branch's own catalog only if the outlet has no POS items.
+        if (branchDrinks.length === 0) {
+            const { data: allBranchDrinks } = await supabase
+                .from('bar_drinks')
+                .select('id, inventory_item_id, name, unit, sku, cost_price, selling_price')
+                .eq('branch_id', branchId)
+                .eq('is_active', true);
+            branchDrinks = (allBranchDrinks || []) as Array<Record<string, any>>;
+        }
 
         // Resolve inventory_item_id for drinks that are missing it.
         const drinksNeedingLink = branchDrinks
@@ -822,32 +871,17 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
                 drinkIdByInvId.set(String(invId), String(d.id));
             }
         }
-        const resolvedDrinkIds = Array.from(drinkIdByInvId.values());
-
         const shiftWindow = await getLastClosedBarShiftWindow(branchId, bar_location, stocktakeDate);
         const sumWindow = await getSinceLastApprovalWindow(branchId, bar_location, stocktakeDate);
-        const outlet = await resolveBarOutlet(branchId, bar_location);
-        const [{ data: posRows }, { additionsByDrinkId, salesByDrinkId }] = await Promise.all([
-            resolvedDrinkIds.length > 0 && outlet?.id
-                ? supabase
-                    .from('pos_outlet_items')
-                    .select('source_item_id, sku, current_stock')
-                    .eq('outlet_id', outlet.id)
-                    .eq('source_table', 'bar_drinks')
-                    .in('source_item_id', resolvedDrinkIds)
-                : Promise.resolve({ data: [] }),
-            loadShiftCountMaps(
-                branchId,
-                bar_location,
-                sumWindow.from,
-                sumWindow.to
-            ),
-        ]);
-
-        // Build stockByInvId using the drinkIdByInvId reverse map.
-        const stockByDrinkId = new Map<string, number>(
-            (posRows || []).map((r: any) => [String(r.source_item_id), num(r.current_stock)])
+        const { additionsByDrinkId, salesByDrinkId } = await loadShiftCountMaps(
+            branchId,
+            bar_location,
+            sumWindow.from,
+            sumWindow.to
         );
+
+        // current_stock per drink comes straight from the outlet's POS items.
+        const stockByDrinkId = posStockByDrinkId;
         // Shift additions only seed opening for the first-ever count; later
         // additions are derived from stock so shift-less issues still show.
         const shiftAdditionsByInvId = new Map<string, number>();
