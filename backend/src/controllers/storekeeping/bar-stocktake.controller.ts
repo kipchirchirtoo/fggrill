@@ -277,6 +277,25 @@ const enrichWithShiftInfo = async (records: any[]): Promise<any[]> => {
  * stock_counts / stock_count_items tables. This is the canonical source used
  * by the cashier shift opening gate.
  */
+// stock_counts.status has a CHECK constraint that does NOT allow 'pending'
+// (which is the bar_stocktake_records status used on submission). Writing
+// 'pending' made the header insert throw, and because the sync is called
+// non-fatally the failure was swallowed — so on SUBMISSION no stock_counts row
+// was ever created and the cashier shift-open gate (which reads stock_counts)
+// kept reporting the stocktake as not done until the accountant approved it.
+// Map any incoming status to the nearest VALID stock_counts status.
+const VALID_STOCK_COUNT_STATUSES = new Set<string>([
+    'draft', 'started', 'counting', 'submitted', 'submitted_to_accountant',
+    'under_review', 'reviewed', 'accountant_review', 'accountant_approved',
+    'accountant_rejected', 'auditor_review', 'auditor_approved', 'auditor_flagged',
+    'approved', 'posted', 'closed', 'rejected', 'cancelled'
+]);
+const mapStockCountStatus = (s: string): string => {
+    const v = String(s || '').trim().toLowerCase();
+    if (v === 'pending' || v === '') return 'submitted';
+    return VALID_STOCK_COUNT_STATUSES.has(v) ? v : 'submitted';
+};
+
 const syncBarStocktakeToStockCounts = async (
     branchId: number,
     barLocation: string,
@@ -285,6 +304,7 @@ const syncBarStocktakeToStockCounts = async (
     reviewedBy: string | null = null,
     reviewedAt: string | null = null
 ): Promise<void> => {
+    const scStatus = mapStockCountStatus(status);
     const { data: existing } = await supabase
         .from('stock_counts')
         .select('id')
@@ -302,7 +322,7 @@ const syncBarStocktakeToStockCounts = async (
         count_type: 'daily',
         store_type: 'bar',
         location: barLocation,
-        status,
+        status: scStatus,
         approved_by: reviewedBy,
         approved_at: reviewedAt
     };
@@ -343,7 +363,7 @@ const syncBarStocktakeToStockCounts = async (
         counted_quantity: num(r.physical_quantity),
         variance: num(r.variance),
         reason: r.reason_for_variance || null,
-        status,
+        status: scStatus,
         created_at: now,
         updated_at: now
     }));
