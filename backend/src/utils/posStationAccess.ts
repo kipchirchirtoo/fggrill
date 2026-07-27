@@ -17,7 +17,10 @@ const KYOGONG_RESTAURANT_RECEPTION_ROLES = new Set([
 ]);
 
 export const POS_STATION_CASHIER_ROLE_TYPES: Record<string, string[]> = {
-  restaurant_cashier: ['restaurant'],
+  // Choma Zone runs under the restaurant station: it opens/runs within the
+  // restaurant shift, and its bills are cleared by the restaurant cashier
+  // (and the Kyogong receptionist, which resolves to restaurant_cashier).
+  restaurant_cashier: ['restaurant', 'choma_zone'],
   main_bar_cashier: ['main_bar', 'kyogong_sports_bar'],
   executive_bar_cashier: ['executive_bar', 'kyogong_executive_bar'],
   non_consumables_cashier: ['non_consumables'],

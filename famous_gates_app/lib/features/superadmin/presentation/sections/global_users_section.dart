@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/api_error_message.dart';
+import '../../../../core/utils/pos_pin_rules.dart';
 import '../../../../core/widgets/loading_skeleton.dart';
 import '../../../../core/widgets/error_state.dart';
 import '../../../../core/services/services.dart';
@@ -647,15 +648,15 @@ class _GlobalUsersSectionState extends ConsumerState<GlobalUsersSection> {
                           backgroundColor: AppColors.kError));
                   return;
                 }
-                // A POS PIN is required to create a login account (the backend
-                // mandates it). Enforce it up front with a clear message rather
-                // than letting the create call fail opaquely.
-                if (user == null && pinCtrl.text.trim().isEmpty) {
+                final posPinRequired = requiresPosPinForRole(selectedRole);
+                if (user == null &&
+                    posPinRequired &&
+                    pinCtrl.text.trim().isEmpty) {
                   AppNotifier.showSnackBar(
                       context,
-                      const SnackBar(
+                      SnackBar(
                           content: Text(
-                              'POS PIN is required to create a login (e.g. R1234).'),
+                              'POS PIN is required for ${selectedRole.replaceAll('_', ' ')} logins (e.g. R1234).'),
                           backgroundColor: AppColors.kError));
                   return;
                 }

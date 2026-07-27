@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:famous_gates_app/core/utils/api_error_message.dart';
+import 'package:famous_gates_app/core/utils/pos_pin_rules.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:famous_gates_app/core/widgets/payment_method_breakdown_widget.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -21740,8 +21741,10 @@ class _BranchStaffManagementSectionState
                     const SizedBox(height: 12),
                     TextField(
                       controller: pinCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'POS PIN *',
+                      decoration: InputDecoration(
+                        labelText: requiresPosPinForRole(selectedRole)
+                            ? 'POS PIN *'
+                            : 'POS PIN',
                         helperText:
                             'Format: R1234, M1234, E1234, N1234 or C1234',
                         prefixIcon: Icon(Icons.pin_outlined),
@@ -21773,13 +21776,17 @@ class _BranchStaffManagementSectionState
                         return;
                       }
                       final pinRaw = pinCtrl.text.trim().toUpperCase();
-                      if (pinRaw.isEmpty) {
-                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                            content: Text('POS PIN is required')));
+                      final posPinRequired =
+                          requiresPosPinForRole(selectedRole);
+                      if (posPinRequired && pinRaw.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text(
+                                'POS PIN is required for ${selectedRole.replaceAll('_', ' ')} logins')));
                         return;
                       }
-                      if (pinRaw.length != 5 ||
-                          !RegExp(r'^[RMNCE]\d{4}$').hasMatch(pinRaw)) {
+                      if (pinRaw.isNotEmpty &&
+                          (pinRaw.length != 5 ||
+                              !RegExp(r'^[RMNCE]\d{4}$').hasMatch(pinRaw))) {
                         ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
                             content: Text(
                                 'POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
@@ -23065,10 +23072,14 @@ class _BranchRestaurantMenuSectionState
                       try {
                         await dio.post('/restaurant/menu/items', data: {
                           'name': nameCtrl.text.trim(),
+                          'categoryId': selectedCategoryId,
                           'category_id': selectedCategoryId,
                           'price': double.tryParse(priceCtrl.text) ?? 0,
+                          'selling_price': double.tryParse(priceCtrl.text) ?? 0,
                           'cost_price':
                               double.tryParse(costCtrl.text.trim()) ?? 0,
+                          if (branchId.isNotEmpty)
+                            'branchId': int.tryParse(branchId) ?? branchId,
                           if (branchId.isNotEmpty)
                             'branch_id': int.tryParse(branchId) ?? branchId,
                         });
@@ -23078,7 +23089,14 @@ class _BranchRestaurantMenuSectionState
                       } catch (e) {
                         if (!ctx.mounted) return;
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Error: $e')),
+                          SnackBar(
+                            content: Text(
+                              apiErrorMessage(
+                                e,
+                                fallback: 'Could not add restaurant menu item',
+                              ),
+                            ),
+                          ),
                         );
                         setDlgState(() => saving = false);
                       }

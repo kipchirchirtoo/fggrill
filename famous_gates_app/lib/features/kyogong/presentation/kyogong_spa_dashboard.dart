@@ -74,7 +74,11 @@ class _KyogongSpaDashboardState extends ConsumerState<KyogongSpaDashboard> {
                       : null,
                   sidebarCollapsed: effectiveSidebarCollapsed,
                 ),
-                Expanded(child: _buildSection()),
+                Expanded(
+                  child: DashboardHorizontalAccess(
+                    child: _buildSection(),
+                  ),
+                ),
               ],
             ),
           ),

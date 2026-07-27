@@ -8,13 +8,15 @@ class StickyHorizontalScrollbar extends StatefulWidget {
     required this.contentWidth,
     required this.child,
     this.bottomSpacing = 12,
+    this.topSpacing = 8,
     this.scrollbarThickness = 12,
-    this.barHeight = 18,
+    this.barHeight = 28,
   });
 
   final double contentWidth;
   final Widget child;
   final double bottomSpacing;
+  final double topSpacing;
   final double scrollbarThickness;
   final double barHeight;
 
@@ -25,48 +27,161 @@ class StickyHorizontalScrollbar extends StatefulWidget {
 
 class _StickyHorizontalScrollbarState extends State<StickyHorizontalScrollbar> {
   late final ScrollController _contentController;
-  late final ScrollController _barController;
-  bool _syncingFromContent = false;
-  bool _syncingFromBar = false;
+  late final ScrollController _topBarController;
+  late final ScrollController _bottomBarController;
+  bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
-    _contentController = ScrollController()..addListener(_syncBarFromContent);
-    _barController = ScrollController()..addListener(_syncContentFromBar);
+    _contentController = ScrollController()..addListener(_syncFromContent);
+    _topBarController = ScrollController()..addListener(_syncFromTopBar);
+    _bottomBarController =
+        ScrollController()..addListener(_syncFromBottomBar);
   }
 
   @override
   void dispose() {
     _contentController
-      ..removeListener(_syncBarFromContent)
+      ..removeListener(_syncFromContent)
       ..dispose();
-    _barController
-      ..removeListener(_syncContentFromBar)
+    _topBarController
+      ..removeListener(_syncFromTopBar)
+      ..dispose();
+    _bottomBarController
+      ..removeListener(_syncFromBottomBar)
       ..dispose();
     super.dispose();
   }
 
-  void _syncBarFromContent() {
-    if (_syncingFromBar || !_barController.hasClients) return;
-    final target = _contentController.offset.clamp(
-      _barController.position.minScrollExtent,
-      _barController.position.maxScrollExtent,
+  void _syncFromContent() {
+    _syncControllers(
+      source: _contentController,
+      targets: [_topBarController, _bottomBarController],
     );
-    _syncingFromContent = true;
-    _barController.jumpTo(target);
-    _syncingFromContent = false;
   }
 
-  void _syncContentFromBar() {
-    if (_syncingFromContent || !_contentController.hasClients) return;
-    final target = _barController.offset.clamp(
+  void _syncFromTopBar() {
+    _syncControllers(
+      source: _topBarController,
+      targets: [_contentController, _bottomBarController],
+    );
+  }
+
+  void _syncFromBottomBar() {
+    _syncControllers(
+      source: _bottomBarController,
+      targets: [_contentController, _topBarController],
+    );
+  }
+
+  void _syncControllers({
+    required ScrollController source,
+    required List<ScrollController> targets,
+  }) {
+    if (_syncing || !source.hasClients) return;
+
+    _syncing = true;
+    final sourceOffset = source.offset;
+    for (final target in targets) {
+      if (!target.hasClients) continue;
+      final clamped = sourceOffset.clamp(
+        target.position.minScrollExtent,
+        target.position.maxScrollExtent,
+      );
+      if ((target.offset - clamped).abs() > 0.5) {
+        target.jumpTo(clamped);
+      }
+    }
+    _syncing = false;
+  }
+
+  Future<void> _nudgeScroll(double delta) async {
+    if (!_contentController.hasClients) return;
+    final target = (_contentController.offset + delta).clamp(
       _contentController.position.minScrollExtent,
       _contentController.position.maxScrollExtent,
     );
-    _syncingFromBar = true;
-    _contentController.jumpTo(target);
-    _syncingFromBar = false;
+    await _contentController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Widget _buildScrollRail({
+    required ScrollController controller,
+    required String semanticsLabel,
+  }) {
+    const trackColor = Color(0xFFE3E8EF);
+    const thumbColor = Color(0xFF1A3C5E);
+    final railExtent = widget.scrollbarThickness + 10;
+
+    return Container(
+      height: widget.barHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F4EC),
+        border: Border.all(color: const Color(0xFFD8DDE6)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Scroll left',
+            onPressed: () => _nudgeScroll(-280),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              size: 16,
+              color: Color(0xFF1A3C5E),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RawScrollbar(
+              controller: controller,
+              interactive: true,
+              thumbVisibility: true,
+              trackVisibility: true,
+              thickness: widget.scrollbarThickness,
+              radius: const Radius.circular(999),
+              thumbColor: thumbColor,
+              trackColor: trackColor,
+              trackBorderColor: trackColor,
+              minThumbLength: 72,
+              child: SingleChildScrollView(
+                controller: controller,
+                scrollDirection: Axis.horizontal,
+                physics: const ClampingScrollPhysics(),
+                child: Semantics(
+                  label: semanticsLabel,
+                  child: SizedBox(
+                    width: widget.contentWidth,
+                    height: railExtent,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Scroll right',
+            onPressed: () => _nudgeScroll(280),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            icon: const Icon(
+              Icons.arrow_forward_rounded,
+              size: 16,
+              color: Color(0xFF1A3C5E),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -74,41 +189,28 @@ class _StickyHorizontalScrollbarState extends State<StickyHorizontalScrollbar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RawScrollbar(
-          controller: _contentController,
-          thumbVisibility: true,
-          trackVisibility: true,
-          thickness: widget.scrollbarThickness,
-          radius: const Radius.circular(8),
-          notificationPredicate: (notification) =>
-              notification.metrics.axis == Axis.horizontal,
-          child: SingleChildScrollView(
-            controller: _contentController,
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: widget.contentWidth,
-              child: widget.child,
+        _buildScrollRail(
+          controller: _topBarController,
+          semanticsLabel: 'Top horizontal dashboard scrollbar',
+        ),
+        SizedBox(height: widget.topSpacing),
+        Expanded(
+          child: ClipRect(
+            child: SingleChildScrollView(
+              controller: _contentController,
+              scrollDirection: Axis.horizontal,
+              physics: const ClampingScrollPhysics(),
+              child: SizedBox(
+                width: widget.contentWidth,
+                child: widget.child,
+              ),
             ),
           ),
         ),
         SizedBox(height: widget.bottomSpacing),
-        SizedBox(
-          height: widget.barHeight,
-          child: RawScrollbar(
-            controller: _barController,
-            thumbVisibility: true,
-            trackVisibility: true,
-            thickness: widget.scrollbarThickness,
-            radius: const Radius.circular(8),
-            child: SingleChildScrollView(
-              controller: _barController,
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: widget.contentWidth,
-                height: 1,
-              ),
-            ),
-          ),
+        _buildScrollRail(
+          controller: _bottomBarController,
+          semanticsLabel: 'Bottom horizontal dashboard scrollbar',
         ),
       ],
     );

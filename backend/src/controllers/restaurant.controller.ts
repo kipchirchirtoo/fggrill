@@ -18,6 +18,9 @@ const parseBranchId = (id: any): number | undefined => {
   return isNaN(parsed) ? undefined : parsed;
 };
 
+const firstDefined = <T>(...values: Array<T | undefined>): T | undefined =>
+  values.find((value) => value !== undefined);
+
 const notifyRolesForOrder = async (
   roles: string[],
   branchId: number | string | undefined,
@@ -177,45 +180,64 @@ export const createMenuItem = async (
   try {
     const {
       categoryId,
+      category_id,
       name,
       description,
       price,
+      selling_price,
       imageUrl,
-      preparationTime,
-      isVegetarian,
-      isSpicy,
+      image_url,
       allergens,
       ingredients,
       branchId,
+      branch_id,
       sku,
       costPrice,
       cost_price,
-      unit
+      unit,
+      metadata
     } = req.body;
 
+    const itemName = String(name || '').trim();
+    const resolvedPrice = Number(firstDefined(price, selling_price) ?? NaN);
+    if (!itemName) {
+      res.status(400).json({ success: false, message: 'Menu item name is required' });
+      return;
+    }
+    if (!Number.isFinite(resolvedPrice) || resolvedPrice < 0) {
+      res.status(400).json({ success: false, message: 'A valid selling price is required' });
+      return;
+    }
+
     const categoryName = req.body.category || req.body.category_name;
-    let resolvedCategoryId = categoryId;
+    let resolvedCategoryId = categoryId || category_id;
     if (!resolvedCategoryId && categoryName) {
       resolvedCategoryId = await resolveRestaurantCategoryId(categoryName) || undefined;
     }
+
+    const resolvedBranchId =
+      parseBranchId(req.user?.branch_id) ||
+      parseBranchId(branchId) ||
+      parseBranchId(branch_id) ||
+      null;
+    const resolvedCostPrice = Number(firstDefined(costPrice, cost_price) ?? 0);
 
     const { data: item, error } = await supabase
       .from('restaurant_menu_items')
       .insert([{
         category_id: resolvedCategoryId,
-        name,
+        name: itemName,
         description,
-        price,
-        image_url: imageUrl,
-        preparation_time: preparationTime || 15, // Default to 15 minutes if not provided
-        is_vegetarian: isVegetarian ?? false,
-        is_spicy: isSpicy ?? false,
+        price: resolvedPrice,
+        selling_price: resolvedPrice,
+        image_url: firstDefined(imageUrl, image_url) || null,
         allergens,
         ingredients,
-        branch_id: req.user?.branch_id || branchId || null,
+        branch_id: resolvedBranchId,
         sku: sku || null,
-        cost_price: costPrice || cost_price || 0,
-        unit: unit || 'portion'
+        cost_price: Number.isFinite(resolvedCostPrice) ? resolvedCostPrice : 0,
+        unit: unit || 'portion',
+        metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
       }])
       .select()
       .single();
@@ -250,14 +272,9 @@ export const updateMenuItem = async (
       name,
       description,
       price,
+      selling_price,
       imageUrl,
       image_url,
-      preparationTime,
-      preparation_time,
-      isVegetarian,
-      is_vegetarian,
-      isSpicy,
-      is_spicy,
       allergens,
       ingredients,
       isAvailable,
@@ -267,7 +284,8 @@ export const updateMenuItem = async (
       sku,
       costPrice,
       cost_price,
-      unit
+      unit,
+      metadata
     } = req.body;
 
     // Build update object with only provided fields
@@ -288,18 +306,37 @@ export const updateMenuItem = async (
     }
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (price !== undefined) updateData.price = price;
-    if (imageUrl !== undefined || image_url !== undefined) updateData.image_url = imageUrl || image_url;
-    if (preparationTime !== undefined || preparation_time !== undefined) updateData.preparation_time = preparationTime || preparation_time;
-    if (isVegetarian !== undefined || is_vegetarian !== undefined) updateData.is_vegetarian = (isVegetarian ?? is_vegetarian) ?? false;
-    if (isSpicy !== undefined || is_spicy !== undefined) updateData.is_spicy = (isSpicy ?? is_spicy) ?? false;
+    if (price !== undefined || selling_price !== undefined) {
+      const resolvedPrice = Number(firstDefined(price, selling_price));
+      if (Number.isFinite(resolvedPrice)) {
+        updateData.price = resolvedPrice;
+        updateData.selling_price = resolvedPrice;
+      }
+    }
+    if (imageUrl !== undefined || image_url !== undefined) {
+      updateData.image_url = firstDefined(imageUrl, image_url) || null;
+    }
     if (allergens !== undefined) updateData.allergens = allergens;
     if (ingredients !== undefined) updateData.ingredients = ingredients;
     if (isAvailable !== undefined || is_available !== undefined) updateData.is_available = (isAvailable ?? is_available) ?? true;
-    if (branchId !== undefined || branch_id !== undefined) updateData.branch_id = branchId || branch_id || null;
+    if (branchId !== undefined || branch_id !== undefined) {
+      updateData.branch_id =
+        parseBranchId(branchId) ||
+        parseBranchId(branch_id) ||
+        null;
+    }
     if (sku !== undefined) updateData.sku = sku || null;
-    if (costPrice !== undefined || cost_price !== undefined) updateData.cost_price = costPrice || cost_price || 0;
+    if (costPrice !== undefined || cost_price !== undefined) {
+      const resolvedCostPrice = Number(firstDefined(costPrice, cost_price) ?? 0);
+      updateData.cost_price = Number.isFinite(resolvedCostPrice)
+        ? resolvedCostPrice
+        : 0;
+    }
     if (unit !== undefined) updateData.unit = unit;
+    if (metadata !== undefined) {
+      updateData.metadata =
+        metadata && typeof metadata === 'object' ? metadata : null;
+    }
 
     const { data: item, error } = await supabase
       .from('restaurant_menu_items')

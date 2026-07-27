@@ -1,4 +1,5 @@
 export 'app_notifier.dart';
+export 'dashboard_horizontal_access.dart';
 export 'dashboard_shell.dart';
 export 'data_table.dart';
 export 'error_state.dart';

@@ -985,7 +985,7 @@ export const getShiftLog = async (
                     } catch (_) {}
 
                     const fbIsBarType = (t: string) => ['bar', 'bar_store', 'spirits', 'main_bar', 'exec_bar', 'pool_bar'].includes(t);
-                    const fbIsRestType = (t: string) => ['restaurant', 'dining', 'room_service', 'kitchen'].includes(t);
+                    const fbIsRestType = (t: string) => ['restaurant', 'choma_zone', 'dining', 'room_service', 'kitchen'].includes(t);
                     const fbFetchRest = fallbackOutletTypes.size === 0 || Array.from(fallbackOutletTypes).some(fbIsRestType);
                     const fbFetchBar = fallbackOutletTypes.size === 0 || Array.from(fallbackOutletTypes).some(fbIsBarType);
 
@@ -1159,7 +1159,7 @@ export const getShiftLog = async (
             // bar_store, bar, spirits etc. → bar_orders; restaurant → restaurant_orders.
             // If no outlet types resolved (old shifts / fallback), query both.
             const isBarType = (t: string) => ['bar', 'bar_store', 'spirits', 'main_bar', 'exec_bar', 'pool_bar'].includes(t);
-            const isRestType = (t: string) => ['restaurant', 'dining', 'room_service', 'kitchen'].includes(t);
+            const isRestType = (t: string) => ['restaurant', 'choma_zone', 'dining', 'room_service', 'kitchen'].includes(t);
 
             const fetchRestOrders = shiftOutletTypes.size === 0
                 || Array.from(shiftOutletTypes).some(isRestType);

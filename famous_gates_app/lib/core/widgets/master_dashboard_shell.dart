@@ -260,77 +260,95 @@ class _MasterSideNav<T> extends ConsumerWidget {
           children: [
             Container(
               height: 60,
-              padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 16),
-              child: isCollapsed
-                  ? Stack(
-                      children: [
-                        Align(
-                          alignment: Alignment.center,
-                          child: _Logo(initials: sidebarInitials ?? initials),
-                        ),
-                        if (canToggle)
-                          Align(
-                            alignment: Alignment.topRight,
-                            child: IconButton(
-                              tooltip: 'Expand sidebar',
-                              onPressed: onToggleCollapsed,
-                              icon: const Icon(
-                                Icons.keyboard_double_arrow_right,
-                                size: 18,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 28,
-                                minHeight: 28,
-                              ),
-                            ),
-                          ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        _Logo(initials: sidebarInitials ?? initials),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final shouldUseCompactHeader =
+                      isCollapsed || constraints.maxWidth < 180;
+
+                  return Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: shouldUseCompactHeader ? 8 : 16,
+                    ),
+                    child: shouldUseCompactHeader
+                        ? Stack(
                             children: [
-                              Text(
-                                sidebarTitle ?? title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: palette?.text,
+                              Align(
+                                alignment: Alignment.center,
+                                child: _Logo(
+                                  initials: sidebarInitials ?? initials,
                                 ),
                               ),
-                              Text(
-                                sidebarSubtitle ?? subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: palette?.mutedText ??
-                                      AppColors.kTextSecondary,
+                              if (canToggle)
+                                Align(
+                                  alignment: Alignment.topRight,
+                                  child: IconButton(
+                                    tooltip: shouldUseCompactHeader &&
+                                            !isCollapsed
+                                        ? 'Collapse sidebar'
+                                        : 'Expand sidebar',
+                                    onPressed: onToggleCollapsed,
+                                    icon: Icon(
+                                      shouldUseCompactHeader && !isCollapsed
+                                          ? Icons.keyboard_double_arrow_left
+                                          : Icons.keyboard_double_arrow_right,
+                                      size: 18,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 28,
+                                      minHeight: 28,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              _Logo(initials: sidebarInitials ?? initials),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      sidebarTitle ?? title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: palette?.text,
+                                      ),
+                                    ),
+                                    Text(
+                                      sidebarSubtitle ?? subtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: palette?.mutedText ??
+                                            AppColors.kTextSecondary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
+                              if (canToggle)
+                                IconButton(
+                                  tooltip: 'Collapse sidebar',
+                                  onPressed: onToggleCollapsed,
+                                  icon: const Icon(
+                                    Icons.keyboard_double_arrow_left,
+                                    size: 20,
+                                  ),
+                                ),
                             ],
                           ),
-                        ),
-                        if (canToggle)
-                          IconButton(
-                            tooltip: 'Collapse sidebar',
-                            onPressed: onToggleCollapsed,
-                            icon: const Icon(
-                              Icons.keyboard_double_arrow_left,
-                              size: 20,
-                            ),
-                          ),
-                      ],
-                    ),
+                  );
+                },
+              ),
             ),
             Divider(height: 1, color: borderColor),
             Expanded(

@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import { applyBranchFilter } from '../utils/branchIsolation';
+import { requiresPosPinForLogin } from '../utils/posPinRules';
 
 const GLOBAL_USER_ADMIN_ROLES = new Set(['super_admin', 'general_manager']);
 const BRANCH_MANAGER_BLOCKED_ROLES = new Set([
@@ -296,35 +297,43 @@ export const createUser = async (
       userEmail = `${slugBase}.${idFrag}@staff.famousgate.local`;
     }
 
-    // Validate POS PIN format and uniqueness
-    if (pos_pin === undefined || pos_pin === null || String(pos_pin).trim() === '') {
+    const posPinRequired = requiresPosPinForLogin(userRole);
+
+    // Validate POS PIN format and uniqueness only for PIN-login roles.
+    if (
+      posPinRequired &&
+      (pos_pin === undefined || pos_pin === null || String(pos_pin).trim() === '')
+    ) {
       res.status(400).json({
         success: false,
-        message: 'POS PIN is required when creating a login account.'
+        message: `POS PIN is required for ${userRole} logins.`
       });
       return;
     }
 
-    const normalizedPin = String(pos_pin).trim().toUpperCase();
-    if (!/^[RMNCE]\d{4}$/.test(normalizedPin)) {
-      res.status(400).json({
-        success: false,
-        message: 'POS PIN must strictly start with R, M, N, C, or E followed by exactly 4 digits (e.g., R1234).'
-      });
-      return;
-    }
+    let normalizedPin: string | null = null;
+    if (pos_pin !== undefined && pos_pin !== null && String(pos_pin).trim() !== '') {
+      normalizedPin = String(pos_pin).trim().toUpperCase();
+      if (!/^[RMNCE]\d{4}$/.test(normalizedPin)) {
+        res.status(400).json({
+          success: false,
+          message: 'POS PIN must strictly start with R, M, N, C, or E followed by exactly 4 digits (e.g., R1234).'
+        });
+        return;
+      }
 
-    const { data: pinConflict } = await supabase
-      .from('users')
-      .select('id, first_name, last_name')
-      .eq('pos_pin', normalizedPin)
-      .maybeSingle();
-    if (pinConflict) {
-      res.status(409).json({
-        success: false,
-        message: `PIN ${normalizedPin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
-      });
-      return;
+      const { data: pinConflict } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .eq('pos_pin', normalizedPin)
+        .maybeSingle();
+      if (pinConflict) {
+        res.status(409).json({
+          success: false,
+          message: `PIN ${normalizedPin[0]}**** is already assigned to ${pinConflict.first_name} ${pinConflict.last_name}. Each staff member must have a unique POS PIN.`
+        });
+        return;
+      }
     }
 
     // Step 1: Create auth user via Supabase Admin API

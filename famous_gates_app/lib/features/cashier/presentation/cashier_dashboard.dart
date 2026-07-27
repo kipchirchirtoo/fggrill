@@ -532,6 +532,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
   List<_ShiftStaffMember> _staffOptions = const [];
   _ShiftStaffMember? _selectedStaff;
   bool _staffLoading = false;
+  List<Map<String, dynamic>> _eligibleRoomChargeGuests = const [];
+  Map<String, dynamic>? _selectedRoomChargeGuest;
+  bool _roomChargeGuestsLoading = false;
 
   Future<void> _loadStaff() async {
     if (_staffOptions.isNotEmpty || _staffLoading) return;
@@ -545,6 +548,47 @@ class _StationTabState extends ConsumerState<_StationTab> {
       _staffOptions = _shiftStaffMembers(staff);
       _staffLoading = false;
     });
+  }
+
+  Future<void> _loadEligibleRoomChargeGuests({bool force = false}) async {
+    if ((_eligibleRoomChargeGuests.isNotEmpty && !force) ||
+        _roomChargeGuestsLoading) {
+      return;
+    }
+
+    setState(() => _roomChargeGuestsLoading = true);
+    try {
+      final nav = ref.read(dashboardNavProvider);
+      final branchId = int.tryParse('${nav.user?.branchId ?? 1}') ?? 1;
+      final guests = await ref
+          .read(cashierRepositoryProvider)
+          .getEligibleRoomChargeGuests(branchId: branchId);
+      if (!mounted) return;
+
+      Map<String, dynamic>? selectedGuest;
+      final currentBookingId = '${_selectedRoomChargeGuest?['booking_id'] ?? ''}';
+      if (currentBookingId.isNotEmpty) {
+        for (final guest in guests) {
+          if ('${guest['booking_id'] ?? ''}' == currentBookingId) {
+            selectedGuest = guest;
+            break;
+          }
+        }
+      }
+      selectedGuest ??= guests.isNotEmpty ? guests.first : null;
+
+      setState(() {
+        _eligibleRoomChargeGuests = guests;
+        _selectedRoomChargeGuest = selectedGuest;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Failed to load in-house rooms: ${apiErrorMessage(error)}');
+    } finally {
+      if (mounted) {
+        setState(() => _roomChargeGuestsLoading = false);
+      }
+    }
   }
 
   // Main Bar / Executive Bar captain orders auto-printed at this cashier
@@ -1179,6 +1223,123 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     _bill == null ? null : 'Balance: ${_money(balance)}',
               ),
             ),
+            if (_method == 'room_charge') ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Guest Room / Active Stay',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _roomChargeGuestsLoading
+                        ? null
+                        : () => _loadEligibleRoomChargeGuests(force: true),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Refresh rooms'),
+                  ),
+                ],
+              ),
+              if (_roomChargeGuestsLoading)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 10),
+                  child: LinearProgressIndicator(),
+                ),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _selectedRoomChargeGuest == null
+                    ? null
+                    : '${_selectedRoomChargeGuest!['booking_id'] ?? ''}',
+                decoration: const InputDecoration(
+                  labelText: 'Select room to charge',
+                  prefixIcon: Icon(Icons.meeting_room_outlined),
+                  helperText:
+                      'Only checked-in overnight stays are shown here.',
+                ),
+                items: _eligibleRoomChargeGuests
+                    .map(
+                      (guest) => DropdownMenuItem<String>(
+                        value: '${guest['booking_id'] ?? ''}',
+                        child: Text(
+                          'Room ${guest['room_number'] ?? '-'} • ${guest['guest_name'] ?? 'Guest'}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _roomChargeGuestsLoading
+                    ? null
+                    : (bookingId) {
+                        setState(() {
+                          _selectedRoomChargeGuest = bookingId == null
+                              ? null
+                              : _eligibleRoomChargeGuests.cast<Map<String, dynamic>?>().firstWhere(
+                                    (guest) =>
+                                        '${guest?['booking_id'] ?? ''}' ==
+                                        bookingId,
+                                    orElse: () => null,
+                                  );
+                        });
+                      },
+              ),
+              if (_selectedRoomChargeGuest != null) ...[
+                const SizedBox(height: 10),
+                Builder(
+                  builder: (_) {
+                    final guest = _selectedRoomChargeGuest!;
+                    final stayNights = _num(guest['stay_nights']).round();
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.kPrimary.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.kPrimary.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${guest['guest_name'] ?? 'Guest'} • Room ${guest['room_number'] ?? '-'}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Booking: ${guest['confirmation_number'] ?? '-'} • Stay: ${stayNights > 0 ? '$stayNights night${stayNights == 1 ? '' : 's'}' : 'In-house'}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.kTextSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Current folio balance: ${_money(guest['folio_balance'] ?? 0)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.kTextSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ] else if (!_roomChargeGuestsLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    'No room selected yet. Pick the occupied room to post this bill to the guest folio.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.kTextSecondary,
+                    ),
+                  ),
+                ),
+            ],
             if (_method == 'cash') ...[
               const SizedBox(height: 12),
               TextField(
@@ -1345,6 +1506,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       onSelected: (_) {
         setState(() => _method = value);
         if (value == 'credit_bill') _loadStaff();
+        if (value == 'room_charge') _loadEligibleRoomChargeGuests(force: true);
       },
     );
   }
@@ -1407,7 +1569,22 @@ class _StationTabState extends ConsumerState<_StationTab> {
     if (amount <= 0) return _snack('Enter a valid amount');
 
     if (_method == 'room_charge') {
-      _showRoomChargeModal(context, ref, bill, amount);
+      if (_selectedRoomChargeGuest == null) {
+        if (_roomChargeGuestsLoading) {
+          return _snack('In-house rooms are still loading');
+        }
+        await _loadEligibleRoomChargeGuests(force: true);
+        if (!mounted) return;
+        if (_selectedRoomChargeGuest == null) {
+          return _snack(
+              'No eligible in-house overnight stays found for room charging');
+        }
+      }
+      await _confirmRoomCharge(
+        bill: bill,
+        guest: _selectedRoomChargeGuest!,
+        amount: amount,
+      );
       return;
     }
 
@@ -1536,6 +1713,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
     }
   }
 
+  // ignore: unused_element, use_build_context_synchronously
   Future<void> _showRoomChargeModal(
       BuildContext context, WidgetRef ref, Map<String, dynamic> bill, num amount) async {
     final nav = ref.read(dashboardNavProvider);
@@ -1782,6 +1960,159 @@ class _StationTabState extends ConsumerState<_StationTab> {
           },
         );
       },
+    );
+  }
+
+  Future<void> _confirmRoomCharge({
+    required Map<String, dynamic> bill,
+    required Map<String, dynamic> guest,
+    required num amount,
+  }) async {
+    if (!mounted) return;
+
+    final guestName = '${guest['guest_name'] ?? 'Guest'}';
+    final roomNo = '${guest['room_number'] ?? '-'}';
+    final bookingRef = '${guest['confirmation_number'] ?? '-'}';
+    final folioBal = _money(guest['folio_balance'] ?? 0);
+    final stayNights = _num(guest['stay_nights']).round();
+    final outletName = _text(bill, ['outlet_name', 'outletName']).isEmpty
+        ? 'Restaurant POS'
+        : _text(bill, ['outlet_name', 'outletName']);
+    final billNo = _text(bill, ['bill_number', 'short_code', 'id']).isEmpty
+        ? 'BILL'
+        : _text(bill, ['bill_number', 'short_code', 'id']);
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogCtx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.bedroom_parent, color: AppColors.kPrimary),
+                SizedBox(width: 8),
+                Text('Confirm Room Charge'),
+              ],
+            ),
+            content: SizedBox(
+              width: 520,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'SELECTED STAY',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          guestName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text('Room $roomNo | Ref: $bookingRef'),
+                        if (stayNights > 0)
+                          Text(
+                            'Stay Length: $stayNights night${stayNights == 1 ? '' : 's'}',
+                          ),
+                        Text(
+                          'Current Folio Balance: $folioBal',
+                          style: TextStyle(color: Colors.grey.shade700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'BILL INFORMATION',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text('Outlet: $outletName'),
+                        Text('Bill #: $billNo'),
+                        Text(
+                          'Amount to Charge: ${_money(amount)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.kPrimary,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade300),
+                    ),
+                    child: Text(
+                      'This charge will be posted to the guest folio for Room $roomNo so it appears on the final invoice at checkout.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.check_circle, size: 16),
+                label: const Text('Confirm Room Charge'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.kPrimary,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => Navigator.pop(dialogCtx, true),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+
+    await _postRoomChargeTransaction(
+      bill: bill,
+      bookingId: '${guest['booking_id'] ?? ''}',
+      roomNumber: roomNo,
+      guestName: guestName,
+      amount: amount,
     );
   }
 

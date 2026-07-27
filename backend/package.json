@@ -1,6 +1,6 @@
 {
   "name": "famous-gate-hotel-backend",
-  "version": "3.9.9.40",
+  "version": "3.9.9.41",
   "description": "Backend API for Kyogong Management System",
   "main": "dist/server.js",
   "scripts": {

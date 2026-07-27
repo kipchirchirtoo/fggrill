@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { AttendanceService } from '../services/attendance.service';
 import { applyBranchFilter } from '../utils/branchIsolation';
+import { requiresPosPinForLogin } from '../utils/posPinRules';
 
 const BRANCH_MANAGER_BLOCKED_USER_ROLES = new Set([
   'super_admin',
@@ -519,13 +520,18 @@ export const createStaffMember = async (
       createAccount === true ||
       createAccount === 'true';
 
-    // Validate POS PIN format and uniqueness immediately if user account is requested
+    const requestedUserRole = user_role || login_role || position;
+    const posPinRequired =
+      shouldCreateUserAccount && requiresPosPinForLogin(requestedUserRole);
+
+    // Validate POS PIN format and uniqueness immediately if the requested
+    // login role actually uses PIN-based POS access.
     let normalizedPin: string | null = null;
-    if (shouldCreateUserAccount) {
+    if (posPinRequired) {
       if (pos_pin === undefined || pos_pin === null || String(pos_pin).trim() === '') {
         res.status(400).json({
           success: false,
-          message: 'POS PIN is required when creating a login account.'
+          message: `POS PIN is required for ${requestedUserRole} logins.`
         });
         return;
       }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
+import 'package:famous_gates_app/core/utils/pos_pin_rules.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
@@ -3081,11 +3082,18 @@ class _BranchManagerDashboardState
                 }
                 if (createAccount) {
                   final p = pinCtrl.text.trim().toUpperCase();
-                  if (p.isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('POS PIN is required when creating a login account')));
+                  final posPinRequired = requiresPosPinForRole(userRole);
+                  if (posPinRequired && p.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'POS PIN is required for ${userRole.replaceAll('_', ' ')} logins',
+                        ),
+                      ),
+                    );
                     return;
                   }
-                  if (!RegExp(r'^[RMNCE]\d{4}$').hasMatch(p)) {
+                  if (p.isNotEmpty && !RegExp(r'^[RMNCE]\d{4}$').hasMatch(p)) {
                     ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
                     return;
                   }

@@ -10,13 +10,19 @@ class DashboardHorizontalAccess extends StatelessWidget {
   const DashboardHorizontalAccess({
     super.key,
     required this.child,
-    this.minContentWidth = 1360,
+    this.minContentWidth = 1560,
+    this.activationBreakpoint = 1480,
+    this.overflowPadding = 220,
     this.bottomSpacing = 10,
+    this.topSpacing = 10,
   });
 
   final Widget child;
   final double minContentWidth;
+  final double activationBreakpoint;
+  final double overflowPadding;
   final double bottomSpacing;
+  final double topSpacing;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +31,10 @@ class DashboardHorizontalAccess extends StatelessWidget {
         final viewportWidth = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
-        final contentWidth = math.max(viewportWidth, minContentWidth);
+        final shouldForceHorizontalAccess = viewportWidth < activationBreakpoint;
+        final contentWidth = shouldForceHorizontalAccess
+            ? math.max(minContentWidth, viewportWidth + overflowPadding)
+            : viewportWidth;
 
         if (contentWidth <= viewportWidth + 1) {
           return child;
@@ -36,6 +45,7 @@ class DashboardHorizontalAccess extends StatelessWidget {
         return StickyHorizontalScrollbar(
           contentWidth: contentWidth,
           bottomSpacing: bottomSpacing,
+          topSpacing: topSpacing,
           child: MediaQuery(
             data: mediaQuery.copyWith(
               size: Size(contentWidth, mediaQuery.size.height),

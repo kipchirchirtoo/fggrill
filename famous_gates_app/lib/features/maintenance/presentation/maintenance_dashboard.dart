@@ -85,13 +85,15 @@ class _MaintenanceDashboardState extends ConsumerState<MaintenanceDashboard> {
             onTabChanged: (i) => setState(() => _tabIndex = i),
           ),
           Expanded(
-            child: IndexedStack(
-              index: _tabIndex,
-              children: const [
-                _WorkOrdersTab(),
-                _AssetsTab(),
-                _ScheduleTab(),
-              ],
+            child: DashboardHorizontalAccess(
+              child: IndexedStack(
+                index: _tabIndex,
+                children: const [
+                  _WorkOrdersTab(),
+                  _AssetsTab(),
+                  _ScheduleTab(),
+                ],
+              ),
             ),
           ),
         ],
