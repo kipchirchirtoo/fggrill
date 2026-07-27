@@ -57,7 +57,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final user = await ref
           .read(authNotifierProvider.notifier)
           .login(email, password, rememberMe: _rememberMe);
-      final route = getRoleRoute(user.role);
+      final route = getRoleRoute(user.role, contextType: user.contextType);
       debugPrint('Backoffice login role=${user.role} route=$route');
       if (mounted) context.go(route);
     } catch (error) {

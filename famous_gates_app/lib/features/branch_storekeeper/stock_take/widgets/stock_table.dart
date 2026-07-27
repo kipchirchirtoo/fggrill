@@ -139,7 +139,7 @@ class _StockTableState extends State<StockTable> {
                 ),
               ),
             ])),
-            for (int _ = 0; _ < (widget.isStorekeeper ? 1 : 8); _++) const DataCell(SizedBox.shrink()),
+            for (int _ = 0; _ < (widget.isStorekeeper ? 1 : 9); _++) const DataCell(SizedBox.shrink()),
           ],
         ));
       }
@@ -249,19 +249,21 @@ class _StockTableState extends State<StockTable> {
                 )),
                 // Opening
                 DataCell(_numCell('${item.openingStock}', isDark)),
-                // Sales
+                // Adds
+                DataCell(_numCell(
+                  item.adds != 0 ? '+${item.adds}' : '0',
+                  isDark,
+                  color: item.adds > 0 ? Colors.green.shade700 : null,
+                )),
+                // Total (opening + adds) — stock available before sales
+                DataCell(_numCell('${item.total}', isDark, bold: true)),
+                // Sales (deducted from Total)
                 DataCell(_numCell(
                   item.sales > 0 ? '-${item.sales}' : '${item.sales}',
                   isDark,
                   color: item.sales > 0 ? Colors.red.shade700 : null,
                 )),
-                // Adds
-                DataCell(_numCell(
-                  item.sdds != 0 ? '+${-item.sdds}' : '0',
-                  isDark,
-                  color: item.sdds < 0 ? Colors.green.shade700 : null,
-                )),
-                // Closing
+                // Closing (= Total - Sales)
                 DataCell(_numCell(
                   '${item.closingStock}',
                   isDark,
@@ -311,7 +313,7 @@ class _StockTableState extends State<StockTable> {
         child: DataTable2(
           columnSpacing: 8,
           horizontalMargin: 8,
-          minWidth: widget.isStorekeeper ? 400 : 980,
+          minWidth: widget.isStorekeeper ? 400 : 1050,
           dataRowHeight: _kRowH,
           headingRowHeight: 32,
           fixedTopRows: 1,
@@ -340,8 +342,9 @@ class _StockTableState extends State<StockTable> {
                   DataColumn2(label: Text('#'),            size: ColumnSize.S, fixedWidth: 32, numeric: true),
                   DataColumn2(label: Text('Product'),      size: ColumnSize.L),
                   DataColumn2(label: Text('Opening'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
-                  DataColumn2(label: Text('Sales'),        size: ColumnSize.S, fixedWidth: 60, numeric: true),
                   DataColumn2(label: Text('Adds'),         size: ColumnSize.S, fixedWidth: 60, numeric: true),
+                  DataColumn2(label: Text('Total'),        size: ColumnSize.S, fixedWidth: 70, numeric: true),
+                  DataColumn2(label: Text('Sales'),        size: ColumnSize.S, fixedWidth: 60, numeric: true),
                   DataColumn2(label: Text('Closing'),      size: ColumnSize.S, fixedWidth: 70, numeric: true),
                   DataColumn2(label: Text('Count'),        size: ColumnSize.M, fixedWidth: 70, numeric: true),
                   DataColumn2(label: Text('Var'),          size: ColumnSize.S, fixedWidth: 60, numeric: true),

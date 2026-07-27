@@ -2965,7 +2965,7 @@ class _BranchManagerDashboardState
     const empTypes = ['permanent', 'contract', 'casual', 'intern', 'part_time'];
     const loginRoles = [
       'waiter', 'bartender', 'cashier', 'receptionist', 'housekeeper',
-      'chef', 'storekeeper', 'kitchen_operations', 'branch_manager',
+      'chef', 'storekeeper', 'kitchen_operations', 'choma_zone_kds', 'branch_manager',
       'hr_manager', 'auditor', 'employee',
     ];
 
@@ -3154,7 +3154,7 @@ class _BranchManagerDashboardState
         : _text(staff, ['role', 'position']).ifEmpty('employee');
     const loginRoleOptions = [
       'waiter', 'bartender', 'cashier', 'receptionist', 'housekeeper',
-      'chef', 'storekeeper', 'kitchen_operations', 'branch_manager',
+      'chef', 'storekeeper', 'kitchen_operations', 'choma_zone_kds', 'branch_manager',
       'hr_manager', 'auditor', 'employee',
     ];
     final passwordController = TextEditingController();

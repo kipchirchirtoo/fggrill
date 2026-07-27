@@ -105,6 +105,7 @@ const allowedRoles = new Set([
   'kitchen',
   'pos_kitchen',
   'kitchen_operations',
+  'choma_zone_kds',
   'head_chef',
   'sous_chef',
   'kyogong_spa_cashier',

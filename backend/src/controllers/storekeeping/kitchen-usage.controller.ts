@@ -490,7 +490,7 @@ export const getBranchStaff = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
+    const isCentral = req.user?.is_central === true || ['super_admin', 'general_manager', 'auditor'].includes(req.user?.role || '');
 
     if (!branchId) {
       if (isCentral) {
@@ -726,7 +726,7 @@ export const getTrackableItems = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
+    const isCentral = req.user?.is_central === true || ['super_admin', 'general_manager', 'auditor'].includes(req.user?.role || '');
 
     if (!branchId) {
       if (isCentral) {

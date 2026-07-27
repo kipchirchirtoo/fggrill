@@ -16,43 +16,40 @@ class AppNotificationButton extends ConsumerWidget {
     final countAsync = ref.watch(unreadNotifCountProvider);
     final count = countAsync.valueOrNull ?? 0;
 
-    return Tooltip(
-      message: '',
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          IconButton(
-            onPressed: () => showAppNotificationPanel(context, ref),
-            icon: Icon(
-              PhosphorIcons.bell(),
-              color: count > 0 ? AppColors.kAccent : iconColor,
-              size: 21,
-            ),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: () => showAppNotificationPanel(context, ref),
+          icon: Icon(
+            PhosphorIcons.bell(),
+            color: count > 0 ? AppColors.kAccent : iconColor,
+            size: 21,
           ),
-          if (count > 0)
-            Positioned(
-              right: 6,
-              top: 6,
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: const BoxDecoration(
-                  color: AppColors.kError,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  count > 99 ? '99+' : '$count',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                  ),
+        ),
+        if (count > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: const BoxDecoration(
+                color: AppColors.kError,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                count > 99 ? '99+' : '$count',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }

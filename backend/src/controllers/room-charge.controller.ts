@@ -304,7 +304,7 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
 
     // Step 8: Create Audit Record
     await client.query(
-      `INSERT INTO audit_logs (user_id, action, resource, details, branch_id, created_at)
+      `INSERT INTO audit_logs (user_id, action, resource, metadata, branch_id, created_at)
        VALUES ($1, 'POST_ROOM_CHARGE', 'folio_transactions', $2, $3, NOW())`,
       [
         userId,
@@ -458,7 +458,7 @@ export const reverseRoomCharge = async (req: Request, res: Response): Promise<vo
 
     // Log Audit
     await client.query(
-      `INSERT INTO audit_logs (user_id, action, resource, details, branch_id, created_at)
+      `INSERT INTO audit_logs (user_id, action, resource, metadata, branch_id, created_at)
        VALUES ($1, 'REVERSE_ROOM_CHARGE', 'folio_transactions', $2, $3, NOW())`,
       [
         userId,

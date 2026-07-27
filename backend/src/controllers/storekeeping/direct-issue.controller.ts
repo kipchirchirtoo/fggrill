@@ -3,6 +3,7 @@ import { supabase } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { logger } from '../../utils/logger';
 import { updateBranchStock } from '../../services/branch-inventory.service';
+import { getCentralWarehouseRecord } from '../../services/inventory-warehouse.service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,6 +60,8 @@ export const createDirectIssue = async (
 
         const branchCode = branchData.code || `BR${branch_id}`;
         const branchName = branchData.name || `Branch ${branch_id}`;
+        const centralWarehouse = await getCentralWarehouseRecord();
+        const centralBranchId = centralWarehouse?.operating_branch_id || req.user?.branch_id || 1;
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const seq = Date.now().toString().slice(-4);
         const issueNumber = `DIS-${branchCode}-${dateStr}-${seq}`;
@@ -80,6 +83,7 @@ export const createDirectIssue = async (
                 reason: reason || 'Direct issue from central store',
                 status: 'DISPATCHED',
                 workflow_status: 'dispatched',
+                fulfilling_warehouse_id: centralWarehouse?.id?.startsWith('legacy-branch-') ? null : (centralWarehouse?.id || null),
                 dispatched_at: now,
                 submitted_to_auditor_at: now
             })
@@ -176,7 +180,7 @@ export const createDirectIssue = async (
 
             // 2. Write central store STOCK_OUT movement record
             supabase.from('branch_stock_movements').insert({
-                branch_id: 1, // central store (branch 1)
+                branch_id: centralBranchId,
                 item_sku: sku,
                 movement_type: 'STOCK_OUT',
                 quantity: issuedQty,

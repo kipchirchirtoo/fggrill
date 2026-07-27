@@ -188,7 +188,7 @@ export const toggleBranchFeature = async (req: Request, res: Response): Promise<
 
     // Log to audit log
     await db.query(
-      `INSERT INTO audit_logs (user_id, action, resource, details, branch_id, created_at)
+      `INSERT INTO audit_logs (user_id, action, resource, metadata, branch_id, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())`,
       [
         userId,

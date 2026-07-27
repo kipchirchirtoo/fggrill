@@ -2765,6 +2765,11 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
                       final index = entry.key;
                       final r = entry.value;
                       return Padding(
+                        // Identity key so deleting a raw-input row reconciles
+                        // by row object, not list position (otherwise each
+                        // Autocomplete keeps the neighbour's text after a
+                        // delete).
+                        key: ObjectKey(r),
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Row(
                           children: [
@@ -2923,7 +2928,7 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
                                 icon:
                                     const Icon(Icons.delete, color: Colors.red),
                                 onPressed: () {
-                                  setState(() => _rawInputs.removeAt(index));
+                                  setState(() => _rawInputs.removeAt(index).dispose());
                                 },
                               ),
                           ],
@@ -3298,6 +3303,12 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
                   .toList();
 
               return Padding(
+                // Identity key so removing a row reconciles by the row object,
+                // not by list position. Without this, each Autocomplete's
+                // internal controller stays put while the data shifts up, so
+                // deleting a row showed the neighbour's values / looked like it
+                // removed from the bottom.
+                key: ObjectKey(row),
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: [
@@ -3331,7 +3342,7 @@ class AddStandardDialogState extends ConsumerState<AddStandardDialog> {
                       icon: const Icon(Icons.close, color: Colors.red),
                       onPressed: () {
                         if (_complexOutputs.length > 1) {
-                          setState(() => _complexOutputs.removeAt(index));
+                          setState(() => _complexOutputs.removeAt(index).dispose());
                         }
                       },
                     )

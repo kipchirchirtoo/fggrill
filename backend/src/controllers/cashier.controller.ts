@@ -8881,6 +8881,14 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     status: isVoided ? 'voided' : (isItemLevelVoid ? 'item_voided' : (o.payment_status === 'paid' ? 'cleared' : o.payment_status)),
                     created_at: o.created_at,
                     bill_date: o.created_at,
+                    // Exact time this bill/ticket was last printed (Kenyan time
+                    // shown client-side) — for cashier accountability, incl.
+                    // recalled bills.
+                    captain_printed_at: o.captain_printed_at || null,
+                    original_bill_printed_at: o.original_bill_printed_at || null,
+                    last_bill_printed_at: o.last_bill_printed_at
+                        || o.original_bill_printed_at || o.captain_printed_at || null,
+                    bill_reprint_count: Number(o.bill_reprint_count || 0),
                     branch_id: shift?.branch_id || effectiveBranchId,
                     outlet_id: o.outlet_id || shift?.outlet_id,
                     outlet_type: outlet?.outlet_type || null,

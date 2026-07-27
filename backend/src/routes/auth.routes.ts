@@ -14,6 +14,7 @@ import {
 } from '../controllers/auth.controller';
 import { protect } from '../middleware/auth';
 import { supabase } from '../config/supabase';
+import { getUserInventoryContexts } from '../services/inventory-warehouse.service';
 
 const router = express.Router();
 
@@ -34,36 +35,10 @@ router.get('/user-roles/:userId', protect, async (req, res, next) => {
       });
     }
 
-    const { data: roleRows, error } = await supabase
-      .from('user_branch_roles')
-      .select('role, branch_id, is_primary, branches(id, name, code)')
-      .eq('user_id', requestedUserId)
-      .order('is_primary', { ascending: false });
-
-    if (error) throw error;
-
-    let roles = (roleRows || []).map((row: any) => {
-      const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
-      return {
-        role: row.role,
-        role_name: row.role,
-        branch_id: row.branch_id,
-        branch_name: branch?.name || null,
-        branch_code: branch?.code || null,
-        is_primary: row.is_primary === true
-      };
+    const roles = await getUserInventoryContexts(requestedUserId, {
+      role: req.user?.role,
+      branch_id: req.user?.branch_id ?? null,
     });
-
-    if (!roles.length && req.user?.id === requestedUserId) {
-      roles = [{
-        role: req.user.role,
-        role_name: req.user.role,
-        branch_id: req.user.branch_id ?? null,
-        branch_name: null,
-        branch_code: null,
-        is_primary: true
-      }];
-    }
 
     res.json({ success: true, roles, data: roles });
   } catch (error) {

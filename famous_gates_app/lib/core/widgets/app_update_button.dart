@@ -97,30 +97,27 @@ class _UpdateButtonBody extends StatelessWidget {
       );
     }
 
-    return Tooltip(
-      message: '',
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          IconButton(
-            onPressed: isBusy ? null : onPressed,
-            icon: _icon(isBusy, hasUpdate, ready, color),
-          ),
-          if (hasUpdate || ready)
-            Positioned(
-              right: 8,
-              top: 8,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: ready ? AppColors.kSuccess : AppColors.kAccent,
-                  shape: BoxShape.circle,
-                ),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: isBusy ? null : onPressed,
+          icon: _icon(isBusy, hasUpdate, ready, color),
+        ),
+        if (hasUpdate || ready)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: ready ? AppColors.kSuccess : AppColors.kAccent,
+                shape: BoxShape.circle,
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../auth/data/auth_repository.dart';
+import '../domain/display_scope.dart';
 import '../domain/models.dart';
 import '../domain/session_models.dart';
 
@@ -50,12 +51,15 @@ class KitchenRepository {
     return '$error';
   }
 
-  Future<List<KitchenOrder>> getOrders() async {
+  Future<List<KitchenOrder>> getOrders({
+    KitchenDisplayScope outletScope = KitchenDisplayScope.restaurant,
+  }) async {
     try {
       final branchId = await _branchId;
       final response =
           await _dio.get('/restaurant/kitchen/orders', queryParameters: {
         if (branchId != null) 'branch_id': branchId,
+        'outlet_scope': outletScope.apiValue,
       });
       return _parseOrders(response.data);
     } catch (e, stackTrace) {
@@ -65,13 +69,17 @@ class KitchenRepository {
     }
   }
 
-  Future<List<KitchenOrder>> getHistory({int limit = 100}) async {
+  Future<List<KitchenOrder>> getHistory({
+    int limit = 100,
+    KitchenDisplayScope outletScope = KitchenDisplayScope.restaurant,
+  }) async {
     try {
       final branchId = await _branchId;
       final response = await _dio
           .get('/restaurant/kitchen/orders/history', queryParameters: {
         if (branchId != null) 'branch_id': branchId,
         'limit': limit,
+        'outlet_scope': outletScope.apiValue,
       });
       return _parseOrders(response.data);
     } catch (e, stackTrace) {
@@ -159,9 +167,14 @@ class KitchenRepository {
         .toList();
   }
 
-  Future<List<Map<String, dynamic>>> getPendingItemVoidsKitchen() async {
+  Future<List<Map<String, dynamic>>> getPendingItemVoidsKitchen({
+    KitchenDisplayScope outletScope = KitchenDisplayScope.restaurant,
+  }) async {
     try {
-      final response = await _dio.get('/pos/voids/pending/kitchen');
+      final response = await _dio.get(
+        '/pos/voids/pending/kitchen',
+        queryParameters: {'outlet_scope': outletScope.apiValue},
+      );
       return _parseMapList(response.data);
     } catch (e) {
       debugPrint('KitchenRepository.getPendingItemVoidsKitchen error: $e');
@@ -190,9 +203,14 @@ class KitchenRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getPendingWholeBillVoidsKitchen() async {
+  Future<List<Map<String, dynamic>>> getPendingWholeBillVoidsKitchen({
+    KitchenDisplayScope outletScope = KitchenDisplayScope.restaurant,
+  }) async {
     try {
-      final response = await _dio.get('/pos/void-requests/pending/kitchen');
+      final response = await _dio.get(
+        '/pos/void-requests/pending/kitchen',
+        queryParameters: {'outlet_scope': outletScope.apiValue},
+      );
       return _parseMapList(response.data);
     } catch (e) {
       debugPrint('KitchenRepository.getPendingWholeBillVoidsKitchen error: $e');
@@ -280,8 +298,9 @@ class KitchenRepository {
   Future<void> configureShiftMode(String shiftMode) async {
     try {
       final branchId = await _branchId;
-      if (branchId == null)
+      if (branchId == null) {
         throw Exception('No branch ID associated with user.');
+      }
       await _dio.post('/kitchen/shifts/shift-mode', data: {
         'branch_id': branchId,
         'shift_mode': shiftMode,
@@ -300,8 +319,9 @@ class KitchenRepository {
   }) async {
     try {
       final branchId = await _branchId;
-      if (branchId == null)
+      if (branchId == null) {
         throw Exception('No branch ID associated with user.');
+      }
 
       final response = await _dio.post('/kitchen/shifts', data: {
         'branch_id': branchId,

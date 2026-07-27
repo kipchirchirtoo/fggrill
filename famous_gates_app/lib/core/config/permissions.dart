@@ -327,6 +327,7 @@ class RolePermissions {
       case UserRole.kitchen:
       case UserRole.kitchenOperations:
       case UserRole.posKitchen:
+      case UserRole.chomaZoneKds:
         return {
           Permission.canViewKitchen,
           Permission.canManageMenu,

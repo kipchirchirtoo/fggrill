@@ -45,6 +45,19 @@ class AuthNotifier extends AsyncNotifier<User?> {
     state = const AsyncValue.data(null);
   }
 
+  Future<List<UserContextAssignment>> fetchAvailableContexts(String userId) {
+    return ref.read(authRepositoryProvider).fetchAvailableContexts(userId);
+  }
+
+  Future<User> switchContext(UserContextAssignment context) async {
+    state = const AsyncValue.loading();
+    final result = await AsyncValue.guard(() {
+      return ref.read(authRepositoryProvider).switchContext(context);
+    });
+    state = result;
+    return result.requireValue;
+  }
+
   /// Called when the network layer discovers the stored token was rejected
   /// (expired/invalid/force-logout) by the backend. The token itself is
   /// already cleared by the caller — this just syncs auth state so the

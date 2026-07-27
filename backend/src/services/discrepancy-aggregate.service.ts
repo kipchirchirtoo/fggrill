@@ -221,7 +221,7 @@ const normalizeBranchScope = (req: Request, explicitBranchId?: number | null) =>
 
   if (!role) return { type: 'global' as const, branchId: undefined };
 
-  const globalRoles = ['super_admin', 'general_manager', 'hr_manager', 'central_storekeeper', 'auditor', 'director'];
+  const globalRoles = ['super_admin', 'general_manager', 'hr_manager', 'auditor', 'director'];
   if (globalRoles.includes(role.toLowerCase())) {
     return { type: 'global' as const, branchId: undefined };
   }

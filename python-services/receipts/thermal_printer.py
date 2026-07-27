@@ -243,7 +243,14 @@ class ThermalPrinter:
             time_str = kenya_dt.strftime('%I:%M %p')
             date_str = kenya_dt.strftime('%m/%d/%Y')
             p.text(f"TIME: {time_str} - {date_str}\n")
-            
+
+            # Exact moment THIS ticket is sent to the printer, in Kenyan time.
+            # For a RECALLED order this is the exact time the recall was
+            # printed — the figure accountability/audits rely on, and it is
+            # deliberately distinct from the order-created TIME above.
+            printed_dt = _now_kenya()
+            p.text(f"PRINTED: {printed_dt.strftime('%I:%M:%S %p - %m/%d/%Y')}\n")
+
             p.text("\n")
             p.text("=" * 32 + "\n")
             p.text("\n")
@@ -400,6 +407,11 @@ class ThermalPrinter:
             p.set(align='right')
             p.text(f"{date_str}\n")
             p.text(f"{time_str}\n")
+            # Exact moment THIS bill copy is printed (Kenyan time). Printed on
+            # every copy — original or reprint/duplicate — so the time of the
+            # last print is always on the bill for accountability.
+            printed_dt = _now_kenya()
+            p.text(f"PRINTED: {printed_dt.strftime('%I:%M:%S %p %m/%d/%Y')}\n")
             p.text("\n")
             
             # === ITEMS ===

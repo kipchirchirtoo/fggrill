@@ -26,10 +26,14 @@ class AuthRepository {
   static const licenseKey = 'fg_license';
   static const userIdKey = 'fg_user_id';
   static const userNameKey = 'fg_user_name';
+  static const primaryRoleKey = 'fg_primary_role';
   static const outletIdKey = 'fg_outlet_id';
   static const outletTypeKey = 'fg_outlet_type';
   static const outletPrefixKey = 'fg_outlet_prefix';
   static const activeShiftIdKey = 'fg_active_shift_id';
+  static const activeContextTypeKey = 'fg_active_context_type';
+  static const activeWarehouseIdKey = 'fg_active_warehouse_id';
+  static const activeWarehouseNameKey = 'fg_active_warehouse_name';
   // Remember-me keys
   static const rememberMeKey = 'fg_remember_me';
   static const rememberedEmailKey = 'fg_remembered_email';
@@ -224,6 +228,12 @@ class AuthRepository {
       userJson['active_outlet_prefix'] ??=
           await storage.read(key: outletPrefixKey);
       userJson['active_shift_id'] ??= await storage.read(key: activeShiftIdKey);
+      userJson['primary_role'] ??= await storage.read(key: primaryRoleKey);
+      userJson['warehouse_id'] ??= await storage.read(key: activeWarehouseIdKey);
+      userJson['warehouse_name'] ??=
+          await storage.read(key: activeWarehouseNameKey);
+      userJson['active_context_type'] ??=
+          await storage.read(key: activeContextTypeKey);
       // Fall back to the persisted role list if the profile endpoint doesn't
       // include all_roles (so multi-role staff keep access after a restart).
       if (userJson['all_roles'] == null && userJson['roles'] == null) {
@@ -265,6 +275,65 @@ class AuthRepository {
     );
     await _writeOptional(storage, supabaseTokenKey, supabaseToken);
     return accessToken;
+  }
+
+  Future<List<UserContextAssignment>> fetchAvailableContexts(String userId) async {
+    final response = await _dio.get('/auth/user-roles/$userId');
+    final root = response.data is Map
+        ? Map<String, dynamic>.from(response.data as Map)
+        : const <String, dynamic>{};
+    final rows = root['roles'] is List
+        ? root['roles'] as List
+        : (root['data'] is List ? root['data'] as List : const []);
+    return rows
+        .whereType<Map>()
+        .map((row) =>
+            UserContextAssignment.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+
+  Future<User> switchContext(UserContextAssignment context) async {
+    final response = await _dio.post('/auth/switch-context', data: {
+      'role': context.role,
+      'branch_id': context.branchId.isEmpty ? null : context.branchId,
+      'warehouse_id': context.warehouseId.isEmpty ? null : context.warehouseId,
+      'context_type': context.contextType,
+    });
+
+    final authData = _authDataFromResponse(response.data);
+    final sessionJson = _sessionJsonFromAuthData(authData);
+    final accessToken = _stringValue(
+      authData['access_token'] ??
+          sessionJson?['access_token'] ??
+          authData['token'] ??
+          authData['session']?['access_token'],
+    );
+    final refreshToken = _stringValue(
+      authData['refresh_token'] ??
+          sessionJson?['refresh_token'] ??
+          authData['session']?['refresh_token'],
+    );
+    final supabaseToken = _stringValue(
+      authData['supabase_token'] ?? sessionJson?['supabase_token'],
+    );
+
+    if (accessToken.isEmpty) {
+      throw Exception('No access token received after switching context');
+    }
+
+    final storage = _ref.read(secureStorageProvider);
+    await storage.write(key: jwtKey, value: accessToken);
+    if (refreshToken.isNotEmpty) {
+      await storage.write(key: refreshKey, value: refreshToken);
+    }
+    await _writeOptional(storage, supabaseTokenKey, supabaseToken);
+
+    final refreshedUser = await getCurrentUser();
+    if (refreshedUser != null) return refreshedUser;
+
+    throw Exception(
+      'Context switched, but the refreshed session could not be loaded',
+    );
   }
 
   Future<LicenseInfo> validateLicense(
@@ -326,9 +395,13 @@ class AuthRepository {
     await storage.write(key: userIdKey, value: user.id);
     await storage.write(key: userNameKey, value: user.name);
     await storage.write(key: roleKey, value: user.role);
+    await storage.write(key: primaryRoleKey, value: user.primaryRole);
     await storage.write(key: rolesKey, value: user.roles.join(','));
     await storage.write(key: branchIdKey, value: user.branchId);
     await storage.write(key: branchNameKey, value: user.branchName);
+    await storage.write(key: activeContextTypeKey, value: user.contextType);
+    await _writeOptional(storage, activeWarehouseIdKey, user.warehouseId);
+    await _writeOptional(storage, activeWarehouseNameKey, user.warehouseName);
     await _writeOptional(storage, outletIdKey, user.outletId);
     await _writeOptional(storage, outletTypeKey, user.outletType);
     await _writeOptional(storage, outletPrefixKey, user.outletPrefix);

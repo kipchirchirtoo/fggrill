@@ -44,15 +44,21 @@ class SummaryCard extends StatelessWidget {
                     const Color(0xFFB3E5FC)),
               ]
             : [
+                // `totalSdds` is stored negated by the callers, so the real
+                // additions are `-totalSdds` and Total available = opening + adds.
                 _Stat('Opening',  '$totalOpening',  Colors.white70, Colors.white),
+                _divider(),
+                _Stat('Adds',     '+${-totalSdds}', Colors.white70,
+                    (-totalSdds) > 0 ? const Color(0xFFC8E6C9) : Colors.white),
+                _divider(),
+                _Stat('Total',    '${totalOpening - totalSdds}', Colors.white70,
+                    Colors.white, bold: true),
                 _divider(),
                 _Stat('Sales',    '-$totalSales',   Colors.white70,
                     totalSales > 0 ? const Color(0xFFFFCDD2) : Colors.white),
                 _divider(),
-                _Stat('Adds',     '+$totalSdds',    Colors.white70,
-                    totalSdds > 0 ? const Color(0xFFC8E6C9) : Colors.white),
-                _divider(),
-                _Stat('Closing',  '$expectedClosing', Colors.white70, Colors.white),
+                _Stat('Closing',  '$expectedClosing', Colors.white70, Colors.white,
+                    bold: true),
                 _divider(),
                 _Stat('Counted',  '$physicalCount', Colors.white70,
                     const Color(0xFFB3E5FC)),

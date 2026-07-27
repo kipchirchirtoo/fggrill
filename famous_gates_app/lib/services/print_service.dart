@@ -144,6 +144,10 @@ class PrintService {
     final money = NumberFormat('#,##0.00', 'en_KE');
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
         .format(_toKenyaTime(sale.createdAt));
+    // Exact moment this bill copy is printed, in Kenyan time — shown on every
+    // copy (original or reprint) so the last print time is always on the bill.
+    final printedStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(_toKenyaTime(DateTime.now()));
 
     final totalAmount = sale.total;
     final baseAmount = totalAmount > 0 ? totalAmount / 1.16 : 0;
@@ -245,6 +249,7 @@ class PrintService {
               if (billCode.isNotEmpty)
                 _infoRow('Bill code:', billCode.toUpperCase()),
               _infoRow('Date:', dateStr),
+              _infoRow('Printed:', printedStr),
               if (tableNumber != null) _infoRow('Table:', tableNumber),
               if (roomNumber != null) _infoRow('Room:', roomNumber),
               if (customerName != null) _infoRow('Customer:', customerName),
@@ -437,6 +442,10 @@ class PrintService {
     final doc = pw.Document();
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
         .format(_toKenyaTime(sale.createdAt));
+    // Exact moment this ticket is printed (Kenyan time). For a RECALLED order
+    // this is the exact time the recall was printed — key for accountability.
+    final printedStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(_toKenyaTime(DateTime.now()));
     final code = (shortCode ?? orderNumber).trim();
 
     // Table/room (when set) ride along on the Type line instead of getting
@@ -482,6 +491,7 @@ class PrintService {
               _dashedLine(context),
               _infoRow('Order #:', orderNumber),
               _infoRow('Time:', dateStr),
+              _infoRow('Printed:', printedStr),
               _infoRow('Type:', typeValue),
               if (customerName != null && customerName.trim().isNotEmpty)
                 _infoRow('Customer:', customerName.trim()),
@@ -550,6 +560,9 @@ class PrintService {
     final money = NumberFormat('#,##0.00', 'en_KE');
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
         .format(_toKenyaTime(createdAt ?? DateTime.now()));
+    // Exact moment this credit-bill copy is printed, in Kenyan time.
+    final printedStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(_toKenyaTime(DateTime.now()));
     final code = (creditNumber ?? '').trim();
 
     pw.MemoryImage? logoImage;
@@ -643,6 +656,7 @@ class PrintService {
               ),
               pw.SizedBox(height: 4),
               _infoRow('Date:', dateStr),
+              _infoRow('Printed:', printedStr),
               if ((sourceReference ?? '').isNotEmpty)
                 _infoRow('Bill Ref:', sourceReference!),
               if ((cashierName ?? '').isNotEmpty)
@@ -757,6 +771,9 @@ class PrintService {
     final money = NumberFormat('#,##0.00', 'en_KE');
     final dateStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
         .format(_toKenyaTime(voidedAt ?? DateTime.now()));
+    // Exact moment this void slip is printed, in Kenyan time.
+    final printedStr = DateFormat('MM/dd/yyyy, hh:mm:ss a')
+        .format(_toKenyaTime(DateTime.now()));
 
     pw.MemoryImage? logoImage;
     try {
@@ -824,6 +841,7 @@ class PrintService {
               pw.SizedBox(height: 4),
               _infoRow('Order #:', orderNumber),
               _infoRow('Voided:', dateStr),
+              _infoRow('Printed:', printedStr),
               if ((stationName ?? '').trim().isNotEmpty)
                 _infoRow('Station:', stationName!.trim()),
               if ((customerName ?? '').trim().isNotEmpty)

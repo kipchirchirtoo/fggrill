@@ -27,7 +27,17 @@ class StockTakeItem {
     required this.category,
   });
 
-  int get closingStock => openingStock - sales - sdds;
+  /// Real additions/restocks into the outlet during the period. `sdds` is
+  /// stored negated by the data mappers (a historical quirk), so `adds`
+  /// exposes the true positive quantity for display and totals.
+  int get adds => -sdds;
+
+  /// Total stock available before sales = opening + additions.
+  int get total => openingStock + adds;
+
+  /// Closing = total available − sales (opening + adds − sales). Equivalent to
+  /// the original `openingStock - sales - sdds` since `sdds == -adds`.
+  int get closingStock => total - sales;
   int get variance => (physicalCount ?? 0) - closingStock;
 
   StockTakeItem copyWith({

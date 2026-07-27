@@ -10,6 +10,10 @@ import * as BranchInventoryService from '../../services/branch-inventory.service
 import * as BranchStockTransferService from '../../services/branch-stock-transfer.service';
 import { isGlobalRole } from '../../utils/branchIsolation';
 import { ensureInventoryLocation } from './items.controller';
+import {
+  KYOGONG_BRANCH_STORE_CUTOVER_AT,
+  shouldUseKyogongBranchCutover,
+} from '../../services/kyogong-branch-cutover.service';
 
 type DispatchRequestItemInput = {
   item_sku?: string;
@@ -54,7 +58,16 @@ export const getBranchStock = async (
       return;
     }
 
-    const data = await BranchInventoryService.getBranchStock(branchId);
+    const applyCutover = shouldUseKyogongBranchCutover({
+      branchId,
+      role: req.user?.role,
+    });
+    const data = await BranchInventoryService.getBranchStock(branchId, applyCutover
+      ? {
+          cutoverEmpty: true,
+          movementsCreatedFrom: KYOGONG_BRANCH_STORE_CUTOVER_AT,
+        }
+      : undefined);
 
     res.status(200).json({
       success: true,
@@ -91,7 +104,16 @@ export const getLowStockItems = async (
       return;
     }
 
-    const lowStock = await BranchInventoryService.getLowStockItems(branchId);
+    const applyCutover = shouldUseKyogongBranchCutover({
+      branchId,
+      role: req.user?.role,
+    });
+    const lowStock = await BranchInventoryService.getLowStockItems(branchId, applyCutover
+      ? {
+          cutoverEmpty: true,
+          movementsCreatedFrom: KYOGONG_BRANCH_STORE_CUTOVER_AT,
+        }
+      : undefined);
 
     res.status(200).json({
       success: true,
@@ -521,7 +543,7 @@ export const createDispatch = async (
     }
 
     // Check if user has permission to create dispatch from central warehouse
-    if (req.user.branch_id !== central.id && !['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user.role)) {
+    if (!req.user?.is_central && !['super_admin', 'general_manager', 'auditor'].includes(req.user.role)) {
       res.status(403).json({
         success: false,
         message: 'You do not have permission to create dispatches from central warehouse'
@@ -707,7 +729,7 @@ export const dispatchItems = async (
     }
 
     // Check if user has permission to dispatch from this branch
-    if (req.user.branch_id !== central.id && !['super_admin', 'general_manager', 'central_storekeeper', 'auditor'].includes(req.user.role)) {
+    if (!req.user?.is_central && !['super_admin', 'general_manager', 'auditor'].includes(req.user.role)) {
       res.status(403).json({
         success: false,
         message: 'You do not have permission to dispatch from central warehouse'
@@ -949,7 +971,13 @@ export const getIncomingDispatches = async (
       return;
     }
 
-    const data = await BranchInventoryService.getIncomingDispatches(branchId);
+    const applyCutover = shouldUseKyogongBranchCutover({
+      branchId,
+      role: req.user?.role,
+    });
+    const data = await BranchInventoryService.getIncomingDispatches(branchId, applyCutover
+      ? { createdFrom: KYOGONG_BRANCH_STORE_CUTOVER_AT }
+      : undefined);
 
     res.status(200).json({
       success: true,
@@ -1035,7 +1063,7 @@ export const getCentralDashboard = async (
       data: {
         stats,
         centralWarehouse: central,
-        branches: branches?.filter(b => !b.is_central_warehouse) || [],
+        branches: branches || [],
         totalItems: stats.totalMasterItems || 0,
         lowStockItems: stats.totalLowStockItems || 0,
         // Compat with frontend expectations
@@ -1060,7 +1088,7 @@ export const getBranchDashboard = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
+    const isCentral = req.user?.is_central === true || ['super_admin', 'general_manager', 'auditor'].includes(req.user?.role || '');
 
     if (!branchId) {
       if (isCentral) {
@@ -1071,7 +1099,16 @@ export const getBranchDashboard = async (
       return;
     }
 
-    const stats = await BranchInventoryService.getBranchDashboardStats(branchId);
+    const applyCutover = shouldUseKyogongBranchCutover({
+      branchId,
+      role: req.user?.role,
+    });
+    const stats = await BranchInventoryService.getBranchDashboardStats(branchId, applyCutover
+      ? {
+          createdFrom: KYOGONG_BRANCH_STORE_CUTOVER_AT,
+          useLiveOnly: true,
+        }
+      : undefined);
 
     // Get branch info
     const { data: branch } = await supabase
@@ -1081,12 +1118,18 @@ export const getBranchDashboard = async (
       .single();
 
     // Get recent movements
-    const { data: movements, error: movementsError } = await supabase
+    let movementsQuery = supabase
       .from('branch_stock_movements')
       .select('*')
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false })
       .limit(10);
+
+    if (applyCutover) {
+      movementsQuery = movementsQuery.gte('created_at', KYOGONG_BRANCH_STORE_CUTOVER_AT);
+    }
+
+    const { data: movements, error: movementsError } = await movementsQuery;
 
     if (movementsError) throw movementsError;
 
@@ -1243,7 +1286,7 @@ export const getStockMovements = async (
 ): Promise<void> => {
   try {
     const branchId = parseInt(req.query.branch_id as string) || req.user?.branch_id;
-    const isCentral = ['super_admin', 'general_manager', 'auditor', 'central_storekeeper'].includes(req.user?.role || '');
+    const isCentral = req.user?.is_central === true || ['super_admin', 'general_manager', 'auditor'].includes(req.user?.role || '');
     const limit = parseInt(req.query.limit as string) || 50;
 
     if (!branchId) {
@@ -1256,12 +1299,18 @@ export const getStockMovements = async (
     }
 
     // Fetch movements first
-    const { data: movements, error: moveError } = await supabase
+    let movementsQuery = supabase
       .from('branch_stock_movements')
       .select('*')
       .eq('branch_id', branchId)
       .order('created_at', { ascending: false })
       .limit(limit);
+
+    if (shouldUseKyogongBranchCutover({ branchId, role: req.user?.role })) {
+      movementsQuery = movementsQuery.gte('created_at', KYOGONG_BRANCH_STORE_CUTOVER_AT);
+    }
+
+    const { data: movements, error: moveError } = await movementsQuery;
 
     if (moveError) throw moveError;
 

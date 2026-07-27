@@ -351,6 +351,56 @@ class CashierRepository {
   Future<Map<String, dynamic>> getMpesaStatus(String checkoutRequestId) =>
       _getMap('/payments/mpesa/status/$checkoutRequestId');
 
+  /// Load purchase orders the storekeeper has created — cashier uses these
+  /// to issue petty-cash payments against approved/received POs.
+  Future<List<Map<String, dynamic>>> getPendingPOs({int? branchId}) async {
+    // The "From PO" shortcut is a convenience only. Most cashier roles are not
+    // authorised on the storekeeping endpoint (403), so treat any failure as
+    // "no approved POs" rather than breaking the whole Expenses tab.
+    try {
+      return await _getList('/storekeeping/purchase-orders', query: {
+        if (branchId != null) 'branch_id': branchId,
+        'status': 'approved',
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Fetch petty-cash expenses already recorded against [shiftId].
+  Future<List<Map<String, dynamic>>> getShiftExpenses(String shiftId) async {
+    try {
+      return await _getList('/kyogong/petty-cash',
+          query: {'shift_id': shiftId, 'limit': '200'});
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Record a petty-cash expense for the current shift.
+  Future<Map<String, dynamic>> recordShiftExpense({
+    required String shiftId,
+    required num amount,
+    required String category,
+    required String description,
+    String? paidToName,
+    String? receiptNumber,
+    String? poReference,
+  }) {
+    return _postMap('/kyogong/petty-cash', {
+      'shift_id': shiftId,
+      'amount': amount,
+      'category': category,
+      'description': description,
+      if (paidToName != null && paidToName.isNotEmpty)
+        'paid_to_name': paidToName,
+      if (receiptNumber != null && receiptNumber.isNotEmpty)
+        'receipt_number': receiptNumber,
+      if (poReference != null && poReference.isNotEmpty)
+        'po_reference': poReference,
+    });
+  }
+
   Future<Map<String, dynamic>> getPosInsights({
     int? branchId,
     int days = 7,

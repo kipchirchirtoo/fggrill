@@ -40,6 +40,7 @@ enum CashierTab {
   exchangeRequests,
   voided,
   credit,
+  expenses,
   shifts,
   barcode
 }
@@ -74,6 +75,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
     CashierTab.exchangeRequests,
     CashierTab.voided,
     CashierTab.credit,
+    CashierTab.expenses,
     CashierTab.shifts,
   ];
 
@@ -197,6 +199,11 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         label: 'Paid Credits',
         icon: Icons.payments,
         content: _RequiresOpenShift(child: _PaidBillsTab()),
+      ),
+      const DashboardTab(
+        label: 'Expenses',
+        icon: Icons.receipt_long,
+        content: _RequiresOpenShift(child: _ShiftExpensesTab()),
       ),
       const DashboardTab(
         label: 'Shifts',
@@ -364,7 +371,7 @@ class _RequiresOpenShift extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Request a cashier shift opening from the Shifts tab. A branch accountant must approve it before cashier operations can begin.',
+                        'Open a shift from the Shifts tab. Once the required stocktake(s) are submitted, your shift opens immediately — no branch accountant approval needed.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppColors.kTextSecondary),
                       ),
@@ -843,7 +850,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Scanner configuration',
                   icon: const Icon(Icons.settings, size: 20),
                   onPressed: _openScannerConfig,
                 ),
@@ -859,7 +865,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     'Order number, short code, barcode, invoice, booking, POS ref',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
-                  tooltip: 'Scan barcode with camera',
                   icon: const Icon(Icons.qr_code_scanner),
                   onPressed: _loading ? null : _scanWithCamera,
                 ),
@@ -932,7 +937,6 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Refresh unpaid bills',
                   onPressed: () => ref.invalidate(cashierUnpaidBillsProvider),
                   icon: const Icon(Icons.refresh, size: 18),
                 ),
@@ -1071,6 +1075,18 @@ class _StationTabState extends ConsumerState<_StationTab> {
                                           icon: Icons.storefront,
                                           text: _text(row,
                                               ['station_name', 'outlet_name']),
+                                        ),
+                                      // Last printed (exact Kenyan time) — for
+                                      // accountability, incl. recalled bills.
+                                      if (_text(row, [
+                                        'last_bill_printed_at',
+                                        'captain_printed_at',
+                                        'original_bill_printed_at'
+                                      ]).isNotEmpty)
+                                        _MiniMeta(
+                                          icon: Icons.print_outlined,
+                                          text:
+                                              'Printed ${_date(row['last_bill_printed_at'] ?? row['captain_printed_at'] ?? row['original_bill_printed_at'])}',
                                         ),
                                       // Customer (only when not redundant with waiter)
                                       if (customer.isNotEmpty &&
@@ -2318,7 +2334,6 @@ class _PosCartTabState extends ConsumerState<_PosCartTab> {
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     IconButton.filledTonal(
-                      tooltip: 'Add item',
                       onPressed: () => _addCatalogItem(item),
                       icon: const Icon(Icons.add, size: 18),
                     ),
@@ -4357,18 +4372,11 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                 onChanged: (value) => setState(() => _status = value ?? 'all'),
               ),
               const SizedBox(width: 12),
-              Tooltip(
-                message: hasPendingShift
-                    ? 'Your shift opening request is waiting for branch accountant approval'
-                    : hasOpenShift
-                        ? 'Close the current open shift before starting another'
-                        : 'Request approval to open a cashier shift',
-                child: ElevatedButton.icon(
-                  onPressed: canRequestShift ? _startShift : null,
-                  icon: const Icon(Icons.play_arrow, size: 16),
-                  label: Text(
-                      hasPendingShift ? 'Awaiting Approval' : 'Request Shift'),
-                ),
+              ElevatedButton.icon(
+                onPressed: canRequestShift ? _startShift : null,
+                icon: const Icon(Icons.play_arrow, size: 16),
+                label: Text(
+                    hasPendingShift ? 'Awaiting Approval' : 'Open Shift'),
               ),
             ],
           ),
@@ -4696,14 +4704,15 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
 
   Future<void> _startShift() async {
     final opening =
-        await _numberDialog(context, 'Request Shift Opening', 'Opening float');
+        await _numberDialog(context, 'Open Shift', 'Opening float');
     if (opening == null) return;
     try {
       await ref.read(cashierRepositoryProvider).startShift(opening);
       ref.invalidate(cashierShiftsProvider);
-      _snack('Shift opening requested. Wait for branch accountant approval.');
+      ref.invalidate(cashierCurrentShiftProvider);
+      _snack('Shift opened — you can start cashier operations.');
     } catch (error) {
-      _snack('Start shift failed: ${apiErrorMessage(error)}');
+      _snack('Open shift failed: ${apiErrorMessage(error)}');
     }
   }
 
@@ -5231,6 +5240,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   final cardLogged = TextEditingController();
   final mpesaSummaryRef = TextEditingController();
   final cardBatchRef = TextEditingController();
+  final notesCtrl = TextEditingController();
 
   final creditStaffId = TextEditingController();
   final creditName = TextEditingController();
@@ -5238,8 +5248,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
   final paidStaffId = TextEditingController();
   final paidName = TextEditingController();
   final paidAmount = TextEditingController();
-  final expenseDescription = TextEditingController();
-  final expenseAmount = TextEditingController();
   final staffOptions = _shiftStaffMembers(staffMembers);
   final creditEntries = _shiftCreditEntries(
     shift,
@@ -5251,6 +5259,7 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
     detailKeys: const ['paid_bills_details', 'paid_bills'],
     staffMembers: staffOptions,
   );
+  // Expenses are recorded mid-shift in the Expenses tab; loaded here read-only.
   final expenseEntries = _shiftExpenseEntries(shift);
 
   void disposeAll() {
@@ -5259,14 +5268,13 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
     cardLogged.dispose();
     mpesaSummaryRef.dispose();
     cardBatchRef.dispose();
+    notesCtrl.dispose();
     creditStaffId.dispose();
     creditName.dispose();
     creditAmount.dispose();
     paidStaffId.dispose();
     paidName.dispose();
     paidAmount.dispose();
-    expenseDescription.dispose();
-    expenseAmount.dispose();
   }
 
   return showDialog<Map<String, dynamic>>(
@@ -5367,7 +5375,11 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           spacing: 12,
                           runSpacing: 12,
                           children: [
-                            _amountField(cashAtHand, 'Cash at hand (including Opening Float)',
+                            _amountField(cashAtHand, 'Cash at hand (incl. Opening Float)',
+                                onChanged: (_) => setDialogState(() {})),
+                            _amountField(mpesaLogged, 'M-Pesa total collected',
+                                onChanged: (_) => setDialogState(() {})),
+                            _amountField(cardLogged, 'Card total collected',
                                 onChanged: (_) => setDialogState(() {})),
                           ],
                         ),
@@ -5430,38 +5442,43 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                             ),
                           ],
                         ),
+                        if (expenseEntries.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          Text('Expenses recorded this shift (read-only)',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Recorded via the Expenses tab during the shift. Total reduces expected cash.',
+                            style: TextStyle(
+                                color: AppColors.kTextSecondary, fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          ...expenseEntries.map((e) => Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                                child: Row(children: [
+                                  Expanded(child: Text(e.description)),
+                                  Text(e.paymentMethod.toUpperCase(),
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.kTextSecondary)),
+                                  const SizedBox(width: 12),
+                                  Text(_money(e.amount),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600)),
+                                ]),
+                              )),
+                        ],
                         const SizedBox(height: 24),
-                        Text('Expenses',
+                        Text('Notes',
                             style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Petty purchases, fuel, etc. paid out of this shift\'s collections — reduces the matching sales total.',
-                          style: TextStyle(
-                              color: AppColors.kTextSecondary, fontSize: 12),
-                        ),
-                        const SizedBox(height: 12),
-                        _expenseEntryPanel(
-                          context,
-                          description: expenseDescription,
-                          amount: expenseAmount,
-                          entries: expenseEntries,
-                          onAdd: (method) => setDialogState(() {
-                            final amount =
-                                num.tryParse(expenseAmount.text.trim()) ?? 0;
-                            if (amount <= 0 ||
-                                expenseDescription.text.trim().isEmpty) {
-                              return;
-                            }
-                            expenseEntries.add(_ShiftExpenseEntry(
-                              description: expenseDescription.text.trim(),
-                              amount: amount,
-                              paymentMethod: method,
-                            ));
-                            expenseDescription.clear();
-                            expenseAmount.clear();
-                          }),
-                          onRemove: (index) => setDialogState(
-                              () => expenseEntries.removeAt(index)),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: notesCtrl,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            hintText: 'Handover notes, observations…',
+                          ),
                         ),
                       ],
                     ),
@@ -5488,9 +5505,13 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                 num.tryParse(cashAtHand.text.trim()) ?? 0,
                             'actual_cash_counted':
                                 num.tryParse(cashAtHand.text.trim()) ?? 0,
-                            'actual_mpesa_logged': null,
-                            'actual_card_logged': null,
-                            'notes': '',
+                            'cash_at_hand':
+                                num.tryParse(cashAtHand.text.trim()) ?? 0,
+                            'actual_mpesa_logged':
+                                num.tryParse(mpesaLogged.text.trim()),
+                            'actual_card_logged':
+                                num.tryParse(cardLogged.text.trim()),
+                            'notes': notesCtrl.text.trim(),
                             'credit_bills_taken': creditBillsTotal,
                             'credit_bills_count': creditEntries.length,
                             'credit_bills_details': creditEntries
@@ -5509,8 +5530,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                 .toList(),
                             'unpaid_bills_value': creditBillsTotal,
                             'unpaid_bills_count': creditEntries.length,
-                            'cash_at_hand':
-                                num.tryParse(cashAtHand.text.trim()) ?? 0,
                             if (mpesaSummaryRef.text.trim().isNotEmpty)
                               'mpesa_summary_ref': mpesaSummaryRef.text.trim(),
                             if (cardBatchRef.text.trim().isNotEmpty)
@@ -5842,12 +5861,10 @@ class _CashierBarcodeScannerScreenState
         title: const Text('Scan Barcode'),
         actions: [
           IconButton(
-            tooltip: 'Toggle torch',
             icon: const Icon(Icons.flash_on),
             onPressed: () => _controller.toggleTorch(),
           ),
           IconButton(
-            tooltip: 'Switch camera',
             icon: const Icon(Icons.cameraswitch),
             onPressed: () => _controller.switchCamera(),
           ),
@@ -6352,6 +6369,14 @@ class _BillList extends StatelessWidget {
                 if (row['is_waiter_order'] == true)
                   'Waiter': _text(row, ['waiter_name']),
                 'Date': _date(row['bill_date'] ?? row['created_at']),
+                if (_text(row, [
+                  'last_bill_printed_at',
+                  'captain_printed_at',
+                  'original_bill_printed_at'
+                ]).isNotEmpty)
+                  'Last printed': _date(row['last_bill_printed_at'] ??
+                      row['captain_printed_at'] ??
+                      row['original_bill_printed_at']),
                 'Total': _money(row['total_amount'] ?? row['amount']),
                 'Paid': _money(row['paid_amount'] ?? row['amount_paid']),
                 'Balance': _money(row['balance_amount'] ?? row['balance']),
@@ -7069,7 +7094,6 @@ class _PaymentLineEditor extends StatelessWidget {
               if (canRemove) ...[
                 const SizedBox(width: 6),
                 IconButton(
-                  tooltip: 'Remove payment line',
                   onPressed: onRemove,
                   icon: const Icon(Icons.close),
                 ),
@@ -7777,6 +7801,535 @@ String _customerName(Map<String, dynamic> bill) {
 
 // Captain orders placed for a walk-in customer (no named guest) still carry
 // the waiter who rang them in — pull it out wherever the lookup response
+// ─── Shift Expenses / Petty Cash Tab ────────────────────────────────────────
+
+const _kExpenseCategories = [
+  'SUPPLIES',
+  'FUEL',
+  'TRANSPORT',
+  'REPAIRS',
+  'MAINTENANCE',
+  'OTHER',
+];
+
+class _ShiftExpensesTab extends ConsumerStatefulWidget {
+  const _ShiftExpensesTab();
+
+  @override
+  ConsumerState<_ShiftExpensesTab> createState() => _ShiftExpensesTabState();
+}
+
+class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
+  List<Map<String, dynamic>> _expenses = [];
+  List<Map<String, dynamic>> _pendingPOs = [];
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
+
+  // Manual entry
+  final _descCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  final _paidToCtrl = TextEditingController();
+  final _receiptCtrl = TextEditingController();
+  final _poRefCtrl = TextEditingController();
+  String _category = 'SUPPLIES';
+
+  // PO mode
+  Map<String, dynamic>? _selectedPO;
+  bool _poMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _descCtrl.dispose();
+    _amountCtrl.dispose();
+    _paidToCtrl.dispose();
+    _receiptCtrl.dispose();
+    _poRefCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _openShiftId() {
+    final shift = ref.read(cashierCurrentShiftProvider).valueOrNull;
+    if (shift == null) return null;
+    return _text(shift, ['id']);
+  }
+
+  Future<void> _load() async {
+    final shiftId = _openShiftId();
+    if (shiftId == null || shiftId.isEmpty) {
+      setState(() { _loading = false; });
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      final repo = ref.read(cashierRepositoryProvider);
+      final results = await Future.wait([
+        repo.getShiftExpenses(shiftId),
+        repo.getPendingPOs(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _expenses = results[0];
+        _pendingPOs = results[1];
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  Future<void> _recordExpense() async {
+    final shiftId = _openShiftId();
+    if (shiftId == null || shiftId.isEmpty) return;
+
+    final String description;
+    final num amount;
+    final String? paidTo;
+    final String? receipt;
+    final String? poRef;
+
+    if (_poMode && _selectedPO != null) {
+      final po = _selectedPO!;
+      description = 'PO #${_text(po, ['po_number', 'reference', 'id'])}: '
+          '${_text(po, ['supplier_name', 'vendor_name', 'description'])}';
+      amount = _num(po['total_amount'] ?? po['amount'] ?? 0);
+      paidTo = _text(po, ['supplier_name', 'vendor_name']);
+      receipt = _text(po, ['po_number', 'reference']);
+      poRef = _text(po, ['po_number', 'reference', 'id']);
+    } else {
+      final raw = num.tryParse(_amountCtrl.text.trim());
+      if (raw == null || raw <= 0 || _descCtrl.text.trim().isEmpty) {
+        AppNotifier.show(context, 'Enter description and amount');
+        return;
+      }
+      description = _descCtrl.text.trim();
+      amount = raw;
+      paidTo = _paidToCtrl.text.trim().isEmpty ? null : _paidToCtrl.text.trim();
+      receipt =
+          _receiptCtrl.text.trim().isEmpty ? null : _receiptCtrl.text.trim();
+      poRef = _poRefCtrl.text.trim().isEmpty ? null : _poRefCtrl.text.trim();
+    }
+
+    setState(() => _saving = true);
+    try {
+      final repo = ref.read(cashierRepositoryProvider);
+      await repo.recordShiftExpense(
+        shiftId: shiftId,
+        amount: amount,
+        category: _category,
+        description: description,
+        paidToName: paidTo,
+        receiptNumber: receipt,
+        poReference: poRef,
+      );
+      _descCtrl.clear();
+      _amountCtrl.clear();
+      _paidToCtrl.clear();
+      _receiptCtrl.clear();
+      _poRefCtrl.clear();
+      setState(() { _selectedPO = null; _saving = false; });
+      await _load();
+      if (mounted) AppNotifier.show(context, 'Expense recorded — cash reduced');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      AppNotifier.show(context, 'Failed: ${apiErrorMessage(e)}');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shift = ref.watch(cashierCurrentShiftProvider).valueOrNull;
+    final openingFloat = _num(shift?['opening_float']);
+    final cashSales = _num(shift?['total_cash_sales'] ?? shift?['total_cash']);
+    final expensesTotal =
+        _expenses.fold<num>(0, (s, e) => s + _num(e['amount']));
+    final cashInDrawer = openingFloat + cashSales - expensesTotal;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header + cash position ──────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Expenses & Petty Cash',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 4),
+                    Text(
+                      'All expenses are paid in CASH and reduce the cash drawer balance.',
+                      style: const TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Refresh'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // ── Cash position summary ───────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
+            ),
+            child: Wrap(
+              spacing: 32,
+              runSpacing: 8,
+              children: [
+                _statChip('Opening Float', _money(openingFloat)),
+                _statChip('Cash Sales', _money(cashSales)),
+                _statChip('Expenses Out', _money(expensesTotal),
+                    accent: Colors.red.shade700),
+                _statChip('Est. Cash in Drawer', _money(cashInDrawer),
+                    accent: Theme.of(context).colorScheme.primary, bold: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // ── Record new expense ──────────────────────────────────────────
+          Text('Record Expense',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          // Mode toggle
+          Row(
+            children: [
+              FilterChip(
+                avatar: const Icon(Icons.edit_note, size: 16),
+                label: const Text('Manual entry'),
+                selected: !_poMode,
+                onSelected: (_) => setState(() {
+                  _poMode = false;
+                  _selectedPO = null;
+                }),
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                avatar: const Icon(Icons.description_outlined, size: 16),
+                label: const Text('From PO'),
+                selected: _poMode,
+                onSelected: _pendingPOs.isEmpty
+                    ? null
+                    : (_) => setState(() => _poMode = true),
+              ),
+              if (_pendingPOs.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Text('(No approved POs)',
+                      style: TextStyle(
+                          color: AppColors.kTextSecondary, fontSize: 12)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_poMode) ...[
+            // PO selector
+            DropdownButtonFormField<Map<String, dynamic>>(
+              value: _selectedPO,
+              hint: const Text('Select an approved PO…'),
+              isExpanded: true,
+              items: _pendingPOs.map((po) {
+                final num = _text(po, ['po_number', 'reference', 'id']);
+                final supplier =
+                    _text(po, ['supplier_name', 'vendor_name', 'description']);
+                final amt = _num(po['total_amount'] ?? po['amount']);
+                return DropdownMenuItem(
+                  value: po,
+                  child: Text('$num — $supplier  (${_money(amt)})'),
+                );
+              }).toList(),
+              onChanged: (v) => setState(() => _selectedPO = v),
+              decoration: const InputDecoration(labelText: 'Purchase Order'),
+            ),
+            if (_selectedPO != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        'PO #${_text(_selectedPO!, ['po_number', 'reference'])}',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(
+                        'Supplier: ${_text(_selectedPO!, ['supplier_name', 'vendor_name'])}'),
+                    Text(
+                        'Amount: ${_money(_num(_selectedPO!['total_amount'] ?? _selectedPO!['amount']))}',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ] else ...[
+            // Manual entry fields
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 320,
+                  child: TextField(
+                    controller: _descCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Description / Reason *'),
+                  ),
+                ),
+                SizedBox(
+                  width: 160,
+                  child: TextField(
+                    controller: _amountCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Amount (KES) *'),
+                  ),
+                ),
+                SizedBox(
+                  width: 200,
+                  child: TextField(
+                    controller: _paidToCtrl,
+                    decoration: const InputDecoration(labelText: 'Paid to (name)'),
+                  ),
+                ),
+                SizedBox(
+                  width: 180,
+                  child: TextField(
+                    controller: _receiptCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Receipt No.'),
+                  ),
+                ),
+                SizedBox(
+                  width: 220,
+                  child: TextField(
+                    controller: _poRefCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'PO Reference (optional)',
+                      helperText: 'Tag a purchase order for traceability',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          // Category + submit row
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 200,
+                child: DropdownButtonFormField<String>(
+                  value: _category,
+                  items: _kExpenseCategories
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _category = v ?? _category),
+                  decoration: const InputDecoration(labelText: 'Category'),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _saving ? null : _recordExpense,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.payments, size: 16),
+                label: Text(_saving ? 'Recording…' : 'Record Cash Payment'),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade700,
+                    foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          // ── Recorded expenses list ──────────────────────────────────────
+          Row(
+            children: [
+              Text('Recorded this Shift',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const Spacer(),
+              if (_expenses.isNotEmpty)
+                Chip(
+                  label: Text(
+                      '${_expenses.length} entries  •  ${_money(expensesTotal)}',
+                      style: const TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_loading)
+            const Center(
+                child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator()))
+          else if (_error != null)
+            Text(_error!,
+                style: const TextStyle(color: Colors.red))
+          else if (_expenses.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                  child: Text('No expenses recorded yet for this shift.',
+                      style: TextStyle(color: AppColors.kTextSecondary))),
+            )
+          else
+            Card(
+              child: Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                            flex: 3,
+                            child: Text('Description',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12))),
+                        Expanded(
+                            child: Text('Category',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12))),
+                        Expanded(
+                            child: Text('Paid To',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12))),
+                        SizedBox(
+                            width: 100,
+                            child: Text('Amount',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12))),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ..._expenses.asMap().entries.map((e) {
+                    final row = e.value;
+                    return Container(
+                      color: e.key.isEven ? null : Colors.grey.shade50,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                              flex: 3,
+                              child: Text(
+                                  _text(row, [
+                                    'purpose_description',
+                                    'description'
+                                  ]),
+                                  style: const TextStyle(fontSize: 13))),
+                          Expanded(
+                              child: Text(
+                                  _text(row, [
+                                    'purpose_category',
+                                    'category'
+                                  ]),
+                                  style: const TextStyle(fontSize: 12))),
+                          Expanded(
+                              child: Text(
+                                  _text(row, ['paid_to_name', 'paid_to']),
+                                  style: const TextStyle(fontSize: 12))),
+                          SizedBox(
+                              width: 100,
+                              child: Text(
+                                _money(_num(row['amount'])),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                    color: Colors.red),
+                              )),
+                        ],
+                      ),
+                    );
+                  }),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                            flex: 5,
+                            child: Text('Total',
+                                style:
+                                    TextStyle(fontWeight: FontWeight.w700))),
+                        SizedBox(
+                          width: 100,
+                          child: Text(
+                            _money(expensesTotal),
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                                color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statChip(String label, String value,
+      {Color? accent, bool bold = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 11, color: AppColors.kTextSecondary)),
+        Text(value,
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+                color: accent)),
+      ],
+    );
+  }
+}
+
 // nests it (top-level for credit bills, `order`/`booking` for POS/hotel).
 String _waiterName(Map<String, dynamic> bill) {
   final direct = _text(bill, ['waiter_name']);

@@ -1,4 +1,4 @@
-String getRoleRoute(String role) {
+String getRoleRoute(String role, {String contextType = 'branch'}) {
   switch (role) {
     case 'super_admin':
       return '/superadmin';
@@ -56,6 +56,8 @@ String getRoleRoute(String role) {
       return '/pos/kyogong-sports-bar';
     case 'choma_zone_cashier':
       return '/pos/choma-zone';
+    case 'choma_zone_kds':
+      return '/kitchen/choma-zone';
     case 'waiter':
     case 'waitress':
     case 'head_waiter':

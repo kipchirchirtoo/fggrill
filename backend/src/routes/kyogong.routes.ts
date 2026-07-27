@@ -1,6 +1,7 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
+import { CASHIER_STATION_ROLES } from '../utils/posStationAccess';
 
 // Import controllers
 import {
@@ -443,6 +444,17 @@ router.put('/spa-services/:id',
 // PETTY CASH ROUTES
 // ============================================
 
+// Cashier roles that record/read their OWN shift petty-cash (expenses).
+// The controller scopes every read and write to the caller's branch_id and the
+// supplied shift_id, so these routes are safe for any branch's cashier — the
+// "kyogong" namespace is historical; the handler itself is branch-neutral.
+//
+// Sourced from the CANONICAL cashier-role list (posStationAccess.ts) so this
+// scales with the estate: onboarding a new branch or cashier variant only
+// requires updating that one map — every petty-cash guard below picks it up
+// automatically, with zero edits to this file.
+const PETTY_CASH_CASHIER_ROLES = CASHIER_STATION_ROLES as UserRole[];
+
 // Get petty cash categories
 router.get('/petty-cash/categories',
   authorize([
@@ -453,7 +465,8 @@ router.get('/petty-cash/categories',
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.ACCOUNTANT,
     UserRole.AUDITOR,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    ...PETTY_CASH_CASHIER_ROLES
   ]),
   getPettyCashCategories
 );
@@ -468,7 +481,8 @@ router.get('/petty-cash/summary',
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.ACCOUNTANT,
     UserRole.AUDITOR,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    ...PETTY_CASH_CASHIER_ROLES
   ]),
   getPettyCashSummary
 );
@@ -483,7 +497,8 @@ router.get('/petty-cash',
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.ACCOUNTANT,
     UserRole.AUDITOR,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    ...PETTY_CASH_CASHIER_ROLES
   ]),
   getPettyCashEntries
 );
@@ -493,7 +508,8 @@ router.post('/petty-cash',
   authorize([
     UserRole.SUPER_ADMIN,
     UserRole.RECEPTIONIST,
-    UserRole.KYOGONG_RECEPTION_CASHIER
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    ...PETTY_CASH_CASHIER_ROLES
   ]),
   recordPettyCash
 );

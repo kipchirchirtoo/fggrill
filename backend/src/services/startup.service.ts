@@ -18,9 +18,6 @@ class StartupService {
     // Patch broken DB triggers/columns from migration 0003
     await this.applyDbPatches();
 
-    // Keep the central store pinned to Kyogong before any stock reconciliation runs.
-    await this.enforceKyogongCentralBranch();
-
     // Backfill inventory_balances from posted GRNs (handles first-run where location didn't exist yet)
     try {
       const backfillResult = await runGRNStockBackfill();
@@ -97,78 +94,6 @@ class StartupService {
       logger.info('DB patch applied: _sync_grn_cols trigger fixed');
     } catch (err: any) {
       logger.warn('DB patch skipped (non-critical):', err.message);
-    }
-  }
-
-  private async enforceKyogongCentralBranch(): Promise<void> {
-    try {
-      await db.query(`
-        DO $$
-        DECLARE
-          v_central_branch_id integer;
-        BEGIN
-          SELECT id
-          INTO v_central_branch_id
-          FROM public.branches
-          WHERE id = 1
-            AND (upper(code) = 'KYO' OR upper(name) = 'KYOGONG')
-          LIMIT 1;
-
-          IF v_central_branch_id IS NULL THEN
-            SELECT id
-            INTO v_central_branch_id
-            FROM public.branches
-            WHERE upper(code) = 'KYO' OR upper(name) = 'KYOGONG'
-            ORDER BY id
-            LIMIT 1;
-          END IF;
-
-          IF v_central_branch_id IS NULL THEN
-            RAISE EXCEPTION 'Kyogong branch not found; cannot configure central warehouse';
-          END IF;
-
-          UPDATE public.branches
-          SET
-            is_central_warehouse = (id = v_central_branch_id),
-            is_main_branch = CASE WHEN id = v_central_branch_id THEN true ELSE is_main_branch END,
-            updated_at = now()
-          WHERE is_central_warehouse IS DISTINCT FROM (id = v_central_branch_id)
-             OR (id = v_central_branch_id AND is_main_branch IS DISTINCT FROM true);
-
-          UPDATE public.users
-          SET
-            branch_id = v_central_branch_id,
-            updated_at = now()
-          WHERE role = 'central_storekeeper'
-            AND branch_id IS DISTINCT FROM v_central_branch_id;
-
-          INSERT INTO public.inventory_locations (
-            branch_id,
-            location_code,
-            name,
-            location_type,
-            is_active,
-            metadata
-          )
-          VALUES (
-            v_central_branch_id,
-            'CENTRAL-STORE-' || v_central_branch_id,
-            'Central Store',
-            'central_store',
-            true,
-            '{}'::jsonb
-          )
-          ON CONFLICT (branch_id, location_code)
-          DO UPDATE SET
-            name = excluded.name,
-            location_type = excluded.location_type,
-            is_active = true,
-            updated_at = now();
-        END $$;
-      `);
-      logger.info('Central warehouse guard applied: Kyogong is central branch');
-    } catch (err: any) {
-      logger.warn('Central warehouse guard skipped (non-critical):', err.message);
     }
   }
 

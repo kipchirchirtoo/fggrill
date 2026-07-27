@@ -149,6 +149,39 @@ async function getOutletItem(outletItemId: string | null | undefined): Promise<J
   return result.rows[0] || null;
 }
 
+// Resolve the sellable outlet item an output should credit. The branch-store
+// issue picker can surface menu items whose id is NOT a pos_outlet_items id,
+// which previously resolved to null — silently deducting branch stock without
+// crediting the outlet. Fall back to matching by SKU, then by normalized name,
+// within the destination outlet so a real pos_outlet_items row is found.
+async function resolveOutletItemForOutput(
+  outletItemId: string | null | undefined,
+  outletId: string | null | undefined,
+  sku?: string | null,
+  name?: string | null
+): Promise<JsonRecord | null> {
+  const direct = await getOutletItem(outletItemId);
+  if (direct) return direct;
+  if (!outletId) return null;
+  const trimmedSku = (sku || '').trim();
+  if (trimmedSku) {
+    const bySku = await db.query(
+      'SELECT * FROM pos_outlet_items WHERE outlet_id = $1 AND sku = $2 ORDER BY updated_at DESC LIMIT 1',
+      [outletId, trimmedSku]
+    );
+    if (bySku.rows[0]) return bySku.rows[0];
+  }
+  const trimmedName = (name || '').trim();
+  if (trimmedName) {
+    const byName = await db.query(
+      'SELECT * FROM pos_outlet_items WHERE outlet_id = $1 AND lower(btrim(name)) = lower(btrim($2)) ORDER BY updated_at DESC LIMIT 1',
+      [outletId, trimmedName]
+    );
+    if (byName.rows[0]) return byName.rows[0];
+  }
+  return null;
+}
+
 async function buildRecipeInputsFromOutputs(outputs: JsonRecord[]): Promise<JsonRecord[]> {
   const inputsBySku = new Map<string, JsonRecord>();
 
@@ -545,6 +578,28 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
   const productionArea = textValue(input.production_area ?? input.productionArea, 'branch_store');
   const batchReference = textValue(input.batch_reference ?? input.batchReference, productionNumber);
 
+  // A POS outlet issue deducts branch stock (inputs) then credits the outlet
+  // (outputs). If an output can't be matched to a real sellable outlet item,
+  // the credit was silently skipped and branch stock vanished. Validate every
+  // output resolves BEFORE any stock moves, and fail loudly otherwise.
+  if (productionArea === 'pos_outlet_issue') {
+    for (const row of outputs) {
+      const resolved = await resolveOutletItemForOutput(
+        row.outlet_item_id ?? row.outletItemId,
+        destinationOutletId,
+        textValue(row.item_sku ?? row.output_sku ?? row.sku),
+        textValue(row.item_name ?? row.output_name)
+      );
+      if (!resolved) {
+        const label = textValue(row.item_name ?? row.output_name ?? row.item_sku ?? row.sku) || 'item';
+        throw new AppError(
+          `Cannot issue "${label}" — no matching sellable item exists in this outlet. Sync or create the POS outlet item first, then re-issue.`,
+          400
+        );
+      }
+    }
+  }
+
   // Resolve active cashier shift if not explicitly provided
   let shiftId = input.shift_id ?? input.shiftId ?? null;
   if (!shiftId && destinationOutletId) {
@@ -670,7 +725,12 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
     : 0;
 
   for (const row of outputs) {
-    const outletItem = await getOutletItem(row.outlet_item_id ?? row.outletItemId);
+    const outletItem = await resolveOutletItemForOutput(
+      row.outlet_item_id ?? row.outletItemId,
+      destinationOutletId,
+      textValue(row.item_sku ?? row.output_sku ?? row.sku),
+      textValue(row.item_name ?? row.output_name)
+    );
     const sku = textValue(row.item_sku ?? row.output_sku ?? row.sku ?? outletItem?.sku);
     const quantity = numberValue(row.quantity_produced ?? row.output_quantity ?? row.quantity);
     if (!sku || quantity <= 0) throw new AppError('Output SKU and quantity are required', 400);

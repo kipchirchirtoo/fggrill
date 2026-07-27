@@ -9,9 +9,11 @@ import notificationService from './notification.service';
 import { AppError } from '../middleware/errorHandler';
 import * as InventoryFoundationService from './inventory-foundation.service';
 import { recordBarStockMovement } from './unified-bar-stock.service';
-
-const KYOGONG_CENTRAL_BRANCH_ID = 1;
-const KYOGONG_BRANCH_CODE = 'KYO';
+import {
+  getCanonicalCentralWarehouseLocation,
+  getCentralWarehouseRecord,
+} from './inventory-warehouse.service';
+import { KYOGONG_BRANCH_STORE_CUTOVER_AT } from './kyogong-branch-cutover.service';
 
 // ============================================================
 // TYPES
@@ -78,35 +80,35 @@ type LiveBranchBalanceRow = {
   unitCost: number;
 };
 
-async function getBranchLocationContext(branchId: number): Promise<{
+async function getBranchLocationContext(
+  branchId: number,
+  options?: { warehouseId?: string | null; forceWarehouse?: boolean }
+): Promise<{
   isCentralStore: boolean;
   locationId?: string;
 }> {
-  const { data: branchRow, error: branchError } = await supabase
-    .from('branches')
-    .select('is_central_warehouse, is_main_branch')
-    .eq('id', branchId)
-    .maybeSingle();
-
-  if (branchError) throw branchError;
-
-  const isCentralStore =
-    branchId === KYOGONG_CENTRAL_BRANCH_ID ||
-    branchRow?.is_central_warehouse === true;
-  const locationType = isCentralStore ? 'central_store' : 'branch_store';
+  if (options?.forceWarehouse || options?.warehouseId) {
+    const { id } = await getCanonicalCentralWarehouseLocation();
+    return {
+      isCentralStore: true,
+      locationId: id || undefined,
+    };
+  }
 
   const { data: locRow, error: locError } = await supabase
     .from('inventory_locations')
     .select('id')
     .eq('branch_id', branchId)
-    .eq('location_type', locationType)
+    .eq('location_type', 'branch_store')
+    .eq('is_active', true)
+    .order('location_code')
     .limit(1)
     .maybeSingle();
 
   if (locError) throw locError;
 
   return {
-    isCentralStore,
+    isCentralStore: false,
     locationId: locRow?.id,
   };
 }
@@ -163,7 +165,11 @@ async function getLiveBranchBalancesBySku(branchId: number): Promise<Map<string,
   return result;
 }
 
-export async function resolveBranchStockSource(branchId: number, itemSku: string): Promise<BranchStockSource> {
+export async function resolveBranchStockSource(
+  branchId: number,
+  itemSku: string,
+  options?: { warehouseId?: string | null; forceWarehouse?: boolean }
+): Promise<BranchStockSource> {
   const [branchStockRes, itemRes, locationContext] = await Promise.all([
     supabase
       .from('branch_stock')
@@ -176,7 +182,7 @@ export async function resolveBranchStockSource(branchId: number, itemSku: string
       .select('id')
       .eq('sku', itemSku)
       .maybeSingle(),
-    getBranchLocationContext(branchId)
+    getBranchLocationContext(branchId, options)
   ]);
 
   if (branchStockRes.error) throw branchStockRes.error;
@@ -406,7 +412,10 @@ export async function postGrnFoundationMovements(params: {
 /**
  * Get stock for a specific branch
  */
-export async function getBranchStock(branchId: number) {
+export async function getBranchStock(
+  branchId: number,
+  options?: { cutoverEmpty?: boolean; movementsCreatedFrom?: string | null }
+) {
   const [branchStockRes, liveBalances] = await Promise.all([
     supabase
       .from('branch_stock')
@@ -444,9 +453,21 @@ export async function getBranchStock(branchId: number) {
     });
   }
 
+  if (options?.cutoverEmpty && liveBalances.size === 0) return [];
   if (stockRows.length === 0) return [];
 
   const skus = [...new Set(stockRows.map((row: any) => row.item_sku).filter(Boolean))];
+
+  let dispatchMovementsQuery = supabase
+    .from('branch_stock_movements')
+    .select('item_sku')
+    .eq('branch_id', branchId)
+    .in('movement_type', ['DISPATCH_RECEIVE', 'RECEIVE_FROM_SUPPLIER', 'SUPPLIER_RECEIPT'])
+    .in('item_sku', skus);
+
+  if (options?.movementsCreatedFrom) {
+    dispatchMovementsQuery = dispatchMovementsQuery.gte('created_at', options.movementsCreatedFrom);
+  }
 
   const [simpleItemsRes, inventoryItemsRes, dispatchMovementsRes] = await Promise.all([
     supabase
@@ -457,12 +478,7 @@ export async function getBranchStock(branchId: number) {
       .from('inventory_items')
       .select('sku, item_name, description, category, unit, default_unit_cost, store_type, reorder_level')
       .in('sku', skus),
-    supabase
-      .from('branch_stock_movements')
-      .select('item_sku')
-      .eq('branch_id', branchId)
-      .in('movement_type', ['DISPATCH_RECEIVE', 'RECEIVE_FROM_SUPPLIER', 'SUPPLIER_RECEIPT'])
-      .in('item_sku', skus)
+    dispatchMovementsQuery
   ]);
 
   if (simpleItemsRes.error) throw simpleItemsRes.error;
@@ -520,8 +536,11 @@ export async function getBranchStock(branchId: number) {
 /**
  * Get low stock items for a branch
  */
-export async function getLowStockItems(branchId: number) {
-  const stock = await getBranchStock(branchId);
+export async function getLowStockItems(
+  branchId: number,
+  options?: { cutoverEmpty?: boolean; movementsCreatedFrom?: string | null }
+) {
+  const stock = await getBranchStock(branchId, options);
   return stock
     .filter((item: any) => Number(item.quantity ?? 0) <= Number(item.reorder_level ?? 10))
     .sort((left: any, right: any) => Number(left.quantity ?? 0) - Number(right.quantity ?? 0));
@@ -1024,7 +1043,11 @@ export async function createStockRequest(
 /**
  * Get stock requests for a branch (or all branches if branchId is null)
  */
-export async function getRequests(branchId: number | null, status?: string) {
+export async function getRequests(
+  branchId: number | null,
+  status?: string,
+  options?: { createdFrom?: string | null }
+) {
   let query = supabase
     .from('stock_requests')
     .select('*')
@@ -1036,6 +1059,10 @@ export async function getRequests(branchId: number | null, status?: string) {
 
   if (status) {
     query = query.eq('status', status);
+  }
+
+  if (options?.createdFrom) {
+    query = query.gte('created_at', options.createdFrom);
   }
 
   const { data: requests, error } = await query;
@@ -1370,6 +1397,7 @@ export async function createDispatchFromRequest(
   estimatedDelivery?: string,
   notes?: string
 ) {
+  const centralWarehouse = await getCentralWarehouseRecord();
   // Generate dispatch number
   const dispatchNumber = await generateDispatchNumber(toBranchCode);
 
@@ -1380,6 +1408,7 @@ export async function createDispatchFromRequest(
       dispatch_number: dispatchNumber,
       stock_request_id: requestId,
       from_branch_id: fromBranchId,
+      source_warehouse_id: centralWarehouse?.id?.startsWith('legacy-branch-') ? null : (centralWarehouse?.id || null),
       to_branch_id: toBranchId,
       created_by: userId,
       status: 'READY', // Changed from PENDING to READY as per user workflow
@@ -1431,6 +1460,7 @@ export async function createDispatchFromRequest(
     .update({
       status: 'DISPATCHED',
       workflow_status: 'packing',
+      fulfilling_warehouse_id: centralWarehouse?.id?.startsWith('legacy-branch-') ? null : (centralWarehouse?.id || null),
       sent_to_central_store_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
@@ -1452,11 +1482,13 @@ export async function createDirectDispatch(
   items: DispatchItem[],
   options?: DirectDispatchOptions
 ): Promise<Record<string, unknown>> {
+  const centralWarehouse = await getCentralWarehouseRecord();
   const dispatchNumber = await generateDispatchNumber(toBranchCode);
   const dispatchPayload: Record<string, unknown> = {
     dispatch_number: dispatchNumber,
     stock_request_id: null,
     from_branch_id: fromBranchId,
+    source_warehouse_id: centralWarehouse?.id?.startsWith('legacy-branch-') ? null : (centralWarehouse?.id || null),
     to_branch_id: toBranchId,
     created_by: userId,
     status: 'READY',
@@ -1580,6 +1612,11 @@ export async function dispatchItems(
       let stockSource: BranchStockSource;
       try {
         stockSource = await resolveBranchStockSource(dispatch.from_branch_id, item.item_sku);
+        if (dispatch.source_warehouse_id) {
+          stockSource = await resolveBranchStockSource(dispatch.from_branch_id, item.item_sku, {
+            warehouseId: dispatch.source_warehouse_id
+          });
+        }
       } catch (error: any) {
         stockErrors.push(`[${item.item_sku}] Failed to verify stock: ${error.message}`);
         continue;
@@ -1995,14 +2032,23 @@ export async function confirmDelivery(
 /**
  * Get incoming dispatches for a branch
  */
-export async function getIncomingDispatches(branchId: number) {
+export async function getIncomingDispatches(
+  branchId: number,
+  options?: { createdFrom?: string | null }
+) {
   // dispatch_notes table: to_branch_id, from_branch_id, status (uppercase)
-  const { data: dispatches, error } = await supabase
+  let query = supabase
     .from('dispatch_notes')
     .select('*')
     .eq('to_branch_id', branchId)
     .in('status', ['IN_TRANSIT', 'DISPATCHED', 'DELIVERED', 'CONFIRMED', 'READY'])
     .order('dispatched_at', { ascending: false, nullsFirst: false });
+
+  if (options?.createdFrom) {
+    query = query.gte('created_at', options.createdFrom);
+  }
+
+  const { data: dispatches, error } = await query;
 
   if (error) throw error;
   if (!dispatches || dispatches.length === 0) return [];
@@ -2141,56 +2187,44 @@ export async function getDispatchHistory(fromBranchId: number, status?: string, 
  * Get central warehouse branch
  */
 export async function getCentralWarehouse() {
-  const { data: kyogong, error: kyogongError } = await supabase
+  const warehouse = await getCentralWarehouseRecord();
+  if (!warehouse?.operating_branch_id) return null;
+
+  const { data: branch, error } = await supabase
     .from('branches')
     .select('*')
-    .eq('id', KYOGONG_CENTRAL_BRANCH_ID)
-    .maybeSingle();
-
-  if (kyogongError) throw kyogongError;
-
-  if (kyogong && (kyogong.code === KYOGONG_BRANCH_CODE || String(kyogong.name || '').toLowerCase() === 'kyogong')) {
-    if (!kyogong.is_central_warehouse) {
-      logger.warn('Kyogong branch found but is_central_warehouse=false; treating Kyogong as central warehouse');
-    }
-    return kyogong;
-  }
-
-  const { data, error } = await supabase
-    .from('branches')
-    .select('*')
-    .eq('is_central_warehouse', true)
+    .eq('id', warehouse.operating_branch_id)
     .maybeSingle();
 
   if (error) throw error;
+  if (!branch) return null;
 
-  if (data) return data;
-
-  // Fallback: use the main branch if no central warehouse is designated
-  logger.warn('No central warehouse found, falling back to is_main_branch=true');
-  const { data: mainBranch, error: mainError } = await supabase
-    .from('branches')
-    .select('*')
-    .eq('is_main_branch', true)
-    .order('id', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (mainError) throw mainError;
-  return mainBranch;
+  return {
+    ...branch,
+    warehouse_id: warehouse.id,
+    warehouse_code: warehouse.code,
+    warehouse_name: warehouse.name,
+    operating_branch_id: warehouse.operating_branch_id,
+  };
 }
 
 /**
  * Check if user is central storekeeper
  */
 export async function isCentralStorekeeper(userId: string, branchId: number): Promise<boolean> {
-  const { data: branch } = await supabase
-    .from('branches')
-    .select('is_central_warehouse')
-    .eq('id', branchId)
+  const warehouse = await getCentralWarehouseRecord();
+  if (!warehouse) return false;
+
+  const { data: assignment, error } = await supabase
+    .from('warehouse_user_assignments')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('warehouse_id', warehouse.id)
+    .limit(1)
     .maybeSingle();
 
-  return branch?.is_central_warehouse === true;
+  if (!error && assignment?.id) return true;
+  return branchId === warehouse.operating_branch_id;
 }
 
 /**
@@ -2212,10 +2246,13 @@ export async function getAllBranches() {
  */
 export async function getCentralDashboardStats() {
   try {
+    const { id: centralLocationId } = await getCanonicalCentralWarehouseLocation();
     const [pendingRequests, inTransit, lowStock, recentDispatches, totalMaster] = await Promise.all([
       supabase.from('stock_requests').select('*', { count: 'exact', head: true }).in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL']),
       supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).in('status', ['READY', 'DISPATCHED', 'IN_TRANSIT']),
-      supabase.from('branch_stock').select('*', { count: 'exact', head: true }).lte('quantity', 10), // Threshold default
+      centralLocationId
+        ? supabase.from('inventory_balances').select('*', { count: 'exact', head: true }).eq('location_id', centralLocationId).lte('current_quantity', 10)
+        : supabase.from('branch_stock').select('*', { count: 'exact', head: true }).eq('branch_id', 1).lte('quantity', 10),
       supabase.from('dispatch_notes').select('*', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
       // branch_id IS NULL = the shared central catalog. Branch-tagged rows
       // (e.g. bar drinks auto-synced from a branch's own menu) are that
@@ -2260,20 +2297,64 @@ export async function getCentralDashboardStats() {
 /**
  * Get dashboard stats for branch
  */
-export async function getBranchDashboardStats(branchId: number) {
-  const [totalItemsRes, allStockRes, pendingRequestsRes, incomingDispatchesRes] = await Promise.all([
-    supabase.from('branch_stock').select('id', { count: 'exact', head: true }).eq('branch_id', branchId),
-    supabase.from('branch_stock').select('id, quantity, reorder_level').eq('branch_id', branchId),
-    supabase.from('stock_requests').select('id', { count: 'exact', head: true }).eq('requesting_branch_id', branchId).in('status', ['PENDING', 'PENDING_AUDIT', 'APPROVED', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL']),
-    supabase.from('dispatch_notes').select('id', { count: 'exact', head: true }).eq('to_branch_id', branchId).eq('status', 'IN_TRANSIT')
+export async function getBranchDashboardStats(
+  branchId: number,
+  options?: { createdFrom?: string | null; useLiveOnly?: boolean }
+) {
+  const shouldUseCutover = options?.useLiveOnly === true;
+  const movementsCreatedFrom = shouldUseCutover ? (options?.createdFrom || KYOGONG_BRANCH_STORE_CUTOVER_AT) : null;
+  const liveStock = shouldUseCutover
+    ? await getBranchStock(branchId, {
+        cutoverEmpty: true,
+        movementsCreatedFrom,
+      })
+    : null;
+
+  let pendingRequestsQuery = supabase
+    .from('stock_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('requesting_branch_id', branchId)
+    .in('status', ['PENDING', 'PENDING_AUDIT', 'APPROVED', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL']);
+
+  let incomingDispatchesQuery = supabase
+    .from('dispatch_notes')
+    .select('id', { count: 'exact', head: true })
+    .eq('to_branch_id', branchId)
+    .eq('status', 'IN_TRANSIT');
+
+  if (options?.createdFrom) {
+    pendingRequestsQuery = pendingRequestsQuery.gte('created_at', options.createdFrom);
+    incomingDispatchesQuery = incomingDispatchesQuery.gte('created_at', options.createdFrom);
+  }
+
+  const [pendingRequestsRes, incomingDispatchesRes] = await Promise.all([
+    pendingRequestsQuery,
+    incomingDispatchesQuery,
   ]);
 
-  // Low stock = items where quantity <= reorder_level
-  const allStock = allStockRes.data || [];
-  const lowStockCount = allStock.filter(item => Number(item.quantity || 0) <= Number(item.reorder_level || 10)).length;
+  let totalItems = 0;
+  let lowStockCount = 0;
+
+  if (liveStock) {
+    totalItems = liveStock.length;
+    lowStockCount = liveStock.filter(
+      (item: any) => Number(item.quantity ?? 0) <= Number(item.reorder_level ?? 10),
+    ).length;
+  } else {
+    const [totalItemsRes, allStockRes] = await Promise.all([
+      supabase.from('branch_stock').select('id', { count: 'exact', head: true }).eq('branch_id', branchId),
+      supabase.from('branch_stock').select('id, quantity, reorder_level').eq('branch_id', branchId),
+    ]);
+
+    totalItems = totalItemsRes.count || 0;
+    const allStock = allStockRes.data || [];
+    lowStockCount = allStock.filter(
+      item => Number(item.quantity || 0) <= Number(item.reorder_level || 10),
+    ).length;
+  }
 
   return {
-    totalItems: totalItemsRes.count || 0,
+    totalItems,
     lowStock: lowStockCount,
     lowStockItems: lowStockCount,
     pendingRequests: pendingRequestsRes.count || 0,

@@ -46,6 +46,22 @@ const normalizeKitchenStatus = (value: any): string => {
   return ['pending', 'confirmed'].includes(status) ? 'pending' : status;
 };
 
+type KitchenOutletScope = 'restaurant' | 'choma_zone';
+
+const normalizeKitchenOutletScope = (value: any): KitchenOutletScope => {
+  return String(value || '').trim().toLowerCase() === 'choma_zone'
+    ? 'choma_zone'
+    : 'restaurant';
+};
+
+const shouldIncludeRestaurantOrders = (scope: KitchenOutletScope): boolean =>
+  scope === 'restaurant';
+
+const matchesKitchenOutletScope = (
+  outletType: unknown,
+  scope: KitchenOutletScope,
+): boolean => String(outletType || '').trim().toLowerCase() === scope;
+
 const activeKitchenStatuses = new Set(['pending', 'preparing', 'ready', 'recalled', 'void_requested', 'cancelled', 'voided']);
 const KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS = 36;
 
@@ -367,27 +383,32 @@ router.get('/reports/daily-sales',
 
 // Kitchen Display - Get active orders (no join, avoids FK issues)
 router.get('/kitchen/orders',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
   async (req, res) => {
     try {
       const branchId = resolveKitchenBranchId(req);
+      const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
       const stopSignalSince = new Date(Date.now() - KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+      let orders: any[] = [];
 
-      let ordersQuery = supabase
-        .from('restaurant_orders')
-        .select('*')
-        .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'cancelled', 'voided'])
-        .order('created_at', { ascending: true });
+      if (shouldIncludeRestaurantOrders(outletScope)) {
+        let ordersQuery = supabase
+          .from('restaurant_orders')
+          .select('*')
+          .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'cancelled', 'voided'])
+          .order('created_at', { ascending: true });
 
-      if (branchId) {
-        ordersQuery = ordersQuery.eq('branch_id', branchId);
+        if (branchId) {
+          ordersQuery = ordersQuery.eq('branch_id', branchId);
+        }
+
+        const { data: restaurantOrders, error: ordersError } = await ordersQuery;
+        if (ordersError) throw ordersError;
+        orders = restaurantOrders || [];
       }
 
-      const { data: orders, error: ordersError } = await ordersQuery;
-      if (ordersError) throw ordersError;
-
       // Fetch order items separately to avoid FK join issues
-      const orderIds = (orders || []).map((o: any) => o.id);
+      const orderIds = orders.map((o: any) => o.id);
       let allItems: any[] = [];
       let itemsError: any = null;
       if (orderIds.length) {
@@ -409,7 +430,7 @@ router.get('/kitchen/orders',
         itemsByOrder[item.order_id].push(item);
       }
 
-      const ordersWithTime = (orders || []).map((order: any) => {
+      const ordersWithTime = orders.map((order: any) => {
         const items = itemsByOrder[order.id] || [];
         return {
           ...order,
@@ -449,7 +470,7 @@ router.get('/kitchen/orders',
         const restaurantShiftIds = (outletShifts || [])
           .filter((shift: any) => {
             const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-            return String(outlet?.outlet_type || '').toLowerCase() === 'restaurant';
+            return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
           })
           .map((shift: any) => shift.id);
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
@@ -493,6 +514,7 @@ router.get('/kitchen/orders',
 
           posOrdersWithTime = (posOrders || []).filter(isKitchenVisiblePosOrder).map((order: any) => {
             const shift = shiftsById.get(order.shift_id) || {};
+            const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             const orderItems = Array.isArray(order.items) ? order.items : [];
             const itemVoidsForOrder = itemVoidsByOrder[order.id] || {};
             return {
@@ -503,6 +525,8 @@ router.get('/kitchen/orders',
               short_code: order.short_code,
               branch_id: shift.branch_id,
               outlet_id: order.outlet_id,
+              outlet_type: shiftOutlet?.outlet_type || null,
+              outlet_name: shiftOutlet?.name || null,
               shift_id: order.shift_id,
               order_type: posOrderType(order),
               table_number: posOrderTableNumber(order),
@@ -569,31 +593,37 @@ router.get('/kitchen/orders',
 
 // Kitchen Display - Get completed restaurant order history (restaurant only)
 router.get('/kitchen/orders/history',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.AUDITOR]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS, UserRole.AUDITOR]),
   async (req, res) => {
     try {
       const branchId = resolveKitchenBranchId(req);
+      const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 250);
       // Scoped to the current kitchen shift so History and Order Intelligence
       // reset per shift instead of accumulating across days indefinitely.
       const historySince = await resolveKitchenHistoryWindow(branchId);
 
-      let ordersQuery = supabase
-        .from('restaurant_orders')
-        .select('*')
-        .in('status', ['served', 'delivered', 'completed', 'paid', 'cancelled', 'voided'])
-        .gte('created_at', historySince)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      let orders: any[] = [];
 
-      if (branchId) {
-        ordersQuery = ordersQuery.eq('branch_id', branchId);
+      if (shouldIncludeRestaurantOrders(outletScope)) {
+        let ordersQuery = supabase
+          .from('restaurant_orders')
+          .select('*')
+          .in('status', ['served', 'delivered', 'completed', 'paid', 'cancelled', 'voided'])
+          .gte('created_at', historySince)
+          .order('created_at', { ascending: false })
+          .limit(limit);
+
+        if (branchId) {
+          ordersQuery = ordersQuery.eq('branch_id', branchId);
+        }
+
+        const { data: restaurantOrders, error: ordersError } = await ordersQuery;
+        if (ordersError) throw ordersError;
+        orders = restaurantOrders || [];
       }
 
-      const { data: orders, error: ordersError } = await ordersQuery;
-      if (ordersError) throw ordersError;
-
-      const orderIds = (orders || []).map((o: any) => o.id);
+      const orderIds = orders.map((o: any) => o.id);
       let allItems: any[] = [];
       if (orderIds.length) {
         const itemsResult = await supabase
@@ -612,7 +642,7 @@ router.get('/kitchen/orders/history',
         itemsByOrder[item.order_id].push(item);
       }
 
-      const history = (orders || []).map((order: any) => {
+      const history = orders.map((order: any) => {
         const items = itemsByOrder[order.id] || [];
         return {
           ...order,
@@ -651,7 +681,7 @@ router.get('/kitchen/orders/history',
         const restaurantShiftIds = (outletShifts || [])
           .filter((shift: any) => {
             const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-            return String(outlet?.outlet_type || '').toLowerCase() === 'restaurant';
+            return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
           })
           .map((shift: any) => shift.id);
         const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
@@ -670,6 +700,7 @@ router.get('/kitchen/orders/history',
 
           posHistory = (posOrders || []).map((order: any) => {
             const shift = shiftsById.get(order.shift_id) || {};
+            const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             const orderItems = Array.isArray(order.items) ? order.items : [];
             return {
               id: `pos:${order.id}`,
@@ -679,6 +710,8 @@ router.get('/kitchen/orders/history',
               short_code: order.short_code,
               branch_id: shift.branch_id,
               outlet_id: order.outlet_id,
+              outlet_type: shiftOutlet?.outlet_type || null,
+              outlet_name: shiftOutlet?.name || null,
               shift_id: order.shift_id,
               order_type: posOrderType(order),
               table_number: posOrderTableNumber(order),
@@ -735,7 +768,7 @@ router.get('/kitchen/orders/history',
 
 // Kitchen Display - Update prep status without clearing cashier payment state.
 router.put('/kitchen/orders/:orderId/status',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
   async (req, res, next) => {
     try {
       const { orderId } = req.params;
@@ -775,7 +808,7 @@ router.put('/kitchen/orders/:orderId/status',
 // won't be reprinted on the next poll or after the KDS screen remounts
 // (e.g. the operator logging out and back in).
 router.put('/kitchen/orders/:orderId/printed',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
   async (req, res, next) => {
     try {
       const { orderId } = req.params;
@@ -805,7 +838,7 @@ router.put('/kitchen/orders/:orderId/printed',
 
 // Kitchen Display - Mark item as ready
 router.put('/kitchen/orders/:orderId/items/:itemId/ready',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN]),
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
   async (req, res, next) => {
     try {
       const { orderId, itemId } = req.params;

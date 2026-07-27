@@ -8,6 +8,7 @@ import {
   setModuleBranchOnCreate,
   SourceModule,
 } from "../../middleware/moduleAccess";
+import { getCentralWarehouseRecord } from "../../services/inventory-warehouse.service";
 
 const toNumber = (value: any): number => {
   const parsed = Number(value);
@@ -665,17 +666,9 @@ export const receivePurchaseOrder = async (
     // Determine destination branch.
     let targetBranchId = req.user?.branch_id;
     if (!targetBranchId) {
-      const { data: central, error } = await supabase
-        .from("branches")
-        .select("id")
-        .eq("is_central_warehouse", true)
-        .single();
-      if (error) {
-        console.error("Database error:", error);
-        throw error;
-      }
-      if (central) {
-        targetBranchId = central.id;
+      const centralWarehouse = await getCentralWarehouseRecord();
+      if (centralWarehouse?.operating_branch_id) {
+        targetBranchId = centralWarehouse.operating_branch_id;
       } else {
         throw new AppError(
           "User has no branch, and no central store is configured",

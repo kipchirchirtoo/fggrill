@@ -26,6 +26,7 @@ enum UserRole {
   posKitchen('pos_kitchen'),
   kitchen('kitchen'),
   kitchenOperations('kitchen_operations'),
+  chomaZoneKds('choma_zone_kds'),
   bartender('bartender'),
   waiter('waiter'),
   waitress('waitress'),
@@ -131,6 +132,8 @@ enum UserRole {
         return 'Kitchen';
       case UserRole.kitchenOperations:
         return 'Kitchen Operations';
+      case UserRole.chomaZoneKds:
+        return 'Choma Zone KDS';
       case UserRole.bartender:
         return 'Bartender';
       case UserRole.waiter:
@@ -265,6 +268,7 @@ enum UserRole {
         chef.value,
         cook.value,
         posKitchen.value,
+        chomaZoneKds.value,
       };
 
   static Set<String> get receptionRoles => {
@@ -366,6 +370,8 @@ enum UserRole {
       case UserRole.posKitchen:
       case UserRole.kitchenOperations:
         return '/kitchen';
+      case UserRole.chomaZoneKds:
+        return '/kitchen/choma-zone';
       case UserRole.centralStorekeeper:
       case UserRole.centralOperationsManager:
         return '/central-store';

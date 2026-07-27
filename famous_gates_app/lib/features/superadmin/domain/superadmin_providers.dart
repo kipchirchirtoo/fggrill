@@ -153,9 +153,19 @@ final systemHealthProvider =
 // ── Global Users Provider ───────────────────────────────────────────────────
 final globalUsersProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final repo = ref.read(superadminGodRepositoryProvider);
-  final branches = await repo.getBranches();
-  return {'users': [], 'data': branches};
+  final service = ref.read(userServiceProvider);
+  final response = await service.getUsers(page: 1, limit: 500);
+  final mapped = _toMap(response, 'data');
+  final rows = mapped['data'] is List
+      ? List<dynamic>.from(mapped['data'] as List)
+      : mapped['users'] is List
+          ? List<dynamic>.from(mapped['users'] as List)
+          : const <dynamic>[];
+  return {
+    ...mapped,
+    'data': rows,
+    'users': rows,
+  };
 });
 
 // ── Branches Provider ───────────────────────────────────────────────────────

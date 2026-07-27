@@ -6736,18 +6736,88 @@ Future<void> _deleteGuest(BuildContext context, WidgetRef ref, Guest guest,
 
 Future<void> _checkoutRoom(BuildContext context, WidgetRef ref, Room room,
     VoidCallback onSuccess) async {
-  final bookings =
-      await ref.read(receptionRepositoryProvider).getRoomBookings(room.id);
-  final active =
-      bookings.where((b) => _text(b, ['status']) == 'checked_in').firstOrNull;
-  if (active != null) {
-    await ref.read(receptionRepositoryProvider).checkOut('${active['id']}');
+  final repo = ref.read(receptionRepositoryProvider);
+  try {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Loading guest details for checkout...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final bookingsMap = await repo.getRoomBookings(room.id);
+    final activeMap = bookingsMap
+        .where((b) => _text(b, ['status']) == 'checked_in')
+        .firstOrNull;
+
+    Booking? booking;
+    if (activeMap != null) {
+      booking = Booking.fromJson(activeMap);
+    } else {
+      final checkedInList = await repo.getBookings(status: 'checked_in');
+      booking = checkedInList.where((b) =>
+          b.roomId == room.id ||
+          (b.roomNumber != null &&
+              b.roomNumber!.toLowerCase() == room.displayNumber.toLowerCase())).firstOrNull;
+    }
+
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    booking ??= Booking(
+      id: '',
+      roomId: room.id,
+      roomNumber: room.displayNumber,
+      roomType: room.type,
+      guestName: 'Guest (${room.displayNumber})',
+      checkIn: DateTime.now(),
+      checkOut: DateTime.now(),
+      status: 'checked_in',
+      raw: const {},
+    );
+
+    if (!context.mounted) return;
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CheckOutScreen(booking: booking),
+      ),
+    );
+
+    if (ok == true) {
+      onSuccess();
+    }
+  } catch (e) {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      _snack(context, 'Failed to load guest details: $e', error: true);
+    }
   }
-  await ref
-      .read(receptionRepositoryProvider)
-      .updateRoomStatus(room.id, 'cleaning');
-  onSuccess();
-  if (context.mounted) _snack(context, 'Room checked out and sent to cleaning');
+}
+
+Future<void> _openCheckOutBooking(
+    BuildContext context, Booking booking, VoidCallback onSuccess) async {
+  final ok = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      builder: (_) => CheckOutScreen(booking: booking),
+    ),
+  );
+  if (ok == true) {
+    onSuccess();
+  }
 }
 
 Future<void> printBookingInvoicePDF({

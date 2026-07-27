@@ -509,56 +509,60 @@ class _BranchAccountantSideNav extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 12),
               children: _navItems.map((item) {
                 final active = item.section == current;
-                return Padding(
+                final tile = Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-                  child: Tooltip(
-                    message: item.label,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => onChanged(item.section),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCollapsed ? 10 : 12,
-                          vertical: 11,
-                        ),
-                        decoration: BoxDecoration(
-                          color: active
-                              ? AppColors.kPrimary.withValues(alpha: 0.09)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              item.icon,
-                              size: 20,
-                              color: active
-                                  ? AppColors.kPrimary
-                                  : AppColors.kTextSecondary,
-                            ),
-                            if (!isCollapsed) ...[
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  item.label,
-                                  style: TextStyle(
-                                    fontWeight: active
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: active
-                                        ? AppColors.kPrimary
-                                        : AppColors.kTextPrimary,
-                                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => onChanged(item.section),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCollapsed ? 10 : 12,
+                        vertical: 11,
+                      ),
+                      decoration: BoxDecoration(
+                        color: active
+                            ? AppColors.kPrimary.withValues(alpha: 0.09)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            item.icon,
+                            size: 20,
+                            color: active
+                                ? AppColors.kPrimary
+                                : AppColors.kTextSecondary,
+                          ),
+                          if (!isCollapsed) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                item.label,
+                                style: TextStyle(
+                                  fontWeight: active
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: active
+                                      ? AppColors.kPrimary
+                                      : AppColors.kTextPrimary,
                                 ),
                               ),
-                            ],
+                            ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
                   ),
                 );
+                // Only attach a Tooltip when collapsed (icon-only mode).
+                // Attaching Tooltip unconditionally inside a ListView causes a
+                // Flutter OverlayPortal / _skipMarkNeedsLayout assertion on web
+                // because OverlayPortal mounts during the Theater's performLayout.
+                return isCollapsed
+                    ? Tooltip(message: item.label, child: tile)
+                    : tile;
               }).toList(),
             ),
           ),
@@ -21717,6 +21721,8 @@ class _BranchBarMenuSectionState
   String? _error;
   String _categoryFilter = 'All';
   List<String> _categories = ['All'];
+  // 'main_bar' = Sports Bar  |  'executive_bar' = Executive Bar
+  String _barOutletType = 'main_bar';
 
   @override
   void initState() {
@@ -21728,73 +21734,47 @@ class _BranchBarMenuSectionState
     setState(() {
       _loading = true;
       _error = null;
+      _categoryFilter = 'All';
+      _categories = ['All'];
     });
     try {
       final repo = ref.read(branchAccountantRepositoryProvider);
       final branchId = await repo.getBranchId();
       final dio = ref.read(dioProvider);
 
-      // Primary: legacy bar_drinks table.
-      final res = await dio.get('/bar/drinks',
-          queryParameters: {
-            if (branchId.isNotEmpty) 'branch_id': branchId,
-          });
-      final data = res.data;
-      List<dynamic> list;
-      if (data is List) {
-        list = data;
-      } else if (data is Map) {
-        list = (data['data'] ?? data['items'] ?? data['drinks'] ?? []) as List;
-      } else {
-        list = [];
-      }
-      final items = list
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+      // Fetch POS outlets for the selected bar type only.
+      final outletsRes = await dio.get('/pos/outlets', queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+        'outlet_type': _barOutletType,
+      });
+      final outletsData = outletsRes.data;
+      final outletsList = outletsData is List
+          ? outletsData
+          : (outletsData is Map
+              ? (outletsData['data'] ?? outletsData['outlets'] ?? []) as List
+              : []);
 
-      // Fallback / merge: POS outlet items for bar-type outlets (covers
-      // branches like Kyogong that manage their menu through pos_outlet_items).
-      if (items.isEmpty && branchId.isNotEmpty) {
-        final outletsRes = await dio.get('/pos/outlets',
-            queryParameters: {'branch_id': branchId});
-        final outletsData = outletsRes.data;
-        final outletsList = outletsData is List
-            ? outletsData
-            : (outletsData is Map
-                ? (outletsData['data'] ?? outletsData['outlets'] ?? []) as List
-                : []);
-        const barTypes = {
-          'main_bar', 'executive_bar', 'kyogong_executive_bar',
-          'kyogong_sports_bar', 'choma_zone', 'bar',
-        };
-        final seenNames = <String>{};
-        for (final outlet in outletsList) {
-          if (outlet is! Map) continue;
-          final ot = '${outlet['outlet_type'] ?? ''}'.toLowerCase();
-          if (!barTypes.contains(ot)) continue;
-          final outletId = '${outlet['id'] ?? ''}';
-          if (outletId.isEmpty) continue;
-          try {
-            final itemsRes = await dio.get('/pos/outlets/$outletId/items');
-            final itemsData = itemsRes.data;
-            final rawItems = itemsData is List
-                ? itemsData
-                : (itemsData is Map
-                    ? (itemsData['data'] ?? itemsData['items'] ?? []) as List
-                    : []);
-            for (final it in rawItems) {
-              if (it is! Map) continue;
-              final name = '${it['name'] ?? ''}'.toLowerCase().trim();
-              if (name.isEmpty || seenNames.contains(name)) continue;
-              seenNames.add(name);
-              items.add(Map<String, dynamic>.from(it)
-                ..['_source'] = 'pos'
-                ..['_outlet_id'] = outletId
-                ..['price'] = it['price'] ?? it['unit_price'] ?? 0);
-            }
-          } catch (_) {}
-        }
+      final items = <Map<String, dynamic>>[];
+      for (final outlet in outletsList) {
+        if (outlet is! Map) continue;
+        final outletId = '${outlet['id'] ?? ''}';
+        if (outletId.isEmpty) continue;
+        try {
+          final itemsRes = await dio.get('/pos/outlets/$outletId/items');
+          final itemsData = itemsRes.data;
+          final rawItems = itemsData is List
+              ? itemsData
+              : (itemsData is Map
+                  ? (itemsData['data'] ?? itemsData['items'] ?? []) as List
+                  : []);
+          for (final it in rawItems) {
+            if (it is! Map) continue;
+            items.add(Map<String, dynamic>.from(it)
+              ..['_source'] = 'pos'
+              ..['_outlet_id'] = outletId
+              ..['price'] = it['selling_price'] ?? it['price'] ?? it['unit_price'] ?? 0);
+          }
+        } catch (_) {}
       }
 
       final cats = <String>{'All'};
@@ -21802,10 +21782,11 @@ class _BranchBarMenuSectionState
         final c = '${item['category'] ?? ''}';
         if (c.isNotEmpty) cats.add(c);
       }
+      final sortedCats = ['All', ...cats.where((c) => c != 'All').toList()..sort()];
       if (!mounted) return;
       setState(() {
         _all = items;
-        _categories = cats.toList();
+        _categories = sortedCats;
         _filtered = items;
         _loading = false;
       });
@@ -21828,6 +21809,12 @@ class _BranchBarMenuSectionState
                   '${i['category'] ?? ''}' == cat)
               .toList();
     });
+  }
+
+  void _switchOutlet(String outletType) {
+    if (_barOutletType == outletType) return;
+    setState(() => _barOutletType = outletType);
+    _load();
   }
 
   Future<void> _toggleAvailability(Map<String, dynamic> item) async {
@@ -22035,6 +22022,26 @@ class _BranchBarMenuSectionState
                 onPressed: _showAddDialog,
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add Item'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Bar outlet selector: Sports Bar (main_bar) | Executive Bar (executive_bar)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FilterChip(
+                avatar: const Icon(Icons.sports_bar, size: 16),
+                label: const Text('Sports Bar'),
+                selected: _barOutletType == 'main_bar',
+                onSelected: (_) => _switchOutlet('main_bar'),
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                avatar: const Icon(Icons.local_bar, size: 16),
+                label: const Text('Executive Bar'),
+                selected: _barOutletType == 'executive_bar',
+                onSelected: (_) => _switchOutlet('executive_bar'),
               ),
             ],
           ),
@@ -24050,9 +24057,14 @@ class _BranchMenuPricingSectionState
     extends ConsumerState<_BranchMenuPricingSection> {
   int? _branchId;
   String _type = 'all'; // all | restaurant | bar
+  // Active bar sub-filter (only when _type == 'bar')
+  String _barSubType = 'main_bar'; // 'main_bar' = Sports Bar | 'executive_bar' = Executive Bar
   String _search = '';
   bool _branchLoading = true;
   bool _saving = false;
+  // outlet IDs resolved from /pos/outlets after branch load
+  String? _mainBarOutletId;
+  String? _execBarOutletId;
 
   // key ('itemType:itemId') → pending cost + selling edit (outletId set for POS items)
   final Map<String, ({double cost, double? selling, String? outletId})> _pending = {};
@@ -24072,6 +24084,30 @@ class _BranchMenuPricingSectionState
       _branchId = id;
       _branchLoading = false;
     });
+    // Fetch POS outlet IDs so we can filter bar items by outlet.
+    if (raw.isNotEmpty) {
+      try {
+        final dio = ref.read(dioProvider);
+        final res = await dio.get('/pos/outlets', queryParameters: {'branch_id': raw});
+        final data = res.data;
+        final outlets = data is List
+            ? data
+            : (data is Map ? (data['data'] ?? data['outlets'] ?? []) as List : []);
+        String? mainId;
+        String? execId;
+        for (final o in outlets) {
+          if (o is! Map) continue;
+          final ot = '${o['outlet_type'] ?? ''}';
+          if (ot == 'main_bar') mainId = '${o['id'] ?? ''}';
+          if (ot == 'executive_bar') execId = '${o['id'] ?? ''}';
+        }
+        if (!mounted) return;
+        setState(() {
+          _mainBarOutletId = mainId;
+          _execBarOutletId = execId;
+        });
+      } catch (_) {}
+    }
   }
 
   BranchPricingArgs? get _args {
@@ -24275,6 +24311,27 @@ class _BranchMenuPricingSectionState
                 setState(() => _search = v.trim().toLowerCase()),
           ),
         ),
+        // Bar outlet sub-filter — only shown when Bar tab is active
+        if (_type == 'bar') ...[
+          FilterChip(
+            avatar: const Icon(Icons.sports_bar, size: 16),
+            label: const Text('Sports Bar'),
+            selected: _barSubType == 'main_bar',
+            onSelected: (_) => setState(() {
+              _barSubType = 'main_bar';
+              _pending.clear();
+            }),
+          ),
+          FilterChip(
+            avatar: const Icon(Icons.local_bar, size: 16),
+            label: const Text('Executive Bar'),
+            selected: _barSubType == 'executive_bar',
+            onSelected: (_) => setState(() {
+              _barSubType = 'executive_bar';
+              _pending.clear();
+            }),
+          ),
+        ],
       ],
     );
   }
@@ -24306,6 +24363,15 @@ class _BranchMenuPricingSectionState
       ),
       data: (result) {
         var items = result.items;
+        // When Bar tab is active, filter by selected outlet
+        if (_type == 'bar') {
+          final targetOutletId = _barSubType == 'main_bar'
+              ? _mainBarOutletId
+              : _execBarOutletId;
+          if (targetOutletId != null && targetOutletId.isNotEmpty) {
+            items = items.where((i) => i.outletId == targetOutletId).toList();
+          }
+        }
         if (_search.isNotEmpty) {
           items = items
               .where((i) =>
@@ -24331,7 +24397,7 @@ class _BranchMenuPricingSectionState
                     const SizedBox(height: 6),
                 itemBuilder: (_, i) => _EditablePricingRow(
                   key: ValueKey(
-                      '${_branchId}_${items[i].key}_${_type}'),
+                      '${_branchId}_${items[i].key}_${_type}_$_barSubType'),
                   item: items[i],
                   onChanged: _onRowChanged,
                   onReset: () => _resetItem(items[i]),

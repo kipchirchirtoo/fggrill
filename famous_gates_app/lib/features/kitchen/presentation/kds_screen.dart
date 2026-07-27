@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
@@ -9,10 +10,20 @@ import '../../../core/widgets/widgets.dart';
 import '../../../services/print_service.dart';
 import '../../pos/domain/models.dart';
 import '../data/repository.dart';
+import '../domain/display_scope.dart';
 import '../domain/models.dart';
 import '../domain/providers.dart';
 
 enum KitchenKdsSection { orders, voidRequests, history, analytics, notifications }
+
+// Africa/Nairobi is a fixed UTC+3 offset (no DST), so a printed-time label
+// always shows Kenyan local time regardless of the device clock's timezone.
+String _kdsKenyaTime(DateTime value) {
+  final k = value.toUtc().add(const Duration(hours: 3));
+  final h12 = k.hour % 12 == 0 ? 12 : k.hour % 12;
+  final ampm = k.hour < 12 ? 'AM' : 'PM';
+  return '$h12:${k.minute.toString().padLeft(2, '0')} $ampm';
+}
 
 // Orders older than this with no clearing action (the backend's active-feed
 // already drops anything marked served/completed) are hidden from the live
@@ -20,9 +31,14 @@ enum KitchenKdsSection { orders, voidRequests, history, analytics, notifications
 const int _kStaleOrderMinutes = 100;
 
 class KDSScreen extends ConsumerStatefulWidget {
-  const KDSScreen({super.key, this.initialSection = KitchenKdsSection.orders});
+  const KDSScreen({
+    super.key,
+    this.initialSection = KitchenKdsSection.orders,
+    this.scope = KitchenDisplayScope.restaurant,
+  });
 
   final KitchenKdsSection initialSection;
+  final KitchenDisplayScope scope;
 
   @override
   ConsumerState<KDSScreen> createState() => _KDSScreenState();
@@ -43,6 +59,11 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   Timer? _staleSweepTimer;
 
   KitchenRepository get _repo => ref.read(kitchenRepositoryProvider);
+
+  StateNotifierProvider<KdsNotifier, AsyncValue<List<KitchenOrder>>>
+      get _ordersProvider => widget.scope == KitchenDisplayScope.chomaZone
+          ? chomaZoneKdsOrdersProvider
+          : kdsOrdersProvider;
 
   @override
   void initState() {
@@ -80,7 +101,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     // ref.listen's auto-print to silently skip every order that arrived
     // on initial load (they'd already be in the dedup set).
     final results = await Future.wait<dynamic>([
-      _repo.getHistory(limit: 150),
+      _repo.getHistory(limit: 150, outletScope: widget.scope),
       _repo.getNotifications(
         status: _notificationStatus,
         category: 'restaurant_order',
@@ -100,7 +121,48 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     // The Orders tab is driven by kdsOrdersProvider, not _future above — this
     // was previously a no-op for that tab (manual Refresh button, void-ack,
     // and other post-action refreshes never actually reloaded the live grid).
-    ref.read(kdsOrdersProvider.notifier).refresh();
+    ref.read(_ordersProvider.notifier).refresh();
+  }
+
+  String _routeForSection(
+    KitchenDisplayScope scope,
+    KitchenKdsSection section,
+  ) {
+    final base = scope.routeBase;
+    switch (section) {
+      case KitchenKdsSection.orders:
+        return base;
+      case KitchenKdsSection.voidRequests:
+        return '$base/void-requests';
+      case KitchenKdsSection.history:
+        return '$base/history';
+      case KitchenKdsSection.analytics:
+        return '$base/analytics';
+      case KitchenKdsSection.notifications:
+        return '$base/notifications';
+    }
+  }
+
+  Widget _scopeSwitcher() {
+    final current = widget.scope;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: KitchenDisplayScope.values.map((scope) {
+        final selected = scope == current;
+        return ChoiceChip(
+          label: Text(
+            scope == KitchenDisplayScope.chomaZone
+                ? 'Choma Zone'
+                : 'Restaurant',
+          ),
+          selected: selected,
+          onSelected: selected
+              ? null
+              : (_) => context.go(_routeForSection(scope, _section)),
+        );
+      }).toList(),
+    );
   }
 
   /// Automatically print captain order tickets as backup.
@@ -227,13 +289,13 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     // fallback poll, or manual refresh) — previously it only ran once inside
     // _load(), so an order arriving after the initial screen load via
     // Realtime would show up on the grid but never get a kitchen ticket.
-    ref.listen<AsyncValue<List<KitchenOrder>>>(kdsOrdersProvider, (previous, next) {
+    ref.listen<AsyncValue<List<KitchenOrder>>>(_ordersProvider, (previous, next) {
       next.whenData(_autoPrintNewCaptainOrders);
     });
     return MasterDashboardShell<KitchenKdsSection>(
-      title: 'Kitchen Display',
-      subtitle: 'Restaurant orders only',
-      initials: 'KD',
+      title: widget.scope.shellTitle,
+      subtitle: widget.scope.shellSubtitle,
+      initials: widget.scope.initials,
       breadcrumbRoot: 'Kitchen',
       searchHint: 'Search order, item, table...',
       palette: const ShellPalette(
@@ -284,7 +346,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           ? _buildOrdersSection()
           : _section == KitchenKdsSection.voidRequests
               // Self-contained: fetches/refreshes its own pending queues.
-              ? const _KdsVoidRequestsSection()
+              ? _KdsVoidRequestsSection(scope: widget.scope)
               : FutureBuilder<_KitchenModuleSnapshot>(
                   key: ValueKey('${_section.name}-$_notificationStatus'),
                   future: _future,
@@ -320,7 +382,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
 
   /// Builds the live orders tab backed by kdsOrdersProvider (Supabase Realtime).
   Widget _buildOrdersSection() {
-    final kdsAsync = ref.watch(kdsOrdersProvider);
+    final kdsAsync = ref.watch(_ordersProvider);
     return kdsAsync.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(24),
@@ -368,10 +430,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
             .round();
 
     return _Page(
-      title: 'Restaurant Kitchen Orders',
-      subtitle:
-          'Live restaurant order queue from POS. Bar orders are excluded by using restaurant order tables only.',
+      title: widget.scope.ordersTitle,
+      subtitle: widget.scope.ordersSubtitle,
       actions: [
+        _scopeSwitcher(),
         // Realtime live indicator dot
         const _RealtimeLiveDot(),
         if (voided > 0)
@@ -404,7 +466,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           ),
           const SizedBox(height: 24),
           if (orders.isEmpty)
-            const EmptyState(message: 'No active restaurant orders.')
+            EmptyState(message: widget.scope.emptyOrdersMessage)
           else
             LayoutBuilder(
               builder: (context, constraints) {
@@ -452,10 +514,10 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
 
   Widget _history(_KitchenModuleSnapshot data) {
     return _Page(
-      title: 'Past Restaurant Orders',
-      subtitle:
-          'Served, delivered, paid and completed restaurant orders for the current branch.',
+      title: widget.scope.historyTitle,
+      subtitle: widget.scope.historySubtitle,
       actions: [
+        _scopeSwitcher(),
         OutlinedButton.icon(
           onPressed: _refresh,
           icon: const Icon(Icons.refresh, size: 18),
@@ -464,7 +526,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       ],
       child: _OrderList(
         orders: data.history,
-        empty: 'No past restaurant orders found.',
+        empty: widget.scope.emptyHistoryMessage,
       ),
     );
   }
@@ -472,9 +534,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   Widget _analytics(_KitchenModuleSnapshot data) {
     return _Page(
       title: 'Order Intelligence',
-      subtitle:
-          'Local machine-learning style order analysis from restaurant order names, quantities and timing.',
+      subtitle: widget.scope.analyticsSubtitle,
       actions: [
+        _scopeSwitcher(),
         OutlinedButton.icon(
           onPressed: _refresh,
           icon: const Icon(Icons.refresh, size: 18),
@@ -484,6 +546,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       child: _KitchenOrderIntelligenceContent(
         activeOrders: data.activeOrders,
         history: data.history,
+        scope: widget.scope,
       ),
     );
   }
@@ -494,6 +557,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
       subtitle:
           'Role and branch filtered notifications for this user and branch.',
       actions: [
+        _scopeSwitcher(),
         OutlinedButton.icon(
           onPressed: () => _run(() => _repo.markAllNotificationsRead()),
           icon: const Icon(Icons.done_all, size: 18),
@@ -627,7 +691,9 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
 /// here applies no financial effect yet — it just signals the kitchen has
 /// confirmed the item/bill can be pulled, and hands off to the cashier.
 class _KdsVoidRequestsSection extends ConsumerStatefulWidget {
-  const _KdsVoidRequestsSection();
+  const _KdsVoidRequestsSection({required this.scope});
+
+  final KitchenDisplayScope scope;
 
   @override
   ConsumerState<_KdsVoidRequestsSection> createState() =>
@@ -649,13 +715,22 @@ class _KdsVoidRequestsSectionState
   }
 
   Future<List<List<Map<String, dynamic>>>> _load() => Future.wait([
-        _repo.getPendingItemVoidsKitchen(),
-        _repo.getPendingWholeBillVoidsKitchen(),
+        _repo.getPendingItemVoidsKitchen(outletScope: widget.scope),
+        _repo.getPendingWholeBillVoidsKitchen(outletScope: widget.scope),
       ]);
 
   void _refresh() => setState(() => _future = _load());
 
   String _money(num value) => 'KES ${value.toStringAsFixed(0)}';
+
+  String _routeForScope(KitchenDisplayScope scope) {
+    switch (scope) {
+      case KitchenDisplayScope.restaurant:
+        return '/kitchen/void-requests';
+      case KitchenDisplayScope.chomaZone:
+        return '/kitchen/choma-zone/void-requests';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -679,11 +754,31 @@ class _KdsVoidRequestsSectionState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Expanded(
+                  SizedBox(
+                    width: 420,
                     child: Text('Void Requests',
                         style: Theme.of(context).textTheme.titleLarge),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: KitchenDisplayScope.values.map((scope) {
+                      final selected = scope == widget.scope;
+                      return ChoiceChip(
+                        label: Text(scope == KitchenDisplayScope.chomaZone
+                            ? 'Choma Zone'
+                            : 'Restaurant'),
+                        selected: selected,
+                        onSelected: selected
+                            ? null
+                            : (_) => context.go(_routeForScope(scope)),
+                      );
+                    }).toList(),
                   ),
                   OutlinedButton.icon(
                     onPressed: _refresh,
@@ -693,19 +788,21 @@ class _KdsVoidRequestsSectionState
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Waiters submit these when they void an item or a whole bill. '
-                'Acknowledge to confirm it can be pulled and send it on to the '
-                'cashier, or decline to keep it on the bill.',
-                style: TextStyle(color: Color(0xFFAAAFC4), fontSize: 13),
+              Text(
+                widget.scope == KitchenDisplayScope.chomaZone
+                    ? 'Choma Zone staff submit these when they void an item or a whole bill. Acknowledge to confirm it can be pulled and send it on to the cashier, or decline to keep it on the bill.'
+                    : 'Waiters submit these when they void an item or a whole bill. Acknowledge to confirm it can be pulled and send it on to the cashier, or decline to keep it on the bill.',
+                style: const TextStyle(color: Color(0xFFAAAFC4), fontSize: 13),
               ),
               const SizedBox(height: 20),
               Text('Items', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               if (itemRequests.isEmpty)
-                const EmptyState(
+                EmptyState(
                   icon: Icons.check_circle_outline,
-                  message: 'No item void requests waiting on kitchen.',
+                  message: widget.scope == KitchenDisplayScope.chomaZone
+                      ? 'No Choma Zone item void requests waiting on kitchen.'
+                      : 'No item void requests waiting on kitchen.',
                 )
               else
                 Column(
@@ -715,9 +812,11 @@ class _KdsVoidRequestsSectionState
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               if (billRequests.isEmpty)
-                const EmptyState(
+                EmptyState(
                   icon: Icons.check_circle_outline,
-                  message: 'No bill void requests waiting on kitchen.',
+                  message: widget.scope == KitchenDisplayScope.chomaZone
+                      ? 'No Choma Zone bill void requests waiting on kitchen.'
+                      : 'No bill void requests waiting on kitchen.',
                 )
               else
                 Column(
@@ -936,7 +1035,12 @@ class _KdsVoidRequestsSectionState
 }
 
 class KitchenOrderIntelligencePanel extends ConsumerStatefulWidget {
-  const KitchenOrderIntelligencePanel({super.key});
+  const KitchenOrderIntelligencePanel({
+    super.key,
+    this.scope = KitchenDisplayScope.restaurant,
+  });
+
+  final KitchenDisplayScope scope;
 
   @override
   ConsumerState<KitchenOrderIntelligencePanel> createState() =>
@@ -957,8 +1061,8 @@ class _KitchenOrderIntelligencePanelState
 
   Future<_KitchenOrderIntelligenceSnapshot> _load() async {
     final results = await Future.wait<dynamic>([
-      _repo.getOrders(),
-      _repo.getHistory(limit: 150),
+      _repo.getOrders(outletScope: widget.scope),
+      _repo.getHistory(limit: 150, outletScope: widget.scope),
     ]);
     return _KitchenOrderIntelligenceSnapshot(
       activeOrders: results[0] as List<KitchenOrder>,
@@ -990,8 +1094,7 @@ class _KitchenOrderIntelligencePanelState
         final data = snapshot.data ?? const _KitchenOrderIntelligenceSnapshot();
         return _Page(
           title: 'Order Intelligence',
-          subtitle:
-              'Branch-specific kitchen demand, rush windows, and preparation pressure from restaurant POS orders.',
+          subtitle: widget.scope.intelligenceSubtitle,
           actions: [
             OutlinedButton.icon(
               onPressed: _refresh,
@@ -1002,6 +1105,7 @@ class _KitchenOrderIntelligencePanelState
           child: _KitchenOrderIntelligenceContent(
             activeOrders: data.activeOrders,
             history: data.history,
+            scope: widget.scope,
           ),
         );
       },
@@ -1041,15 +1145,17 @@ class _KitchenOrderIntelligenceContent extends StatelessWidget {
   const _KitchenOrderIntelligenceContent({
     required this.activeOrders,
     required this.history,
+    this.scope = KitchenDisplayScope.restaurant,
   });
 
   final List<KitchenOrder> activeOrders;
   final List<KitchenOrder> history;
+  final KitchenDisplayScope scope;
 
   @override
   Widget build(BuildContext context) {
     final source = [...activeOrders, ...history];
-    final analytics = _KitchenAnalytics.from(source);
+    final analytics = _KitchenAnalytics.from(source, scope: scope);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1155,10 +1261,11 @@ class _RealtimeLiveDotState extends State<_RealtimeLiveDot>
               height: 10,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF22C55E).withOpacity(_pulse.value),
+                color: const Color(0xFF22C55E).withValues(alpha: _pulse.value),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF22C55E).withOpacity(_pulse.value * 0.6),
+                    color: const Color(0xFF22C55E)
+                        .withValues(alpha: _pulse.value * 0.6),
                     blurRadius: 6,
                     spreadRadius: 2,
                   ),
@@ -1420,6 +1527,25 @@ class _OrderTicket extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.9),
                             fontWeight: FontWeight.w600,
                             fontSize: 12)),
+                    if (order.captainPrintedAt != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.print_outlined,
+                              color: Colors.white.withValues(alpha: 0.9),
+                              size: 12),
+                          const SizedBox(width: 3),
+                          Text(
+                            'Printed ${_kdsKenyaTime(order.captainPrintedAt!)}',
+                            style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -2027,7 +2153,10 @@ class _KitchenAnalytics {
     required this.insight,
   });
 
-  factory _KitchenAnalytics.from(List<KitchenOrder> orders) {
+  factory _KitchenAnalytics.from(
+    List<KitchenOrder> orders, {
+    KitchenDisplayScope scope = KitchenDisplayScope.restaurant,
+  }) {
     final itemTotals = <String, int>{};
     final hourTotals = <int, int>{};
     var urgent = 0;
@@ -2063,7 +2192,9 @@ class _KitchenAnalytics {
       urgentOrders: urgent,
       readyOrders: ready,
       insight: topItem == null
-          ? 'Once orders flow through the restaurant POS, this panel will identify demand patterns from item names, quantities and order timing.'
+          ? scope == KitchenDisplayScope.chomaZone
+              ? 'Once orders flow through the Choma Zone POS, this panel will identify grill demand patterns from item names, quantities and order timing.'
+              : 'Once orders flow through the restaurant POS, this panel will identify demand patterns from item names, quantities and order timing.'
           : '${topItem.name} is currently the strongest demand signal. Prep planning should prioritize mise en place before the $topHour:00 rush window.',
     );
   }

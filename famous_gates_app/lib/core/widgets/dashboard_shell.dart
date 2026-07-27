@@ -252,7 +252,6 @@ class _BackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: 'Back',
       onPressed: () => _goBack(context),
       icon: Icon(Icons.arrow_back, size: mobile ? 18 : 22),
       color: AppColors.kPrimary,

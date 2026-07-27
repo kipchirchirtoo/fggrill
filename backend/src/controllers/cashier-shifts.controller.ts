@@ -1299,6 +1299,44 @@ export const getShiftLog = async (
             // Do not fail the request — the raw shift data is still useful.
         }
 
+        // ---------------------------------------------------------------
+        // Cashier expenses recorded against this shift (Expenses tab ->
+        // shift_reconciliation_expenses, the canonical shift-expense table).
+        // Surface them as expense_details so the close-shift logbook shows
+        // them, the expected-cash calculation reduces the drawer by cash paid
+        // out, and the branch accountant sees the same figures at
+        // reconciliation. Non-fatal.
+        // ---------------------------------------------------------------
+        try {
+            const { data: pettyRows } = await supabase
+                .from('shift_reconciliation_expenses')
+                .select('amount, category, description, paid_to_name, receipt_number, po_reference, created_at')
+                .eq('shift_id', shift.id)
+                .order('created_at', { ascending: true });
+
+            const expenseDetails = (pettyRows || []).map((row: any) => ({
+                description: row.description || row.category || 'Expense',
+                category: row.category || null,
+                amount: Number(row.amount || 0),
+                payment_method: 'cash', // cashier expenses are paid from the drawer
+                paid_to_name: row.paid_to_name || null,
+                receipt_number: row.receipt_number || null,
+                po_reference: row.po_reference || null,
+                time: row.created_at || null,
+            }));
+            const expenseTotal = expenseDetails.reduce(
+                (sum: number, e: any) => sum + Number(e.amount || 0), 0);
+
+            enrichedShift = {
+                ...enrichedShift,
+                expense_details: expenseDetails,
+                expense_total: expenseTotal,
+                total_expenses: expenseTotal,
+            };
+        } catch (expErr) {
+            logger.warn(`Petty-cash expense enrichment failed for shift ${shift.id}:`, expErr);
+        }
+
         res.status(200).json({
             success: true,
             data: enrichedShift
@@ -1420,8 +1458,12 @@ export const startShift = async (
         if (numberError) throw numberError;
 
         const now = new Date().toISOString();
-        const explicitlyApproved = req.body.approve_immediately === true || req.body.open_immediately === true;
-        const opensImmediately = manager && targetCashierId !== userId && explicitlyApproved;
+        // Stocktake submission (verified above) is the ONLY gate for opening a
+        // cashier shift. Branch-accountant approval is no longer required — once
+        // the relevant stocktake(s) are submitted, the cashier's shift opens
+        // immediately on request. (Managers opening for another cashier also
+        // open immediately.)
+        const opensImmediately = true;
 
         // Create shift. Cashiers request opening; branch accountants/managers can open for another cashier.
         const { data: newShift, error: shiftError } = await supabase
@@ -1440,7 +1482,7 @@ export const startShift = async (
                 opening_approved_by: opensImmediately ? userId : null,
                 opening_approved_at: opensImmediately ? now : null,
                 opening_review_notes: opensImmediately
-                    ? (notes || 'Opened directly by branch accountant or manager')
+                    ? (notes || 'Auto-opened on request — stocktake submitted, no approval required')
                     : notes
             })
             .select()

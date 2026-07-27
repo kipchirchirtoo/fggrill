@@ -123,18 +123,17 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   }
 
   Future<void> _loadFolio() async {
-    if (_selectedBooking == null) return;
+    if (_selectedBooking == null || _selectedBooking!.id.isEmpty) return;
 
     setState(() => _loadingFolio = true);
     try {
       final folio = await _repository.getFolio(_selectedBooking!.id);
       setState(() {
         _folio = folio;
-        _totalCharges = folio['total_charges'] ?? 0;
-        _totalPayments = folio['total_payments'] ?? 0;
-        _balance = folio['balance'] ?? 0;
+        _totalCharges = (folio['total_charges'] as num?)?.toDouble() ?? 0.0;
+        _totalPayments = (folio['total_payments'] as num?)?.toDouble() ?? 0.0;
+        _balance = (folio['balance'] as num?)?.toDouble() ?? 0.0;
         _transactions = List<Map<String, dynamic>>.from(folio['transactions'] ?? []);
-        // _paymentAmount = _balance > 0 ? _balance : 0; // Future implementation
         _loadingFolio = false;
       });
     } catch (e) {
@@ -250,6 +249,12 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
     final booking = _selectedBooking!;
     final nights = booking.checkOut.difference(booking.checkIn).inDays;
 
+    final foodCharges = (_folio?['food_charges'] as num?)?.toDouble() ?? 0.0;
+    final bevCharges = (_folio?['beverage_charges'] as num?)?.toDouble() ?? 0.0;
+    final foodBevTotal = foodCharges + bevCharges;
+    final roomCharges = (_folio?['room_charges'] as num?)?.toDouble() ?? 0.0;
+    final otherCharges = (_folio?['other_charges'] as num?)?.toDouble() ?? 0.0;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -299,9 +304,9 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                   if (_loadingFolio)
                     const Center(child: CircularProgressIndicator())
                   else ...[
-                    _infoRow('Room Charges', 'KES ${(_folio?['room_charges'] ?? 0).toStringAsFixed(2)}'),
-                    _infoRow('Food & Beverage', 'KES ${(_folio?['food_charges'] ?? 0 + _folio?['beverage_charges'] ?? 0).toStringAsFixed(2)}'),
-                    _infoRow('Other Charges', 'KES ${(_folio?['other_charges'] ?? 0).toStringAsFixed(2)}'),
+                    _infoRow('Room Charges', 'KES ${roomCharges.toStringAsFixed(2)}'),
+                    _infoRow('Food & Beverage', 'KES ${foodBevTotal.toStringAsFixed(2)}'),
+                    _infoRow('Other Charges', 'KES ${otherCharges.toStringAsFixed(2)}'),
                     const Divider(),
                     _infoRow('Total Charges', 'KES ${_totalCharges.toStringAsFixed(2)}', bold: true),
                     _infoRow('Total Payments', 'KES ${_totalPayments.toStringAsFixed(2)}'),

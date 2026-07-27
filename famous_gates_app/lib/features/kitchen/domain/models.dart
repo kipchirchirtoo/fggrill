@@ -16,6 +16,9 @@ class KitchenOrder {
   final DateTime createdAt;
   final DateTime? bumpedAt;
   final bool captainOrderAlreadyPrinted;
+  /// Exact time the captain ticket was last (re)printed, if known. Shown in
+  /// Kenyan time for accountability — including recalled orders.
+  final DateTime? captainPrintedAt;
   final String? shiftId;
   final String? outletType;
   final bool isExchangeOrder;
@@ -39,6 +42,7 @@ class KitchenOrder {
     required this.createdAt,
     this.bumpedAt,
     this.captainOrderAlreadyPrinted = false,
+    this.captainPrintedAt,
     this.shiftId,
     this.outletType,
     this.isExchangeOrder = false,
@@ -75,6 +79,8 @@ class KitchenOrder {
               DateTime.now(),
       bumpedAt: DateTime.tryParse('${json['bumped_at'] ?? ''}'),
       captainOrderAlreadyPrinted: json['captain_order_already_printed'] == true,
+      captainPrintedAt:
+          DateTime.tryParse('${json['captain_printed_at'] ?? ''}'),
       shiftId: _optionalString(json['shift_id']),
       outletType: _optionalString(json['outlet_type']),
       isExchangeOrder: json['is_exchange'] == true,

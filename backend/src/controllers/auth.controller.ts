@@ -12,6 +12,11 @@ import {
   registerManagedSession,
   revokeManagedSession
 } from '../services/session-registry.service';
+import {
+  getDefaultUserInventoryContext,
+  getUserInventoryContexts,
+  type UserInventoryContext,
+} from '../services/inventory-warehouse.service';
 
 const getJwtSecrets = (): string[] => {
   const candidateSecrets = [
@@ -27,7 +32,7 @@ const getJwtSecrets = (): string[] => {
 };
 
 // Roles that have universal access and skip the context selector
-const UNIVERSAL_ROLES = ['super_admin', 'general_manager', 'central_storekeeper', 'auditor', 'hr_manager', 'director'];
+const UNIVERSAL_ROLES = ['super_admin', 'general_manager', 'auditor', 'hr_manager', 'director'];
 
 const parseBooleanConfig = (value: unknown, fallback = true): boolean => {
   if (value === undefined || value === null || value === '') return fallback;
@@ -82,6 +87,26 @@ const enrichUserBranch = async (user: any): Promise<any> => {
     });
     return user;
   }
+};
+
+const serializeActiveContext = (context: UserInventoryContext | null) => {
+  if (!context) return null;
+
+  return {
+    role: context.role,
+    role_name: context.role_name,
+    context_type: context.context_type,
+    branch_id: context.branch_id,
+    branch_name: context.branch_name,
+    branch_code: context.branch_code,
+    warehouse_id: context.warehouse_id,
+    warehouse_name: context.warehouse_name,
+    warehouse_code: context.warehouse_code,
+    operating_branch_id: context.operating_branch_id,
+    operating_branch_name: context.operating_branch_name,
+    is_default: context.is_default,
+    display_name: context.display_name,
+  };
 };
 
 // @desc    Validate local deployment license and bind terminal to a branch
@@ -181,6 +206,9 @@ const issueLocalSession = (
     activeOutletId?: string | null;
     activeOutletPrefix?: string | null;
     activeOutletType?: string | null;
+    activeWarehouseId?: string | null;
+    activeContextType?: 'branch' | 'warehouse';
+    homeBranchId?: number | null;
     isPosLogin?: boolean;
     ttlHours?: number;
   }
@@ -199,6 +227,9 @@ const issueLocalSession = (
 
   if (activeRole) payload.active_role = activeRole;
   if (activeBranchId !== undefined && activeBranchId !== null) payload.active_branch_id = activeBranchId;
+  if (options?.activeWarehouseId) payload.active_warehouse_id = options.activeWarehouseId;
+  if (options?.activeContextType) payload.active_context_type = options.activeContextType;
+  if (options?.homeBranchId !== undefined && options.homeBranchId !== null) payload.home_branch_id = options.homeBranchId;
   if (options?.activeOutletId) payload.active_outlet_id = options.activeOutletId;
   if (options?.activeOutletType) payload.active_outlet_type = options.activeOutletType;
   if (options?.activeOutletPrefix) payload.active_outlet_prefix = options.activeOutletPrefix;
@@ -207,7 +238,16 @@ const issueLocalSession = (
   const accessToken = jwt.sign(payload, jwtSecret, { expiresIn: `${ttlHours}h` });
 
   const refreshToken = jwt.sign(
-    { sub: userId, type: 'refresh', sid: sessionId },
+    {
+      sub: userId,
+      type: 'refresh',
+      sid: sessionId,
+      active_role: payload.active_role,
+      active_branch_id: payload.active_branch_id,
+      active_warehouse_id: payload.active_warehouse_id,
+      active_context_type: payload.active_context_type,
+      home_branch_id: payload.home_branch_id
+    },
     jwtSecret,
     { expiresIn: '7d' }
   );
@@ -492,28 +532,6 @@ export const login = async (
       logger.warn('Failed to update last login:', updateError);
     }
 
-    const { secretSource, sessionId, session } = issueLocalSession(
-      userId,
-      userProfile.email,
-      userProfile.role,
-      userProfile.role,
-      userProfile.branch_id
-    );
-
-    await registerManagedSession({
-      userId,
-      sessionId,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') || null,
-      expiresAt: session.expires_at
-    });
-
-    logger.info('Generating local JWT token for user login', {
-      userId,
-      email: userProfile.email,
-      secretSource
-    });
-
     // Fetch all role+branch assignments for this user
     let allRoles: any[] = [];
     try {
@@ -535,17 +553,71 @@ export const login = async (
       }
     }
 
-    const isUniversal = UNIVERSAL_ROLES.includes(userProfile.role);
-    const requiresContextSelection = !isUniversal && allRoles.length > 1;
+    const availableContexts = await getUserInventoryContexts(userId, {
+      role: userProfile.role,
+      branch_id: userProfile.branch_id ?? null
+    });
+    const activeContext = getDefaultUserInventoryContext(availableContexts, userProfile.role);
+    const activeRole = activeContext?.role || userProfile.role;
+    const activeBranchId = activeContext?.context_type === 'branch'
+      ? (activeContext.branch_id ?? userProfile.branch_id ?? null)
+      : null;
 
-    const enrichedUserProfile = await enrichUserBranch(userProfile);
+    const { secretSource, sessionId, session } = issueLocalSession(
+      userId,
+      userProfile.email,
+      userProfile.role,
+      activeRole,
+      activeBranchId,
+      {
+        activeWarehouseId: activeContext?.warehouse_id || null,
+        activeContextType: activeContext?.context_type || 'branch',
+        homeBranchId: userProfile.branch_id ?? null,
+      }
+    );
+
+    await registerManagedSession({
+      userId,
+      sessionId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') || null,
+      expiresAt: session.expires_at
+    });
+
+    logger.info('Generating local JWT token for user login', {
+      userId,
+      email: userProfile.email,
+      secretSource,
+      activeContextType: activeContext?.context_type || 'branch',
+      activeWarehouseId: activeContext?.warehouse_id || null,
+      activeBranchId
+    });
+
+    const isUniversal = UNIVERSAL_ROLES.includes(userProfile.role);
+    const requiresContextSelection = !isUniversal && availableContexts.length > 1;
+
+    const enrichedUserProfile = await enrichUserBranch({
+      ...userProfile,
+      role: activeRole,
+      active_context: serializeActiveContext(activeContext),
+      all_roles: allRoles,
+      available_contexts: availableContexts.map(serializeActiveContext)
+    });
 
     res.status(200).json({
       success: true,
       data: {
-        user: { ...enrichedUserProfile, all_roles: allRoles },
+        user: {
+          ...enrichedUserProfile,
+          primary_role: userProfile.role,
+          all_roles: allRoles,
+          available_contexts: availableContexts.map(serializeActiveContext),
+          active_context: serializeActiveContext(activeContext)
+        },
         session,
-        requires_context_selection: requiresContextSelection
+        requires_context_selection: requiresContextSelection,
+        available_contexts: availableContexts.map(serializeActiveContext),
+        active_context: serializeActiveContext(activeContext)
       }
     });
 
@@ -606,12 +678,44 @@ export const refreshToken = async (
             await revokeManagedSession(decoded.sid);
           }
 
+          const availableContexts = await getUserInventoryContexts(user.id, {
+            role: user.role,
+            branch_id: user.branch_id ?? null
+          });
+          const requestedRole = decoded.active_role || user.role;
+          const requestedContextType = decoded.active_context_type || 'branch';
+          const requestedBranchId = requestedContextType === 'branch'
+            ? (decoded.active_branch_id ?? null)
+            : null;
+          const requestedWarehouseId = decoded.active_warehouse_id ?? null;
+
+          const requestedContext = availableContexts.find((context) =>
+            context.role === requestedRole &&
+            context.context_type === requestedContextType &&
+            (context.branch_id ?? null) === (requestedBranchId ?? null) &&
+            (context.warehouse_id ?? null) === (requestedWarehouseId ?? null)
+          );
+
+          const activeContext = requestedContext
+            || getDefaultUserInventoryContext(availableContexts, requestedRole);
+          const activeRole = activeContext?.role || requestedRole || user.role;
+          const activeContextType = activeContext?.context_type || requestedContextType;
+          const activeBranchId = activeContextType === 'warehouse'
+            ? null
+            : (activeContext?.branch_id ?? user.branch_id ?? null);
+          const activeWarehouseId = activeContext?.warehouse_id ?? null;
+
           const { sessionId, session } = issueLocalSession(
             user.id,
             user.email,
             user.role,
-            user.role,
-            user.branch_id
+            activeRole,
+            activeBranchId,
+            {
+              activeWarehouseId,
+              activeContextType,
+              homeBranchId: user.branch_id ?? null
+            }
           );
 
           await registerManagedSession({
@@ -675,7 +779,7 @@ export const switchContext = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { role, branch_id } = req.body;
+    const { role, branch_id, warehouse_id, context_type } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -688,31 +792,28 @@ export const switchContext = async (
       return;
     }
 
-    // Validate that this user actually has this role+branch assignment
-    const query = supabase
-      .from('user_branch_roles')
-      .select('id, role, branch_id')
-      .eq('user_id', userId)
-      .eq('role', role);
+    const availableContexts = await getUserInventoryContexts(userId);
+    const entry = availableContexts.find((context) =>
+      context.role === role &&
+      (context_type == null || context.context_type === context_type) &&
+      (context.branch_id ?? null) === (branch_id ?? null) &&
+      (context.warehouse_id ?? null) === (warehouse_id ?? null)
+    ) || availableContexts.find((context) =>
+      context.role === role &&
+      (context.branch_id ?? null) === (branch_id ?? null) &&
+      (context.warehouse_id ?? null) === (warehouse_id ?? null)
+    );
 
-    if (branch_id !== undefined && branch_id !== null) {
-      query.eq('branch_id', branch_id);
-    } else {
-      query.is('branch_id', null);
-    }
-
-    const { data: entry, error: entryError } = await query.maybeSingle();
-
-    if (entryError || !entry) {
-      logger.warn(`switchContext: user ${userId} attempted unauthorized context role=${role} branch=${branch_id}`);
-      res.status(403).json({ success: false, message: 'This role/branch combination is not assigned to you' });
+    if (!entry) {
+      logger.warn(`switchContext: user ${userId} attempted unauthorized context role=${role} branch=${branch_id} warehouse=${warehouse_id}`);
+      res.status(403).json({ success: false, message: 'This context is not assigned to you' });
       return;
     }
 
     // Fetch user profile for email
     const { data: userProfile } = await supabase
       .from('users')
-      .select('id, email, role')
+      .select('id, email, role, branch_id')
       .eq('id', userId)
       .single();
 
@@ -725,8 +826,13 @@ export const switchContext = async (
       userId,
       userProfile.email,
       userProfile.role,   // primary role (unchanged in DB)
-      role,              // active_role in JWT
-      branch_id ?? null  // active_branch_id in JWT
+      entry.role,
+      entry.context_type === 'branch' ? (entry.branch_id ?? null) : null,
+      {
+        activeWarehouseId: entry.warehouse_id,
+        activeContextType: entry.context_type,
+        homeBranchId: userProfile.branch_id ?? null
+      }
     );
 
     await registerManagedSession({
@@ -741,12 +847,16 @@ export const switchContext = async (
       success: true,
       data: {
         session,
-        active_role: role,
-        active_branch_id: branch_id ?? null
+        active_role: entry.role,
+        active_branch_id: entry.context_type === 'branch' ? (entry.branch_id ?? null) : null,
+        active_warehouse_id: entry.warehouse_id,
+        active_context_type: entry.context_type,
+        active_context: serializeActiveContext(entry),
+        available_contexts: availableContexts.map(serializeActiveContext)
       }
     });
 
-    logger.info(`User ${userProfile.email} switched context to role=${role} branch=${branch_id}`);
+    logger.info(`User ${userProfile.email} switched context to role=${entry.role} branch=${entry.branch_id} warehouse=${entry.warehouse_id}`);
   } catch (error) {
     next(error);
   }
@@ -833,8 +943,8 @@ export const getMe = async (
       logger.warn('getMe: Failed to fetch staff_profile, continuing without it', staffErr);
     }
 
-    // Include all branch roles so multi-role staff (e.g. cashier + waiter)
-    // keep access to every dashboard they're assigned to after a refresh.
+    // Include all assigned contexts so staff can move between branch and
+    // warehouse work surfaces without re-authenticating.
     let allRoles: any[] = [];
     try {
       const { data: roleRows } = await supabase
@@ -849,11 +959,26 @@ export const getMe = async (
       allRoles = [{ role: profile.role, branch_id: profile.branch_id, is_primary: true }];
     }
 
+    const availableContexts = await getUserInventoryContexts(req.user.id, {
+      role: profile.role,
+      branch_id: profile.branch_id ?? null
+    });
+    const activeContext = availableContexts.find((context) =>
+      context.role === req.user?.role &&
+      context.context_type === (req.user?.context_type || 'branch') &&
+      (context.branch_id ?? null) === ((req.user?.context_type === 'branch' ? req.user?.branch_id : null) ?? null) &&
+      (context.warehouse_id ?? null) === (req.user?.warehouse_id ?? null)
+    ) || getDefaultUserInventoryContext(availableContexts, req.user?.role || profile.role);
+
     // Build response
     const responseData = await enrichUserBranch({
       ...profile,
       id_number: idNumber,
-      all_roles: allRoles
+      role: req.user?.role || profile.role,
+      primary_role: profile.role,
+      all_roles: allRoles,
+      available_contexts: availableContexts.map(serializeActiveContext),
+      active_context: serializeActiveContext(activeContext)
     });
 
     res.status(200).json({

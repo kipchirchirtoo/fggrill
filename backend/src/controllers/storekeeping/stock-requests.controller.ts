@@ -6,6 +6,10 @@ import notificationService from '../../services/notification.service';
 import * as BranchInventoryService from '../../services/branch-inventory.service';
 import { isGlobalRole } from '../../utils/branchIsolation';
 import { randomUUID } from 'crypto';
+import {
+    KYOGONG_BRANCH_STORE_CUTOVER_AT,
+    shouldUseKyogongBranchCutover,
+} from '../../services/kyogong-branch-cutover.service';
 
 const SIMPLE_ITEM_SELECT = 'sku, item_name, description, quantity, store_type, is_active';
 
@@ -167,7 +171,15 @@ export const getStockRequests = async (
             }
         }
 
-        const data = await BranchInventoryService.getRequests(branchId, status);
+        const applyCutover = shouldUseKyogongBranchCutover({
+            branchId,
+            role: req.user?.role,
+        });
+        const data = await BranchInventoryService.getRequests(
+            branchId,
+            status,
+            applyCutover ? { createdFrom: KYOGONG_BRANCH_STORE_CUTOVER_AT } : undefined,
+        );
 
         res.status(200).json({
             success: true,
@@ -1234,6 +1246,10 @@ export const getApprovedRequests = async (
 
         if (branchId) {
             query = query.eq('requesting_branch_id', branchId);
+        }
+
+        if (shouldUseKyogongBranchCutover({ branchId, role: req.user?.role })) {
+            query = query.gte('created_at', KYOGONG_BRANCH_STORE_CUTOVER_AT);
         }
 
         const { data: requests, error } = await query.order('created_at', { ascending: false });

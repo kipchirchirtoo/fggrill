@@ -167,6 +167,7 @@ export const getRoles = async (
       // Kitchen
       { value: 'kitchen',                        label: 'Kitchen Staff',                  description: 'Kitchen operations' },
       { value: 'kitchen_operations',             label: 'Kitchen Operations',             description: 'Kitchen operations management' },
+      { value: 'choma_zone_kds',                 label: 'Choma Zone KDS',                 description: 'Branch-scoped Choma Zone kitchen display screen' },
       { value: 'chef',                           label: 'Chef',                           description: 'Cooking and food prep' },
       { value: 'head_chef',                      label: 'Head Chef',                      description: 'Lead chef' },
       { value: 'cook',                           label: 'Cook',                           description: 'Food preparation' },
@@ -594,6 +595,7 @@ export const createStaffMember = async (
       chef: 'kitchen', head_chef: 'kitchen', sous_chef: 'kitchen',
       line_cook: 'kitchen', kitchen_staff: 'kitchen', kitchen_manager: 'kitchen',
       kitchen_operations: 'kitchen', pastry_chef: 'kitchen', pos_kitchen: 'kitchen',
+      choma_zone_kds: 'kitchen',
       receptionist: 'front_office', concierge: 'front_office', bellboy: 'front_office',
       front_desk_supervisor: 'front_office',
       cashier: 'finance', accountant: 'finance', finance_manager: 'finance',

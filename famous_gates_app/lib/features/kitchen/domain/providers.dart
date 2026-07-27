@@ -5,6 +5,7 @@ import '../../../core/realtime/realtime_service.dart';
 import '../../../core/storage/secure_storage_provider.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/repository.dart';
+import 'display_scope.dart';
 import 'models.dart';
 
 final kdsOrdersProvider =
@@ -12,10 +13,19 @@ final kdsOrdersProvider =
   return KdsNotifier(ref)..start();
 });
 
+final chomaZoneKdsOrdersProvider =
+    StateNotifierProvider<KdsNotifier, AsyncValue<List<KitchenOrder>>>((ref) {
+  return KdsNotifier(ref, outletScope: KitchenDisplayScope.chomaZone)..start();
+});
+
 class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
-  KdsNotifier(this._ref) : super(const AsyncValue.loading());
+  KdsNotifier(
+    this._ref, {
+    this.outletScope = KitchenDisplayScope.restaurant,
+  }) : super(const AsyncValue.loading());
 
   final Ref _ref;
+  final KitchenDisplayScope outletScope;
   StreamSubscription<OrderItemRealtimeEvent>? _realtimeSub;
   // Polling timer — always active, parallel to Realtime, so cards appear
   // within 5 s even while Realtime is still connecting/authenticating.
@@ -83,7 +93,7 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
 
     try {
       final repo = _ref.read(kitchenRepositoryProvider);
-      final orders = await repo.getOrders();
+      final orders = await repo.getOrders(outletScope: outletScope);
       if (mounted) state = AsyncValue.data(orders);
     } catch (error, stackTrace) {
       if (mounted) state = AsyncValue.error(error, stackTrace);

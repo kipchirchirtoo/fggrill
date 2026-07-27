@@ -6,6 +6,7 @@ import notificationService from '../../services/notification.service';
 import { UserRole } from '../../models/User';
 import pool from '../../db';
 import { isGlobalRole } from '../../utils/branchIsolation';
+import { isWarehouseUserContext } from '../../services/inventory-warehouse.service';
 
 // =====================================================
 // VEHICLES 
@@ -253,7 +254,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
     const { status, category, search, scope } = req.query;
     const user = (req as any).user;
     const userBranchId = user?.branch_id || user?.branchId;
-    const isCentral = !userBranchId || isGlobalRole(user?.role);
+    const isCentral = isWarehouseUserContext(user) || (!userBranchId && isGlobalRole(user?.role));
 
     logger.debug('SUPPLIER_DEBUG_START', { 
       email: user?.email, 

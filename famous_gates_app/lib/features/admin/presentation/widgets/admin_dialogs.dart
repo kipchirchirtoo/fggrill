@@ -367,7 +367,8 @@ class _UserDialogState extends ConsumerState<_UserDialog> {
         'line_cook',
         'kitchen_staff',
         'pastry_chef',
-        'kitchen_operations'
+        'kitchen_operations',
+        'choma_zone_kds'
       ]
     ),
     (

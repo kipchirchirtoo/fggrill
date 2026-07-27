@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/admin_providers.dart';
@@ -235,6 +236,10 @@ class _UserAvatarMenu extends ConsumerWidget {
       offset: const Offset(0, 44),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (value) {
+        if (value == 'switch_context') {
+          context.go('/settings');
+          return;
+        }
         if (value == 'logout') {
           ref.read(authNotifierProvider.notifier).logout();
         }
@@ -283,6 +288,13 @@ class _UserAvatarMenu extends ConsumerWidget {
         ),
       ),
       itemBuilder: (_) => [
+        if (user?.hasMultipleContexts == true)
+          PopupMenuItem(
+              value: 'switch_context',
+              child: ListTile(
+                  leading: Icon(PhosphorIcons.arrowsLeftRight(), size: 18),
+                  title: const Text('Switch Context'),
+                  dense: true)),
         PopupMenuItem(
             value: 'logout',
             child: ListTile(

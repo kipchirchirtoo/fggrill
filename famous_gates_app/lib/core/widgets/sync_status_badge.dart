@@ -53,13 +53,10 @@ class SyncStatusBadge extends ConsumerWidget {
     }
 
     if (compact) {
-      return Tooltip(
-        message: text,
-        child: Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
+      return Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       );
     }
 

@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, File, Directory;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -17,6 +17,8 @@ import 'core/utils/working_directory_guard.dart';
 
 bool _updateNoticeShown = false;
 bool _isExitingFullScreen = false;
+bool _renderCrashCaptured = false;
+bool _layoutCrashCaptured = false;
 
 bool get _isDesktop =>
     !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
@@ -55,6 +57,55 @@ Future<void> main() async {
       );
       return;
     }
+
+    // ── TEMP DIAGNOSTIC: capture the first render/semantics-corruption error ──
+    // The cashier station floods the console with `!semantics.parentDataDirty`,
+    // `child._parent == this`, and "no size" hit-test errors every frame,
+    // hanging the app. Those follow-on errors are all cascade noise — only the
+    // FIRST one carries a useful stack. Dump that first stack to a file we can
+    // read, then swallow the flood so the app stops hanging and we can see
+    // whether content renders.
+    final isLayoutRecursion = message.contains('Stack Overflow') ||
+        message.contains('Stack overflow') ||
+        message.contains('was not laid out') ||
+        message.contains('RenderBox was not laid out');
+    final isRenderCorruption = message.contains('parentDataDirty') ||
+        message.contains('child._parent == this') ||
+        message.contains('hit test a render box with no size') ||
+        message.contains('_debugRelayoutBoundaryAlreadyMarkedNeedsLayout');
+    if (isLayoutRecursion || isRenderCorruption) {
+      // The layout-recursion stack names the offending widget (a repeating
+      // frame). Prioritise capturing THAT over the semantics cascade.
+      final wantCapture = isLayoutRecursion
+          ? !_layoutCrashCaptured
+          : (!_renderCrashCaptured && !_layoutCrashCaptured);
+      if (wantCapture) {
+        if (isLayoutRecursion) _layoutCrashCaptured = true;
+        _renderCrashCaptured = true;
+        try {
+          final buffer = StringBuffer()
+            ..writeln('=== FIRST ${isLayoutRecursion ? 'LAYOUT-RECURSION' : 'RENDER-CORRUPTION'} ERROR ===')
+            ..writeln(DateTime.now().toIso8601String())
+            ..writeln(details.toStringShort())
+            ..writeln('--- exception ---')
+            ..writeln(details.exception.toString())
+            ..writeln('--- stack (first 120 frames) ---');
+          final frames =
+              (details.stack?.toString() ?? '(no stack)').split('\n');
+          buffer.writeln(frames.take(120).join('\n'));
+          final name = isLayoutRecursion
+              ? 'fggrill_cashier_layout_crash.txt'
+              : 'fggrill_cashier_crash.txt';
+          final file = File('${Directory.systemTemp.path}/$name');
+          file.writeAsStringSync(buffer.toString());
+          debugPrint('■■■ Cashier crash stack written to: ${file.path} ■■■');
+        } catch (_) {}
+        FlutterError.presentError(details);
+      }
+      // Swallow the per-frame cascade so the UI thread isn't saturated.
+      return;
+    }
+
     FlutterError.presentError(details);
   };
   ErrorWidget.builder = (details) {

@@ -6,6 +6,7 @@ import { recordAuditTrail } from '../../utils/audit';
 import { generateGRNPDF } from '../../services/native-pdf-reports.service';
 import { ensureInventoryLocation } from './items.controller';
 import { postGrnFoundationMovements } from '../../services/branch-inventory.service';
+import { resolveStoreContextForUser } from '../../services/inventory-warehouse.service';
 
 const generateGRNNumber = async (): Promise<string> => {
     const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, '');
@@ -47,40 +48,19 @@ const sameNormalizedText = (left: any, right: any): boolean => {
 
 const resolveReceivingBranchId = async (req: Request): Promise<number | null> => {
     const userBranchId = req.user?.branch_id ? Number(req.user.branch_id) : null;
-    if (req.user?.role !== 'central_storekeeper') {
+    if (req.user?.context_type !== 'warehouse') {
         return Number.isFinite(userBranchId) ? userBranchId : null;
     }
 
-    const { data: kyogong, error: kyogongError } = await supabase
-        .from('branches')
-        .select('id, code, name')
-        .eq('id', 1)
-        .limit(1)
-        .maybeSingle();
-
-    if (kyogongError) throw kyogongError;
-
-    if (kyogong && (kyogong.code === 'KYO' || String(kyogong.name || '').toLowerCase() === 'kyogong')) {
-        if (Number(kyogong.id) !== userBranchId) {
-            logger.warn(`Central GRN branch remapped from user branch ${userBranchId || 'none'} to Kyogong central branch ${kyogong.id}`);
+    const storeContext = await resolveStoreContextForUser(req.user || {});
+    if (storeContext.scope === 'warehouse' && storeContext.operatingBranchId) {
+        if (Number(storeContext.operatingBranchId) !== userBranchId) {
+            logger.warn(`Central GRN branch remapped from user branch ${userBranchId || 'none'} to warehouse host branch ${storeContext.operatingBranchId}`);
         }
-        return Number(kyogong.id);
+        return Number(storeContext.operatingBranchId);
     }
 
-    const { data: central, error } = await supabase
-        .from('branches')
-        .select('id')
-        .eq('is_central_warehouse', true)
-        .limit(1)
-        .maybeSingle();
-
-    if (error) throw error;
-
-    if (central?.id && Number(central.id) !== userBranchId) {
-        logger.warn(`Central GRN branch remapped from user branch ${userBranchId || 'none'} to central warehouse ${central.id}`);
-    }
-
-    return central?.id ? Number(central.id) : (Number.isFinite(userBranchId) ? userBranchId : null);
+    return Number.isFinite(userBranchId) ? userBranchId : null;
 };
 
 const findExistingMatchingGRN = async (params: {

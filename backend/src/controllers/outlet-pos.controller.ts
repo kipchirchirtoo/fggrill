@@ -245,7 +245,14 @@ const REVIEW_ROLES = new Set([
 // approval. KITCHEN_VOID_ROLES gates the new first stage; the cashier-
 // initiated instant-void tool (cashierVoidWholeBill/cashierVoidLineItems)
 // is a separate flow and does not use this chain.
-const KITCHEN_VOID_ROLES = new Set(['kitchen', 'pos_kitchen', 'kitchen_operations', 'head_chef', 'sous_chef']);
+const KITCHEN_VOID_ROLES = new Set([
+  'kitchen',
+  'pos_kitchen',
+  'kitchen_operations',
+  'choma_zone_kds',
+  'head_chef',
+  'sous_chef'
+]);
 const KITCHEN_VOID_NOTIFY_ROLES = ['kitchen', 'pos_kitchen'];
 
 const MANAGE_OUTLET_ROLES = new Set([
@@ -1908,6 +1915,15 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
           total: order.total_amount,
           total_amount: order.total_amount,
           captain_order_already_printed: isCaptainOrderAlreadyPrinted(order, orderItems),
+          // Exact time the captain ticket was last printed (updates on each
+          // (re)print/recall via markCaptainOrderPrinted). Surfaced so the KDS
+          // and cashier can show "last printed at" in Kenyan time for
+          // accountability — including recalled orders.
+          captain_printed_at: order.captain_printed_at || null,
+          original_bill_printed_at: order.original_bill_printed_at || null,
+          last_bill_printed_at: order.last_bill_printed_at
+            || order.original_bill_printed_at || order.captain_printed_at || null,
+          bill_reprint_count: Number(order.bill_reprint_count || 0),
           items: orderItems.map((item: any, index: number) => {
             const itemStatus = captainOrderNormalizeStatus(item.kitchen_status || item.status || order.kitchen_status);
             return {
@@ -2721,6 +2737,7 @@ export const markOriginalBillPrinted = async (req: Request, res: Response, next:
       .from('pos_shift_orders')
       .update({
         original_bill_printed_at: new Date().toISOString(),
+        last_bill_printed_at: new Date().toISOString(),
         bill_reprint_count: 0
       })
       .eq('id', orderId)
@@ -2754,17 +2771,26 @@ export const reprintShiftOrderBill = async (req: Request, res: Response, next: N
 
     const { data, error } = await supabase
       .from('pos_shift_orders')
-      .update({ bill_reprint_count: currentCount + 1 })
+      .update({
+        bill_reprint_count: currentCount + 1,
+        last_bill_printed_at: new Date().toISOString()
+      })
       .eq('id', orderId)
       .eq('shift_id', shiftId)
       .eq('bill_reprint_count', currentCount) // optimistic lock against a concurrent reprint racing this one
-      .select('bill_reprint_count')
+      .select('bill_reprint_count, last_bill_printed_at')
       .single();
     if (error || !data) {
       throw new AppError('Reprint limit reached. Only one duplicate bill is allowed.', 409);
     }
 
-    res.json({ success: true, data: { bill_reprint_count: data.bill_reprint_count } });
+    res.json({
+      success: true,
+      data: {
+        bill_reprint_count: data.bill_reprint_count,
+        last_bill_printed_at: data.last_bill_printed_at
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -3217,7 +3243,8 @@ export const requestVoidShiftOrder = async (req: Request, res: Response, next: N
 const fetchEnrichedPosVoidRequests = async (
   status: string,
   branchId: number | null,
-  scopeToBranch: boolean
+  scopeToBranch: boolean,
+  outletScope: KitchenOutletScope = null,
 ): Promise<Record<string, any>[]> => {
   let query = supabase
     .from('pos_void_requests')
@@ -3245,7 +3272,7 @@ const fetchEnrichedPosVoidRequests = async (
       ? supabase.from('pos_shift_orders').select('id, order_number, customer_name, total_amount, amount_paid, balance_amount, items').in('id', orderIds)
       : Promise.resolve({ data: [], error: null }),
     outletIds.length
-      ? supabase.from('pos_outlets').select('id, name').in('id', outletIds)
+      ? supabase.from('pos_outlets').select('id, name, outlet_type').in('id', outletIds)
       : Promise.resolve({ data: [], error: null }),
     branchIds.length
       ? supabase.from('branches').select('id, name').in('id', branchIds)
@@ -3264,7 +3291,15 @@ const fetchEnrichedPosVoidRequests = async (
   const outletsById = new Map((outletsResult.data || []).map((outlet: any) => [outlet.id, outlet]));
   const branchesById = new Map((branchesResult.data || []).map((branch: any) => [branch.id, branch]));
   const usersById = new Map((usersResult.data || []).map((user: any) => [user.id, user]));
-  return rows.map((row: any) => {
+  const filteredRows = outletScope
+    ? rows.filter((row: any) =>
+        matchesKitchenOutletScope(
+          outletsById.get(row.outlet_id)?.outlet_type,
+          outletScope,
+        ),
+      )
+    : rows;
+  return filteredRows.map((row: any) => {
     const order = ordersById.get(row.order_id) || {};
     const outlet = outletsById.get(row.outlet_id) || {};
     const branch = branchesById.get(row.branch_id) || {};
@@ -3305,7 +3340,8 @@ export const getPendingVoidsKitchenWholeBill = async (req: Request, res: Respons
       throw new AppError('Forbidden: kitchen access required', 403);
     }
     const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
-    const enriched = await fetchEnrichedPosVoidRequests('pending', branchId, !isGlobalUser(req));
+    const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
+    const enriched = await fetchEnrichedPosVoidRequests('pending', branchId, !isGlobalUser(req), outletScope);
     res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
@@ -3320,7 +3356,8 @@ export const getPendingVoidsCashierWholeBill = async (req: Request, res: Respons
       throw new AppError('Forbidden: cashier access required', 403);
     }
     const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
-    const enriched = await fetchEnrichedPosVoidRequests('kitchen_acknowledged', branchId, !isGlobalUser(req));
+    const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
+    const enriched = await fetchEnrichedPosVoidRequests('kitchen_acknowledged', branchId, !isGlobalUser(req), outletScope);
     res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
@@ -3333,7 +3370,8 @@ export const getPendingPosVoidRequests = async (req: Request, res: Response, nex
     assertUser(req);
     if (!REVIEW_ROLES.has(roleFor(req))) throw new AppError('Forbidden: accountant approval required', 403);
     const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
-    const enriched = await fetchEnrichedPosVoidRequests('cashier_acknowledged', branchId, !isGlobalUser(req));
+    const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
+    const enriched = await fetchEnrichedPosVoidRequests('cashier_acknowledged', branchId, !isGlobalUser(req), outletScope);
     res.json({ success: true, data: enriched });
   } catch (error) {
     next(error);
@@ -3852,6 +3890,54 @@ const resolveStationCashierRole = (outletType: unknown): string => {
     if (outletTypes.includes(type)) return roleKey;
   }
   return 'cashier';
+};
+
+type KitchenOutletScope = 'restaurant' | 'choma_zone' | null;
+
+const normalizeKitchenOutletScope = (value: unknown): KitchenOutletScope => {
+  const scope = String(value || '').trim().toLowerCase();
+  return scope === 'restaurant' || scope === 'choma_zone'
+    ? (scope as KitchenOutletScope)
+    : null;
+};
+
+const matchesKitchenOutletScope = (
+  outletType: unknown,
+  outletScope: KitchenOutletScope,
+): boolean => {
+  if (!outletScope) return true;
+  return String(outletType || '').trim().toLowerCase() === outletScope;
+};
+
+const filterRowsByKitchenOutletScope = async <
+  T extends { outlet_id?: string | null }
+>(
+  rows: T[],
+  outletScope: KitchenOutletScope,
+): Promise<T[]> => {
+  if (!outletScope || !rows.length) return rows;
+
+  const outletIds = Array.from(
+    new Set(rows.map((row) => row.outlet_id).filter(Boolean) as string[]),
+  );
+  if (!outletIds.length) return [];
+
+  const { data: outlets, error } = await supabase
+    .from('pos_outlets')
+    .select('id, outlet_type')
+    .in('id', outletIds);
+  if (error) throw error;
+
+  const outletTypeById = new Map(
+    (outlets || []).map((outlet: any) => [String(outlet.id), outlet.outlet_type]),
+  );
+
+  return rows.filter((row) =>
+    matchesKitchenOutletScope(
+      outletTypeById.get(String(row.outlet_id || '')),
+      outletScope,
+    ),
+  );
 };
 
 // Restricts a pos_item_void_requests query to the calling cashier's own
@@ -4650,6 +4736,7 @@ export const getPendingVoidsKitchen = async (req: Request, res: Response, next: 
   try {
     assertUser(req);
     const branchId = branchIdFor(req);
+    const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
 
     let query = supabase
       .from('pos_item_void_requests')
@@ -4667,7 +4754,7 @@ export const getPendingVoidsKitchen = async (req: Request, res: Response, next: 
     const { data, error } = await query;
     if (error) throw error;
 
-    const rows = data || [];
+    const rows = await filterRowsByKitchenOutletScope(data || [], outletScope);
     const userIds = Array.from(new Set(rows.map((r: any) => r.requested_by).filter(Boolean)));
     const namesById = await userDisplayNamesById(userIds as string[]);
     const enriched = rows.map((r: any) => ({

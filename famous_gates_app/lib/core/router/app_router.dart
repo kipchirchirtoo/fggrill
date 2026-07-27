@@ -18,6 +18,7 @@ import '../../features/cashier/presentation/cashier_dashboard.dart';
 import '../../features/hr/presentation/hr_dashboard.dart';
 import '../../features/hr/domain/providers.dart';
 import '../../features/kitchen/presentation/kds_screen.dart';
+import '../../features/kitchen/domain/display_scope.dart';
 import '../../features/maintenance/presentation/maintenance_dashboard.dart';
 import '../../features/pos/presentation/outlet_pos_screen.dart';
 import '../../features/reception/presentation/reception_dashboard.dart';
@@ -101,13 +102,20 @@ final routerProvider = Provider<GoRouter>((ref) {
               user.roles.contains('super_admin')) {
             return null;
           }
+          if (_isCentralStoreRoute(location) &&
+              user.contextType != 'warehouse' &&
+              !_isCentralStoreUser(user)) {
+            return _defaultRouteForUser(user);
+          }
+          if (_isBranchStoreRoute(location) &&
+              (user.contextType == 'warehouse' || _isCentralStoreUser(user))) {
+            return _defaultRouteForUser(user);
+          }
           final allowedRoles = _rolesForLocation(location);
           // Allow the route if ANY of the account's roles is permitted — a staff
           // member with two roles (e.g. cashier + restaurant waiter) must be
           // able to reach either dashboard without being bounced back.
-          if (allowedRoles.isEmpty ||
-              user.roles.any(allowedRoles.contains) ||
-              allowedRoles.contains(user.role)) {
+          if (allowedRoles.isEmpty || allowedRoles.contains(user.role)) {
             return null;
           }
           return _defaultRouteForUser(user);
@@ -248,6 +256,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             const KDSScreen(initialSection: KitchenKdsSection.orders),
       ),
       GoRoute(
+        path: '/kitchen/void-requests',
+        builder: (context, state) =>
+            const KDSScreen(initialSection: KitchenKdsSection.voidRequests),
+      ),
+      GoRoute(
         path: '/kitchen/history',
         builder: (context, state) =>
             const KDSScreen(initialSection: KitchenKdsSection.history),
@@ -261,6 +274,47 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/kitchen/notifications',
         builder: (context, state) =>
             const KDSScreen(initialSection: KitchenKdsSection.notifications),
+      ),
+      GoRoute(
+        path: '/kitchen/choma-zone',
+        builder: (context, state) => const KDSScreen(
+          scope: KitchenDisplayScope.chomaZone,
+        ),
+      ),
+      GoRoute(
+        path: '/kitchen/choma-zone/orders',
+        builder: (context, state) => const KDSScreen(
+          scope: KitchenDisplayScope.chomaZone,
+          initialSection: KitchenKdsSection.orders,
+        ),
+      ),
+      GoRoute(
+        path: '/kitchen/choma-zone/void-requests',
+        builder: (context, state) => const KDSScreen(
+          scope: KitchenDisplayScope.chomaZone,
+          initialSection: KitchenKdsSection.voidRequests,
+        ),
+      ),
+      GoRoute(
+        path: '/kitchen/choma-zone/history',
+        builder: (context, state) => const KDSScreen(
+          scope: KitchenDisplayScope.chomaZone,
+          initialSection: KitchenKdsSection.history,
+        ),
+      ),
+      GoRoute(
+        path: '/kitchen/choma-zone/analytics',
+        builder: (context, state) => const KDSScreen(
+          scope: KitchenDisplayScope.chomaZone,
+          initialSection: KitchenKdsSection.analytics,
+        ),
+      ),
+      GoRoute(
+        path: '/kitchen/choma-zone/notifications',
+        builder: (context, state) => const KDSScreen(
+          scope: KitchenDisplayScope.chomaZone,
+          initialSection: KitchenKdsSection.notifications,
+        ),
       ),
       GoRoute(
           path: '/cashier',
@@ -934,6 +988,12 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 }
 
 String _defaultRouteForUser(User user) {
+  if (user.role == 'choma_zone_kds' || user.roles.contains('choma_zone_kds')) {
+    return '/kitchen/choma-zone';
+  }
+  if (_isCentralStoreUser(user)) {
+    return '/central-store';
+  }
   // A cashier's home is the cashier desk — even though they're assigned to a
   // POS outlet (e.g. restaurant) to clear its orders, their outletType must not
   // route them into the POS module.
@@ -960,9 +1020,24 @@ String _defaultRouteForUser(User user) {
     case 'kyogong_sports_bar':
       return '/pos/kyogong-sports-bar';
     default:
-      return getRoleRoute(user.role);
+      return getRoleRoute(user.role, contextType: user.contextType);
   }
 }
+
+bool _isCentralStoreRoute(String location) =>
+    location == '/central-store' || location.startsWith('/central-store/');
+
+bool _isBranchStoreRoute(String location) =>
+    location == '/store' ||
+    location.startsWith('/store/') ||
+    location == '/branch-store' ||
+    location.startsWith('/branch-store/');
+
+bool _isCentralStoreUser(User user) =>
+    user.role == 'central_storekeeper' ||
+    user.role == 'central_operations_manager' ||
+    user.roles.contains('central_storekeeper') ||
+    user.roles.contains('central_operations_manager');
 
 const _publicRoutes = {
   '/splash',
@@ -1004,7 +1079,8 @@ const _kitchenRoles = {
   'sous_chef',
   'chef',
   'cook',
-  'pos_kitchen'
+  'pos_kitchen',
+  'choma_zone_kds',
 };
 const _receptionRoles = {
   'receptionist',
@@ -1108,7 +1184,7 @@ const _routeRoles = <String, Set<String>>{
   '/branch-store': _branchStorekeeperRoles,
   '/central-store': _centralStoreRoles,
   '/auditor': {'auditor', 'night_auditor', 'director'},
-  '/director': {'director', 'super_admin', 'auditor', 'central_storekeeper'},
+  '/director': {'director', 'super_admin', 'auditor'},
   '/admin': _adminRoles,
   '/admin/users': {'super_admin'},
   '/admin/id-cards': {'super_admin'},

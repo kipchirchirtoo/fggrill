@@ -491,6 +491,7 @@ export const getRoles = async (
       { id: 'pos_kitchen',               name: 'pos_kitchen',               display_name: 'POS Kitchen',                    category: 'Kitchen' },
       { id: 'kitchen',                   name: 'kitchen',                   display_name: 'Kitchen',                        category: 'Kitchen' },
       { id: 'kitchen_operations',        name: 'kitchen_operations',        display_name: 'Kitchen Operations',             category: 'Kitchen' },
+      { id: 'choma_zone_kds',            name: 'choma_zone_kds',            display_name: 'Choma Zone KDS',                 category: 'Kitchen' },
       { id: 'kitchen_helper',            name: 'kitchen_helper',            display_name: 'Kitchen Helper',                 category: 'Kitchen' },
       { id: 'dishwasher',                name: 'dishwasher',                display_name: 'Dishwasher',                     category: 'Kitchen' },
       // ── Maintenance ─────────────────────────────────────────────────────

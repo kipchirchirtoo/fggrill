@@ -10,37 +10,75 @@ import {
   getCategories,
   getCategoryCode
 } from '../../services/sku.service';
+import {
+  getCanonicalCentralWarehouseLocation,
+  getCentralWarehouseRecord,
+  isWarehouseUserContext,
+} from '../../services/inventory-warehouse.service';
 
 /**
- * Finds or auto-creates the inventory location for a branch.
- * Kyogong is the central store; other main branches still use branch_store.
+ * Finds or auto-creates the inventory location for the active store context.
  */
-export async function ensureInventoryLocation(sb: typeof supabase, branchId: number | undefined): Promise<string> {
-  if (!branchId) throw new Error('branch_id required to resolve inventory location');
+export async function ensureInventoryLocation(
+  sb: typeof supabase,
+  branchId: number | undefined,
+  context?: { contextType?: string | null; warehouseId?: string | null }
+): Promise<string> {
+  const isWarehouseContext = context?.contextType === 'warehouse' || !!context?.warehouseId;
 
-  // Determine location type from branch flags, not hardcoded ID
-  const { data: branchRow } = await sb
-    .from('branches')
-    .select('is_central_warehouse, is_main_branch')
-    .eq('id', branchId)
-    .maybeSingle();
-  const locType = (branchId === 1 || branchRow?.is_central_warehouse)
-    ? 'central_store'
-    : 'branch_store';
+  if (isWarehouseContext) {
+    const { id: existingWarehouseLocationId, warehouse } = await getCanonicalCentralWarehouseLocation();
+    if (existingWarehouseLocationId) return existingWarehouseLocationId;
+
+    const centralWarehouse = warehouse || await getCentralWarehouseRecord();
+    if (!centralWarehouse?.operating_branch_id) {
+      throw new Error('Active warehouse context has no operating branch');
+    }
+
+    const insertPayload: any = {
+      branch_id: centralWarehouse.operating_branch_id,
+      warehouse_id: centralWarehouse.id.startsWith('legacy-branch-') ? null : centralWarehouse.id,
+      location_code: `WAREHOUSE-${centralWarehouse.code}`,
+      name: centralWarehouse.name,
+      location_type: 'central_store',
+      is_active: true,
+      metadata: {
+        canonical: true,
+        hosted_at_branch_id: centralWarehouse.operating_branch_id
+      }
+    };
+
+    const { data: created, error } = await sb
+      .from('inventory_locations')
+      .insert(insertPayload)
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return created.id;
+  }
+
+  if (!branchId) throw new Error('branch_id required to resolve inventory location');
 
   const { data: existing } = await sb
     .from('inventory_locations')
     .select('id')
     .eq('branch_id', branchId)
-    .eq('location_type', locType)
+    .eq('location_type', 'branch_store')
+    .eq('is_active', true)
     .maybeSingle();
   if (existing?.id) return existing.id;
 
-  // Auto-create if missing
-  const locationCode = `${locType.toUpperCase().replace('_', '-')}-${branchId}`;
+  const locationCode = `BRANCH-STORE-${branchId}`;
   const { data: created, error } = await sb
     .from('inventory_locations')
-    .insert({ branch_id: branchId, location_code: locationCode, name: locType === 'central_store' ? 'Central Store' : 'Branch Store', location_type: locType })
+    .insert({
+      branch_id: branchId,
+      location_code: locationCode,
+      name: 'Branch Store',
+      location_type: 'branch_store',
+      is_active: true
+    })
     .select('id')
     .single();
   if (error) throw error;
@@ -61,9 +99,13 @@ export const getItems = async (
 
     // Find this branch's inventory location (creates it if missing)
     let locationId: string | null = null;
+    const warehouseContext = isWarehouseUserContext(req.user);
     if (branchId) {
       try {
-        locationId = await ensureInventoryLocation(supabase, Number(branchId));
+        locationId = await ensureInventoryLocation(supabase, Number(branchId), {
+          contextType: warehouseContext ? 'warehouse' : 'branch',
+          warehouseId: req.user?.warehouse_id || null
+        });
       } catch (err: any) {
         logger.warn(`getItems: could not resolve inventory location for branch ${branchId}: ${err.message}`);
       }
@@ -75,15 +117,7 @@ export const getItems = async (
     // Central-context requests (no branch_id, or the central warehouse
     // itself) only see branch_id IS NULL rows; branch requests see their
     // own branch's items plus the shared catalog.
-    let isCentralContext = true;
-    if (branchId) {
-      const { data: branchRow } = await supabase
-        .from('branches')
-        .select('is_central_warehouse')
-        .eq('id', branchId)
-        .maybeSingle();
-      isCentralContext = Number(branchId) === 1 || !!branchRow?.is_central_warehouse;
-    }
+    const isCentralContext = warehouseContext;
 
     let query = supabase
       .from('inventory_items')

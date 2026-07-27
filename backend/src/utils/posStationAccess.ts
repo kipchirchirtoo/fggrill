@@ -26,6 +26,20 @@ const EXPLICIT_ASSIGNMENT_CASHIER_ROLES = new Set([
   ...Object.keys(POS_STATION_CASHIER_ROLE_TYPES)
 ]);
 
+/**
+ * Canonical, branch-agnostic list of every cashier-station role in the system.
+ *
+ * This is the SINGLE source of truth for "who is a cashier." To onboard a new
+ * branch or a new cashier variant, add it to POS_STATION_CASHIER_ROLE_TYPES
+ * above — it then flows automatically into POS station access, petty-cash /
+ * expenses authorization, and anywhere else that reads this list. Never
+ * re-list cashier roles inline in a route file; import this instead so the
+ * 10-branch (and growing) estate stays in sync.
+ */
+export const CASHIER_STATION_ROLES: string[] = Array.from(
+  EXPLICIT_ASSIGNMENT_CASHIER_ROLES
+);
+
 export const normalizePosRole = (role: unknown): string =>
   String(role || '').trim().toLowerCase();
 

@@ -173,8 +173,8 @@ export const protect = async (
         decoded = undefined;
       }
 
-      if (decoded?.sub) {
-        logger.debug('Auth Middleware - JWT verified for sub:', decoded.sub);
+        if (decoded?.sub) {
+          logger.debug('Auth Middleware - JWT verified for sub:', decoded.sub);
 
         // Valid JWT - get user from database (with retry + direct SQL fallback)
         let user: any = null;
@@ -200,16 +200,21 @@ export const protect = async (
           // proceed instead of returning a spurious 401.
           if (decoded.role || decoded.active_role) {
             const effectiveRole = decoded.active_role || decoded.role;
-            const effectiveBranchId = decoded.active_branch_id ?? null;
+            const contextType = decoded.active_context_type || 'branch';
+            const effectiveBranchId = contextType === 'warehouse'
+              ? (decoded.home_branch_id ?? null)
+              : (decoded.active_branch_id ?? decoded.home_branch_id ?? null);
             req.user = {
               id: decoded.sub,
               email: decoded.email || null,
               role: effectiveRole,
               branch_id: effectiveBranchId,
               branchId: effectiveBranchId,
+              context_type: contextType,
+              warehouse_id: decoded.active_warehouse_id || null,
               first_name: null,
               last_name: null,
-              is_central: !effectiveBranchId,
+              is_central: contextType === 'warehouse',
               primary_role: decoded.role,
               active_context: !!(decoded.active_role),
               active_outlet_id: decoded.active_outlet_id || null,
@@ -248,9 +253,12 @@ export const protect = async (
 
           // Base user from DB
           const effectiveRole = decoded.active_role || user.role;
-          let effectiveBranchId = (decoded.active_branch_id !== undefined && decoded.active_branch_id !== null)
-            ? decoded.active_branch_id
-            : user.branch_id;
+          const contextType = decoded.active_context_type || 'branch';
+          let effectiveBranchId = contextType === 'warehouse'
+            ? (decoded.home_branch_id ?? user.branch_id)
+            : ((decoded.active_branch_id !== undefined && decoded.active_branch_id !== null)
+              ? decoded.active_branch_id
+              : user.branch_id);
 
           // Fallback: if users.branch_id is null, check user_branch_roles for a primary assignment
           if (!effectiveBranchId) {
@@ -274,9 +282,11 @@ export const protect = async (
             role: effectiveRole,
             branch_id: effectiveBranchId,
             branchId: effectiveBranchId,
+            context_type: contextType,
+            warehouse_id: decoded.active_warehouse_id || null,
             first_name: user.first_name,
             last_name: user.last_name,
-            is_central: !effectiveBranchId,
+            is_central: contextType === 'warehouse',
             primary_role: user.role,          // always the DB role, for audit
             active_context: !!(decoded.active_role), // flag: user is in switched context
             active_outlet_id: decoded.active_outlet_id || null,
@@ -333,6 +343,8 @@ export const protect = async (
         role: user.role,
         branch_id: user.branch_id,
         branchId: user.branch_id,
+        context_type: 'branch',
+        warehouse_id: null,
         first_name: user.first_name,
         last_name: user.last_name,
         is_central: !user.branch_id

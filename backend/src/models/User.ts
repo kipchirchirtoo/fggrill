@@ -42,6 +42,7 @@ export enum UserRole {
   POS_KITCHEN = 'pos_kitchen',
   KITCHEN = 'kitchen',
   KITCHEN_OPERATIONS = 'kitchen_operations',
+  CHOMA_ZONE_KDS = 'choma_zone_kds',
   KITCHEN_HELPER = 'kitchen_helper',
   DISHWASHER = 'dishwasher',
 

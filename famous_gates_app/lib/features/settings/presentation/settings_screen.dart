@@ -8,9 +8,9 @@ import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/safe_avatar.dart';
-import '../../../core/config/user_roles.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../auth/domain/models.dart';
+import '../../auth/domain/role_routes.dart';
 import '../../auth/data/auth_repository.dart';
 
 const _storage = FlutterSecureStorage();
@@ -615,11 +615,10 @@ Staff members have the right to access their personal data held in the System, r
       BuildContext context, WidgetRef ref, User? user) async {
     if (user == null) return;
 
-    // Fetch available roles for the user
-    final dio = ref.read(dioProvider);
     try {
-      final response = await dio.get('/auth/user-roles/${user.id}');
-      final availableRoles = response.data['roles'] as List? ?? [];
+      final availableRoles = await ref
+          .read(authNotifierProvider.notifier)
+          .fetchAvailableContexts(user.id);
 
       if (availableRoles.isEmpty) {
         if (context.mounted) {
@@ -643,9 +642,11 @@ Staff members have the right to access their personal data held in the System, r
                 itemCount: availableRoles.length,
                 itemBuilder: (_, i) {
                   final role = availableRoles[i];
-                  final roleName =
-                      role['role_name'] ?? role['role'] ?? 'Unknown';
-                  final isActive = user.role.toString() == roleName;
+                  final roleName = role.roleName;
+                  final isActive = user.role == role.role &&
+                      user.contextType == role.contextType &&
+                      user.branchId == role.branchId &&
+                      user.warehouseId == role.warehouseId;
                   return ListTile(
                     leading: Icon(
                       isActive
@@ -657,28 +658,32 @@ Staff members have the right to access their personal data held in the System, r
                     ),
                     title: Text(
                         roleName.toString().replaceAll('_', ' ').toUpperCase()),
-                    subtitle: role['branch_name'] != null
-                        ? Text(role['branch_name'])
-                        : null,
+                    subtitle: Text(
+                      role.displayName.isNotEmpty
+                          ? role.displayName
+                          : (role.branchName.isNotEmpty
+                              ? role.branchName
+                              : role.warehouseName),
+                    ),
                     onTap: isActive
                         ? null
                         : () async {
                             Navigator.pop(ctx);
                             try {
-                              await dio.post('/auth/switch-context', data: {
-                                'role': roleName,
-                                'branch_id': role['branch_id'],
-                              });
-                              // Refresh auth state
-                              ref.invalidate(authNotifierProvider);
+                              final switchedUser = await ref
+                                  .read(authNotifierProvider.notifier)
+                                  .switchContext(role);
                               if (context.mounted) {
                                 AppNotifier.showSnackBar(
                                   context,
                                   SnackBar(
                                       content: Text('Switched to $roleName')),
                                 );
-                                final newRole = UserRole.fromString(roleName);
-                                context.go(newRole.dashboardRoute);
+                                final route = getRoleRoute(
+                                  switchedUser.role,
+                                  contextType: switchedUser.contextType,
+                                );
+                                context.go(route);
                               }
                             } catch (e) {
                               if (context.mounted) {
