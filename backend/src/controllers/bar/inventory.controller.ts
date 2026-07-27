@@ -4,41 +4,67 @@ import { logger } from '../../utils/logger';
 
 export const getStock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { branch_id, low_stock, category } = req.query;
+    const rawBranchId = req.query.branch_id as string | undefined;
+    let targetBranchId: number | null = null;
+    if (rawBranchId && rawBranchId !== 'all' && rawBranchId !== '0') {
+      const parsed = parseInt(rawBranchId, 10);
+      if (!isNaN(parsed) && parsed > 0) targetBranchId = parsed;
+    }
+    if (!targetBranchId && (req as any).user?.branch_id) {
+      targetBranchId = (req as any).user.branch_id;
+    }
+
+    const { low_stock, category } = req.query;
 
     let query = supabase
-      .from('restaurant_bar_inventory')
+      .from('bar_stock')
       .select(`
-        *,
-        supplier:restaurant_suppliers(id, name, email)
+        id,
+        branch_id,
+        drink_id,
+        item_name,
+        item_sku,
+        current_stock,
+        par_level,
+        unit,
+        last_updated,
+        created_at,
+        updated_at,
+        drink:bar_drinks(id, name, category, price, selling_price, is_available, image_url, sku)
       `)
-      .order('name');
+      .order('item_name');
 
-    // Note: The schema for restaurant_bar_inventory might not have branch_id according to previous migration view
-    // If it doesn't, we might need to rely on the fact that bar items are global or check if I missed a column.
-    // Migration 12 shows: branch_id is NOT in restaurant_bar_inventory. 
-    // It seems bar inventory is designed as a global catalog or I missed adding branch_id in migration 12.
-    // Let's assume it's global for now or add branch_id if needed. 
-    // WAIT, most hotel tables have branch_id. Check migration 12 line 642 again.
-    // "CREATE TABLE restaurant_bar_inventory ... no branch_id". 
-    // Usage implies it might be branch specific. 
-    // I will use it as is for now, but filter client side if returned data has it, or just return all.
-
-    // Actually, to support multi-branch, we should generally have branch_id. 
-    // For now, I will proceed with querying all and let the frontend filter if needed, 
-    // but ideally we should update the schema.
-
-    if (category) {
-      query = query.eq('category', category);
+    if (targetBranchId) {
+      query = query.eq('branch_id', targetBranchId);
     }
 
     const { data, error } = await query;
-
     if (error) throw error;
 
-    let result = data;
-    if (low_stock === 'true' && data) {
-      result = data.filter((item: any) => item.current_bottles <= item.par_level);
+    let result = (data || []).map((item: any) => ({
+      id: item.id,
+      drink_id: item.drink_id,
+      name: item.drink?.name || item.item_name,
+      category: item.drink?.category || category || 'bar',
+      price: item.drink?.selling_price || item.drink?.price || 0,
+      current_stock: item.current_stock ?? 0,
+      current_bottles: item.current_stock ?? 0,
+      par_level: item.par_level ?? 5,
+      is_available: (item.current_stock ?? 0) > 0,
+      sku: item.item_sku || item.drink?.sku,
+      unit: item.unit || 'bottle',
+      last_updated: item.last_updated,
+      branch_id: item.branch_id
+    }));
+
+    if (category) {
+      result = result.filter((item: any) =>
+        item.category.toLowerCase().trim() === (category as string).toLowerCase().trim()
+      );
+    }
+
+    if (low_stock === 'true') {
+      result = result.filter((item: any) => item.current_stock <= item.par_level);
     }
 
     res.status(200).json({ success: true, data: result });
