@@ -3,6 +3,7 @@ import { supabase } from '../../config/database';
 import db from '../../db';
 import { logger } from '../../utils/logger';
 import { getLastClosedCashierShiftWindow } from '../../utils/posStationAccess';
+import { isGlobalRole } from '../../utils/branchIsolation';
 
 // Bar stocktake (migration 20260622_kitchen_storekeeper_integration.sql,
 // section 4) — storekeeper records physical counts for main_bar/executive_bar
@@ -25,6 +26,31 @@ const BAR_LOCATIONS = ['main_bar', 'executive_bar'];
 const BAR_CASHIER_ROLES_BY_LOCATION: Record<string, string[]> = {
     main_bar: ['main_bar_cashier', 'kyogong_sports_bar_cashier'],
     executive_bar: ['executive_bar_cashier', 'kyogong_executive_bar_cashier'],
+};
+
+const resolveScopedBranchId = (
+    req: Request,
+    requestedBranchId: unknown
+): number | null => {
+    const requested = Number(requestedBranchId);
+    const userBranch = Number(req.user?.branch_id ?? (req.user as any)?.branchId);
+    const globalUser = isGlobalRole(String(req.user?.role || ''));
+
+    if (!globalUser) {
+        return Number.isInteger(userBranch) && userBranch > 0 ? userBranch : null;
+    }
+
+    return Number.isInteger(requested) && requested > 0
+        ? requested
+        : (Number.isInteger(userBranch) && userBranch > 0 ? userBranch : null);
+};
+
+const canAccessRecordBranch = (req: Request, recordBranchId: unknown): boolean => {
+    if (isGlobalRole(String(req.user?.role || ''))) return true;
+    const userBranch = Number(req.user?.branch_id ?? (req.user as any)?.branchId);
+    return Number.isInteger(userBranch) &&
+        userBranch > 0 &&
+        userBranch === Number(recordBranchId);
 };
 
 const getLastClosedBarShiftWindow = (branchId: number, barLocation: string, stocktakeDate: string): Promise<any> =>
@@ -376,13 +402,9 @@ const ensureInventoryItems = async (
 export const listBarStocktakes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { branch_id, bar_location, date, stocktake_date, status, history } = req.query;
-        if (!branch_id) {
+        const branchId = resolveScopedBranchId(req, branch_id);
+        if (!branchId) {
             res.status(400).json({ success: false, message: 'branch_id is required' });
-            return;
-        }
-        const branchId = Number(branch_id);
-        if (!Number.isInteger(branchId)) {
-            res.status(400).json({ success: false, message: 'branch_id must be an integer' });
             return;
         }
 
@@ -593,9 +615,9 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
     try {
         const { branch_id, bar_location, items } = req.body || {};
         const stocktakeDate = req.body?.stocktake_date || new Date().toISOString().split('T')[0];
-        const branchId = Number(branch_id);
+        const branchId = resolveScopedBranchId(req, branch_id);
         logger.info(`recordBarStocktake: branch_id=${branch_id} bar_location=${bar_location} date=${stocktakeDate} items=${Array.isArray(items) ? items.length : 'non-array'}`);
-        if (!Number.isInteger(branchId)) {
+        if (!branchId) {
             res.status(400).json({ success: false, message: 'branch_id must be an integer' });
             return;
         }
@@ -795,6 +817,10 @@ export const reviewBarStocktake = async (req: Request, res: Response, next: Next
             res.status(404).json({ success: false, message: 'Stocktake record not found' });
             return;
         }
+        if (!canAccessRecordBranch(req, existing.branch_id)) {
+            res.status(403).json({ success: false, message: 'Forbidden: stocktake record belongs to another branch' });
+            return;
+        }
         if (existing.status !== 'pending') {
             res.status(400).json({ success: false, message: `Cannot review a record that is ${existing.status}` });
             return;
@@ -843,6 +869,10 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
         const existing = await loadRecord(req.params.id);
         if (!existing) {
             res.status(404).json({ success: false, message: 'Stocktake record not found' });
+            return;
+        }
+        if (!canAccessRecordBranch(req, existing.branch_id)) {
+            res.status(403).json({ success: false, message: 'Forbidden: stocktake record belongs to another branch' });
             return;
         }
         if (existing.status === 'approved') {
@@ -993,6 +1023,10 @@ export const rejectBarStocktake = async (req: Request, res: Response, next: Next
             res.status(404).json({ success: false, message: 'Stocktake record not found' });
             return;
         }
+        if (!canAccessRecordBranch(req, existing.branch_id)) {
+            res.status(403).json({ success: false, message: 'Forbidden: stocktake record belongs to another branch' });
+            return;
+        }
         if (!String(req.body?.notes || '').trim()) {
             res.status(400).json({ success: false, message: 'notes are required when rejecting a stocktake record' });
             return;
@@ -1041,13 +1075,9 @@ export const rejectBarStocktake = async (req: Request, res: Response, next: Next
 export const getBarStocktakeSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { branch_id, from_date, to_date } = req.query;
-        if (!branch_id) {
+        const branchId = resolveScopedBranchId(req, branch_id);
+        if (!branchId) {
             res.status(400).json({ success: false, message: 'branch_id is required' });
-            return;
-        }
-        const branchId = Number(branch_id);
-        if (!Number.isInteger(branchId)) {
-            res.status(400).json({ success: false, message: 'branch_id must be an integer' });
             return;
         }
 
