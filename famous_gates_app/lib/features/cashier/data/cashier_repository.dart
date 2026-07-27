@@ -320,6 +320,19 @@ class CashierRepository {
     });
   }
 
+  Future<List<Map<String, dynamic>>> getEligibleRoomChargeGuests({
+    String? query,
+    int? branchId,
+  }) {
+    return _getList('/room-charge/eligible-guests', query: {
+      if (branchId != null) 'branch_id': branchId,
+      if (query != null) 'query': query,
+    });
+  }
+
+  Future<Map<String, dynamic>> postRoomCharge(Map<String, dynamic> body) =>
+      _postMap('/room-charge/post', body);
+
   Future<Map<String, dynamic>> scanPOSBarcode(String barcode) =>
       getBillDetails(barcode);
 

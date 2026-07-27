@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/dashboard_horizontal_access.dart';
 import '../domain/superadmin_providers.dart';
 import 'widgets/superadmin_side_nav.dart'
     show SuperAdminSideNav, SuperAdminNavItem;
@@ -102,7 +103,9 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                   sidebarCollapsed: effectiveSidebarCollapsed,
                 ),
                 Expanded(
-                  child: _buildSection(currentSection, ref),
+                  child: DashboardHorizontalAccess(
+                    child: _buildSection(currentSection, ref),
+                  ),
                 ),
               ],
             ),

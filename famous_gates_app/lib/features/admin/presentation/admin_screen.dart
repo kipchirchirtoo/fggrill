@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../core/widgets/dashboard_horizontal_access.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../domain/admin_providers.dart';
@@ -193,7 +194,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                   sidebarCollapsed: effectiveSidebarCollapsed,
                 ),
                 Expanded(
-                  child: _buildSection(currentSection, ref),
+                  child: DashboardHorizontalAccess(
+                    child: _buildSection(currentSection, ref),
+                  ),
                 ),
               ],
             ),

@@ -10,7 +10,7 @@ import '../state/app_refresh.dart';
 import '../storage/secure_storage_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/screen_size.dart';
-import 'app_update_button.dart';
+import 'dashboard_horizontal_access.dart';
 import 'notification_button.dart';
 import 'safe_avatar.dart';
 import 'sync_status_badge.dart';
@@ -129,7 +129,11 @@ class DashboardShell extends ConsumerWidget {
       backgroundColor: backgroundColor,
       body: Column(
         children: [
-          _TopBar(title: title, nav: nav, actions: actions, showBackButton: showBackButton),
+          _TopBar(
+              title: title,
+              nav: nav,
+              actions: actions,
+              showBackButton: showBackButton),
           if (tabs.length > 1)
             _TabBar(
               tabs: tabs,
@@ -139,7 +143,7 @@ class DashboardShell extends ConsumerWidget {
           Expanded(
             child: KeyedSubtree(
               key: ValueKey('shell_${currentTab ?? 0}_$tick'),
-              child: content,
+              child: DashboardHorizontalAccess(child: content),
             ),
           ),
         ],
@@ -151,7 +155,11 @@ class DashboardShell extends ConsumerWidget {
 // ─── Top bar ─────────────────────────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.title, required this.nav, this.actions, this.showBackButton = true});
+  const _TopBar(
+      {required this.title,
+      required this.nav,
+      this.actions,
+      this.showBackButton = true});
 
   final String title;
   final DashboardNavData nav;
@@ -256,9 +264,8 @@ class _BackButton extends StatelessWidget {
       icon: Icon(Icons.arrow_back, size: mobile ? 18 : 22),
       color: AppColors.kPrimary,
       padding: mobile ? const EdgeInsets.all(6) : null,
-      constraints: mobile
-          ? const BoxConstraints(minWidth: 32, minHeight: 32)
-          : null,
+      constraints:
+          mobile ? const BoxConstraints(minWidth: 32, minHeight: 32) : null,
       style: IconButton.styleFrom(
         backgroundColor: AppColors.kSurface,
         shape: RoundedRectangleBorder(
@@ -414,8 +421,7 @@ class _TabBar extends StatelessWidget {
               child: Container(
                 padding: EdgeInsets.symmetric(horizontal: tabPadH),
                 decoration: BoxDecoration(
-                  color:
-                      isSelected ? AppColors.kPrimary : Colors.transparent,
+                  color: isSelected ? AppColors.kPrimary : Colors.transparent,
                   borderRadius: BorderRadius.circular(mobile ? 6 : 8),
                 ),
                 child: Row(
@@ -539,7 +545,7 @@ class SidebarLayout extends ConsumerWidget {
         body: Column(
           children: [
             _TopBar(title: title, nav: nav, actions: actions),
-            Expanded(child: body),
+            Expanded(child: DashboardHorizontalAccess(child: body)),
           ],
         ),
       );
@@ -557,7 +563,7 @@ class SidebarLayout extends ConsumerWidget {
             child: Column(
               children: [
                 _TopBar(title: title, nav: nav, actions: actions),
-                Expanded(child: body),
+                Expanded(child: DashboardHorizontalAccess(child: body)),
               ],
             ),
           ),
@@ -610,27 +616,23 @@ class _SidebarContent extends StatelessWidget {
               leading: Icon(
                 item.icon,
                 size: 20,
-                color: isSelected
-                    ? AppColors.kPrimary
-                    : AppColors.kTextSecondary,
+                color:
+                    isSelected ? AppColors.kPrimary : AppColors.kTextSecondary,
               ),
               title: Text(
                 item.label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight:
-                      isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected
-                      ? AppColors.kPrimary
-                      : AppColors.kTextPrimary,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color:
+                      isSelected ? AppColors.kPrimary : AppColors.kTextPrimary,
                 ),
               ),
               selected: isSelected,
               selectedTileColor: AppColors.kPrimary.withValues(alpha: 0.05),
               shape: const RoundedRectangleBorder(),
-              onTap: onItemSelected != null
-                  ? () => onItemSelected!(index)
-                  : null,
+              onTap:
+                  onItemSelected != null ? () => onItemSelected!(index) : null,
               trailing: item.badge != null
                   ? Container(
                       padding: const EdgeInsets.symmetric(

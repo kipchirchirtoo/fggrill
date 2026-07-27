@@ -679,10 +679,7 @@ Staff members have the right to access their personal data held in the System, r
                                   SnackBar(
                                       content: Text('Switched to $roleName')),
                                 );
-                                final route = getRoleRoute(
-                                  switchedUser.role,
-                                  contextType: switchedUser.contextType,
-                                );
+                                final route = getUserHomeRoute(switchedUser);
                                 context.go(route);
                               }
                             } catch (e) {

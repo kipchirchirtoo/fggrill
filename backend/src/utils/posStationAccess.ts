@@ -9,6 +9,13 @@ export type PosOutlet = {
   name?: string | null;
 };
 
+const KYOGONG_BRANCH_ID = 1;
+const KYOGONG_RESTAURANT_RECEPTION_ROLES = new Set([
+  'receptionist',
+  'branch_receptionist',
+  'front_desk_supervisor',
+]);
+
 export const POS_STATION_CASHIER_ROLE_TYPES: Record<string, string[]> = {
   restaurant_cashier: ['restaurant'],
   main_bar_cashier: ['main_bar', 'kyogong_sports_bar'],
@@ -43,11 +50,39 @@ export const CASHIER_STATION_ROLES: string[] = Array.from(
 export const normalizePosRole = (role: unknown): string =>
   String(role || '').trim().toLowerCase();
 
-export const stationTypesForCashierRole = (role: unknown): string[] =>
-  POS_STATION_CASHIER_ROLE_TYPES[normalizePosRole(role)] || [];
+const normalizeBranchId = (branchId: unknown): number | null => {
+  const parsed = Number(branchId);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
 
-export const isCashierStationRole = (role: unknown): boolean =>
-  EXPLICIT_ASSIGNMENT_CASHIER_ROLES.has(normalizePosRole(role));
+export const resolveCashierStationRole = (
+  role: unknown,
+  branchId?: unknown
+): string => {
+  const normalizedRole = normalizePosRole(role);
+  if (
+    normalizeBranchId(branchId) === KYOGONG_BRANCH_ID &&
+    KYOGONG_RESTAURANT_RECEPTION_ROLES.has(normalizedRole)
+  ) {
+    return 'restaurant_cashier';
+  }
+  return normalizedRole;
+};
+
+export const stationTypesForCashierRole = (
+  role: unknown,
+  branchId?: unknown
+): string[] => POS_STATION_CASHIER_ROLE_TYPES[
+  resolveCashierStationRole(role, branchId)
+] || [];
+
+export const isCashierStationRole = (
+  role: unknown,
+  branchId?: unknown
+): boolean =>
+  EXPLICIT_ASSIGNMENT_CASHIER_ROLES.has(
+    resolveCashierStationRole(role, branchId)
+  );
 
 export const isBarStationType = (outletType: unknown): boolean =>
   ['main_bar', 'executive_bar', 'kyogong_executive_bar', 'kyogong_sports_bar']
@@ -55,26 +90,34 @@ export const isBarStationType = (outletType: unknown): boolean =>
 
 export const shouldRestrictCashierStationAccess = (
   role: unknown,
-  assignedOutletIds: string[]
+  assignedOutletIds: string[],
+  branchId?: unknown
 ): boolean => {
-  const normalizedRole = normalizePosRole(role);
+  const normalizedRole = resolveCashierStationRole(role, branchId);
   if (!isCashierStationRole(normalizedRole)) return false;
-  if (stationTypesForCashierRole(normalizedRole).length > 0) return true;
+  if (stationTypesForCashierRole(normalizedRole, branchId).length > 0) return true;
   return assignedOutletIds.length > 0;
 };
 
 export const canAccessPosOutlet = (
   role: unknown,
   outlet: PosOutlet | null | undefined,
-  assignedOutlets: PosOutlet[]
+  assignedOutlets: PosOutlet[],
+  branchId?: unknown
 ): boolean => {
   if (!outlet?.id) return false;
   const assignedOutletIds = assignedOutlets
     .map((item) => String(item.id || ''))
     .filter(Boolean);
-  if (!shouldRestrictCashierStationAccess(role, assignedOutletIds)) return true;
+  const effectiveBranchId =
+    branchId ?? outlet.branch_id ?? assignedOutlets[0]?.branch_id;
+  if (!shouldRestrictCashierStationAccess(role, assignedOutletIds, effectiveBranchId)) {
+    return true;
+  }
   if (assignedOutletIds.includes(String(outlet.id))) return true;
-  return stationTypesForCashierRole(role).includes(String(outlet.outlet_type || '').toLowerCase());
+  return stationTypesForCashierRole(role, effectiveBranchId).includes(
+    String(outlet.outlet_type || '').toLowerCase()
+  );
 };
 
 export const loadAssignedPosOutlets = async (

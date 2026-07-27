@@ -8,6 +8,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
 import 'package:famous_gates_app/core/widgets/safe_asset_image.dart';
 import '../domain/auth_notifier.dart';
+import '../domain/models.dart';
 import '../domain/role_routes.dart';
 
 final _terminalPinProvider = StateProvider.autoDispose<String>((ref) => '');
@@ -198,7 +199,7 @@ class TerminalScreen extends ConsumerWidget {
     ref.read(_terminalLoadingProvider.notifier).state = true;
     try {
       final user = await ref.read(authNotifierProvider.notifier).posLogin(pin);
-      final route = _routeForPosUser(user.outletType, user.role, pin);
+      final route = _routeForPosUser(user, pin);
       debugPrint(
           'Terminal login role=${user.role} outlet=${user.outletType} route=$route');
       if (context.mounted) {
@@ -217,7 +218,7 @@ class TerminalScreen extends ConsumerWidget {
     }
   }
 
-  static String _routeForPosUser(String? outletType, String role, String pin) {
+  static String _routeForPosUser(User user, String pin) {
     switch (pin.substring(0, 1).toUpperCase()) {
       case 'R':
         return '/pos/restaurant';
@@ -230,7 +231,7 @@ class TerminalScreen extends ConsumerWidget {
       case 'C':
         return '/cashier';
     }
-    switch (outletType) {
+    switch (user.outletType) {
       case 'restaurant':
         return '/pos/restaurant';
       case 'main_bar':
@@ -250,7 +251,7 @@ class TerminalScreen extends ConsumerWidget {
       case 'kyogong_sports_bar':
         return '/pos/kyogong-sports-bar';
       default:
-        return getRoleRoute(role);
+        return getUserHomeRoute(user);
     }
   }
 }

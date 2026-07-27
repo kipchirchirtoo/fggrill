@@ -88,7 +88,9 @@ function requiredStocktakeLocationsForRole(
     role: unknown,
     branchId: number
 ): Array<{ key: string; label: string; groupStoreType?: string }> {
-    const normalized = String(role || '').trim().toLowerCase();
+    const normalized = stationTypesForCashierRole(role, branchId).includes('restaurant')
+        ? 'restaurant_cashier'
+        : String(role || '').trim().toLowerCase();
     switch (normalized) {
         case 'restaurant_cashier':
         case 'choma_zone_cashier':
@@ -177,6 +179,96 @@ async function verifyStocktakesComplete(
 
     return { ok: missing.length === 0, missing };
 }
+
+const seedPosOutletShiftStockCounts = async (
+    shiftId: string,
+    outletId: string
+): Promise<void> => {
+    const { data: existingCounts, error: existingError } = await supabase
+        .from('pos_shift_stock_counts')
+        .select('id')
+        .eq('shift_id', shiftId)
+        .limit(1);
+    if (existingError) throw existingError;
+    if (existingCounts && existingCounts.length > 0) return;
+
+    const { data: items, error: itemsError } = await supabase
+        .from('pos_outlet_items')
+        .select('*')
+        .eq('outlet_id', outletId)
+        .eq('is_active', true);
+    if (itemsError) throw itemsError;
+
+    const stockRows = ((items || []) as Array<Record<string, any>>).map((item) => ({
+        shift_id: shiftId,
+        outlet_id: outletId,
+        outlet_item_id: item.id,
+        item_name: item.name,
+        sku: item.sku,
+        unit: item.unit || 'each',
+        cost_price: item.cost_price || 0,
+        selling_price: item.selling_price || 0,
+        opening_stock: item.current_stock ?? item.opening_stock ?? 0,
+        additions: 0,
+        sold_quantity: 0,
+        system_closing_stock: item.current_stock ?? item.opening_stock ?? 0,
+        track_stock: item.track_stock !== false
+    }));
+
+    if (!stockRows.length) return;
+
+    const { error: stockError } = await supabase
+        .from('pos_shift_stock_counts')
+        .insert(stockRows);
+    if (stockError) throw stockError;
+};
+
+const ensurePosOutletShiftsForCashier = async (params: {
+    branchId: number;
+    cashierId: string;
+    cashierRole: unknown;
+    openedAt?: string | null;
+}): Promise<void> => {
+    const outletTypes = stationTypesForCashierRole(params.cashierRole, params.branchId);
+    if (!outletTypes.length) return;
+
+    const { data: outlets, error: outletsError } = await supabase
+        .from('pos_outlets')
+        .select('id, branch_id, outlet_type, is_active')
+        .eq('branch_id', params.branchId)
+        .eq('is_active', true)
+        .in('outlet_type', outletTypes);
+    if (outletsError) throw outletsError;
+
+    for (const outlet of (outlets || []) as Array<Record<string, any>>) {
+        const { data: existingShift, error: existingError } = await supabase
+            .from('pos_outlet_shifts')
+            .select('id, cashier_id, status')
+            .eq('outlet_id', outlet.id)
+            .eq('status', 'open')
+            .order('opened_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (existingError) throw existingError;
+        if (existingShift) continue;
+
+        const { data: createdShift, error: createError } = await supabase
+            .from('pos_outlet_shifts')
+            .insert({
+                outlet_id: outlet.id,
+                branch_id: params.branchId,
+                cashier_id: params.cashierId,
+                opening_float: 0,
+                status: 'open',
+                opened_at: params.openedAt || new Date().toISOString()
+            })
+            .select('id')
+            .single();
+        if (createError) throw createError;
+
+        await seedPosOutletShiftStockCounts(String(createdShift.id), String(outlet.id));
+    }
+};
 
 function isLegacyUnapprovedOpenShift(shift: any): boolean {
     return String(shift?.status || '').toLowerCase() === 'open'
@@ -1491,6 +1583,22 @@ export const startShift = async (
         if (shiftError) throw shiftError;
 
         if (opensImmediately) {
+            try {
+                await ensurePosOutletShiftsForCashier({
+                    branchId: targetBranchId,
+                    cashierId: String(targetCashierId),
+                    cashierRole: targetUser.role,
+                    openedAt: newShift.shift_start || now
+                });
+            } catch (posShiftError: any) {
+                logger.warn('Failed to eagerly open POS outlet shifts for cashier shift', {
+                    shiftId: newShift.id,
+                    cashierId: targetCashierId,
+                    branchId: targetBranchId,
+                    error: posShiftError?.message
+                });
+            }
+
             // Automated food-control pipeline for the just-finalized previous
             // day — same lifecycle moment as the snapshot above, fire-and-forget
             // so it never slows down opening the new shift.
@@ -1586,7 +1694,7 @@ export const approveShiftOpening = async (
         // completed before their shift opening can be approved.
         const { data: cashierUser, error: cashierRoleError } = await supabase
             .from('users')
-            .select('role')
+            .select('id, role')
             .eq('id', shift.cashier_id)
             .maybeSingle();
         if (cashierRoleError) throw cashierRoleError;
@@ -1625,6 +1733,22 @@ export const approveShiftOpening = async (
 
         const { data, error } = await updateQuery.select().single();
         if (error) throw error;
+
+        try {
+            await ensurePosOutletShiftsForCashier({
+                branchId: Number(shift.branch_id),
+                cashierId: String(shift.cashier_id),
+                cashierRole: cashierUser?.role,
+                openedAt: data?.shift_start || shift.shift_start || now
+            });
+        } catch (posShiftError: any) {
+            logger.warn('Failed to eagerly open POS outlet shifts after shift approval', {
+                shiftId: id,
+                cashierId: shift.cashier_id,
+                branchId: shift.branch_id,
+                error: posShiftError?.message
+            });
+        }
 
         if (data?.cashier_id) {
             void notificationService.notifyUser(
@@ -1845,9 +1969,13 @@ export const closeShift = async (
         const ownerRole = String(ownerUser?.role || '').toLowerCase();
         const ownerAssignedOutlets = await loadAssignedPosOutlets(supabase, shift.cashier_id);
         const ownerAssignedIds = assignedOutletIds(ownerAssignedOutlets);
-        const ownerStationRestricted = shouldRestrictCashierStationAccess(ownerRole, ownerAssignedIds);
+        const ownerStationRestricted = shouldRestrictCashierStationAccess(
+            ownerRole,
+            ownerAssignedIds,
+            shift.branch_id
+        );
         const ownerOutletTypes = new Set([
-            ...stationTypesForCashierRole(ownerRole),
+            ...stationTypesForCashierRole(ownerRole, shift.branch_id),
             ...ownerAssignedOutlets
                 .map((o: PosOutlet) => String(o.outlet_type || '').toLowerCase())
                 .filter(Boolean),
@@ -1861,7 +1989,9 @@ export const closeShift = async (
             .select('id, outlet_type, branch_id, name')
             .eq('branch_id', shift.branch_id);
         const allowedOutletIds = ((branchPosOutlets || []) as PosOutlet[])
-            .filter((outlet) => canAccessPosOutlet(ownerRole, outlet, ownerAssignedOutlets))
+            .filter((outlet) =>
+                canAccessPosOutlet(ownerRole, outlet, ownerAssignedOutlets, shift.branch_id)
+            )
             .map((outlet) => String(outlet.id))
             .filter(Boolean);
 

@@ -8,6 +8,8 @@ import { normalizeBarStation } from '../utils/posStationShift';
 
 const mainBar: PosOutlet = { id: 'o-main', outlet_type: 'main_bar', branch_id: 2 };
 const execBar: PosOutlet = { id: 'o-exec', outlet_type: 'executive_bar', branch_id: 2 };
+const restaurantKyogong: PosOutlet = { id: 'o-rest-1', outlet_type: 'restaurant', branch_id: 1 };
+const restaurantBomet: PosOutlet = { id: 'o-rest-2', outlet_type: 'restaurant', branch_id: 2 };
 
 describe('POS station / shift access rules', () => {
   describe('isCashierStationRole — only cashiers may open shifts', () => {
@@ -34,6 +36,14 @@ describe('POS station / shift access rules', () => {
     it('executive_bar cashier serves exec bar but NOT main bar', () => {
       expect(canAccessPosOutlet('executive_bar_cashier', execBar, [])).toBe(true);
       expect(canAccessPosOutlet('executive_bar_cashier', mainBar, [])).toBe(false);
+    });
+    it('Kyogong receptionist behaves like restaurant cashier only on branch 1', () => {
+      const kyogongTypes = stationTypesForCashierRole('receptionist', 1);
+      const otherBranchTypes = stationTypesForCashierRole('receptionist', 2);
+      expect(kyogongTypes).toContain('restaurant');
+      expect(otherBranchTypes).toHaveLength(0);
+      expect(canAccessPosOutlet('receptionist', restaurantKyogong, [], 1)).toBe(true);
+      expect(canAccessPosOutlet('receptionist', restaurantBomet, [], 2)).toBe(true);
     });
   });
 

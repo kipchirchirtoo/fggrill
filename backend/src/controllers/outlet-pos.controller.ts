@@ -2075,7 +2075,10 @@ const findBridgeCashierShift = async (
     const roleById = new Map((users || []).map((u: any) => [u.id, u.role]));
     const outletType = String(outlet.outlet_type || '').toLowerCase();
     match = rows.find((s: any) =>
-      stationTypesForCashierRole(roleById.get(s.cashier_id)).includes(outletType)) || null;
+      stationTypesForCashierRole(
+        roleById.get(s.cashier_id),
+        outlet.branch_id,
+      ).includes(outletType)) || null;
   }
 
   return { match, openByCashier };
@@ -2230,8 +2233,11 @@ const queryAccessibleOutlets = async (
   const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
   const ids = assignedOutletIds(assignedOutlets);
   let rows = ((data || []) as Array<Record<string, any>>);
-  if (shouldRestrictCashierStationAccess(role, ids)) {
-    const roleOutletTypes = stationTypesForCashierRole(role);
+  if (shouldRestrictCashierStationAccess(role, ids, branchIdOverride ?? branchIdFor(req))) {
+    const roleOutletTypes = stationTypesForCashierRole(
+      role,
+      branchIdOverride ?? branchIdFor(req),
+    );
     rows = rows.filter((outlet) =>
       ids.includes(String(outlet.id)) ||
       roleOutletTypes.includes(String(outlet.outlet_type || '').toLowerCase())
@@ -2442,7 +2448,7 @@ export const openShift = async (req: Request, res: Response, next: NextFunction)
     // POS shift. Waiters can never open a shift — they place orders against
     // the cashier's open shift.
     const openerRole = roleFor(req);
-    if (!isCashierStationRole(openerRole) &&
+    if (!isCashierStationRole(openerRole, req.user?.branch_id) &&
         !SHIFT_MANAGER_ROLES.has(openerRole) &&
         !isGlobalUser(req)) {
       throw new AppError(
@@ -3334,7 +3340,7 @@ export const getPendingVoidsKitchenWholeBill = async (req: Request, res: Respons
     if (
       !KITCHEN_VOID_ROLES.has(roleFor(req)) &&
       !REVIEW_ROLES.has(roleFor(req)) &&
-      !isCashierStationRole(roleFor(req)) &&
+      !isCashierStationRole(roleFor(req), req.user?.branch_id) &&
       !isGlobalUser(req)
     ) {
       throw new AppError('Forbidden: kitchen access required', 403);
@@ -3352,7 +3358,7 @@ export const getPendingVoidsKitchenWholeBill = async (req: Request, res: Respons
 export const getPendingVoidsCashierWholeBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+    if (!isCashierStationRole(roleFor(req), req.user?.branch_id) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
       throw new AppError('Forbidden: cashier access required', 403);
     }
     const branchId = req.query.branch_id ? Number(req.query.branch_id) : branchIdFor(req);
@@ -3514,7 +3520,7 @@ export const kitchenDeclineVoidRequest = async (req: Request, res: Response, nex
 export const cashierAcknowledgeVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+    if (!isCashierStationRole(roleFor(req), req.user?.branch_id) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
       throw new AppError('Forbidden: cashier acknowledgment required', 403);
     }
     const { requestId } = req.params;
@@ -3641,7 +3647,7 @@ export const cashierAcknowledgeVoidRequest = async (req: Request, res: Response,
 export const cashierDeclineVoidRequest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+    if (!isCashierStationRole(roleFor(req), req.user?.branch_id) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
       throw new AppError('Forbidden: cashier action required', 403);
     }
     const { requestId } = req.params;
@@ -3952,7 +3958,7 @@ const scopeQueryToCashierStation = async (
   branchId: number | null
 ): Promise<any> => {
   const normalizedRole = roleFor(req);
-  if (!isCashierStationRole(normalizedRole) || normalizedRole === 'cashier') {
+  if (!isCashierStationRole(normalizedRole, branchId) || normalizedRole === 'cashier') {
     return query;
   }
 
@@ -3987,7 +3993,7 @@ const scopeQueryToCashierStation = async (
   }
 
   // 4. Fall back to role-based outlet types
-  const allowedTypes = POS_STATION_CASHIER_ROLE_TYPES[normalizedRole] || [];
+  const allowedTypes = stationTypesForCashierRole(normalizedRole, branchId);
   if (allowedTypes.length > 0) {
     const { data: outlets } = await supabase
       .from('pos_outlets')
@@ -4557,7 +4563,7 @@ export const kitchenDeclineItemVoid = async (req: Request, res: Response, next: 
 export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+    if (!isCashierStationRole(roleFor(req), req.user?.branch_id) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
       throw new AppError('Forbidden: cashier acknowledgment required', 403);
     }
     const { id } = req.params;
@@ -4668,7 +4674,7 @@ export const cashierAcknowledgeItemVoid = async (req: Request, res: Response, ne
 export const cashierDeclineItemVoid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    if (!isCashierStationRole(roleFor(req)) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
+    if (!isCashierStationRole(roleFor(req), req.user?.branch_id) && !REVIEW_ROLES.has(roleFor(req)) && !isGlobalUser(req)) {
       throw new AppError('Forbidden: cashier action required', 403);
     }
     const { id } = req.params;
@@ -4899,7 +4905,7 @@ export const getVoidHistory = async (req: Request, res: Response, next: NextFunc
 // or issue a refund — unlike the void flows above, REVIEW_ROLES is
 // deliberately NOT part of the approval gate here.
 const isExchangeApprover = (req: Request): boolean =>
-  isCashierStationRole(roleFor(req)) || roleFor(req) === 'super_admin';
+  isCashierStationRole(roleFor(req), req.user?.branch_id) || roleFor(req) === 'super_admin';
 
 export const requestItemExchange = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -5259,7 +5265,7 @@ export const issueExchangeRefund = async (req: Request, res: Response, next: Nex
 export const getExchangeHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    if (!REVIEW_ROLES.has(roleFor(req)) && !isCashierStationRole(roleFor(req))) {
+    if (!REVIEW_ROLES.has(roleFor(req)) && !isCashierStationRole(roleFor(req), req.user?.branch_id)) {
       throw new AppError('Forbidden', 403);
     }
 
@@ -5726,7 +5732,7 @@ export const CASHIER_VOID_REASON_CATEGORIES = [
 const CASHIER_VOID_REASON_CATEGORY_SET = new Set<string>(CASHIER_VOID_REASON_CATEGORIES);
 
 const canManageCashierVoids = (req: Request): boolean =>
-  isCashierStationRole(roleFor(req)) || REVIEW_ROLES.has(roleFor(req)) || isGlobalUser(req);
+  isCashierStationRole(roleFor(req), req.user?.branch_id) || REVIEW_ROLES.has(roleFor(req)) || isGlobalUser(req);
 
 const ensureCashierShiftOpenForVoid = async (req: Request, branchId: number): Promise<void> => {
   if (isGlobalUser(req) || REVIEW_ROLES.has(roleFor(req))) return;

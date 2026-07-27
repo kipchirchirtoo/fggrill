@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import db from '../db';
+import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 
-/**
- * Helper: Check feature toggle status for a branch
- */
+const IN_HOUSE_ROOM_CHARGE_STATUSES = ['checked_in', 'checked-in', 'in-house', 'active'] as const;
+
 const isFeatureEnabled = async (branchId: number, featureKey: string): Promise<boolean> => {
   const res = await db.query(
     'SELECT is_enabled FROM branch_features WHERE branch_id = $1 AND (feature_key = $2 OR feature_name = $2)',
@@ -14,16 +14,311 @@ const isFeatureEnabled = async (branchId: number, featureKey: string): Promise<b
   return Boolean(res.rows[0].is_enabled);
 };
 
-/**
- * 1. Get Eligible Guests for Room Charging
- * Only returns checked-in, confirmed guests with assigned rooms & open folios in the same branch.
- */
+function todayInNairobi(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
+}
+
+function normalizeGuestName(row: any): string {
+  const guest = Array.isArray(row?.guest) ? row.guest[0] : row?.guest;
+  const first = String(guest?.first_name || '').trim();
+  const last = String(guest?.last_name || '').trim();
+  const full = [first, last].filter(Boolean).join(' ').trim();
+  return full || String(row?.guest_name || 'Guest').trim() || 'Guest';
+}
+
+function relationRecord<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return (value[0] ?? null) as T | null;
+  return (value ?? null) as T | null;
+}
+
+function stayNights(checkIn: string | null | undefined, checkOut: string | null | undefined): number {
+  if (!checkIn || !checkOut) return 0;
+  const start = new Date(`${checkIn}T00:00:00Z`).getTime();
+  const end = new Date(`${checkOut}T00:00:00Z`).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+}
+
+function isCurrentInHouseStay(row: any, today: string): boolean {
+  const status = String(row?.status || '').trim().toLowerCase();
+  if (!IN_HOUSE_ROOM_CHARGE_STATUSES.includes(status as any)) return false;
+  const checkIn = String(row?.check_in_date || '').trim();
+  const checkOut = String(row?.check_out_date || '').trim();
+  if (!checkIn || !checkOut) return false;
+  if (checkIn > today || checkOut <= today) return false;
+  return stayNights(checkIn, checkOut) >= 1;
+}
+
+function resolveChargeBucket(outletName?: string, outletType?: string): {
+  category: string;
+  folioField: 'food_charges' | 'beverage_charges' | 'other_charges';
+} {
+  const token = `${outletName || ''} ${outletType || ''}`.toLowerCase();
+  if (
+    token.includes('bar') ||
+    token.includes('cocktail') ||
+    token.includes('beverage') ||
+    token.includes('drink')
+  ) {
+    return { category: 'Beverage', folioField: 'beverage_charges' };
+  }
+  if (
+    token.includes('restaurant') ||
+    token.includes('buffet') ||
+    token.includes('breakfast') ||
+    token.includes('lunch') ||
+    token.includes('dinner') ||
+    token.includes('food') ||
+    token.includes('kitchen') ||
+    token.includes('grill')
+  ) {
+    return { category: 'Food', folioField: 'food_charges' };
+  }
+  return { category: 'Other', folioField: 'other_charges' };
+}
+
+async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
+  const today = todayInNairobi();
+  const { data: reservations, error } = await supabase
+    .from('reservations')
+    .select(`
+      id,
+      confirmation_number,
+      guest_id,
+      room_id,
+      status,
+      check_in_date,
+      check_out_date,
+      total_amount,
+      deposit_amount,
+      adults,
+      children,
+      meal_plan,
+      checked_in_at,
+      guest:guests!guest_id(first_name,last_name,phone,email),
+      room:rooms!room_id!inner(id, room_number, branch_id, status)
+    `)
+    .eq('room.branch_id', branchId)
+    .in('status', [...IN_HOUSE_ROOM_CHARGE_STATUSES])
+    .lte('check_in_date', today)
+    .gt('check_out_date', today)
+    .order('check_in_date', { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  const inHouseReservations = (reservations || []).filter((row: any) =>
+    isCurrentInHouseStay(row, today)
+  );
+
+  const reservationIds = inHouseReservations.map((row: any) => row.id);
+  const folioMap = new Map<string, any>();
+
+  if (reservationIds.length > 0) {
+    const { data: folios, error: folioError } = await supabase
+      .from('folios')
+      .select(`
+        id,
+        reservation_id,
+        status,
+        total_charges,
+        total_payments,
+        balance,
+        room_charges,
+        food_charges,
+        beverage_charges,
+        other_charges,
+        updated_at
+      `)
+      .in('reservation_id', reservationIds)
+      .order('updated_at', { ascending: false });
+
+    if (folioError) throw folioError;
+
+    for (const folio of folios || []) {
+      const key = String(folio.reservation_id || '');
+      if (!key || folioMap.has(key)) continue;
+      folioMap.set(key, folio);
+    }
+  }
+
+  const normalizedQuery = queryStr.trim().toLowerCase();
+
+  return inHouseReservations
+    .map((row: any) => {
+      const folio = folioMap.get(String(row.id));
+      const guestName = normalizeGuestName(row);
+      const guest = relationRecord<any>(row?.guest);
+      const room = relationRecord<any>(row?.room);
+      const phone = String(guest?.phone || '').trim();
+      const roomNumber = String(room?.room_number || '').trim();
+      const confirmationNumber = String(row?.confirmation_number || '').trim();
+      const nights = stayNights(row?.check_in_date, row?.check_out_date);
+      const roomOutstanding = Number(row?.total_amount || 0) - Number(row?.deposit_amount || 0);
+      const folioBalanceBase =
+        folio?.balance ??
+        (Number(folio?.total_charges || 0) - Number(folio?.total_payments || 0));
+
+      return {
+        booking_id: row.id,
+        folio_id: folio?.id || row.id,
+        room_number: roomNumber,
+        guest_name: guestName,
+        guest_phone: phone,
+        confirmation_number: confirmationNumber || `RSV-${row.id}`,
+        check_in_date: row.check_in_date,
+        check_out_date: row.check_out_date,
+        occupants: Number(row?.adults || 0) + Number(row?.children || 0),
+        stay_nights: nights,
+        folio_balance: Number(folioBalanceBase || roomOutstanding),
+        total_amount: Number(row?.total_amount || 0),
+        amount_paid: Number(row?.deposit_amount || 0),
+        meal_plan: row?.meal_plan || 'Room Only',
+        eligibility_status: 'In house',
+      };
+    })
+    .filter((row) => {
+      if (!normalizedQuery) return true;
+      return [
+        row.room_number,
+        row.guest_name,
+        row.confirmation_number,
+        row.guest_phone,
+      ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
+    })
+    .sort((a, b) => String(a.room_number).localeCompare(String(b.room_number)));
+}
+
+async function settleRoomChargeSourceBill(input: {
+  source?: string;
+  billId?: string;
+  bookingId: string;
+  roomNumber: string;
+  guestName: string;
+}) {
+  const normalizedSource = String(input.source || '').trim().toLowerCase();
+  const billId = String(input.billId || '').trim();
+  if (!billId) return;
+
+  const now = new Date().toISOString();
+
+  if (['restaurant', 'restaurant_order'].includes(normalizedSource)) {
+    const { data: order } = await supabase
+      .from('restaurant_orders')
+      .select('id,total_amount')
+      .eq('id', billId)
+      .maybeSingle();
+
+    if (order) {
+      const totalAmount = Number(order.total_amount || 0);
+      await supabase
+        .from('restaurant_orders')
+        .update({
+          payment_status: 'room_charge',
+          payment_method: 'ROOM_CHARGE',
+          amount_paid: totalAmount,
+          balance_amount: 0,
+          status: 'delivered',
+          updated_at: now,
+        })
+        .eq('id', billId);
+      return;
+    }
+  }
+
+  if (['bar', 'bar_order'].includes(normalizedSource)) {
+    const { data: order } = await supabase
+      .from('bar_orders')
+      .select('id,total')
+      .eq('id', billId)
+      .maybeSingle();
+
+    if (order) {
+      const totalAmount = Number(order.total || 0);
+      await supabase
+        .from('bar_orders')
+        .update({
+          payment_status: 'room_charge',
+          payment_method: 'ROOM_CHARGE',
+          amount_paid: totalAmount,
+          balance_amount: 0,
+          status: 'completed',
+          updated_at: now,
+        })
+        .eq('id', billId);
+      return;
+    }
+  }
+
+  if (['pos', 'pos_shift_order', 'captain', 'captain_order'].includes(normalizedSource)) {
+    const { data: order } = await supabase
+      .from('pos_shift_orders')
+      .select('id,total_amount')
+      .eq('id', billId)
+      .maybeSingle();
+
+    if (order) {
+      const totalAmount = Number(order.total_amount || 0);
+      await supabase
+        .from('pos_shift_orders')
+        .update({
+          payment_status: 'room_charge',
+          amount_paid: totalAmount,
+          balance_amount: 0,
+          status: 'paid',
+          updated_at: now,
+        })
+        .eq('id', billId);
+      return;
+    }
+  }
+
+  if (normalizedSource === 'unpaid_bill') {
+    const { data: bill } = await supabase
+      .from('unpaid_bills')
+      .select('id,total_amount,remarks')
+      .eq('id', billId)
+      .maybeSingle();
+
+    if (bill) {
+      const totalAmount = Number(bill.total_amount || 0);
+      const remarks = [bill.remarks, `Charged to room ${input.roomNumber} (${input.guestName})`]
+        .filter(Boolean)
+        .join(' • ');
+
+      await supabase
+        .from('unpaid_bills')
+        .update({
+          paid_amount: totalAmount,
+          balance_amount: 0,
+          status: 'paid',
+          remarks,
+          updated_at: now,
+        })
+        .eq('id', billId);
+      return;
+    }
+  }
+
+  await supabase
+    .from('pos_orders')
+    .update({
+      payment_status: 'room_charge',
+      status: 'completed',
+      payment_method: 'Room Charge',
+      room_number: input.roomNumber,
+      guest_name: input.guestName,
+      booking_id: input.bookingId,
+      updated_at: now,
+    })
+    .eq('id', billId);
+}
+
 export const getEligibleGuests = async (req: Request, res: Response): Promise<void> => {
   try {
     const branchId = Number(req.query.branch_id || (req as any).user?.branch_id || 1);
     const queryStr = String(req.query.query || '').trim().toLowerCase();
 
-    // Check parent feature toggle
     const roomChargingEnabled = await isFeatureEnabled(branchId, 'GUEST_ROOM_CHARGING');
     if (!roomChargingEnabled) {
       res.status(403).json({
@@ -34,64 +329,7 @@ export const getEligibleGuests = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    let sql = `
-      SELECT 
-        b.id as booking_id,
-        b.confirmation_number,
-        b.guest_name,
-        b.guest_phone,
-        b.guest_email,
-        b.room_number,
-        b.check_in_date,
-        b.check_out_date,
-        b.status as booking_status,
-        b.num_guests as occupants,
-        b.total_amount,
-        b.amount_paid,
-        (COALESCE(b.total_amount, 0) - COALESCE(b.amount_paid, 0)) as folio_balance,
-        b.meal_plan,
-        f.id as folio_id,
-        f.status as folio_status
-      FROM bookings b
-      LEFT JOIN folios f ON f.reservation_id = b.id OR f.guest_id = b.guest_id
-      WHERE b.branch_id = $1
-        AND LOWER(b.status) IN ('checked_in', 'checked-in', 'in-house', 'active')
-        AND b.room_number IS NOT NULL
-        AND b.room_number != ''
-    `;
-
-    const params: any[] = [branchId];
-
-    if (queryStr) {
-      params.push(`%${queryStr}%`);
-      sql += ` AND (
-        LOWER(b.room_number) LIKE $2 OR
-        LOWER(b.guest_name) LIKE $2 OR
-        LOWER(COALESCE(b.confirmation_number, '')) LIKE $2 OR
-        LOWER(COALESCE(b.guest_phone, '')) LIKE $2
-      )`;
-    }
-
-    sql += ` ORDER BY b.room_number ASC LIMIT 50`;
-
-    const result = await db.query(sql, params);
-
-    const eligibleGuests = result.rows.map((row) => ({
-      booking_id: row.booking_id,
-      folio_id: row.folio_id || row.booking_id,
-      room_number: row.room_number,
-      guest_name: row.guest_name || 'Guest',
-      guest_phone: row.guest_phone || '',
-      confirmation_number: row.confirmation_number || `BK-${row.booking_id}`,
-      check_in_date: row.check_in_date,
-      check_out_date: row.check_out_date,
-      occupants: row.occupants || 1,
-      folio_balance: Number(row.folio_balance || 0),
-      total_amount: Number(row.total_amount || 0),
-      amount_paid: Number(row.amount_paid || 0),
-      meal_plan: row.meal_plan || 'Room Only',
-      eligibility_status: 'Eligible',
-    }));
+    const eligibleGuests = await loadEligibleInHouseGuests(branchId, queryStr);
 
     res.json({
       success: true,
@@ -100,18 +338,19 @@ export const getEligibleGuests = async (req: Request, res: Response): Promise<vo
     });
   } catch (error: any) {
     logger.error('Error searching eligible room charge guests:', error);
-    res.status(500).json({ success: false, message: 'Failed to search eligible guests', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to search eligible guests',
+      error: error.message,
+    });
   }
 };
 
-/**
- * 2. Post Bill to Guest Room Folio (Atomic Transaction)
- */
 export const postRoomCharge = async (req: Request, res: Response): Promise<void> => {
-  const client = await db.getClient();
   try {
     const {
       branch_id,
+      source,
       outlet_name,
       outlet_type,
       bill_id,
@@ -132,15 +371,15 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
     const userId = (req as any).user?.id || null;
     const userName = (req as any).user?.name || 'Cashier';
     const branchId = Number(branch_id || (req as any).user?.branch_id || 1);
+    const today = todayInNairobi();
 
-    // Step 1: Validate Parent & Outlet Feature Toggles
     const parentEnabled = await isFeatureEnabled(branchId, 'GUEST_ROOM_CHARGING');
     if (!parentEnabled) {
       res.status(403).json({ success: false, message: 'Guest Room Charging is disabled for this branch.' });
       return;
     }
 
-    const outletNameStr = (outlet_name || '').toUpperCase();
+    const outletNameStr = String(outlet_name || '').toUpperCase();
     let outletFeatureKey = 'RESTAURANT_ROOM_CHARGING';
     if (outletNameStr.includes('EXEC') || outletNameStr.includes('EXECUTIVE')) {
       outletFeatureKey = 'EXECUTIVE_BAR_ROOM_CHARGING';
@@ -157,193 +396,248 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    await client.query('BEGIN');
-
-    // Step 2: Lock & Validate Guest Booking
-    const bookingRes = await client.query(
-      `SELECT id, guest_id, guest_name, room_number, status, total_amount, amount_paid, branch_id
-       FROM bookings
-       WHERE id = $1 FOR UPDATE`,
-      [booking_id]
-    );
-
-    if (bookingRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      res.status(404).json({ success: false, message: 'Active guest booking not found.' });
+    if (!booking_id) {
+      res.status(400).json({ success: false, message: 'booking_id is required.' });
       return;
     }
 
-    const booking = bookingRes.rows[0];
-    const bookingStatus = (booking.status || '').toLowerCase();
-    if (!['checked_in', 'checked-in', 'in-house', 'active'].includes(bookingStatus)) {
-      await client.query('ROLLBACK');
-      res.status(400).json({ success: false, message: 'Guest is no longer checked in or has checked out.' });
+    const reservationRes = await supabase
+      .from('reservations')
+      .select(`
+        id,
+        confirmation_number,
+        guest_id,
+        room_id,
+        status,
+        check_in_date,
+        check_out_date,
+        total_amount,
+        deposit_amount,
+        meal_plan,
+        guest:guests!guest_id(first_name,last_name,phone,email),
+        room:rooms!room_id(id, room_number, branch_id, status)
+      `)
+      .eq('id', booking_id)
+      .maybeSingle();
+
+    if (reservationRes.error) {
+      throw reservationRes.error;
+    }
+
+    const reservation = reservationRes.data;
+    if (!reservation) {
+      res.status(404).json({ success: false, message: 'Active guest stay not found.' });
       return;
     }
 
-    if (Number(booking.branch_id) !== branchId) {
-      await client.query('ROLLBACK');
-      res.status(400).json({ success: false, message: 'Guest booking belongs to a different branch.' });
+    const reservationRoom = relationRecord<any>(reservation.room);
+    if (Number(reservationRoom?.branch_id || 0) !== branchId) {
+      res.status(400).json({ success: false, message: 'Guest stay belongs to a different branch.' });
       return;
     }
 
-    // Step 3: Validate & Lock POS Bill
-    if (bill_id) {
-      const billCheck = await client.query(
-        `SELECT id, payment_status, status FROM pos_orders WHERE id = $1 FOR UPDATE`,
-        [bill_id]
-      );
-
-      if (billCheck.rows.length > 0) {
-        const bStatus = billCheck.rows[0].payment_status || billCheck.rows[0].status;
-        if (bStatus === 'paid' || bStatus === 'cleared' || bStatus === 'room_charge') {
-          await client.query('ROLLBACK');
-          res.status(400).json({ success: false, message: 'This POS bill has already been settled or cleared.' });
-          return;
-        }
-      }
-    }
-
-    // Step 4: Resolve or Create Folio
-    let folioRes = await client.query(`SELECT id FROM folios WHERE reservation_id = $1 AND status = 'open'`, [
-      booking_id,
-    ]);
-    let folioId = folioRes.rows.length > 0 ? folioRes.rows[0].id : null;
-
-    if (!folioId) {
-      const newFolioRes = await client.query(
-        `INSERT INTO folios (reservation_id, guest_id, branch_id, status, total_charges, total_payments, created_at, updated_at)
-         VALUES ($1, $2, $3, 'open', 0, 0, NOW(), NOW())
-         RETURNING id`,
-        [booking_id, booking.guest_id, branchId]
-      );
-      folioId = newFolioRes.rows[0].id;
+    if (!isCurrentInHouseStay(reservation, today)) {
+      res.status(400).json({
+        success: false,
+        message: 'Only current in-house overnight stays can be charged to room.',
+      });
+      return;
     }
 
     const grossAmount = Number(total_amount) || 0;
+    if (grossAmount <= 0) {
+      res.status(400).json({ success: false, message: 'A positive amount is required.' });
+      return;
+    }
+
     const taxAmt = Number(tax_amount) || 0;
     const discAmt = Number(discount_amount) || 0;
     const scAmt = Number(service_charge) || 0;
     const billRef = bill_number || order_number || `BILL-${Date.now()}`;
+    const roomNumber = String(room_number || reservationRoom?.room_number || '').trim();
+    const guestName = String(guest_name || normalizeGuestName(reservation)).trim();
+    const chargeBucket = resolveChargeBucket(outlet_name, outlet_type);
+    const descriptionText = `${outlet_name || 'Outlet'} - Bill ${billRef}`;
 
-    const categoryLabel = outlet_name || 'Restaurant';
-    const descriptionText = `${categoryLabel} — Bill ${billRef}`;
-    const itemsSnapshotJson = JSON.stringify(items || []);
+    const existingFolioRes = await supabase
+      .from('folios')
+      .select(`
+        id,
+        reservation_id,
+        guest_id,
+        branch_id,
+        status,
+        folio_number,
+        room_charges,
+        food_charges,
+        beverage_charges,
+        other_charges,
+        total_charges,
+        total_payments,
+        balance
+      `)
+      .eq('reservation_id', booking_id)
+      .eq('status', 'open')
+      .maybeSingle();
 
-    // Step 5: Insert Folio Charge Transaction
-    const folioTransRes = await client.query(
-      `INSERT INTO folio_transactions (
-        folio_id, booking_id, guest_id, branch_id, room_number,
-        type, category, outlet_name, outlet_type,
-        pos_bill_number, pos_order_number, amount, tax, discount, service_charge,
-        description, items_snapshot, posted_by, posted_by_name, waiter_name, status, created_at
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        'charge', $6, $7, $8,
-        $9, $10, $11, $12, $13, $14,
-        $15, $16, $17, $18, $19, 'active', NOW()
-      ) RETURNING id`,
-      [
-        folioId,
-        booking_id,
-        booking.guest_id,
-        branchId,
-        room_number || booking.room_number,
-        categoryLabel,
-        outlet_name || 'Outlet',
-        outlet_type || 'POS',
-        bill_number || billRef,
-        order_number || billRef,
-        grossAmount,
-        taxAmt,
-        discAmt,
-        scAmt,
-        descriptionText,
-        itemsSnapshotJson,
-        userId,
-        userName,
-        waiter_name || 'Staff',
-      ]
-    );
-
-    const folioTransactionId = folioTransRes.rows[0].id;
-
-    // Step 6: Update Folio & Booking Charges Balance
-    await client.query(
-      `UPDATE folios
-       SET total_charges = COALESCE(total_charges, 0) + $1,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [grossAmount, folioId]
-    );
-
-    await client.query(
-      `UPDATE bookings
-       SET total_amount = COALESCE(total_amount, 0) + $1,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [grossAmount, booking_id]
-    );
-
-    // Step 7: Update POS Bill Settlement
-    if (bill_id) {
-      await client.query(
-        `UPDATE pos_orders
-         SET payment_status = 'room_charge',
-             status = 'completed',
-             payment_method = 'Room Charge',
-             room_number = $1,
-             guest_name = $2,
-             booking_id = $3,
-             folio_transaction_id = $4,
-             updated_at = NOW()
-         WHERE id = $5`,
-        [room_number || booking.room_number, guest_name || booking.guest_name, booking_id, folioTransactionId, bill_id]
-      );
+    if (existingFolioRes.error) {
+      throw existingFolioRes.error;
     }
 
-    // Step 8: Create Audit Record
-    await client.query(
+    let folio = existingFolioRes.data;
+    if (!folio) {
+      const openingRoomCharges = Number(reservation.total_amount || 0);
+      const createdFolioRes = await supabase
+        .from('folios')
+        .insert({
+          reservation_id: booking_id,
+          guest_id: reservation.guest_id,
+          branch_id: branchId,
+          status: 'open',
+          folio_number: reservation.confirmation_number || `FOL-${Date.now()}`,
+          room_charges: openingRoomCharges,
+          food_charges: 0,
+          beverage_charges: 0,
+          other_charges: 0,
+          total_charges: openingRoomCharges,
+          total_payments: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .select(`
+          id,
+          reservation_id,
+          guest_id,
+          branch_id,
+          status,
+          folio_number,
+          room_charges,
+          food_charges,
+          beverage_charges,
+          other_charges,
+          total_charges,
+          total_payments,
+          balance
+        `)
+        .single();
+
+      if (createdFolioRes.error) {
+        throw createdFolioRes.error;
+      }
+      folio = createdFolioRes.data;
+    }
+
+    const transactionRes = await supabase
+      .from('transactions')
+      .insert({
+        folio_id: folio.id,
+        type: 'charge',
+        category: chargeBucket.category,
+        amount: grossAmount,
+        description: descriptionText,
+        reference_number: billRef,
+        performed_by: userId,
+        quantity: Array.isArray(items) && items.length > 0 ? items.length : 1,
+        unit_price: grossAmount,
+        posted_by: userId,
+        transaction_date: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (transactionRes.error) {
+      throw transactionRes.error;
+    }
+
+    const folioUpdatePayload: Record<string, any> = {
+      total_charges: Number(folio.total_charges || 0) + grossAmount,
+      updated_at: new Date().toISOString(),
+    };
+    folioUpdatePayload[chargeBucket.folioField] =
+      Number((folio as any)[chargeBucket.folioField] || 0) + grossAmount;
+
+    const folioUpdateRes = await supabase
+      .from('folios')
+      .update(folioUpdatePayload)
+      .eq('id', folio.id);
+
+    if (folioUpdateRes.error) {
+      throw folioUpdateRes.error;
+    }
+
+    const roomChargeAuditRes = await supabase
+      .from('folio_transactions')
+      .insert({
+        folio_id: folio.id,
+        booking_id,
+        guest_id: reservation.guest_id,
+        branch_id: branchId,
+        room_number: roomNumber,
+        type: 'charge',
+        category: chargeBucket.category,
+        outlet_name: outlet_name || 'Outlet',
+        outlet_type: outlet_type || 'POS',
+        pos_bill_number: bill_number || billRef,
+        pos_order_number: order_number || billRef,
+        amount: grossAmount,
+        tax: taxAmt,
+        discount: discAmt,
+        service_charge: scAmt,
+        description: descriptionText,
+        items_snapshot: Array.isArray(items) ? items : [],
+        posted_by: userId,
+        posted_by_name: userName,
+        waiter_name: waiter_name || 'Staff',
+        status: 'active',
+      });
+
+    if (roomChargeAuditRes.error) {
+      logger.warn(`Room charge audit insert skipped: ${roomChargeAuditRes.error.message}`);
+    }
+
+    await settleRoomChargeSourceBill({
+      source,
+      billId: bill_id,
+      bookingId: String(booking_id),
+      roomNumber,
+      guestName,
+    });
+
+    await db.query(
       `INSERT INTO audit_logs (user_id, action, resource, metadata, branch_id, created_at)
-       VALUES ($1, 'POST_ROOM_CHARGE', 'folio_transactions', $2, $3, NOW())`,
+       VALUES ($1, 'POST_ROOM_CHARGE', 'folios', $2, $3, NOW())`,
       [
         userId,
         JSON.stringify({
-          folio_transaction_id: folioTransactionId,
+          folio_id: folio.id,
+          folio_transaction_id: transactionRes.data.id,
           booking_id,
-          guest_name: guest_name || booking.guest_name,
-          room_number: room_number || booking.room_number,
+          guest_name: guestName,
+          room_number: roomNumber,
           outlet_name,
           bill_number: billRef,
           amount: grossAmount,
+          notes: notes || null,
         }),
         branchId,
       ]
     );
 
-    await client.query('COMMIT');
-
     res.json({
       success: true,
-      message: `Bill ${billRef} posted successfully to Room ${room_number || booking.room_number}`,
-      folio_transaction_id: folioTransactionId,
-      room_number: room_number || booking.room_number,
-      guest_name: guest_name || booking.guest_name,
+      message: `Bill ${billRef} posted successfully to Room ${roomNumber}`,
+      folio_id: folio.id,
+      folio_transaction_id: transactionRes.data.id,
+      room_number: roomNumber,
+      guest_name: guestName,
       amount: grossAmount,
       settlement_method: 'Room Charge',
     });
   } catch (error: any) {
-    await client.query('ROLLBACK');
     logger.error('Error posting room charge transaction:', error);
     res.status(500).json({ success: false, message: 'Failed to post room charge', error: error.message });
-  } finally {
-    client.release();
   }
 };
 
-/**
- * 3. Reverse an Authorized Room Charge
- */
 export const reverseRoomCharge = async (req: Request, res: Response): Promise<void> => {
   const client = await db.getClient();
   try {
@@ -378,7 +672,6 @@ export const reverseRoomCharge = async (req: Request, res: Response): Promise<vo
 
     const amountToDeduct = Number(trans.amount) || 0;
 
-    // Mark transaction as reversed
     await client.query(
       `UPDATE folio_transactions
        SET status = 'reversed',
@@ -391,7 +684,6 @@ export const reverseRoomCharge = async (req: Request, res: Response): Promise<vo
       [userId, reason, transaction_id]
     );
 
-    // Create Reversal Counter-Entry
     await client.query(
       `INSERT INTO folio_transactions (
         folio_id, booking_id, guest_id, branch_id, room_number,
@@ -416,13 +708,12 @@ export const reverseRoomCharge = async (req: Request, res: Response): Promise<vo
         trans.pos_bill_number,
         trans.pos_order_number,
         -amountToDeduct,
-        `REVERSAL: ${trans.description} — Reason: ${reason}`,
+        `REVERSAL: ${trans.description} - Reason: ${reason}`,
         userId,
         userName,
       ]
     );
 
-    // Update Folio total charges
     if (trans.folio_id) {
       await client.query(
         `UPDATE folios
@@ -435,15 +726,13 @@ export const reverseRoomCharge = async (req: Request, res: Response): Promise<vo
 
     if (trans.booking_id) {
       await client.query(
-        `UPDATE bookings
-         SET total_amount = GREATEST(0, COALESCE(total_amount, 0) - $1),
-             updated_at = NOW()
-         WHERE id = $2`,
-        [amountToDeduct, trans.booking_id]
+        `UPDATE reservations
+         SET updated_at = NOW()
+         WHERE id = $1`,
+        [trans.booking_id]
       );
     }
 
-    // Re-open linked POS bill if applicable
     if (trans.pos_bill_number) {
       await client.query(
         `UPDATE pos_orders
@@ -456,7 +745,6 @@ export const reverseRoomCharge = async (req: Request, res: Response): Promise<vo
       );
     }
 
-    // Log Audit
     await client.query(
       `INSERT INTO audit_logs (user_id, action, resource, metadata, branch_id, created_at)
        VALUES ($1, 'REVERSE_ROOM_CHARGE', 'folio_transactions', $2, $3, NOW())`,
@@ -489,9 +777,6 @@ export const reverseRoomCharge = async (req: Request, res: Response): Promise<vo
   }
 };
 
-/**
- * 4. Get Room Charges Reports
- */
 export const getRoomChargeReports = async (req: Request, res: Response): Promise<void> => {
   try {
     const branchId = req.query.branch_id ? Number(req.query.branch_id) : null;
@@ -500,7 +785,7 @@ export const getRoomChargeReports = async (req: Request, res: Response): Promise
     const status = req.query.status ? String(req.query.status) : 'active';
 
     let sql = `
-      SELECT 
+      SELECT
         ft.*,
         b.name as branch_name
       FROM folio_transactions ft
@@ -533,8 +818,8 @@ export const getRoomChargeReports = async (req: Request, res: Response): Promise
     const result = await db.query(sql, params);
 
     const totalPosted = result.rows
-      .filter((r) => r.status === 'active')
-      .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+      .filter((row) => row.status === 'active')
+      .reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
     res.json({
       success: true,

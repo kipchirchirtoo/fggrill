@@ -38,7 +38,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (!mounted) return;
 
     if (user != null) {
-      context.go(getRoleRoute(user.role, contextType: user.contextType));
+      context.go(getUserHomeRoute(user));
       return;
     }
 

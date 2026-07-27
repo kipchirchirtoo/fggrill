@@ -1,3 +1,5 @@
+import 'models.dart';
+
 String getRoleRoute(String role, {String contextType = 'branch'}) {
   switch (role) {
     case 'super_admin':
@@ -98,5 +100,45 @@ String getRoleRoute(String role, {String contextType = 'branch'}) {
       // fallback are PIN-authenticated POS staff with no email/password
       // account to log into there.
       return '/terminal';
+  }
+}
+
+String getUserHomeRoute(User user) {
+  if (user.role == 'choma_zone_kds' || user.roles.contains('choma_zone_kds')) {
+    return '/kitchen/choma-zone';
+  }
+
+  if (user.role == 'central_storekeeper' ||
+      user.role == 'central_operations_manager' ||
+      user.roles.contains('central_storekeeper') ||
+      user.roles.contains('central_operations_manager')) {
+    return '/central-store';
+  }
+
+  if (user.role == 'cashier' || user.roles.contains('cashier')) {
+    return '/cashier';
+  }
+
+  switch (user.outletType) {
+    case 'restaurant':
+      return '/pos/restaurant';
+    case 'main_bar':
+      return '/pos/main-bar';
+    case 'executive_bar':
+      return '/pos/executive-bar';
+    case 'non_consumables':
+      return '/pos/non-consumables';
+    case 'choma_zone':
+      return '/pos/choma-zone';
+    case 'kyogong_reception':
+      return '/pos/kyogong-reception';
+    case 'kyogong_spa':
+      return '/pos/kyogong-spa';
+    case 'kyogong_executive_bar':
+      return '/pos/kyogong-executive-bar';
+    case 'kyogong_sports_bar':
+      return '/pos/kyogong-sports-bar';
+    default:
+      return getRoleRoute(user.role, contextType: user.contextType);
   }
 }

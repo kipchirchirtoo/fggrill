@@ -282,9 +282,18 @@ export const createUser = async (
       return;
     }
 
+    // POS staff (waiters, bar, carwash, etc.) log in by PIN and usually have
+    // no email, but Supabase Auth requires one. When the staff profile has no
+    // email, synthesize a unique placeholder from the employee number or name
+    // + the staff-profile id so the login can still be created. An admin can
+    // set a real address later.
     if (!userEmail) {
-      res.status(400).json({ success: false, message: 'Email is required for user accounts' });
-      return;
+      const slugBase = String(empId || `${fName}.${lName}` || 'staff')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '.')
+        .replace(/(^\.+|\.+$)/g, '') || 'staff';
+      const idFrag = String(staffProfileIdVal).replace(/[^a-z0-9]/gi, '').slice(0, 8);
+      userEmail = `${slugBase}.${idFrag}@staff.famousgate.local`;
     }
 
     // Validate POS PIN format and uniqueness

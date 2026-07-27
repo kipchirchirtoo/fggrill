@@ -20,6 +20,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/readable_record.dart';
 import '../../../core/utils/screen_size.dart';
 import '../../../core/widgets/record_detail_screen.dart';
+import '../../../core/widgets/dashboard_horizontal_access.dart';
 import '../../auth/domain/auth_notifier.dart';
 import '../../branch_search/presentation/branch_search_screen.dart';
 import '../data/repository.dart';
@@ -162,9 +163,11 @@ class _BranchAccountantDashboardState
             ),
           Expanded(
             child: _isFullScreenSection
-                ? KeyedSubtree(
-                    key: ValueKey('ba_${_section}_$tick'),
-                    child: _buildSection(),
+                ? DashboardHorizontalAccess(
+                    child: KeyedSubtree(
+                      key: ValueKey('ba_${_section}_$tick'),
+                      child: _buildSection(),
+                    ),
                   )
                 : Column(
                     children: [
@@ -184,9 +187,11 @@ class _BranchAccountantDashboardState
                         sidebarCollapsed: effectiveSidebarCollapsed,
                       ),
                       Expanded(
-                        child: KeyedSubtree(
-                          key: ValueKey('ba_${_section}_$tick'),
-                          child: _buildSection(),
+                        child: DashboardHorizontalAccess(
+                          child: KeyedSubtree(
+                            key: ValueKey('ba_${_section}_$tick'),
+                            child: _buildSection(),
+                          ),
                         ),
                       ),
                     ],
@@ -338,12 +343,13 @@ const _navItems = [
       Icons.receipt_long),
   _NavItem(BranchAccountantSection.bookingsInvoices, 'Bookings & Invoices',
       Icons.request_quote),
-  _NavItem(BranchAccountantSection.eventOrders, 'Event Orders',
-      Icons.event_note),
+  _NavItem(
+      BranchAccountantSection.eventOrders, 'Event Orders', Icons.event_note),
   _NavItem(BranchAccountantSection.outboundPayments, 'Outbound Payments',
       Icons.payments),
   _NavItem(BranchAccountantSection.staffAudit, 'Staff Audit', Icons.shield),
-  _NavItem(BranchAccountantSection.waiterAudit, 'Waiter Audit', Icons.restaurant),
+  _NavItem(
+      BranchAccountantSection.waiterAudit, 'Waiter Audit', Icons.restaurant),
   _NavItem(
       BranchAccountantSection.voidApprovals, 'Void Approvals', Icons.block),
   _NavItem(BranchAccountantSection.voidAudit, 'Void Audit',
@@ -357,8 +363,8 @@ const _navItems = [
       BranchAccountantSection.financialClose, 'Daily Close', Icons.lock_clock),
   _NavItem(BranchAccountantSection.branchPayroll, 'Branch Payroll',
       Icons.people_alt),
-  _NavItem(BranchAccountantSection.payrollPolicies, 'Payroll Policies',
-      Icons.tune),
+  _NavItem(
+      BranchAccountantSection.payrollPolicies, 'Payroll Policies', Icons.tune),
   _NavItem(BranchAccountantSection.payrollAdjustments, 'Payroll Adjustments',
       Icons.adjust),
   _NavItem(
@@ -375,14 +381,14 @@ const _navItems = [
       Icons.soup_kitchen),
   _NavItem(BranchAccountantSection.dailyControls, 'Daily Controls',
       Icons.analytics_outlined),
-  _NavItem(BranchAccountantSection.foodControlStandards, 'Food Control Standards',
-      Icons.gavel),
+  _NavItem(BranchAccountantSection.foodControlStandards,
+      'Food Control Standards', Icons.gavel),
   _NavItem(BranchAccountantSection.barStocktakeReview, 'Bar Stocktake Review',
       Icons.liquor),
-  _NavItem(BranchAccountantSection.storeStocktakeReview, 'Store Stocktake Review',
-      Icons.warehouse),
-  _NavItem(BranchAccountantSection.kitchenStocktakeReview, 'Kitchen Stocktake Review',
-      Icons.soup_kitchen_outlined),
+  _NavItem(BranchAccountantSection.storeStocktakeReview,
+      'Store Stocktake Review', Icons.warehouse),
+  _NavItem(BranchAccountantSection.kitchenStocktakeReview,
+      'Kitchen Stocktake Review', Icons.soup_kitchen_outlined),
   _NavItem(BranchAccountantSection.spoilageReview, 'Spoilage Review',
       Icons.report_problem_outlined),
   _NavItem(BranchAccountantSection.branchStockRequestReview,
@@ -1047,11 +1053,7 @@ class _QuickActions extends StatelessWidget {
         Icons.lock_open,
         BranchAccountantSection.shiftOpenings
       ),
-      (
-        'Daily Close',
-        Icons.lock_clock,
-        BranchAccountantSection.financialClose
-      ),
+      ('Daily Close', Icons.lock_clock, BranchAccountantSection.financialClose),
       ('Discrepancies', Icons.warning, BranchAccountantSection.discrepancies),
       ('Credit Bills', Icons.credit_card, BranchAccountantSection.creditBills),
       (
@@ -1431,8 +1433,9 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
               : soldItemsPayload;
           final soldItemsSummary = _map(soldItemsData['summary']);
           final outletBreakdown = _list(soldItemsSummary['outlet_breakdown']);
-          final topSellingItems = ([..._list(soldItemsData['analysis'])]
-                ..sort((a, b) => _num(b['quantity']).compareTo(_num(a['quantity']))))
+          final topSellingItems = ([
+            ..._list(soldItemsData['analysis'])
+          ]..sort((a, b) => _num(b['quantity']).compareTo(_num(a['quantity']))))
               .take(10)
               .toList();
           final byMethodMap = paymentBreakdown.fold<Map<String, num>>(
@@ -1587,7 +1590,8 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
                     values: _map(financialSummary['expensesByCategory'] ??
                         financialSummary['expenses_by_category'])),
               ),
-              _StaffAuditSummaryCard(staffAudit: _map(financials['staffAudit'])),
+              _StaffAuditSummaryCard(
+                  staffAudit: _map(financials['staffAudit'])),
               _TwoColumn(
                 left: _SectionCard(
                   title: 'Recent Finance Transactions',
@@ -2146,7 +2150,10 @@ class _RevenueByOutletChart extends StatelessWidget {
       ..sort((a, b) => _num(b['revenue']).compareTo(_num(a['revenue'])));
     final top = sorted.take(10).toList();
     final maxRevenue = top.fold<double>(
-        0, (max, e) => _num(e['revenue']).toDouble() > max ? _num(e['revenue']).toDouble() : max);
+        0,
+        (max, e) => _num(e['revenue']).toDouble() > max
+            ? _num(e['revenue']).toDouble()
+            : max);
     return _SectionCard(
       title: 'Revenue by Outlet',
       child: top.isEmpty
@@ -2175,8 +2182,7 @@ class _RevenueByOutletChart extends StatelessWidget {
                           if (index < 0 || index >= top.length) {
                             return const SizedBox.shrink();
                           }
-                          return Text(
-                              _text(top[index], ['label', 'key']),
+                          return Text(_text(top[index], ['label', 'key']),
                               style: const TextStyle(fontSize: 10));
                         },
                       ),
@@ -2198,8 +2204,8 @@ class _RevenueByOutletChart extends StatelessWidget {
                           toY: _num(entry.value['revenue']).toDouble(),
                           color: const Color(0xFF3B82F6),
                           width: 18,
-                          borderRadius:
-                              const BorderRadius.horizontal(right: Radius.circular(6)),
+                          borderRadius: const BorderRadius.horizontal(
+                              right: Radius.circular(6)),
                         ),
                       ],
                     );
@@ -2231,8 +2237,11 @@ class _DailyTransactionsBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxCount = data.fold<double>(0,
-        (max, e) => _num(e['transaction_count']).toDouble() > max ? _num(e['transaction_count']).toDouble() : max);
+    final maxCount = data.fold<double>(
+        0,
+        (max, e) => _num(e['transaction_count']).toDouble() > max
+            ? _num(e['transaction_count']).toDouble()
+            : max);
     return _SectionCard(
       title: 'Daily Transactions',
       child: SizedBox(
@@ -2253,8 +2262,9 @@ class _DailyTransactionsBarChart extends StatelessWidget {
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 36,
-                        getTitlesWidget: (value, meta) =>
-                            Text('${value.toInt()}', style: const TextStyle(fontSize: 10)),
+                        getTitlesWidget: (value, meta) => Text(
+                            '${value.toInt()}',
+                            style: const TextStyle(fontSize: 10)),
                       ),
                     ),
                     bottomTitles: AxisTitles(
@@ -2277,11 +2287,12 @@ class _DailyTransactionsBarChart extends StatelessWidget {
                       x: entry.key,
                       barRods: [
                         BarChartRodData(
-                          toY: _num(entry.value['transaction_count']).toDouble(),
+                          toY:
+                              _num(entry.value['transaction_count']).toDouble(),
                           color: const Color(0xFF6366F1),
                           width: 10,
-                          borderRadius:
-                              const BorderRadius.vertical(top: Radius.circular(4)),
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(4)),
                         ),
                       ],
                     );
@@ -2299,13 +2310,17 @@ class _TopSellingItemsChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxQty = data.fold<double>(0,
-        (max, e) => _num(e['quantity']).toDouble() > max ? _num(e['quantity']).toDouble() : max);
+    final maxQty = data.fold<double>(
+        0,
+        (max, e) => _num(e['quantity']).toDouble() > max
+            ? _num(e['quantity']).toDouble()
+            : max);
     return _SectionCard(
       title: 'Top 10 Selling Items',
       child: data.isEmpty
           ? const SizedBox(
-              height: 200, child: Center(child: Text('No item sales data available')))
+              height: 200,
+              child: Center(child: Text('No item sales data available')))
           : SizedBox(
               height: 46.0 * data.length + 20,
               child: BarChart(
@@ -2346,8 +2361,8 @@ class _TopSellingItemsChart extends StatelessWidget {
                           toY: _num(entry.value['quantity']).toDouble(),
                           color: const Color(0xFF10B981),
                           width: 18,
-                          borderRadius:
-                              const BorderRadius.horizontal(right: Radius.circular(6)),
+                          borderRadius: const BorderRadius.horizontal(
+                              right: Radius.circular(6)),
                         ),
                       ],
                     );
@@ -2416,8 +2431,9 @@ class _HourlySalesBarChart extends StatelessWidget {
                       sideTitles: SideTitles(
                         showTitles: true,
                         interval: 3,
-                        getTitlesWidget: (value, meta) =>
-                            Text('${value.toInt()}h', style: const TextStyle(fontSize: 10)),
+                        getTitlesWidget: (value, meta) => Text(
+                            '${value.toInt()}h',
+                            style: const TextStyle(fontSize: 10)),
                       ),
                     ),
                   ),
@@ -2466,7 +2482,8 @@ class _CreditBillsTrendChart extends StatelessWidget {
       child: SizedBox(
         height: 260,
         child: dates.isEmpty
-            ? const Center(child: Text('No credit bills recorded for this period'))
+            ? const Center(
+                child: Text('No credit bills recorded for this period'))
             : LineChart(
                 LineChartData(
                   minY: 0,
@@ -2490,7 +2507,8 @@ class _CreditBillsTrendChart extends StatelessWidget {
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        interval: (dates.length / 5).ceilToDouble().clamp(1, 99),
+                        interval:
+                            (dates.length / 5).ceilToDouble().clamp(1, 99),
                         getTitlesWidget: (value, meta) {
                           final index = value.round();
                           if (index < 0 || index >= dates.length) {
@@ -2583,7 +2601,8 @@ class _StaffAuditSummaryCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          const Text('Recent Critical Actions (delete / void / discount / refund / role change)',
+          const Text(
+              'Recent Critical Actions (delete / void / discount / refund / role change)',
               style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           _SimpleTable(
@@ -2755,46 +2774,57 @@ class _DiscrepanciesSectionState extends ConsumerState<_DiscrepanciesSection> {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Row(children: [
-                    Icon(Icons.check_circle_outline, color: Colors.green.shade400, size: 32),
+                    Icon(Icons.check_circle_outline,
+                        color: Colors.green.shade400, size: 32),
                     const SizedBox(width: 12),
-                    const Text('No flags from auditor or director require your attention.'),
+                    const Text(
+                        'No flags from auditor or director require your attention.'),
                   ]),
                 ),
               ),
             ...items.map((item) {
               final status = _text(item, ['status']).toLowerCase();
-              final isPending = status == 'pending' || status == 'open' || status == 'flagged';
-              final isUnderReview = status == 'under_review' || status == 'in_review';
+              final isPending = status == 'pending' ||
+                  status == 'open' ||
+                  status == 'flagged';
+              final isUnderReview =
+                  status == 'under_review' || status == 'in_review';
               return _ActionCard(
-                  title: _text(item, ['flag_type', 'type', 'title', 'subject']),
-                  subtitle: _text(item, ['description', 'message', 'notes']),
-                  trailing: _StatusPill(_text(item, ['status'])),
-                  rows: {
-                    'Severity': _text(item, ['severity', 'priority']),
-                    'Flagged By': _text(item, ['flagged_by_name', 'raised_by', 'created_by']),
-                    'Record Date': _text(item, ['record_date', 'flag_date', 'created_at']),
-                    'Accountant Response': _text(item, ['accountant_response', 'response']),
-                    'Director Decision': _text(item, ['director_final_decision', 'resolution']),
-                  },
-                  actions: [
-                    OutlinedButton.icon(
-                      onPressed: () => _showRecord(context, item),
-                      icon: const Icon(Icons.visibility, size: 16),
-                      label: const Text('View Details'),
+                title: _text(item, ['flag_type', 'type', 'title', 'subject']),
+                subtitle: _text(item, ['description', 'message', 'notes']),
+                trailing: _StatusPill(_text(item, ['status'])),
+                rows: {
+                  'Severity': _text(item, ['severity', 'priority']),
+                  'Flagged By': _text(
+                      item, ['flagged_by_name', 'raised_by', 'created_by']),
+                  'Record Date':
+                      _text(item, ['record_date', 'flag_date', 'created_at']),
+                  'Accountant Response':
+                      _text(item, ['accountant_response', 'response']),
+                  'Director Decision':
+                      _text(item, ['director_final_decision', 'resolution']),
+                },
+                actions: [
+                  OutlinedButton.icon(
+                    onPressed: () => _showRecord(context, item),
+                    icon: const Icon(Icons.visibility, size: 16),
+                    label: const Text('View Details'),
+                  ),
+                  if (isPending)
+                    FilledButton.icon(
+                      onPressed: () => _respond(item),
+                      icon: const Icon(Icons.reply, size: 16),
+                      label: const Text('Respond'),
                     ),
-                    if (isPending)
-                      FilledButton.icon(
-                        onPressed: () => _respond(item),
-                        icon: const Icon(Icons.reply, size: 16),
-                        label: const Text('Respond'),
-                      ),
-                    if (isUnderReview && _text(item, ['accountant_response', 'response']).isNotEmpty)
-                      OutlinedButton.icon(
-                        onPressed: () => _respond(item),
-                        icon: const Icon(Icons.edit_note, size: 16),
-                        label: const Text('Update Response'),
-                      ),
-                  ],
+                  if (isUnderReview &&
+                      _text(item, ['accountant_response', 'response'])
+                          .isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () => _respond(item),
+                      icon: const Icon(Icons.edit_note, size: 16),
+                      label: const Text('Update Response'),
+                    ),
+                ],
               );
             }),
           ],
@@ -2869,8 +2899,8 @@ class _ProfitLossSectionState extends ConsumerState<_ProfitLossSection> {
           final systemRevenue = _num(pl['system_revenue']);
           final verifiedRevenue = _num(pl['verified_revenue']);
           final revenueVariance = _num(pl['revenue_variance']);
-          final totalExpenses = expenses.values
-              .fold<num>(0, (sum, v) => sum + _num(v));
+          final totalExpenses =
+              expenses.values.fold<num>(0, (sum, v) => sum + _num(v));
 
           return _Page(
             title: 'Profit & Loss Statement',
@@ -3032,7 +3062,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
 
   Future<void> _pickDateRange() async {
     final initialRange = DateTimeRange(
-      start: DateTime.tryParse(_from) ?? DateTime.now().subtract(const Duration(days: 30)),
+      start: DateTime.tryParse(_from) ??
+          DateTime.now().subtract(const Duration(days: 30)),
       end: DateTime.tryParse(_to) ?? DateTime.now(),
     );
     final picked = await showDateRangePicker(
@@ -3147,7 +3178,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                 _text(tx, ['cashier_name']).toLowerCase().contains(q) ||
                 _text(tx, ['item_summary']).toLowerCase().contains(q);
             final txGroup = _text(tx, ['outlet_group']);
-            final matchesGroup = selectedOutlet == 'all' || txGroup == selectedOutlet;
+            final matchesGroup =
+                selectedOutlet == 'all' || txGroup == selectedOutlet;
             return matchesSearch && matchesGroup;
           }).toList();
 
@@ -3357,18 +3389,26 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
       children: [
         // Summary stats row
         _ResponsiveGrid(children: [
-          _MetricCard('Expected Cash', _money(totalExpected), Icons.point_of_sale, Colors.indigo),
-          _MetricCard('Actual Cash', _money(totalActual), Icons.payments, Colors.teal),
+          _MetricCard('Expected Cash', _money(totalExpected),
+              Icons.point_of_sale, Colors.indigo),
+          _MetricCard(
+              'Actual Cash', _money(totalActual), Icons.payments, Colors.teal),
           _MetricCard(
             'Total Variance',
             '${totalVariance >= 0 ? '+' : ''}${_money(totalVariance)}',
             totalVariance >= 0 ? Icons.trending_up : Icons.trending_down,
-            totalVariance == 0 ? Colors.green : totalVariance > 0 ? Colors.orange : Colors.red,
+            totalVariance == 0
+                ? Colors.green
+                : totalVariance > 0
+                    ? Colors.orange
+                    : Colors.red,
           ),
           _MetricCard('Shifts', '$totalShifts', Icons.access_time, Colors.blue),
-          _MetricCard('Pending', '$pending', Icons.hourglass_empty, Colors.orange),
+          _MetricCard(
+              'Pending', '$pending', Icons.hourglass_empty, Colors.orange),
           _MetricCard('Approved', '$approved', Icons.verified, Colors.green),
-          _MetricCard('With Discrepancy', '$withDiscrepancy', Icons.warning_amber, Colors.red),
+          _MetricCard('With Discrepancy', '$withDiscrepancy',
+              Icons.warning_amber, Colors.red),
         ]),
         const SizedBox(height: 16),
 
@@ -3385,17 +3425,27 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
             decoration: BoxDecoration(
               color: gapAbs < 100 ? Colors.green.shade50 : Colors.red.shade50,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: gapAbs < 100 ? Colors.green.shade200 : Colors.red.shade200),
+              border: Border.all(
+                  color: gapAbs < 100
+                      ? Colors.green.shade200
+                      : Colors.red.shade200),
             ),
             child: Row(
               children: [
                 Icon(gapAbs < 100 ? Icons.check_circle : Icons.warning,
-                    color: gapAbs < 100 ? Colors.green.shade700 : Colors.red.shade700, size: 18),
+                    color: gapAbs < 100
+                        ? Colors.green.shade700
+                        : Colors.red.shade700,
+                    size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: RichText(
                     text: TextSpan(
-                      style: TextStyle(fontSize: 13, color: gapAbs < 100 ? Colors.green.shade800 : Colors.red.shade800),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: gapAbs < 100
+                              ? Colors.green.shade800
+                              : Colors.red.shade800),
                       children: [
                         TextSpan(
                           text: gapAbs < 100
@@ -3404,7 +3454,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         TextSpan(
-                          text: 'POS Expected: ${_money(salesRevenue)}  •  Cash Collected: ${_money(collected)}',
+                          text:
+                              'POS Expected: ${_money(salesRevenue)}  •  Cash Collected: ${_money(collected)}',
                         ),
                       ],
                     ),
@@ -3425,26 +3476,73 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
             children: [
               // Header
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.indigo.shade700,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(7)),
                 ),
                 child: const Row(children: [
-                  Expanded(flex: 2, child: Text('Cashier', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
-                  Expanded(child: Text('Shift Start', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
-                  Expanded(child: Text('Shift End', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
-                  SizedBox(width: 110, child: Text('Expected', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
-                  SizedBox(width: 110, child: Text('Collected', textAlign: TextAlign.right, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
-                  SizedBox(width: 100, child: Text('Variance', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
-                  SizedBox(width: 110, child: Text('Status', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
+                  Expanded(
+                      flex: 2,
+                      child: Text('Cashier',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                  Expanded(
+                      child: Text('Shift Start',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                  Expanded(
+                      child: Text('Shift End',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                  SizedBox(
+                      width: 110,
+                      child: Text('Expected',
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                  SizedBox(
+                      width: 110,
+                      child: Text('Collected',
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                  SizedBox(
+                      width: 100,
+                      child: Text('Variance',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                  SizedBox(
+                      width: 110,
+                      child: Text('Status',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
                 ]),
               ),
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: shifts.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: Colors.grey.shade100),
                 itemBuilder: (ctx, i) {
                   final shift = shifts[i];
                   final expected = _num(shift['expected_cash']);
@@ -3459,33 +3557,52 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                     if (v == null) return '—';
                     try {
                       final dt = _toKenyaTime(DateTime.parse('$v'));
-                      return '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
-                    } catch (_) { return '$v'; }
+                      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                    } catch (_) {
+                      return '$v';
+                    }
                   }
 
                   return Container(
                     color: hasDiscrepancy
-                        ? (i.isEven ? Colors.red.shade50 : Colors.red.shade50.withAlpha(180))
+                        ? (i.isEven
+                            ? Colors.red.shade50
+                            : Colors.red.shade50.withAlpha(180))
                         : (i.isEven ? Colors.white : Colors.grey.shade50),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     child: Row(children: [
                       Expanded(
                         flex: 2,
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('${shift['cashier_name'] ?? 'Unknown'}',
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                          if ((shift['approved_by_name'] ?? '').toString().isNotEmpty)
-                            Text('Approved by: ${shift['approved_by_name']}',
-                                style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
-                        ]),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${shift['cashier_name'] ?? 'Unknown'}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13)),
+                              if ((shift['approved_by_name'] ?? '')
+                                  .toString()
+                                  .isNotEmpty)
+                                Text(
+                                    'Approved by: ${shift['approved_by_name']}',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500)),
+                            ]),
                       ),
-                      Expanded(child: Text(_fmtTime(shift['start_time']), style: const TextStyle(fontSize: 12))),
-                      Expanded(child: Text(_fmtTime(shift['end_time']), style: const TextStyle(fontSize: 12))),
+                      Expanded(
+                          child: Text(_fmtTime(shift['start_time']),
+                              style: const TextStyle(fontSize: 12))),
+                      Expanded(
+                          child: Text(_fmtTime(shift['end_time']),
+                              style: const TextStyle(fontSize: 12))),
                       SizedBox(
                         width: 110,
                         child: Text(_money(expected),
                             textAlign: TextAlign.right,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w500)),
                       ),
                       SizedBox(
                         width: 110,
@@ -3494,13 +3611,16 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                             style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: hasDiscrepancy ? Colors.red.shade700 : Colors.teal.shade700)),
+                                color: hasDiscrepancy
+                                    ? Colors.red.shade700
+                                    : Colors.teal.shade700)),
                       ),
                       SizedBox(
                         width: 100,
                         child: Center(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
                               color: variance == 0
                                   ? Colors.green.shade50
@@ -3529,7 +3649,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
                         width: 110,
                         child: Center(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: isApproved
                                   ? Colors.green.shade100
@@ -4197,9 +4318,8 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
       runSpacing: 4,
       children: methods.map((m) {
         final isMap = m is Map;
-        final label = isMap
-            ? '${m['method'] ?? ''}'.toUpperCase()
-            : '$m'.toUpperCase();
+        final label =
+            isMap ? '${m['method'] ?? ''}'.toUpperCase() : '$m'.toUpperCase();
         final code = isMap ? '${m['code'] ?? ''}'.trim() : '';
         Color bg = Colors.grey.shade100;
         Color fg = Colors.grey.shade800;
@@ -4212,7 +4332,9 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
         } else if (label == 'CARD') {
           bg = Colors.blue.shade50;
           fg = Colors.blue.shade700;
-        } else if (label == 'CREDIT BILL' || label == 'CREDIT_BILL' || label == 'CREDIT') {
+        } else if (label == 'CREDIT BILL' ||
+            label == 'CREDIT_BILL' ||
+            label == 'CREDIT') {
           bg = Colors.orange.shade50;
           fg = Colors.orange.shade700;
         }
@@ -4299,37 +4421,35 @@ class _SoldItemsSectionState extends ConsumerState<_SoldItemsSection> {
         'Mpesa Code',
         'Status'
       ],
-      rows: transactions
-          .map((tx) {
-            // Prefer structured payment_details over legacy payment_methods strings
-            final details = _list(tx['payment_details']);
-            final methods = _list(tx['payment_methods']);
-            // Resolve payment badge input: use details if present, else plain strings
-            final badgeInput = details.isNotEmpty ? details : methods;
+      rows: transactions.map((tx) {
+        // Prefer structured payment_details over legacy payment_methods strings
+        final details = _list(tx['payment_details']);
+        final methods = _list(tx['payment_methods']);
+        // Resolve payment badge input: use details if present, else plain strings
+        final badgeInput = details.isNotEmpty ? details : methods;
 
-            // Extract M-Pesa code(s) from payment_details
-            final mpesaCodes = details
-                .where((d) =>
-                    d is Map &&
-                    '${d['method'] ?? ''}'.toUpperCase() == 'MPESA' &&
-                    '${d['code'] ?? ''}'.trim().isNotEmpty)
-                .map((d) => '${d['code']}'.trim())
-                .toSet()
-                .join(' · ');
+        // Extract M-Pesa code(s) from payment_details
+        final mpesaCodes = details
+            .where((d) =>
+                d is Map &&
+                '${d['method'] ?? ''}'.toUpperCase() == 'MPESA' &&
+                '${d['code'] ?? ''}'.trim().isNotEmpty)
+            .map((d) => '${d['code']}'.trim())
+            .toSet()
+            .join(' · ');
 
-            return [
-              _formatCompactDateTime(_text(tx, ['created_at'])),
-              _text(tx, ['order_number']),
-              _text(tx, ['cashier_name']),
-              _text(tx, ['outlet_name']),
-              _text(tx, ['item_summary']),
-              _money(_num(tx['total_amount'])),
-              _paymentMethodBadge(badgeInput),
-              mpesaCodes.isEmpty ? '-' : mpesaCodes,
-              _paymentStatusBadge(_text(tx, ['payment_status'])),
-            ];
-          })
-          .toList(),
+        return [
+          _formatCompactDateTime(_text(tx, ['created_at'])),
+          _text(tx, ['order_number']),
+          _text(tx, ['cashier_name']),
+          _text(tx, ['outlet_name']),
+          _text(tx, ['item_summary']),
+          _money(_num(tx['total_amount'])),
+          _paymentMethodBadge(badgeInput),
+          mpesaCodes.isEmpty ? '-' : mpesaCodes,
+          _paymentStatusBadge(_text(tx, ['payment_status'])),
+        ];
+      }).toList(),
     );
   }
 
@@ -5004,9 +5124,9 @@ class _ShiftOpeningApprovalsSectionState
     setState(() => _busyIds.add(id));
     try {
       await repo.approveShiftOpening(
-            id,
-            notes: 'Approved from Shift Openings queue',
-          );
+        id,
+        notes: 'Approved from Shift Openings queue',
+      );
       if (!mounted) return;
       _notify(
         context,
@@ -5521,7 +5641,11 @@ class _ShiftReconciliationPanel extends StatelessWidget {
             title: 'Cash Drawer & Change Trace',
             rows: [
               _ShiftReportRow('Opening Float', _money(_openingFloat(shift!))),
-              _ShiftReportRow('+ Cash Sales', _money(_cashSales(shift!) + _payouts(shift!) + _expenseTotal(shift!))),
+              _ShiftReportRow(
+                  '+ Cash Sales',
+                  _money(_cashSales(shift!) +
+                      _payouts(shift!) +
+                      _expenseTotal(shift!))),
               _ShiftReportRow(
                 'Cash Tendered by Customers',
                 _money(_cashTendered(shift!)),
@@ -5538,12 +5662,9 @@ class _ShiftReconciliationPanel extends StatelessWidget {
               ),
               _ShiftReportRow('+ Credit Payments Received',
                   _money(_creditPaymentsReceived(shift!))),
-
-              _ShiftReportRow(
-                  '- Payouts', _money(_payouts(shift!))),
+              _ShiftReportRow('- Payouts', _money(_payouts(shift!))),
               if (_expenseTotal(shift!) > 0)
-                _ShiftReportRow(
-                    '- Expenses', _money(_expenseTotal(shift!))),
+                _ShiftReportRow('- Expenses', _money(_expenseTotal(shift!))),
               _ShiftReportRow(
                 '= Expected Closing Amount',
                 _money(_expectedClosingAmount(shift!)),
@@ -5942,8 +6063,7 @@ class _ShiftCollectionsAndExpensesSectionState
                       ),
                       const SizedBox(width: 10),
                       FilledButton(
-                        onPressed:
-                            _submittingExpense ? null : _submitExpense,
+                        onPressed: _submittingExpense ? null : _submitExpense,
                         child: Text(
                             _submittingExpense ? 'Saving…' : 'Save Expense'),
                       ),
@@ -6477,15 +6597,18 @@ List<Map<String, dynamic>> _shiftPaymentRows(Map<String, dynamic> shift) {
   if (lines.isNotEmpty) {
     final Map<String, Map<String, dynamic>> aggregated = {};
     for (final line in lines) {
-      String method = '${line['payment_method'] ?? 'unknown'}'.toLowerCase().trim();
+      String method =
+          '${line['payment_method'] ?? 'unknown'}'.toLowerCase().trim();
       if (method == 'credit') {
         method = 'credit_bill';
       }
-      final amount = _num(line['amount'] ?? line['total_amount'] ?? line['total']);
+      final amount =
+          _num(line['amount'] ?? line['total_amount'] ?? line['total']);
       if (!aggregated.containsKey(method)) {
         aggregated[method] = {'method': method, 'amount': 0.0, 'count': 0};
       }
-      aggregated[method]!['amount'] = _num(aggregated[method]!['amount']) + amount;
+      aggregated[method]!['amount'] =
+          _num(aggregated[method]!['amount']) + amount;
       aggregated[method]!['count'] = (aggregated[method]!['count'] as int) + 1;
     }
     if (aggregated.isNotEmpty) {
@@ -6521,11 +6644,13 @@ List<Map<String, dynamic>> _shiftRevenueRows(Map<String, dynamic> shift) {
       } else if (source.contains('room')) {
         label = 'Rooms';
       }
-      final amount = _num(line['amount'] ?? line['total_amount'] ?? line['total']);
+      final amount =
+          _num(line['amount'] ?? line['total_amount'] ?? line['total']);
       if (!aggregated.containsKey(label)) {
         aggregated[label] = {'label': label, 'amount': 0.0};
       }
-      aggregated[label]!['amount'] = _num(aggregated[label]!['amount']) + amount;
+      aggregated[label]!['amount'] =
+          _num(aggregated[label]!['amount']) + amount;
     }
     if (aggregated.isNotEmpty) {
       return aggregated.values.toList();
@@ -6552,11 +6677,14 @@ List<Map<String, dynamic>> _shiftTransactionLines(Map<String, dynamic> shift) {
   return rawLines.map<Map<String, dynamic>>((line) {
     final map = _map(line);
     final normalized = Map<String, dynamic>.from(map);
-    if (normalized['created_at'] == null && normalized['transaction_time'] != null) {
+    if (normalized['created_at'] == null &&
+        normalized['transaction_time'] != null) {
       normalized['created_at'] = normalized['transaction_time'];
     }
     if (normalized['reference'] == null) {
-      normalized['reference'] = normalized['transaction_ref'] ?? normalized['transaction_id'] ?? normalized['id'];
+      normalized['reference'] = normalized['transaction_ref'] ??
+          normalized['transaction_id'] ??
+          normalized['id'];
     }
     if (normalized['section'] == null) {
       final source = '${normalized['source_table'] ?? ''}'.toLowerCase();
@@ -6565,11 +6693,13 @@ List<Map<String, dynamic>> _shiftTransactionLines(Map<String, dynamic> shift) {
       } else if (source.contains('credit') || source.contains('debt')) {
         normalized['section'] = 'paid_bill';
       } else {
-        normalized['section'] = source.replaceAll('_orders', '').replaceAll('_orders_v2', '');
+        normalized['section'] =
+            source.replaceAll('_orders', '').replaceAll('_orders_v2', '');
       }
     }
     if (normalized['status'] == null) {
-      normalized['status'] = normalized['is_voided'] == true ? 'voided' : 'completed';
+      normalized['status'] =
+          normalized['is_voided'] == true ? 'voided' : 'completed';
     }
     return normalized;
   }).toList();
@@ -6934,7 +7064,8 @@ class _CashierLogbooksSection extends ConsumerStatefulWidget {
       _CashierLogbooksSectionState();
 }
 
-class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection>
+class _CashierLogbooksSectionState
+    extends ConsumerState<_CashierLogbooksSection>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
       TabController(length: 2, vsync: this);
@@ -6942,7 +7073,8 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
       ref.read(branchAccountantRepositoryProvider).getPendingCashierLogbooks();
   late Future<List<Map<String, dynamic>>> _historyFuture = _loadHistory();
   String _historySearch = '';
-  String _historyFrom = _date(DateTime.now().subtract(const Duration(days: 30)));
+  String _historyFrom =
+      _date(DateTime.now().subtract(const Duration(days: 30)));
   String _historyTo = _today();
   Map<String, dynamic>? _selectedLogbook;
   Future<Map<String, dynamic>>? _detailFuture;
@@ -7033,7 +7165,8 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
 
     return _Page(
       title: 'Cashier Shift Logbooks',
-      subtitle: 'Review cashier shift closures, blind entries, and approve hard-close reconciliation.',
+      subtitle:
+          'Review cashier shift closures, blind entries, and approve hard-close reconciliation.',
       actions: [
         _RefreshButton(
           onPressed: () {
@@ -7137,98 +7270,149 @@ class _CashierLogbooksSectionState extends ConsumerState<_CashierLogbooksSection
                         child: Text('No past shifts match your filters.'),
                       )
                     : Column(
-                        children: filtered
-                            .map((logbook) {
-                              final cashier = _map(logbook['cashier']);
-                              final cashierName = _logbookCashierName(cashier).isEmpty
+                        children: filtered.map((logbook) {
+                          final cashier = _map(logbook['cashier']);
+                          final cashierName =
+                              _logbookCashierName(cashier).isEmpty
                                   ? _logbookCashierName(logbook)
                                   : _logbookCashierName(cashier);
-                              final shift = _map(logbook['shift']);
-                              final shiftStart = _text(shift, ['shift_start']);
-                              final shiftEnd = _text(shift, ['shift_end']);
-                              final shiftNum = _text(shift, ['shift_number']);
-                              final payments = _list(logbook['payment_breakdown']);
-                              final mpesaTotal = payments
-                                  .where((p) => '${_map(p)['method']}'.toLowerCase().contains('mpesa'))
-                                  .fold<num>(0, (s, p) => s + _num(_map(p)['amount']));
-                              final cashTotal = payments
-                                  .where((p) => '${_map(p)['method']}'.toLowerCase() == 'cash')
-                                  .fold<num>(0, (s, p) => s + _num(_map(p)['amount']));
-                              final closingAmt = _num(logbook['closing_amount'] ?? logbook['total'] ?? logbook['closing_float']);
+                          final shift = _map(logbook['shift']);
+                          final shiftStart = _text(shift, ['shift_start']);
+                          final shiftEnd = _text(shift, ['shift_end']);
+                          final shiftNum = _text(shift, ['shift_number']);
+                          final payments = _list(logbook['payment_breakdown']);
+                          final mpesaTotal = payments
+                              .where((p) => '${_map(p)['method']}'
+                                  .toLowerCase()
+                                  .contains('mpesa'))
+                              .fold<num>(
+                                  0, (s, p) => s + _num(_map(p)['amount']));
+                          final cashTotal = payments
+                              .where((p) =>
+                                  '${_map(p)['method']}'.toLowerCase() ==
+                                  'cash')
+                              .fold<num>(
+                                  0, (s, p) => s + _num(_map(p)['amount']));
+                          final closingAmt = _num(logbook['closing_amount'] ??
+                              logbook['total'] ??
+                              logbook['closing_float']);
 
-                              return InkWell(
-                                onTap: () => _openDetail(logbook),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-                                  decoration: const BoxDecoration(
-                                    border: Border(bottom: BorderSide(color: AppColors.kDivider)),
+                          return InkWell(
+                            onTap: () => _openDetail(logbook),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12, horizontal: 4),
+                              decoration: const BoxDecoration(
+                                border: Border(
+                                    bottom:
+                                        BorderSide(color: AppColors.kDivider)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Avatar / icon
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: Colors.indigo.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.person,
+                                        size: 20, color: Colors.indigo),
                                   ),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Avatar / icon
-                                      Container(
-                                        width: 38, height: 38,
-                                        decoration: BoxDecoration(
-                                          color: Colors.indigo.shade50,
-                                          borderRadius: BorderRadius.circular(8),
+                                  const SizedBox(width: 12),
+                                  // Cashier info & shift times
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          cashierName.isEmpty
+                                              ? 'Unknown Cashier'
+                                              : cashierName,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 14),
                                         ),
-                                        child: const Icon(Icons.person, size: 20, color: Colors.indigo),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      // Cashier info & shift times
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              cashierName.isEmpty ? 'Unknown Cashier' : cashierName,
-                                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Wrap(spacing: 12, runSpacing: 4, children: [
+                                        const SizedBox(height: 3),
+                                        Wrap(
+                                            spacing: 12,
+                                            runSpacing: 4,
+                                            children: [
                                               if (shiftNum.isNotEmpty)
-                                                Text(shiftNum, style: TextStyle(fontSize: 11, color: Colors.indigo.shade400, fontWeight: FontWeight.w600)),
-                                              Row(mainAxisSize: MainAxisSize.min, children: [
-                                                Icon(Icons.access_time, size: 12, color: Colors.grey.shade500),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  shiftStart.isEmpty
-                                                      ? _shortDate(_text(logbook, ['log_date']))
-                                                      : '${_formatCompactDateTime(shiftStart)}${shiftEnd.isEmpty ? '' : ' → ${_formatCompactDateTime(shiftEnd)}'}',
-                                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                                ),
-                                              ]),
+                                                Text(shiftNum,
+                                                    style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors
+                                                            .indigo.shade400,
+                                                        fontWeight:
+                                                            FontWeight.w600)),
+                                              Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.access_time,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .grey.shade500),
+                                                    const SizedBox(width: 3),
+                                                    Text(
+                                                      shiftStart.isEmpty
+                                                          ? _shortDate(_text(
+                                                              logbook,
+                                                              ['log_date']))
+                                                          : '${_formatCompactDateTime(shiftStart)}${shiftEnd.isEmpty ? '' : ' → ${_formatCompactDateTime(shiftEnd)}'}',
+                                                      style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: Colors
+                                                              .grey.shade600),
+                                                    ),
+                                                  ]),
                                             ]),
-                                            if (mpesaTotal > 0 || cashTotal > 0) ...[  
-                                              const SizedBox(height: 5),
-                                              Wrap(spacing: 8, runSpacing: 4, children: [
-                                                if (mpesaTotal > 0) _PayBadge(label: 'Mpesa', amount: mpesaTotal, color: Colors.teal),
-                                                if (cashTotal > 0) _PayBadge(label: 'Cash', amount: cashTotal, color: Colors.green),
+                                        if (mpesaTotal > 0 ||
+                                            cashTotal > 0) ...[
+                                          const SizedBox(height: 5),
+                                          Wrap(
+                                              spacing: 8,
+                                              runSpacing: 4,
+                                              children: [
+                                                if (mpesaTotal > 0)
+                                                  _PayBadge(
+                                                      label: 'Mpesa',
+                                                      amount: mpesaTotal,
+                                                      color: Colors.teal),
+                                                if (cashTotal > 0)
+                                                  _PayBadge(
+                                                      label: 'Cash',
+                                                      amount: cashTotal,
+                                                      color: Colors.green),
                                               ]),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      // Amount + status
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            _money(closingAmt),
-                                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          _StatusPill(_text(logbook, ['status'])),
                                         ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Amount + status
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        _money(closingAmt),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14),
                                       ),
+                                      const SizedBox(height: 4),
+                                      _StatusPill(_text(logbook, ['status'])),
                                     ],
                                   ),
-                                ),
-                              );
-                            })
-                            .toList(),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
               ),
             ],
@@ -7627,40 +7811,58 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                       const Icon(Icons.person, color: Colors.white70, size: 16),
                       const SizedBox(width: 6),
                       Text(
-                        cashierName.isEmpty ? 'Cashier' : cashierName.toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.5),
+                        cashierName.isEmpty
+                            ? 'Cashier'
+                            : cashierName.toUpperCase(),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                            letterSpacing: 0.5),
                       ),
                       const Spacer(),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.white.withAlpha(30),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           _text(detail, ['status']).toUpperCase(),
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700),
                         ),
                       ),
                     ]),
                     const SizedBox(height: 10),
                     Wrap(spacing: 24, runSpacing: 8, children: [
                       if (_text(branch, ['name']).isNotEmpty)
-                        _ShiftInfoChip(icon: Icons.location_on, label: _text(branch, ['name'])),
+                        _ShiftInfoChip(
+                            icon: Icons.location_on,
+                            label: _text(branch, ['name'])),
                       if (_text(detail, ['log_date']).isNotEmpty)
-                        _ShiftInfoChip(icon: Icons.calendar_today, label: _text(detail, ['log_date'])),
+                        _ShiftInfoChip(
+                            icon: Icons.calendar_today,
+                            label: _text(detail, ['log_date'])),
                       if (_text(shift, ['shift_start']).isNotEmpty)
                         _ShiftInfoChip(
                           icon: Icons.play_circle_outline,
-                          label: _formatCompactDateTime(_text(shift, ['shift_start'])),
+                          label: _formatCompactDateTime(
+                              _text(shift, ['shift_start'])),
                         ),
                       if (_text(shift, ['shift_end']).isNotEmpty)
                         _ShiftInfoChip(
                           icon: Icons.stop_circle_outlined,
-                          label: _formatCompactDateTime(_text(shift, ['shift_end'])),
+                          label: _formatCompactDateTime(
+                              _text(shift, ['shift_end'])),
                         ),
                       if (_text(shift, ['shift_number']).isNotEmpty)
-                        _ShiftInfoChip(icon: Icons.tag, label: _text(shift, ['shift_number'])),
+                        _ShiftInfoChip(
+                            icon: Icons.tag,
+                            label: _text(shift, ['shift_number'])),
                     ]),
                   ],
                 ),
@@ -7791,14 +7993,17 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                               width: 110,
                               child: Text(
                                 _title(method),
-                                style: const TextStyle(fontWeight: FontWeight.w700),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700),
                               ),
                             ),
                             Expanded(
-                              child: Text('System ${_money(_num(row['system_expected']))}'),
+                              child: Text(
+                                  'System ${_money(_num(row['system_expected']))}'),
                             ),
                             Expanded(
-                              child: Text('Cashier ${_money(_num(row['cashier_logged']))}'),
+                              child: Text(
+                                  'Cashier ${_money(_num(row['cashier_logged']))}'),
                             ),
                             Expanded(
                               child: Text(
@@ -7931,12 +8136,20 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                         rows: voidLines.map((v) {
                           return [
                             _text(v, ['reference']),
-                            _title(_text(v, ['void_type', 'revenue_type', 'source_table']).replaceAll('_', ' ')),
+                            _title(_text(v, [
+                              'void_type',
+                              'revenue_type',
+                              'source_table'
+                            ]).replaceAll('_', ' ')),
                             _money(_num(v['amount'])),
                             _text(v, ['customer_name']),
                             _formatCompactDateTime(_text(v, ['created_at'])),
-                            _text(v, ['voided_by_name']).isEmpty ? 'Self Void' : _text(v, ['voided_by_name']),
-                            _text(v, ['void_reason']).isEmpty ? 'No reason provided' : _text(v, ['void_reason']),
+                            _text(v, ['voided_by_name']).isEmpty
+                                ? 'Self Void'
+                                : _text(v, ['voided_by_name']),
+                            _text(v, ['void_reason']).isEmpty
+                                ? 'No reason provided'
+                                : _text(v, ['void_reason']),
                           ];
                         }).toList(),
                       ),
@@ -7946,7 +8159,8 @@ class _CashierLogbookDetailScreen extends StatelessWidget {
                 child: _ComplianceFlagList(flags: flags),
               ),
               _SectionCard(
-                title: 'Full Transaction Ledger — All POS, Restaurant & Bar Sales',
+                title:
+                    'Full Transaction Ledger — All POS, Restaurant & Bar Sales',
                 child: _LogbookEvidenceTable(lines: clearedTransactions),
               ),
             ],
@@ -8087,20 +8301,27 @@ class _LogbookEvidenceTable extends StatelessWidget {
     Color bg = Colors.grey.shade100;
     Color fg = Colors.grey.shade700;
     if (label == 'CASH') {
-      bg = Colors.green.shade50; fg = Colors.green.shade700;
+      bg = Colors.green.shade50;
+      fg = Colors.green.shade700;
     } else if (label.contains('MPESA') || label.contains('M-PESA')) {
-      bg = Colors.teal.shade50; fg = Colors.teal.shade700;
+      bg = Colors.teal.shade50;
+      fg = Colors.teal.shade700;
     } else if (label == 'CARD') {
-      bg = Colors.blue.shade50; fg = Colors.blue.shade700;
+      bg = Colors.blue.shade50;
+      fg = Colors.blue.shade700;
     } else if (label.contains('CREDIT')) {
-      bg = Colors.orange.shade50; fg = Colors.orange.shade700;
+      bg = Colors.orange.shade50;
+      fg = Colors.orange.shade700;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: bg, borderRadius: BorderRadius.circular(4),
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg)),
+      child: Text(label,
+          style:
+              TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg)),
     );
   }
 
@@ -8110,22 +8331,30 @@ class _LogbookEvidenceTable extends StatelessWidget {
     Color bg = Colors.grey.shade100;
     Color fg = Colors.grey.shade700;
     if (s == 'paid' || s == 'completed') {
-      bg = Colors.green.shade100; fg = Colors.green.shade800;
+      bg = Colors.green.shade100;
+      fg = Colors.green.shade800;
     } else if (s == 'credit_bill' || s == 'credit') {
-      bg = Colors.orange.shade100; fg = Colors.orange.shade800;
+      bg = Colors.orange.shade100;
+      fg = Colors.orange.shade800;
     } else if (s == 'partial') {
-      bg = Colors.blue.shade100; fg = Colors.blue.shade800;
+      bg = Colors.blue.shade100;
+      fg = Colors.blue.shade800;
     } else if (s == 'voided' || s == 'cancelled') {
-      bg = Colors.red.shade100; fg = Colors.red.shade800;
+      bg = Colors.red.shade100;
+      fg = Colors.red.shade800;
     } else if (s == 'open' || s == 'pending') {
-      bg = Colors.amber.shade100; fg = Colors.amber.shade900;
+      bg = Colors.amber.shade100;
+      fg = Colors.amber.shade900;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bg, borderRadius: BorderRadius.circular(4),
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(raw.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg)),
+      child: Text(raw.toUpperCase(),
+          style:
+              TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg)),
     );
   }
 
@@ -8145,11 +8374,14 @@ class _LogbookEvidenceTable extends StatelessWidget {
     final nonVoidLines = lines.where((line) {
       final item = _map(line);
       final status = '${item['status'] ?? ''}'.trim().toLowerCase();
-      final isVoid = '${item['is_voided'] ?? ''}'.trim().toLowerCase() == 'true' || item['is_voided'] == true;
+      final isVoid =
+          '${item['is_voided'] ?? ''}'.trim().toLowerCase() == 'true' ||
+              item['is_voided'] == true;
       return status != 'voided' && status != 'cancelled' && !isVoid;
     }).toList();
 
-    final totalAmount = nonVoidLines.fold<num>(0, (s, line) => s + _num(_map(line)['amount']));
+    final totalAmount =
+        nonVoidLines.fold<num>(0, (s, line) => s + _num(_map(line)['amount']));
     final methodTotals = <String, num>{};
     for (final line in nonVoidLines) {
       final item = _map(line);
@@ -8174,20 +8406,32 @@ class _LogbookEvidenceTable extends StatelessWidget {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                Text('Total', style: TextStyle(fontSize: 11, color: Colors.indigo.shade400)),
-                Text(_money(totalAmount), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-              ]),
+              Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Total',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.indigo.shade400)),
+                    Text(_money(totalAmount),
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w900)),
+                  ]),
               Text('${lines.length} line${lines.length == 1 ? '' : 's'}',
-                  style: TextStyle(fontSize: 12, color: Colors.indigo.shade500)),
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.indigo.shade500)),
               ...methodTotals.entries.map((e) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(e.key.toUpperCase().replaceAll('_', '-'),
-                      style: TextStyle(fontSize: 10, color: Colors.indigo.shade300)),
-                  Text(_money(e.value), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                ],
-              )),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(e.key.toUpperCase().replaceAll('_', '-'),
+                          style: TextStyle(
+                              fontSize: 10, color: Colors.indigo.shade300)),
+                      Text(_money(e.value),
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700)),
+                    ],
+                  )),
             ],
           ),
         ),
@@ -8205,14 +8449,16 @@ class _LogbookEvidenceTable extends StatelessWidget {
           ],
           rows: lines.map<List<Object>>((line) {
             final item = _map(line);
-            final method = '${item['payment_method'] ?? ''}'.trim().toLowerCase();
+            final method =
+                '${item['payment_method'] ?? ''}'.trim().toLowerCase();
             final status = '${item['status'] ?? ''}'.trim();
             final reference = '${item['reference'] ?? ''}'.trim();
             // Show M-Pesa code in its own column; keep receipt col for order refs
             final isMpesa = method.contains('mpesa') || method == 'm-pesa';
-            final mpesaCode = isMpesa && reference.isNotEmpty && reference != 'Linked record'
-                ? reference
-                : '-';
+            final mpesaCode =
+                isMpesa && reference.isNotEmpty && reference != 'Linked record'
+                    ? reference
+                    : '-';
             final receiptRef = reference.isEmpty || reference == 'Linked record'
                 ? '-'
                 : (isMpesa ? '-' : reference);
@@ -8226,7 +8472,8 @@ class _LogbookEvidenceTable extends StatelessWidget {
               mpesaCode == '-'
                   ? const Text('-', style: TextStyle(color: Colors.grey))
                   : Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
                         color: Colors.teal.shade50,
                         borderRadius: BorderRadius.circular(4),
@@ -8386,8 +8633,7 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
               )
             else
               ...items.map((item) => _ActionCard(
-                    title: _text(item, ['order_number', 'bill_number'])
-                            .isEmpty
+                    title: _text(item, ['order_number', 'bill_number']).isEmpty
                         ? 'POS bill'
                         : _text(item, ['order_number', 'bill_number']),
                     subtitle: _text(item, ['outlet_name', 'reason']),
@@ -8409,8 +8655,8 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
                       'Reason': _text(item, ['reason']),
                       'Requested at': _text(item, ['created_at']),
                     },
-                    extra: _VoidItemsExpandable(
-                        items: _list(item['void_items'])),
+                    extra:
+                        _VoidItemsExpandable(items: _list(item['void_items'])),
                     actions: [
                       TextButton(
                         onPressed: () => _showRecord(context, item),
@@ -8485,8 +8731,7 @@ class _VoidApprovalsSectionState extends ConsumerState<_VoidApprovalsSection>
                               : 2),
                       'Amount': 'KES ${_fmt(r.amount)}',
                       'Reason': r.reason,
-                      'Requested by':
-                          r.requestedByName ?? r.requestedBy ?? '—',
+                      'Requested by': r.requestedByName ?? r.requestedBy ?? '—',
                       'Cashier': r.cashierName ?? '—',
                       'Acknowledged at': r.cashierAcknowledgedAt
                               ?.toLocal()
@@ -8708,14 +8953,15 @@ class _VoidAuditSectionState extends ConsumerState<_VoidAuditSection> {
                               subtitle:
                                   '${_fmtDate(row['shift_opened_at'])} → ${_fmtDate(row['shift_closed_at'])}',
                               trailing: _VoidAuditStatusBadge(
-                                  status: '${row['status'] ?? 'pending_review'}'),
+                                  status:
+                                      '${row['status'] ?? 'pending_review'}'),
                               rows: {
                                 'Bills voided':
                                     '${row['total_bills_voided'] ?? 0}',
                                 'Items voided':
                                     '${row['total_items_voided'] ?? 0}',
-                                'Value voided':
-                                    _money((row['total_value_voided'] as num?) ?? 0),
+                                'Value voided': _money(
+                                    (row['total_value_voided'] as num?) ?? 0),
                                 'Void % of revenue':
                                     '${((row['void_pct_of_revenue'] as num?) ?? 0).toStringAsFixed(1)}%',
                               },
@@ -8724,7 +8970,8 @@ class _VoidAuditSectionState extends ConsumerState<_VoidAuditSection> {
                                   onPressed: () async {
                                     await showDialog(
                                       context: context,
-                                      builder: (context) => _VoidAuditDetailDialog(
+                                      builder: (context) =>
+                                          _VoidAuditDetailDialog(
                                         auditId: '${row['id']}',
                                       ),
                                     );
@@ -8782,7 +9029,8 @@ class _VoidAuditStatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(label,
-          style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+          style: TextStyle(
+              color: color, fontWeight: FontWeight.w700, fontSize: 12)),
     );
   }
 }
@@ -8796,7 +9044,8 @@ class _VoidAuditDetailDialog extends ConsumerStatefulWidget {
       _VoidAuditDetailDialogState();
 }
 
-class _VoidAuditDetailDialogState extends ConsumerState<_VoidAuditDetailDialog> {
+class _VoidAuditDetailDialogState
+    extends ConsumerState<_VoidAuditDetailDialog> {
   late Future<Map<String, dynamic>> _future = _load();
   bool _busy = false;
 
@@ -8890,15 +9139,20 @@ class _VoidAuditDetailDialogState extends ConsumerState<_VoidAuditDetailDialog> 
               return const Center(child: CircularProgressIndicator());
             }
             if (snap.hasError) {
-              return _ErrorPane(error: snap.error!, onRefresh: () => setState(() => _future = _load()));
+              return _ErrorPane(
+                  error: snap.error!,
+                  onRefresh: () => setState(() => _future = _load()));
             }
             final data = snap.data!;
-            final records =
-                (data['records'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-            final perServer =
-                (data['per_server'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-            final perReason =
-                (data['per_reason'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            final records = (data['records'] as List? ?? [])
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList();
+            final perServer = (data['per_server'] as List? ?? [])
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList();
+            final perReason = (data['per_reason'] as List? ?? [])
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList();
             final status = '${data['status'] ?? 'pending_review'}';
             final note = '${data['accountant_note'] ?? ''}';
 
@@ -8941,11 +9195,11 @@ class _VoidAuditDetailDialogState extends ConsumerState<_VoidAuditDetailDialog> 
                                       const Divider(height: 1),
                                   itemBuilder: (context, index) {
                                     final r = records[index];
-                                    final items =
-                                        (r['items_voided'] as List? ?? [])
-                                            .map((e) => Map<String, dynamic>.from(
-                                                e as Map))
-                                            .toList();
+                                    final items = (r['items_voided'] as List? ??
+                                            [])
+                                        .map((e) =>
+                                            Map<String, dynamic>.from(e as Map))
+                                        .toList();
                                     return ListTile(
                                       dense: true,
                                       title: Text(
@@ -8970,13 +9224,15 @@ class _VoidAuditDetailDialogState extends ConsumerState<_VoidAuditDetailDialog> 
                                     final s = perServer[index];
                                     final flagged = s['flagged'] == true;
                                     return ListTile(
-                                      title: Text('${s['server_name'] ?? 'Unknown'}'),
+                                      title: Text(
+                                          '${s['server_name'] ?? 'Unknown'}'),
                                       subtitle: Text(
                                           '${s['count'] ?? 0} void(s) • KES ${((s['value'] as num?) ?? 0).toStringAsFixed(2)}'),
                                       trailing: flagged
                                           ? const Chip(
                                               label: Text('⚠ Review Flag'),
-                                              backgroundColor: Color(0xFFFFE0B2),
+                                              backgroundColor:
+                                                  Color(0xFFFFE0B2),
                                             )
                                           : null,
                                     );
@@ -8988,8 +9244,8 @@ class _VoidAuditDetailDialogState extends ConsumerState<_VoidAuditDetailDialog> 
                                       const Divider(height: 1),
                                   itemBuilder: (context, index) {
                                     final r = perReason[index];
-                                    final notes =
-                                        (r['notes'] as List? ?? []).cast<String>();
+                                    final notes = (r['notes'] as List? ?? [])
+                                        .cast<String>();
                                     return ListTile(
                                       title: Text(cashierVoidReasonLabel(
                                           '${r['reason_category'] ?? 'other'}')),
@@ -9024,8 +9280,9 @@ class _VoidAuditDetailDialogState extends ConsumerState<_VoidAuditDetailDialog> 
                         child: const Text('Mark Reviewed'),
                       ),
                       OutlinedButton(
-                        onPressed:
-                            _busy || status == 'flagged' ? null : _flagForManager,
+                        onPressed: _busy || status == 'flagged'
+                            ? null
+                            : _flagForManager,
                         child: const Text('Flag for Manager'),
                       ),
                       OutlinedButton(
@@ -9141,10 +9398,8 @@ class _ExchangeHistorySectionState
                 items: const [
                   DropdownMenuItem(value: 'all', child: Text('All statuses')),
                   DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                  DropdownMenuItem(
-                      value: 'approved', child: Text('Approved')),
-                  DropdownMenuItem(
-                      value: 'rejected', child: Text('Rejected')),
+                  DropdownMenuItem(value: 'approved', child: Text('Approved')),
+                  DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
                 ],
                 onChanged: (value) {
                   if (value == null) return;
@@ -9155,8 +9410,7 @@ class _ExchangeHistorySectionState
               DropdownButton<String>(
                 value: _direction,
                 items: const [
-                  DropdownMenuItem(
-                      value: 'all', child: Text('All directions')),
+                  DropdownMenuItem(value: 'all', child: Text('All directions')),
                   DropdownMenuItem(value: 'top_up', child: Text('Top-up')),
                   DropdownMenuItem(value: 'refund', child: Text('Refund')),
                   DropdownMenuItem(value: 'even', child: Text('Even')),
@@ -9693,7 +9947,12 @@ class _PaymentsInvoicesSectionState
       final buffer = StringBuffer()..writeln(headers.map(_csvCell).join(','));
       for (final p in payments) {
         buffer.writeln([
-          _shortDate(_text(p, ['_transaction_date', 'recorded_at', 'created_at', 'transaction_date'])),
+          _shortDate(_text(p, [
+            '_transaction_date',
+            'recorded_at',
+            'created_at',
+            'transaction_date'
+          ])),
           _paymentSourceLabel(p),
           _paymentDescription(p),
           _title(_text(p, ['payment_method'])),
@@ -9734,19 +9993,25 @@ class _PaymentsInvoicesSectionState
         builder: (data) {
           final payments = _list(data['payments']);
           final stats = _map(data['stats']);
-          
+
           final query = _searchQuery.trim().toLowerCase();
           final filteredPayments = payments.where((p) {
             if (query.isEmpty) return true;
-            final date = _shortDate(_text(p, ['_transaction_date', 'recorded_at', 'created_at', 'transaction_date'])).toLowerCase();
+            final date = _shortDate(_text(p, [
+              '_transaction_date',
+              'recorded_at',
+              'created_at',
+              'transaction_date'
+            ])).toLowerCase();
             final source = _paymentSourceLabel(p).toLowerCase();
             final desc = _paymentDescription(p).toLowerCase();
             final method = _title(_text(p, ['payment_method'])).toLowerCase();
             final refStr = _paymentReference(p).toLowerCase();
             final amount = _money(_num(p['amount'])).toLowerCase();
             final recordedBy = _paymentRecordedBy(p).toLowerCase();
-            final status = _paymentStatusLabel(_text(p, ['status'])).toLowerCase();
-            
+            final status =
+                _paymentStatusLabel(_text(p, ['status'])).toLowerCase();
+
             return date.contains(query) ||
                 source.contains(query) ||
                 desc.contains(query) ||
@@ -9798,7 +10063,9 @@ class _PaymentsInvoicesSectionState
               ),
               _RefreshButton(onPressed: _refresh),
               OutlinedButton.icon(
-                onPressed: filteredPayments.isEmpty ? null : () => _downloadCsv(filteredPayments),
+                onPressed: filteredPayments.isEmpty
+                    ? null
+                    : () => _downloadCsv(filteredPayments),
                 icon: const Icon(Icons.table_view),
                 label: const Text('Export CSV'),
               ),
@@ -9934,7 +10201,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
 
   String _itemDateStr(Map<String, dynamic> item, String tab) {
     if (tab == 'paid_entries') {
-      return _text(item, ['recorded_at', 'shift_end', 'shift_start', 'created_at']);
+      return _text(
+          item, ['recorded_at', 'shift_end', 'shift_start', 'created_at']);
     }
     if (tab == 'advance') {
       return _text(item, ['advance_date', 'created_at']);
@@ -9964,7 +10232,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     }
   }
 
-  Widget _buildDateButton(BuildContext context, String label, String value, bool isStart) {
+  Widget _buildDateButton(
+      BuildContext context, String label, String value, bool isStart) {
     return OutlinedButton.icon(
       onPressed: () => _selectDate(context, isStart),
       icon: const Icon(Icons.calendar_today, size: 16),
@@ -10126,8 +10395,8 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
               Colors.indigo),
           _MetricCard(
               'Staff Loans',
-              _money(
-                  filteredLoans.fold<num>(0, (sum, e) => sum + _staffLoanBalance(e))),
+              _money(filteredLoans.fold<num>(
+                  0, (sum, e) => sum + _staffLoanBalance(e))),
               Icons.account_balance,
               Colors.purple),
         ]),
@@ -10429,7 +10698,6 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       _text(row, ['status']),
     ].join(' ').toLowerCase();
   }
-
 
   num _staffCreditBalance(Map<String, dynamic> row) {
     final explicit = row['balance'];
@@ -11051,11 +11319,15 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
               _ResponsiveGrid(children: [
                 _MetricCard('Customer Bills', '${filteredItems.length}',
                     Icons.receipt_long, Colors.blue),
-                _MetricCard('Total', _money(_sum(filteredItems, 'total_amount')),
-                    Icons.payments, Colors.green),
+                _MetricCard(
+                    'Total',
+                    _money(_sum(filteredItems, 'total_amount')),
+                    Icons.payments,
+                    Colors.green),
                 _MetricCard(
                     'Outstanding',
-                    _money(filteredItems.fold<num>(0, (s, b) => s + outstanding(b))),
+                    _money(filteredItems.fold<num>(
+                        0, (s, b) => s + outstanding(b))),
                     Icons.warning,
                     Colors.orange),
               ]),
@@ -11469,13 +11741,17 @@ class _BookingsInvoicesSectionState
           _shortDate(_text(e, ['service_date', 'created_at'])),
           _num(e['total_amount']).toStringAsFixed(2),
           _num(e['balance']).toStringAsFixed(2),
-          _text(e, ['invoice_number']).isEmpty ? 'Not generated' : _text(e, ['invoice_number']),
-          _text(e, ['invoice_status', 'payment_status', 'status']).toUpperCase(),
+          _text(e, ['invoice_number']).isEmpty
+              ? 'Not generated'
+              : _text(e, ['invoice_number']),
+          _text(e, ['invoice_status', 'payment_status', 'status'])
+              .toUpperCase(),
         ].map(_csvCell).join(','));
       }
       final directory = await getDownloadsDirectory() ??
           await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/FG_Bookings_Invoices_${DateTime.now().millisecondsSinceEpoch}.csv');
+      final file = File(
+          '${directory.path}/FG_Bookings_Invoices_${DateTime.now().millisecondsSinceEpoch}.csv');
       await file.writeAsString(buffer.toString(), flush: true);
       if (mounted) _notify(context, 'Bookings CSV prepared: ${file.path}');
     } catch (e) {
@@ -11541,15 +11817,24 @@ class _BookingsInvoicesSectionState
           final query = _searchQuery.trim().toLowerCase();
           final filteredItems = items.where((e) {
             if (query.isEmpty) return true;
-            final source = _text(e, ['source_label', 'source_type']).toLowerCase();
-            final refStr = _text(e, ['reference', 'invoice_number', 'id']).toLowerCase();
-            final customer = _text(e, ['customer_name', 'guest_name']).toLowerCase();
-            final date = _shortDate(_text(e, ['service_date', 'created_at'])).toLowerCase();
+            final source =
+                _text(e, ['source_label', 'source_type']).toLowerCase();
+            final refStr =
+                _text(e, ['reference', 'invoice_number', 'id']).toLowerCase();
+            final customer =
+                _text(e, ['customer_name', 'guest_name']).toLowerCase();
+            final date = _shortDate(_text(e, ['service_date', 'created_at']))
+                .toLowerCase();
             final total = _money(_num(e['total_amount'])).toLowerCase();
             final balance = _money(_num(e['balance'])).toLowerCase();
-            final invoice = (_text(e, ['invoice_number']).isEmpty ? 'not generated' : _text(e, ['invoice_number'])).toLowerCase();
-            final status = _text(e, ['invoice_status', 'payment_status', 'status']).toLowerCase();
-            
+            final invoice = (_text(e, ['invoice_number']).isEmpty
+                    ? 'not generated'
+                    : _text(e, ['invoice_number']))
+                .toLowerCase();
+            final status =
+                _text(e, ['invoice_status', 'payment_status', 'status'])
+                    .toLowerCase();
+
             return source.contains(query) ||
                 refStr.contains(query) ||
                 customer.contains(query) ||
@@ -11628,7 +11913,9 @@ class _BookingsInvoicesSectionState
               ),
               _RefreshButton(onPressed: _refresh),
               OutlinedButton.icon(
-                onPressed: filteredItems.isEmpty ? null : () => _downloadCsv(filteredItems),
+                onPressed: filteredItems.isEmpty
+                    ? null
+                    : () => _downloadCsv(filteredItems),
                 icon: const Icon(Icons.table_view),
                 label: const Text('Export CSV'),
               ),
@@ -11707,7 +11994,6 @@ class _BookingsInvoicesSectionState
     );
   }
 }
-
 
 class _InventoryJournalsSection extends ConsumerStatefulWidget {
   const _InventoryJournalsSection();
@@ -12106,9 +12392,12 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
     final readyToBill = await repo.getReadyToBillGRNs();
     final ids = supplierIds.where((id) => id.isNotEmpty).toList();
     final results = await Future.wait([
-      for (final supplierId in ids) repo.getSupplierInvoices(supplierId: supplierId),
-      for (final supplierId in ids) repo.getSupplierPayments(supplierId: supplierId),
-      for (final supplierId in ids) repo.getSupplierGRNs(supplierId: supplierId),
+      for (final supplierId in ids)
+        repo.getSupplierInvoices(supplierId: supplierId),
+      for (final supplierId in ids)
+        repo.getSupplierPayments(supplierId: supplierId),
+      for (final supplierId in ids)
+        repo.getSupplierGRNs(supplierId: supplierId),
     ]);
     final invoices = results.take(ids.length).expand((e) => e).toList();
     final payments =
@@ -12158,9 +12447,8 @@ class _PurchasesSectionState extends ConsumerState<_PurchasesSection> {
                 orElse: () => {},
               ));
 
-    final supplierId = resolvedSupplier == null
-        ? ''
-        : _text(resolvedSupplier, ['id']);
+    final supplierId =
+        resolvedSupplier == null ? '' : _text(resolvedSupplier, ['id']);
     final supplierName = resolvedSupplier == null || resolvedSupplier.isEmpty
         ? ''
         : _supplierName(resolvedSupplier);
@@ -15290,8 +15578,9 @@ class _KitchenVarianceSectionState
               ...shifts.map((s) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: _ActionCard(
-                      title:
-                          '${s['shift_number'] ?? 'Shift'} — ${_text(s, ['shift_date'])}',
+                      title: '${s['shift_number'] ?? 'Shift'} — ${_text(s, [
+                            'shift_date'
+                          ])}',
                       subtitle:
                           'Store keeper: ${s['store_keeper']?['first_name'] ?? '—'}',
                       trailing: _StatusPill(
@@ -15299,16 +15588,14 @@ class _KitchenVarianceSectionState
                       rows: {
                         'Revenue': _money(_num(s['total_revenue'])),
                         'COGS': _money(_num(s['total_cogs'])),
-                        'Spoilage Cost':
-                            _money(_num(s['total_spoilage_cost'])),
+                        'Spoilage Cost': _money(_num(s['total_spoilage_cost'])),
                         'Variance Cost':
                             _money(_num(s['total_variance_cost']).abs()),
                       },
                       actions: [
                         FilledButton.icon(
                           onPressed: () => _review(s),
-                          icon: const Icon(Icons.fact_check_outlined,
-                              size: 16),
+                          icon: const Icon(Icons.fact_check_outlined, size: 16),
                           label: const Text('Review & Decide'),
                         ),
                       ],
@@ -15466,7 +15753,8 @@ class _KitchenVarianceReviewDialogState
                         _liabilityRadio('write_off', 'Write off (no recovery)'),
                         if (_liabilityAction == 'write_off')
                           Padding(
-                            padding: const EdgeInsets.only(left: 32, top: 4, bottom: 8),
+                            padding: const EdgeInsets.only(
+                                left: 32, top: 4, bottom: 8),
                             child: TextField(
                               controller: _writeOffReasonCtrl,
                               decoration: const InputDecoration(
@@ -15496,15 +15784,18 @@ class _KitchenVarianceReviewDialogState
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: _posting ? null : () => _submit(approved: false),
-                      icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                      onPressed:
+                          _posting ? null : () => _submit(approved: false),
+                      icon:
+                          const Icon(Icons.cancel_outlined, color: Colors.red),
                       label: const Text('Reject Shift'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: _posting ? null : () => _submit(approved: true),
+                      onPressed:
+                          _posting ? null : () => _submit(approved: true),
                       icon: _posting
                           ? const SizedBox(
                               width: 16,
@@ -15513,7 +15804,8 @@ class _KitchenVarianceReviewDialogState
                                   strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.check),
                       label: Text(_posting ? 'Submitting...' : 'Approve'),
-                      style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                      style:
+                          FilledButton.styleFrom(backgroundColor: Colors.green),
                     ),
                   ),
                 ],
@@ -15532,7 +15824,8 @@ class _KitchenVarianceReviewDialogState
       dense: true,
       contentPadding: EdgeInsets.zero,
       title: Text(label, style: const TextStyle(fontSize: 13)),
-      onChanged: (v) => setState(() => _liabilityAction = v ?? _liabilityAction),
+      onChanged: (v) =>
+          setState(() => _liabilityAction = v ?? _liabilityAction),
     );
   }
 
@@ -15543,7 +15836,9 @@ class _KitchenVarianceReviewDialogState
         initialValue: _selectedStaffId,
         isExpanded: true,
         decoration: const InputDecoration(
-            labelText: 'Staff member', isDense: true, border: OutlineInputBorder()),
+            labelText: 'Staff member',
+            isDense: true,
+            border: OutlineInputBorder()),
         items: _staff
             .map((st) => DropdownMenuItem(
                   value: '${st['user_id']}',
@@ -15582,7 +15877,9 @@ class _KitchenVarianceReviewDialogState
                     controller: _splitCtrls[id],
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                        prefixText: 'KES ', isDense: true, border: OutlineInputBorder()),
+                        prefixText: 'KES ',
+                        isDense: true,
+                        border: OutlineInputBorder()),
                   ),
                 ),
               ],
@@ -15631,7 +15928,8 @@ class _KitchenVarianceReviewDialogState
             {
               'user_id': _selectedStaffId,
               'amount': _totalVariance,
-              'description': 'Kitchen variance — ${(widget.detail['shift'] as Map?)?['shift_number']}',
+              'description':
+                  'Kitchen variance — ${(widget.detail['shift'] as Map?)?['shift_number']}',
             }
           ];
           break;
@@ -15639,8 +15937,13 @@ class _KitchenVarianceReviewDialogState
           allocations = _staff
               .map((st) {
                 final id = '${st['user_id']}';
-                final amount = double.tryParse(_splitCtrls[id]?.text.trim() ?? '') ?? 0;
-                return {'user_id': id, 'amount': amount, 'description': 'Kitchen variance split'};
+                final amount =
+                    double.tryParse(_splitCtrls[id]?.text.trim() ?? '') ?? 0;
+                return {
+                  'user_id': id,
+                  'amount': amount,
+                  'description': 'Kitchen variance split'
+                };
               })
               .where((a) => (a['amount'] as double) > 0)
               .toList();
@@ -18317,8 +18620,7 @@ class _CollapsibleSectionCard extends StatelessWidget {
         child: ExpansionTile(
           initiallyExpanded: initiallyExpanded,
           tilePadding: const EdgeInsets.symmetric(horizontal: 18),
-          childrenPadding:
-              const EdgeInsets.fromLTRB(18, 0, 18, 18),
+          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
           title: Text(title,
               style:
                   const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
@@ -18494,8 +18796,10 @@ class _SimpleTableState extends State<_SimpleTable> {
     }
 
     final totalRows = widget.rows.length;
-    final shouldPaginate = widget.enablePagination && totalRows > widget.pageSize;
-    final totalPages = shouldPaginate ? (totalRows / widget.pageSize).ceil() : 1;
+    final shouldPaginate =
+        widget.enablePagination && totalRows > widget.pageSize;
+    final totalPages =
+        shouldPaginate ? (totalRows / widget.pageSize).ceil() : 1;
 
     if (_currentPage > totalPages) {
       _currentPage = totalPages;
@@ -18505,7 +18809,9 @@ class _SimpleTableState extends State<_SimpleTable> {
     }
 
     final startIdx = shouldPaginate ? (_currentPage - 1) * widget.pageSize : 0;
-    final endIdx = shouldPaginate ? (startIdx + widget.pageSize).clamp(0, totalRows) : totalRows;
+    final endIdx = shouldPaginate
+        ? (startIdx + widget.pageSize).clamp(0, totalRows)
+        : totalRows;
     final pageRows = widget.rows.sublist(startIdx, endIdx);
 
     return Column(
@@ -18530,7 +18836,8 @@ class _SimpleTableState extends State<_SimpleTable> {
                           .map((cell) => DataCell(cell is Widget
                               ? cell
                               : Text('$cell',
-                                  overflow: TextOverflow.ellipsis, maxLines: 2)))
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2)))
                           .toList(),
                     ))
                 .toList(),
@@ -18564,12 +18871,14 @@ class _SimpleTableState extends State<_SimpleTable> {
                       icon: const Icon(Icons.chevron_left, size: 18),
                       label: const Text('Previous'),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.indigo.shade50,
                         borderRadius: BorderRadius.circular(6),
@@ -18592,7 +18901,8 @@ class _SimpleTableState extends State<_SimpleTable> {
                       icon: const Icon(Icons.chevron_right, size: 18),
                       label: const Text('Next'),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                       ),
                     ),
                   ],
@@ -18721,9 +19031,7 @@ class _VoidItemsExpandableState extends State<_VoidItemsExpandable> {
                   ? _num(item['total_price'])
                   : qty * unitPrice;
               return [
-                _text(item, ['name']).isEmpty
-                    ? 'Item'
-                    : _text(item, ['name']),
+                _text(item, ['name']).isEmpty ? 'Item' : _text(item, ['name']),
                 '$qty',
                 _money(unitPrice),
                 _money(total),
@@ -18797,13 +19105,17 @@ class _PayBadge extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w700, color: color.shade700),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: color.shade700),
           ),
           const SizedBox(width: 4),
           Text(
             _money(amount),
             style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w900, color: color.shade800),
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: color.shade800),
           ),
         ],
       ),
@@ -19489,7 +19801,8 @@ Future<File> _exportPdf({
   List<List<String>> tableRows = const [],
 }) async {
   final doc = pw.Document();
-  final generated = DateFormat('MMM d, yyyy HH:mm').format(_toKenyaTime(DateTime.now()));
+  final generated =
+      DateFormat('MMM d, yyyy HH:mm').format(_toKenyaTime(DateTime.now()));
   final safeTitle = _pdfSafe(title);
   final safeSubtitle = _pdfSafe(subtitle);
   final safeMetrics = metrics.map(
@@ -19834,8 +20147,9 @@ class _OutboundPaymentsSectionState
   void _refresh() {
     final next = _load();
     // Once the fresh data arrives, optimistic removals are no longer needed.
-    next.then((_) { if (mounted) setState(() => _paidGrnIds.clear()); },
-        onError: (_) {});
+    next.then((_) {
+      if (mounted) setState(() => _paidGrnIds.clear());
+    }, onError: (_) {});
     setState(() => _future = next);
   }
 
@@ -19882,7 +20196,8 @@ class _OutboundPaymentsSectionState
           final filteredPayments = payments
               .where((p) => _matchesOutboundSearch(Map<String, dynamic>.from(p),
                   isGrn: false))
-              .where((p) => _sourceTab == 'all' ||
+              .where((p) =>
+                  _sourceTab == 'all' ||
                   _txt(Map<String, dynamic>.from(p), ['source']) == _sourceTab)
               .toList();
           final filteredGrns = unbilledGrns
@@ -19890,13 +20205,13 @@ class _OutboundPaymentsSectionState
                   isGrn: true))
               .toList();
           final settledTotal = filteredPayments
-              .where((p) => _txt(Map<String, dynamic>.from(p),
-                      ['settlement_status']) ==
+              .where((p) =>
+                  _txt(Map<String, dynamic>.from(p), ['settlement_status']) ==
                   'settled')
               .fold<num>(0, (sum, p) => sum + _num(p['amount']));
           final pendingTotal = filteredPayments
-              .where((p) => _txt(Map<String, dynamic>.from(p),
-                      ['settlement_status']) !=
+              .where((p) =>
+                  _txt(Map<String, dynamic>.from(p), ['settlement_status']) !=
                   'settled')
               .fold<num>(0, (sum, p) => sum + _num(p['amount']));
           return _Page(
@@ -19954,30 +20269,33 @@ class _OutboundPaymentsSectionState
               ),
               const SizedBox(height: 12),
               _ResponsiveGrid(children: [
-                _MetricCard(
-                    'Total',
-                    _money(settledTotal + pendingTotal),
-                    Icons.account_balance_wallet,
-                    Colors.blueGrey),
-                _MetricCard('Settled', _money(settledTotal),
-                    Icons.check_circle, Colors.green),
+                _MetricCard('Total', _money(settledTotal + pendingTotal),
+                    Icons.account_balance_wallet, Colors.blueGrey),
+                _MetricCard('Settled', _money(settledTotal), Icons.check_circle,
+                    Colors.green),
                 _MetricCard('Pending', _money(pendingTotal),
                     Icons.hourglass_bottom, Colors.amber.shade800),
               ]),
               const SizedBox(height: 12),
               // ── Supplier Finance redirect banner ──────────────────────
-              if (widget.preload != null && (widget.preload!['supplier_name'] ?? '').toString().isNotEmpty)
+              if (widget.preload != null &&
+                  (widget.preload!['supplier_name'] ?? '')
+                      .toString()
+                      .isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(bottom: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A3C5E).withValues(alpha: 0.07),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF1A3C5E).withValues(alpha: 0.2)),
+                    border: Border.all(
+                        color: const Color(0xFF1A3C5E).withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.link, size: 16, color: Color(0xFF1A3C5E)),
+                      const Icon(Icons.link,
+                          size: 16, color: Color(0xFF1A3C5E)),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -20004,16 +20322,10 @@ class _OutboundPaymentsSectionState
                     '${_num(summary['released']).toInt()}',
                     Icons.check_circle_outline,
                     Colors.green),
-                _MetricCard(
-                    'GRNs to Pay',
-                    '${unbilledGrns.length}',
-                    Icons.receipt_long,
-                    Colors.orange),
-                _MetricCard(
-                    'Total Payments',
-                    '${payments.length}',
-                    Icons.payments_outlined,
-                    Colors.blueGrey),
+                _MetricCard('GRNs to Pay', '${unbilledGrns.length}',
+                    Icons.receipt_long, Colors.orange),
+                _MetricCard('Total Payments', '${payments.length}',
+                    Icons.payments_outlined, Colors.blueGrey),
               ]),
               _outboundSearchCard(
                 visibleBills: filteredGrns.length,
@@ -20691,8 +21003,8 @@ class _AddExpenseSheetState extends ConsumerState<_AddExpenseSheet> {
             initialValue: _category,
             decoration: const InputDecoration(labelText: 'Category'),
             items: _expenseCategoryLabels.entries
-                .map((e) =>
-                    DropdownMenuItem(value: e.key, child: Text(e.value)))
+                .map(
+                    (e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
                 .toList(),
             onChanged: (v) => setState(() => _category = v!),
           ),
@@ -20818,7 +21130,8 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final hasContext = widget.supplierName.isNotEmpty || widget.invoiceId != null;
+    final hasContext =
+        widget.supplierName.isNotEmpty || widget.invoiceId != null;
     return AlertDialog(
       title: const Text('New Outbound Payment'),
       content: SizedBox(
@@ -20829,11 +21142,13 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
             if (hasContext) ...[
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A3C5E).withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF1A3C5E).withValues(alpha: 0.18)),
+                  border: Border.all(
+                      color: const Color(0xFF1A3C5E).withValues(alpha: 0.18)),
                 ),
                 child: Row(
                   children: [
@@ -20847,7 +21162,8 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
                             'From Supplier Finance',
                             style: TextStyle(
                               fontSize: 11,
-                              color: const Color(0xFF1A3C5E).withValues(alpha: 0.7),
+                              color: const Color(0xFF1A3C5E)
+                                  .withValues(alpha: 0.7),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -20860,7 +21176,8 @@ class _NewPaymentDialogState extends ConsumerState<_NewPaymentDialog> {
                                 color: Color(0xFF1A3C5E),
                               ),
                             ),
-                          if (widget.invoiceId != null && widget.invoiceId!.isNotEmpty)
+                          if (widget.invoiceId != null &&
+                              widget.invoiceId!.isNotEmpty)
                             Text(
                               'Invoice: ${widget.reference.isNotEmpty ? widget.reference : widget.invoiceId}',
                               style: const TextStyle(fontSize: 12),
@@ -21036,8 +21353,7 @@ class _CashFlowCategoryBadge extends StatelessWidget {
         color: c.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
-          (_cashFlowCategoryLabels[category] ?? category).toUpperCase(),
+      child: Text((_cashFlowCategoryLabels[category] ?? category).toUpperCase(),
           style:
               TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w700)),
     );
@@ -21066,13 +21382,33 @@ class _BranchStaffManagementSectionState
 
   // Role list for login account creation
   static const _roles = [
-    'branch_manager', 'branch_accountant', 'branch_storekeeper',
-    'receptionist', 'cashier', 'restaurant_cashier', 'main_bar_cashier',
-    'executive_bar_cashier', 'non_consumables_cashier', 'restaurant',
-    'waiter', 'waitress', 'head_waiter', 'bartender', 'barman', 'barmaid',
-    'bar_manager', 'kitchen', 'kitchen_operations', 'chef', 'head_chef',
-    'housekeeping', 'housekeeping_supervisor', 'maintenance', 'procurement',
-    'purchasing_manager', 'employee',
+    'branch_manager',
+    'branch_accountant',
+    'branch_storekeeper',
+    'receptionist',
+    'cashier',
+    'restaurant_cashier',
+    'main_bar_cashier',
+    'executive_bar_cashier',
+    'non_consumables_cashier',
+    'restaurant',
+    'waiter',
+    'waitress',
+    'head_waiter',
+    'bartender',
+    'barman',
+    'barmaid',
+    'bar_manager',
+    'kitchen',
+    'kitchen_operations',
+    'chef',
+    'head_chef',
+    'housekeeping',
+    'housekeeping_supervisor',
+    'maintenance',
+    'procurement',
+    'purchasing_manager',
+    'employee',
   ];
 
   @override
@@ -21088,7 +21424,10 @@ class _BranchStaffManagementSectionState
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final repo = ref.read(branchAccountantRepositoryProvider);
       final staff = await repo.getBranchStaff();
@@ -21100,22 +21439,32 @@ class _BranchStaffManagementSectionState
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = '$e'; _loading = false; });
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
     }
   }
 
   void _onSearch(String query) {
     final q = query.trim().toLowerCase();
     setState(() {
-      _filtered = q.isEmpty ? _staff : _staff.where((s) {
-        final name = '${s['first_name'] ?? ''} ${s['last_name'] ?? ''} ${s['name'] ?? ''}'.toLowerCase();
-        final role = '${s['role'] ?? s['position'] ?? ''}'.toLowerCase();
-        final dept = '${s['department'] ?? ''}'.toLowerCase();
-        final phone = '${s['phone'] ?? ''}'.toLowerCase();
-        final email = '${s['email'] ?? ''}'.toLowerCase();
-        return name.contains(q) || role.contains(q) || dept.contains(q) ||
-            phone.contains(q) || email.contains(q);
-      }).toList();
+      _filtered = q.isEmpty
+          ? _staff
+          : _staff.where((s) {
+              final name =
+                  '${s['first_name'] ?? ''} ${s['last_name'] ?? ''} ${s['name'] ?? ''}'
+                      .toLowerCase();
+              final role = '${s['role'] ?? s['position'] ?? ''}'.toLowerCase();
+              final dept = '${s['department'] ?? ''}'.toLowerCase();
+              final phone = '${s['phone'] ?? ''}'.toLowerCase();
+              final email = '${s['email'] ?? ''}'.toLowerCase();
+              return name.contains(q) ||
+                  role.contains(q) ||
+                  dept.contains(q) ||
+                  phone.contains(q) ||
+                  email.contains(q);
+            }).toList();
     });
   }
 
@@ -21154,80 +21503,126 @@ class _BranchStaffManagementSectionState
             width: 480,
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text('This creates a staff profile. You can create a login account separately after adding the staff member.',
+                const Text(
+                    'This creates a staff profile. You can create a login account separately after adding the staff member.',
                     style: TextStyle(fontSize: 12, color: Colors.grey)),
                 const SizedBox(height: 16),
                 Row(children: [
-                  Expanded(child: TextField(controller: firstCtrl,
-                    decoration: const InputDecoration(labelText: 'First Name *', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: firstCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'First Name *',
+                              border: OutlineInputBorder()))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: lastCtrl,
-                    decoration: const InputDecoration(labelText: 'Last Name *', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: lastCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Last Name *',
+                              border: OutlineInputBorder()))),
                 ]),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: TextField(controller: natIdCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'National ID', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: natIdCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'National ID',
+                              border: OutlineInputBorder()))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: phoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                              labelText: 'Phone',
+                              border: OutlineInputBorder()))),
                 ]),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: TextField(controller: posCtrl,
-                    decoration: const InputDecoration(labelText: 'Role / Position', hintText: 'e.g. waiter', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: posCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Role / Position',
+                              hintText: 'e.g. waiter',
+                              border: OutlineInputBorder()))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: deptCtrl,
-                    decoration: const InputDecoration(labelText: 'Department', hintText: 'e.g. restaurant', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: deptCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Department',
+                              hintText: 'e.g. restaurant',
+                              border: OutlineInputBorder()))),
                 ]),
                 const SizedBox(height: 12),
-                TextField(controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder())),
+                TextField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                        labelText: 'Email', border: OutlineInputBorder())),
               ]),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             FilledButton.icon(
-              onPressed: saving ? null : () async {
-                if (firstCtrl.text.trim().isEmpty || lastCtrl.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('First and last name are required')));
-                  return;
-                }
-                setDlgState(() => saving = true);
-                try {
-                  final dio = ref.read(dioProvider);
-                  await dio.post('/staff', data: {
-                    'first_name': firstCtrl.text.trim(),
-                    'last_name': lastCtrl.text.trim(),
-                    if (natIdCtrl.text.trim().isNotEmpty) 'national_id': natIdCtrl.text.trim(),
-                    if (deptCtrl.text.trim().isNotEmpty) 'department': deptCtrl.text.trim(),
-                    if (posCtrl.text.trim().isNotEmpty) 'position': posCtrl.text.trim(),
-                    if (phoneCtrl.text.trim().isNotEmpty) 'phone': phoneCtrl.text.trim(),
-                    if (emailCtrl.text.trim().isNotEmpty) 'email': emailCtrl.text.trim(),
-                    if (branchId.isNotEmpty) 'branch_id': int.tryParse(branchId) ?? branchId,
-                  });
-                  if (!ctx.mounted) return;
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                    content: Text('Staff member added successfully'),
-                    backgroundColor: Colors.green));
-                  await _load();
-                } catch (e) {
-                  if (!ctx.mounted) return;
-                  final msg = e is DioException
-                      ? (e.response?.data?['message'] ?? '$e') : '$e';
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red));
-                  setDlgState(() => saving = false);
-                }
-              },
-              icon: saving ? const SizedBox(width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (firstCtrl.text.trim().isEmpty ||
+                          lastCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text('First and last name are required')));
+                        return;
+                      }
+                      setDlgState(() => saving = true);
+                      try {
+                        final dio = ref.read(dioProvider);
+                        await dio.post('/staff', data: {
+                          'first_name': firstCtrl.text.trim(),
+                          'last_name': lastCtrl.text.trim(),
+                          if (natIdCtrl.text.trim().isNotEmpty)
+                            'national_id': natIdCtrl.text.trim(),
+                          if (deptCtrl.text.trim().isNotEmpty)
+                            'department': deptCtrl.text.trim(),
+                          if (posCtrl.text.trim().isNotEmpty)
+                            'position': posCtrl.text.trim(),
+                          if (phoneCtrl.text.trim().isNotEmpty)
+                            'phone': phoneCtrl.text.trim(),
+                          if (emailCtrl.text.trim().isNotEmpty)
+                            'email': emailCtrl.text.trim(),
+                          if (branchId.isNotEmpty)
+                            'branch_id': int.tryParse(branchId) ?? branchId,
+                        });
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text('Staff member added successfully'),
+                            backgroundColor: Colors.green));
+                        await _load();
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        final msg = e is DioException
+                            ? (e.response?.data?['message'] ?? '$e')
+                            : '$e';
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text('Error: $msg'),
+                            backgroundColor: Colors.red));
+                        setDlgState(() => saving = false);
+                      }
+                    },
+              icon: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.person_add, size: 18),
               label: Text(saving ? 'Adding…' : 'Add Staff'),
             ),
@@ -21235,8 +21630,13 @@ class _BranchStaffManagementSectionState
         );
       }),
     );
-    firstCtrl.dispose(); lastCtrl.dispose(); natIdCtrl.dispose();
-    deptCtrl.dispose(); posCtrl.dispose(); phoneCtrl.dispose(); emailCtrl.dispose();
+    firstCtrl.dispose();
+    lastCtrl.dispose();
+    natIdCtrl.dispose();
+    deptCtrl.dispose();
+    posCtrl.dispose();
+    phoneCtrl.dispose();
+    emailCtrl.dispose();
   }
 
   // ── CREATE LOGIN ACCOUNT DIALOG (from staff profile) ──────────────────────
@@ -21250,7 +21650,9 @@ class _BranchStaffManagementSectionState
     final pinCtrl = TextEditingController();
     bool obscurePass = true;
     String selectedRole = _roles.firstWhere(
-      (r) => r == (staff['position'] ?? staff['role'] ?? '').toString().toLowerCase(),
+      (r) =>
+          r ==
+          (staff['position'] ?? staff['role'] ?? '').toString().toLowerCase(),
       orElse: () => 'employee',
     );
     bool saving = false;
@@ -21264,149 +21666,178 @@ class _BranchStaffManagementSectionState
           title: Row(children: [
             Icon(Icons.account_circle, color: AppColors.kPrimary, size: 22),
             const SizedBox(width: 10),
-            Expanded(child: Text('Create Login for $staffName',
-                overflow: TextOverflow.ellipsis)),
+            Expanded(
+                child: Text('Create Login for $staffName',
+                    overflow: TextOverflow.ellipsis)),
           ]),
           content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.kPrimary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(children: [
-                    const Icon(Icons.badge_outlined, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(
-                      '${staff['first_name'] ?? ''} ${staff['last_name'] ?? ''}  •  ${staff['department'] ?? staff['position'] ?? '—'}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    )),
-                  ]),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email (login username) *',
-                    prefixIcon: Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passwordCtrl,
-                  obscureText: obscurePass,
-                  decoration: InputDecoration(
-                    labelText: 'Password *',
-                    helperText: 'Minimum 6 characters',
-                    prefixIcon: const Icon(Icons.lock_outlined),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(obscurePass ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setDlgState(() => obscurePass = !obscurePass),
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.kPrimary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.badge_outlined, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: Text(
+                          '${staff['first_name'] ?? ''} ${staff['last_name'] ?? ''}  •  ${staff['department'] ?? staff['position'] ?? '—'}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        )),
+                      ]),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedRole,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Role / Access Level *',
-                    prefixIcon: Icon(Icons.manage_accounts_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _roles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                  onChanged: (v) => setDlgState(() => selectedRole = v ?? selectedRole),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: pinCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'POS PIN *',
-                    helperText: 'Format: R1234, M1234, E1234, N1234 or C1234',
-                    prefixIcon: Icon(Icons.pin_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ]),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Email (login username) *',
+                        prefixIcon: Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: passwordCtrl,
+                      obscureText: obscurePass,
+                      decoration: InputDecoration(
+                        labelText: 'Password *',
+                        helperText: 'Minimum 6 characters',
+                        prefixIcon: const Icon(Icons.lock_outlined),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscurePass
+                              ? Icons.visibility_off
+                              : Icons.visibility),
+                          onPressed: () =>
+                              setDlgState(() => obscurePass = !obscurePass),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRole,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Role / Access Level *',
+                        prefixIcon: Icon(Icons.manage_accounts_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _roles
+                          .map(
+                              (r) => DropdownMenuItem(value: r, child: Text(r)))
+                          .toList(),
+                      onChanged: (v) =>
+                          setDlgState(() => selectedRole = v ?? selectedRole),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: pinCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'POS PIN *',
+                        helperText:
+                            'Format: R1234, M1234, E1234, N1234 or C1234',
+                        prefixIcon: Icon(Icons.pin_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ]),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             FilledButton.icon(
-              onPressed: saving ? null : () async {
-                final email = emailCtrl.text.trim();
-                final password = passwordCtrl.text;
-                if (!email.contains('@')) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('Enter a valid email address')));
-                  return;
-                }
-                if (password.length < 6) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('Password must be at least 6 characters')));
-                  return;
-                }
-                final pinRaw = pinCtrl.text.trim().toUpperCase();
-                if (pinRaw.isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('POS PIN is required')));
-                  return;
-                }
-                if (pinRaw.length != 5 || !RegExp(r'^[RMNCE]\d{4}$').hasMatch(pinRaw)) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
-                  return;
-                }
-                // Capture values before pop
-                final firstName = '${staff['first_name'] ?? ''}';
-                final lastName = '${staff['last_name'] ?? ''}';
-                final staffProfileId = '${staff['id'] ?? ''}';
-                final department = '${staff['department'] ?? ''}';
-                final branchIdInt = int.tryParse(branchId);
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final email = emailCtrl.text.trim();
+                      final password = passwordCtrl.text;
+                      if (!email.contains('@')) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text('Enter a valid email address')));
+                        return;
+                      }
+                      if (password.length < 6) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text(
+                                'Password must be at least 6 characters')));
+                        return;
+                      }
+                      final pinRaw = pinCtrl.text.trim().toUpperCase();
+                      if (pinRaw.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text('POS PIN is required')));
+                        return;
+                      }
+                      if (pinRaw.length != 5 ||
+                          !RegExp(r'^[RMNCE]\d{4}$').hasMatch(pinRaw)) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text(
+                                'POS PIN must be exactly 5 characters: R, M, N, C, or E followed by 4 digits')));
+                        return;
+                      }
+                      // Capture values before pop
+                      final firstName = '${staff['first_name'] ?? ''}';
+                      final lastName = '${staff['last_name'] ?? ''}';
+                      final staffProfileId = '${staff['id'] ?? ''}';
+                      final department = '${staff['department'] ?? ''}';
+                      final branchIdInt = int.tryParse(branchId);
 
-                FocusScope.of(ctx).unfocus();
-                setDlgState(() => saving = true);
-                try {
-                  final svc = ref.read(userServiceProvider);
-                  await svc.createUser({
-                    'first_name': firstName,
-                    'last_name': lastName,
-                    'email': email,
-                    'password': password,
-                    'role': selectedRole,
-                    'status': 'active',
-                    'branch_id': branchIdInt,
-                    'department': department,
-                    if (pinRaw.isNotEmpty) 'pos_pin': pinRaw,
-                    if (staffProfileId.isNotEmpty) 'staff_profile_id': staffProfileId,
-                  });
-                  if (!ctx.mounted) return;
-                  Navigator.pop(ctx);
-                  if (mounted) {
-                    AppNotifier.showSnackBar(context, SnackBar(
-                      content: Text('Login account created for $firstName $lastName'),
-                      backgroundColor: Colors.green,
-                    ));
-                  }
-                  await _load();
-                } catch (e) {
-                  if (!ctx.mounted) return;
-                  setDlgState(() => saving = false);
-                  final msg = e is DioException
-                      ? (e.response?.data?['message'] ?? '$e') : '$e';
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red));
-                }
-              },
+                      FocusScope.of(ctx).unfocus();
+                      setDlgState(() => saving = true);
+                      try {
+                        final svc = ref.read(userServiceProvider);
+                        await svc.createUser({
+                          'first_name': firstName,
+                          'last_name': lastName,
+                          'email': email,
+                          'password': password,
+                          'role': selectedRole,
+                          'status': 'active',
+                          'branch_id': branchIdInt,
+                          'department': department,
+                          if (pinRaw.isNotEmpty) 'pos_pin': pinRaw,
+                          if (staffProfileId.isNotEmpty)
+                            'staff_profile_id': staffProfileId,
+                        });
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        if (mounted) {
+                          AppNotifier.showSnackBar(
+                              context,
+                              SnackBar(
+                                content: Text(
+                                    'Login account created for $firstName $lastName'),
+                                backgroundColor: Colors.green,
+                              ));
+                        }
+                        await _load();
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        setDlgState(() => saving = false);
+                        final msg = e is DioException
+                            ? (e.response?.data?['message'] ?? '$e')
+                            : '$e';
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text('Error: $msg'),
+                            backgroundColor: Colors.red));
+                      }
+                    },
               icon: saving
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.person_add_alt_1, size: 18),
               label: Text(saving ? 'Creating…' : 'Create Login'),
             ),
@@ -21414,7 +21845,9 @@ class _BranchStaffManagementSectionState
         );
       }),
     );
-    emailCtrl.dispose(); passwordCtrl.dispose(); pinCtrl.dispose();
+    emailCtrl.dispose();
+    passwordCtrl.dispose();
+    pinCtrl.dispose();
   }
 
   // ── DELETE STAFF ──────────────────────────────────────────────────────────
@@ -21427,9 +21860,12 @@ class _BranchStaffManagementSectionState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Staff'),
-        content: Text('Are you sure you want to permanently delete $name? This will also delete their login account (if any). This action cannot be undone.'),
+        content: Text(
+            'Are you sure you want to permanently delete $name? This will also delete their login account (if any). This action cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
@@ -21464,12 +21900,15 @@ class _BranchStaffManagementSectionState
 
   // ── EDIT STAFF DIALOG ─────────────────────────────────────────────────────
   Future<void> _showEditDialog(Map<String, dynamic> staff) async {
-    final firstCtrl = TextEditingController(text: '${staff['first_name'] ?? ''}');
+    final firstCtrl =
+        TextEditingController(text: '${staff['first_name'] ?? ''}');
     final lastCtrl = TextEditingController(text: '${staff['last_name'] ?? ''}');
     final phoneCtrl = TextEditingController(text: '${staff['phone'] ?? ''}');
     final emailCtrl = TextEditingController(text: '${staff['email'] ?? ''}');
-    final deptCtrl = TextEditingController(text: '${staff['department'] ?? ''}');
-    final posCtrl = TextEditingController(text: '${staff['position'] ?? staff['role'] ?? ''}');
+    final deptCtrl =
+        TextEditingController(text: '${staff['department'] ?? ''}');
+    final posCtrl = TextEditingController(
+        text: '${staff['position'] ?? staff['role'] ?? ''}');
     bool saving = false;
 
     await showDialog(
@@ -21486,67 +21925,101 @@ class _BranchStaffManagementSectionState
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Row(children: [
-                  Expanded(child: TextField(controller: firstCtrl,
-                    decoration: const InputDecoration(labelText: 'First Name', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: firstCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'First Name',
+                              border: OutlineInputBorder()))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: lastCtrl,
-                    decoration: const InputDecoration(labelText: 'Last Name', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: lastCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Last Name',
+                              border: OutlineInputBorder()))),
                 ]),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: TextField(controller: deptCtrl,
-                    decoration: const InputDecoration(labelText: 'Department', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: deptCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Department',
+                              border: OutlineInputBorder()))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: posCtrl,
-                    decoration: const InputDecoration(labelText: 'Position / Role', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: posCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Position / Role',
+                              border: OutlineInputBorder()))),
                 ]),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: TextField(controller: phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: phoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                              labelText: 'Phone',
+                              border: OutlineInputBorder()))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()))),
+                  Expanded(
+                      child: TextField(
+                          controller: emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                              labelText: 'Email',
+                              border: OutlineInputBorder()))),
                 ]),
               ]),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             FilledButton.icon(
-              onPressed: saving ? null : () async {
-                setDlgState(() => saving = true);
-                try {
-                  final id = '${staff['id'] ?? staff['staff_id'] ?? ''}';
-                  if (id.isEmpty) throw Exception('No staff ID');
-                  final dio = ref.read(dioProvider);
-                  await dio.put('/staff/$id', data: {
-                    'first_name': firstCtrl.text.trim(),
-                    'last_name': lastCtrl.text.trim(),
-                    'department': deptCtrl.text.trim(),
-                    'position': posCtrl.text.trim(),
-                    'phone': phoneCtrl.text.trim(),
-                    'email': emailCtrl.text.trim(),
-                  });
-                  if (!ctx.mounted) return;
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                    content: Text('Staff updated'), backgroundColor: Colors.green));
-                  await _load();
-                } catch (e) {
-                  if (!ctx.mounted) return;
-                  final msg = e is DioException
-                      ? (e.response?.data?['message'] ?? '$e') : '$e';
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red));
-                  setDlgState(() => saving = false);
-                }
-              },
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setDlgState(() => saving = true);
+                      try {
+                        final id = '${staff['id'] ?? staff['staff_id'] ?? ''}';
+                        if (id.isEmpty) throw Exception('No staff ID');
+                        final dio = ref.read(dioProvider);
+                        await dio.put('/staff/$id', data: {
+                          'first_name': firstCtrl.text.trim(),
+                          'last_name': lastCtrl.text.trim(),
+                          'department': deptCtrl.text.trim(),
+                          'position': posCtrl.text.trim(),
+                          'phone': phoneCtrl.text.trim(),
+                          'email': emailCtrl.text.trim(),
+                        });
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                            content: Text('Staff updated'),
+                            backgroundColor: Colors.green));
+                        await _load();
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        final msg = e is DioException
+                            ? (e.response?.data?['message'] ?? '$e')
+                            : '$e';
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text('Error: $msg'),
+                            backgroundColor: Colors.red));
+                        setDlgState(() => saving = false);
+                      }
+                    },
               icon: saving
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.save_outlined, size: 18),
               label: Text(saving ? 'Saving…' : 'Save'),
             ),
@@ -21554,8 +22027,12 @@ class _BranchStaffManagementSectionState
         );
       }),
     );
-    firstCtrl.dispose(); lastCtrl.dispose(); phoneCtrl.dispose();
-    emailCtrl.dispose(); deptCtrl.dispose(); posCtrl.dispose();
+    firstCtrl.dispose();
+    lastCtrl.dispose();
+    phoneCtrl.dispose();
+    emailCtrl.dispose();
+    deptCtrl.dispose();
+    posCtrl.dispose();
   }
 
   @override
@@ -21568,11 +22045,20 @@ class _BranchStaffManagementSectionState
           // Header
           Row(
             children: [
-              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Staff Management', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                Text('Add staff profiles and create login accounts', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              ])),
-              IconButton(icon: const Icon(Icons.refresh), tooltip: 'Refresh', onPressed: _loading ? null : _load),
+              const Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('Staff Management',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w700)),
+                    Text('Add staff profiles and create login accounts',
+                        style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  ])),
+              IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                  onPressed: _loading ? null : _load),
               const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: _showAddStaffDialog,
@@ -21589,10 +22075,17 @@ class _BranchStaffManagementSectionState
               hintText: 'Search by name, role, department, phone or email…',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _searchCtrl.text.isNotEmpty
-                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); _onSearch(''); })
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        _onSearch('');
+                      })
                   : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             ),
             onChanged: _onSearch,
           ),
@@ -21600,7 +22093,8 @@ class _BranchStaffManagementSectionState
           if (!_loading && _staff.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 8),
-              child: Text('${_filtered.length} of ${_staff.length} staff members',
+              child: Text(
+                  '${_filtered.length} of ${_staff.length} staff members',
                   style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ),
           const SizedBox(height: 8),
@@ -21608,15 +22102,25 @@ class _BranchStaffManagementSectionState
           if (_loading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
-            Expanded(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Expanded(
+                child: Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 16),
-              FilledButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+              FilledButton.icon(
+                  onPressed: _load,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry')),
             ])))
           else if (_filtered.isEmpty)
-            const Expanded(child: Center(child: Text('No staff found.', style: TextStyle(color: Colors.grey))))
+            const Expanded(
+                child: Center(
+                    child: Text('No staff found.',
+                        style: TextStyle(color: Colors.grey))))
           else
             Expanded(
               child: ListView.separated(
@@ -21628,51 +22132,72 @@ class _BranchStaffManagementSectionState
                   final role = '${s['position'] ?? s['role'] ?? '—'}';
                   final dept = '${s['department'] ?? '—'}';
                   final phone = '${s['phone'] ?? '—'}';
-                  final status = '${s['employment_status'] ?? s['status'] ?? 'active'}';
-                  final hasUser = s['user_id'] != null && '${s['user_id']}'.isNotEmpty;
+                  final status =
+                      '${s['employment_status'] ?? s['status'] ?? 'active'}';
+                  final hasUser =
+                      s['user_id'] != null && '${s['user_id']}'.isNotEmpty;
                   return ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: AppColors.kPrimary.withValues(alpha: 0.15),
+                      backgroundColor:
+                          AppColors.kPrimary.withValues(alpha: 0.15),
                       child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
-                          style: TextStyle(color: AppColors.kPrimary, fontWeight: FontWeight.w700)),
+                          style: TextStyle(
+                              color: AppColors.kPrimary,
+                              fontWeight: FontWeight.w700)),
                     ),
                     title: Row(children: [
-                      Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                      Expanded(
+                          child: Text(name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600))),
                       if (hasUser)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.green.shade50,
                             border: Border.all(color: Colors.green.shade300),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text('Has Login', style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+                          child: Text('Has Login',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.w600)),
                         ),
                     ]),
-                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('$role  •  $dept'),
-                      Text(phone, style: const TextStyle(fontSize: 12)),
-                      Container(
-                        margin: const EdgeInsets.only(top: 2),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: status.toLowerCase() == 'active'
-                              ? Colors.green.shade50 : Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(status.toUpperCase(),
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
-                                color: status.toLowerCase() == 'active'
-                                    ? Colors.green.shade700 : Colors.orange.shade700)),
-                      ),
-                    ]),
+                    subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('$role  •  $dept'),
+                          Text(phone, style: const TextStyle(fontSize: 12)),
+                          Container(
+                            margin: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: status.toLowerCase() == 'active'
+                                  ? Colors.green.shade50
+                                  : Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(status.toUpperCase(),
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: status.toLowerCase() == 'active'
+                                        ? Colors.green.shade700
+                                        : Colors.orange.shade700)),
+                          ),
+                        ]),
                     isThreeLine: true,
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       if (!hasUser)
                         Tooltip(
                           message: 'Create login account',
                           child: IconButton(
-                            icon: const Icon(Icons.account_circle_outlined, color: Colors.blue),
+                            icon: const Icon(Icons.account_circle_outlined,
+                                color: Colors.blue),
                             onPressed: () => _showCreateLoginDialog(s),
                           ),
                         ),
@@ -21686,7 +22211,8 @@ class _BranchStaffManagementSectionState
                       Tooltip(
                         message: 'Delete staff',
                         child: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red),
                           onPressed: () => _confirmDeleteStaff(s),
                         ),
                       ),
@@ -21713,8 +22239,7 @@ class _BranchBarMenuSection extends ConsumerStatefulWidget {
       _BranchBarMenuSectionState();
 }
 
-class _BranchBarMenuSectionState
-    extends ConsumerState<_BranchBarMenuSection> {
+class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
   List<Map<String, dynamic>> _all = [];
   List<Map<String, dynamic>> _filtered = [];
   bool _loading = false;
@@ -21772,7 +22297,8 @@ class _BranchBarMenuSectionState
             items.add(Map<String, dynamic>.from(it)
               ..['_source'] = 'pos'
               ..['_outlet_id'] = outletId
-              ..['price'] = it['selling_price'] ?? it['price'] ?? it['unit_price'] ?? 0);
+              ..['price'] =
+                  it['selling_price'] ?? it['price'] ?? it['unit_price'] ?? 0);
           }
         } catch (_) {}
       }
@@ -21782,7 +22308,10 @@ class _BranchBarMenuSectionState
         final c = '${item['category'] ?? ''}';
         if (c.isNotEmpty) cats.add(c);
       }
-      final sortedCats = ['All', ...cats.where((c) => c != 'All').toList()..sort()];
+      final sortedCats = [
+        'All',
+        ...cats.where((c) => c != 'All').toList()..sort()
+      ];
       if (!mounted) return;
       setState(() {
         _all = items;
@@ -21804,10 +22333,7 @@ class _BranchBarMenuSectionState
       _categoryFilter = cat;
       _filtered = cat == 'All'
           ? _all
-          : _all
-              .where((i) =>
-                  '${i['category'] ?? ''}' == cat)
-              .toList();
+          : _all.where((i) => '${i['category'] ?? ''}' == cat).toList();
     });
   }
 
@@ -21839,12 +22365,9 @@ class _BranchBarMenuSectionState
   }
 
   Future<void> _showEditDialog(Map<String, dynamic> item) async {
-    final nameCtrl =
-        TextEditingController(text: '${item['name'] ?? ''}');
-    final catCtrl =
-        TextEditingController(text: '${item['category'] ?? ''}');
-    final priceCtrl =
-        TextEditingController(text: '${item['price'] ?? ''}');
+    final nameCtrl = TextEditingController(text: '${item['name'] ?? ''}');
+    final catCtrl = TextEditingController(text: '${item['category'] ?? ''}');
+    final priceCtrl = TextEditingController(text: '${item['price'] ?? ''}');
     bool saving = false;
 
     await showDialog(
@@ -21859,8 +22382,7 @@ class _BranchBarMenuSectionState
             const SizedBox(height: 8),
             TextField(
                 controller: catCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Category')),
+                decoration: const InputDecoration(labelText: 'Category')),
             const SizedBox(height: 8),
             TextField(
                 controller: priceCtrl,
@@ -21882,16 +22404,19 @@ class _BranchBarMenuSectionState
                         final dio = ref.read(dioProvider);
                         if (item['_source'] == 'pos') {
                           final outletId = '${item['_outlet_id'] ?? ''}';
-                          await dio.patch('/pos/outlets/$outletId/items/$id', data: {
+                          await dio
+                              .patch('/pos/outlets/$outletId/items/$id', data: {
                             'name': nameCtrl.text.trim(),
                             'category': catCtrl.text.trim(),
-                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                            'price': double.tryParse(priceCtrl.text) ??
+                                item['price'],
                           });
                         } else {
                           await dio.put('/bar/drinks/$id', data: {
                             'name': nameCtrl.text.trim(),
                             'category': catCtrl.text.trim(),
-                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                            'price': double.tryParse(priceCtrl.text) ??
+                                item['price'],
                           });
                         }
                         if (!ctx.mounted) return;
@@ -21935,19 +22460,16 @@ class _BranchBarMenuSectionState
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
                 controller: nameCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Name *')),
+                decoration: const InputDecoration(labelText: 'Name *')),
             const SizedBox(height: 8),
             TextField(
                 controller: catCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Category')),
+                decoration: const InputDecoration(labelText: 'Category')),
             const SizedBox(height: 8),
             TextField(
                 controller: priceCtrl,
                 keyboardType: TextInputType.number,
-                decoration:
-                    const InputDecoration(labelText: 'Price *')),
+                decoration: const InputDecoration(labelText: 'Price *')),
           ]),
           actions: [
             TextButton(
@@ -21973,8 +22495,7 @@ class _BranchBarMenuSectionState
                           'category': catCtrl.text.trim(),
                           'price': double.tryParse(priceCtrl.text) ?? 0,
                           if (branchId.isNotEmpty)
-                            'branch_id':
-                                int.tryParse(branchId) ?? branchId,
+                            'branch_id': int.tryParse(branchId) ?? branchId,
                         });
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
@@ -22010,8 +22531,8 @@ class _BranchBarMenuSectionState
             children: [
               const Expanded(
                 child: Text('Bar Menu',
-                    style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.w700)),
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
               ),
               IconButton(
                   icon: const Icon(Icons.refresh),
@@ -22067,8 +22588,7 @@ class _BranchBarMenuSectionState
             ),
           const SizedBox(height: 12),
           if (_loading)
-            const Expanded(
-                child: Center(child: CircularProgressIndicator()))
+            const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
             Expanded(
               child: Center(
@@ -22102,32 +22622,27 @@ class _BranchBarMenuSectionState
             Expanded(
               child: ListView.separated(
                 itemCount: _filtered.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1),
+                separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final item = _filtered[i];
                   final name = '${item['name'] ?? '—'}';
-                  final category =
-                      '${item['category'] ?? '—'}';
+                  final category = '${item['category'] ?? '—'}';
                   final price = item['price'];
-                  final available =
-                      item['available'] != false &&
-                          item['is_available'] != false;
+                  final available = item['available'] != false &&
+                      item['is_available'] != false;
                   return ListTile(
                     leading: const CircleAvatar(
                       child: Icon(Icons.local_bar, size: 20),
                     ),
                     title: Text(name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600)),
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text('$category  •  KES ${price ?? '—'}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Switch(
                           value: available,
-                          onChanged: (_) =>
-                              _toggleAvailability(item),
+                          onChanged: (_) => _toggleAvailability(item),
                         ),
                         IconButton(
                           icon: const Icon(Icons.edit_outlined),
@@ -22200,17 +22715,16 @@ class _BranchRestaurantMenuSectionState
       final repo = ref.read(branchAccountantRepositoryProvider);
       final branchId = await repo.getBranchId();
       final dio = ref.read(dioProvider);
-      final res = await dio.get('/restaurant/menu/items',
-          queryParameters: {
-            if (branchId.isNotEmpty) 'branch_id': branchId,
-          });
+      final res = await dio.get('/restaurant/menu/items', queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
       final data = res.data;
       List<dynamic> list;
       if (data is List) {
         list = data;
       } else if (data is Map) {
-        list = (data['data'] ?? data['items'] ?? data['menu_items'] ?? [])
-            as List;
+        list =
+            (data['data'] ?? data['items'] ?? data['menu_items'] ?? []) as List;
       } else {
         list = [];
       }
@@ -22222,34 +22736,39 @@ class _BranchRestaurantMenuSectionState
       // Fallback: load from POS restaurant outlets when legacy table is empty
       if (items.isEmpty && branchId.isNotEmpty) {
         const barTypes = {
-          'main_bar', 'executive_bar', 'kyogong_executive_bar',
-          'kyogong_sports_bar', 'choma_zone', 'bar',
+          'main_bar',
+          'executive_bar',
+          'kyogong_executive_bar',
+          'kyogong_sports_bar',
+          'choma_zone',
+          'bar',
         };
         try {
-          final outletsRes = await dio.get('/pos/outlets',
-              queryParameters: {'branch_id': branchId});
+          final outletsRes = await dio
+              .get('/pos/outlets', queryParameters: {'branch_id': branchId});
           final outletsData = outletsRes.data;
           final outletList = outletsData is List
               ? outletsData
               : outletsData is Map
-                  ? ((outletsData['data'] ?? outletsData['outlets'] ?? []) as List)
+                  ? ((outletsData['data'] ?? outletsData['outlets'] ?? [])
+                      as List)
                   : <dynamic>[];
           final restaurantOutlets = outletList
               .whereType<Map>()
-              .where((o) => !barTypes.contains(
-                  (o['outlet_type'] as String? ?? '').toLowerCase()))
+              .where((o) => !barTypes
+                  .contains((o['outlet_type'] as String? ?? '').toLowerCase()))
               .toList();
           for (final outlet in restaurantOutlets) {
             final outletId = '${outlet['id'] ?? ''}';
             if (outletId.isEmpty) continue;
             try {
-              final itemsRes =
-                  await dio.get('/pos/outlets/$outletId/items');
+              final itemsRes = await dio.get('/pos/outlets/$outletId/items');
               final itemsData = itemsRes.data;
               final rawItems = itemsData is List
                   ? itemsData
                   : itemsData is Map
-                      ? ((itemsData['data'] ?? itemsData['items'] ?? []) as List)
+                      ? ((itemsData['data'] ?? itemsData['items'] ?? [])
+                          as List)
                       : <dynamic>[];
               for (final it in rawItems.whereType<Map>()) {
                 items.add({
@@ -22289,9 +22808,7 @@ class _BranchRestaurantMenuSectionState
       _categoryFilter = cat;
       _filtered = cat == 'All'
           ? _all
-          : _all
-              .where((i) => _menuCategoryName(i['category']) == cat)
-              .toList();
+          : _all.where((i) => _menuCategoryName(i['category']) == cat).toList();
     });
   }
 
@@ -22325,8 +22842,12 @@ class _BranchRestaurantMenuSectionState
     // Resolve initial category_id from the nested category object or direct field
     final rawCat = item['category'];
     String? selectedCategoryId = rawCat is Map
-        ? (rawCat['id']?.toString().isNotEmpty == true ? rawCat['id'].toString() : null)
-        : (item['category_id']?.toString().isNotEmpty == true ? item['category_id'].toString() : null);
+        ? (rawCat['id']?.toString().isNotEmpty == true
+            ? rawCat['id'].toString()
+            : null)
+        : (item['category_id']?.toString().isNotEmpty == true
+            ? item['category_id'].toString()
+            : null);
 
     bool saving = false;
 
@@ -22364,9 +22885,10 @@ class _BranchRestaurantMenuSectionState
                   decoration: const InputDecoration(labelText: 'Name')),
               const SizedBox(height: 8),
               DropdownButtonFormField<String?>(
-                value: cats.any((c) => c['id']?.toString() == selectedCategoryId)
-                    ? selectedCategoryId
-                    : null,
+                value:
+                    cats.any((c) => c['id']?.toString() == selectedCategoryId)
+                        ? selectedCategoryId
+                        : null,
                 decoration: const InputDecoration(labelText: 'Category'),
                 isExpanded: true,
                 items: [
@@ -22382,13 +22904,15 @@ class _BranchRestaurantMenuSectionState
               const SizedBox(height: 8),
               TextField(
                   controller: priceCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Selling Price', prefixText: 'KES ')),
               const SizedBox(height: 8),
               TextField(
                   controller: costCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Cost Price', prefixText: 'KES ')),
             ]),
@@ -22407,10 +22931,12 @@ class _BranchRestaurantMenuSectionState
                       try {
                         if (item['_source'] == 'pos') {
                           final outletId = '${item['_outlet_id'] ?? ''}';
-                          await dio.patch('/pos/outlets/$outletId/items/$id', data: {
+                          await dio
+                              .patch('/pos/outlets/$outletId/items/$id', data: {
                             'name': nameCtrl.text.trim(),
                             'category': selectedCategoryId,
-                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                            'price': double.tryParse(priceCtrl.text) ??
+                                item['price'],
                             if (costCtrl.text.trim().isNotEmpty)
                               'cost_price': double.tryParse(costCtrl.text) ?? 0,
                           });
@@ -22418,7 +22944,8 @@ class _BranchRestaurantMenuSectionState
                           await dio.put('/restaurant/menu/items/$id', data: {
                             'name': nameCtrl.text.trim(),
                             'category_id': selectedCategoryId,
-                            'price': double.tryParse(priceCtrl.text) ?? item['price'],
+                            'price': double.tryParse(priceCtrl.text) ??
+                                item['price'],
                             if (costCtrl.text.trim().isNotEmpty)
                               'cost_price': double.tryParse(costCtrl.text) ?? 0,
                           });
@@ -22504,13 +23031,15 @@ class _BranchRestaurantMenuSectionState
               const SizedBox(height: 8),
               TextField(
                   controller: priceCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Selling Price *', prefixText: 'KES ')),
               const SizedBox(height: 8),
               TextField(
                   controller: costCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Cost Price', prefixText: 'KES ')),
             ]),
@@ -22527,7 +23056,8 @@ class _BranchRestaurantMenuSectionState
                           priceCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           const SnackBar(
-                              content: Text('Name and selling price are required')),
+                              content:
+                                  Text('Name and selling price are required')),
                         );
                         return;
                       }
@@ -22537,7 +23067,8 @@ class _BranchRestaurantMenuSectionState
                           'name': nameCtrl.text.trim(),
                           'category_id': selectedCategoryId,
                           'price': double.tryParse(priceCtrl.text) ?? 0,
-                          'cost_price': double.tryParse(costCtrl.text.trim()) ?? 0,
+                          'cost_price':
+                              double.tryParse(costCtrl.text.trim()) ?? 0,
                           if (branchId.isNotEmpty)
                             'branch_id': int.tryParse(branchId) ?? branchId,
                         });
@@ -22575,8 +23106,8 @@ class _BranchRestaurantMenuSectionState
             children: [
               const Expanded(
                 child: Text('Restaurant Menu',
-                    style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.w700)),
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
               ),
               IconButton(
                   icon: const Icon(Icons.refresh),
@@ -22612,8 +23143,7 @@ class _BranchRestaurantMenuSectionState
             ),
           const SizedBox(height: 12),
           if (_loading)
-            const Expanded(
-                child: Center(child: CircularProgressIndicator()))
+            const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
             Expanded(
               child: Center(
@@ -22647,32 +23177,28 @@ class _BranchRestaurantMenuSectionState
             Expanded(
               child: ListView.separated(
                 itemCount: _filtered.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1),
+                separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final item = _filtered[i];
                   final name = '${item['name'] ?? '—'}';
                   final catName = _menuCategoryName(item['category']);
                   final category = catName.isNotEmpty ? catName : '—';
                   final price = item['price'];
-                  final available =
-                      item['available'] != false &&
-                          item['is_available'] != false;
+                  final available = item['available'] != false &&
+                      item['is_available'] != false;
                   return ListTile(
                     leading: const CircleAvatar(
                       child: Icon(Icons.restaurant_menu, size: 20),
                     ),
                     title: Text(name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600)),
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text('$category  •  KES ${price ?? '—'}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Switch(
                           value: available,
-                          onChanged: (_) =>
-                              _toggleAvailability(item),
+                          onChanged: (_) => _toggleAvailability(item),
                         ),
                         IconButton(
                           icon: const Icon(Icons.edit_outlined),
@@ -22741,10 +23267,9 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
       final branchId = await repo.getBranchId();
       final dio = ref.read(dioProvider);
 
-      final outletsRes = await dio.get('/pos/outlets',
-          queryParameters: {
-            if (branchId.isNotEmpty) 'branch_id': branchId,
-          });
+      final outletsRes = await dio.get('/pos/outlets', queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
       final rawOutlets = outletsRes.data;
       List<dynamic> outletList;
       if (rawOutlets is List) {
@@ -22769,8 +23294,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
         if (oid.isEmpty) continue;
         outletsById[oid] = outlet;
         try {
-          final itemsRes =
-              await dio.get('/pos/outlets/$oid/items');
+          final itemsRes = await dio.get('/pos/outlets/$oid/items');
           final rawItems = itemsRes.data;
           List<dynamic> itemList;
           if (rawItems is List) {
@@ -22800,8 +23324,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
       if (rawDrinks is List) {
         drinkList = rawDrinks;
       } else if (rawDrinks is Map) {
-        drinkList =
-            (rawDrinks['data'] ?? rawDrinks['drinks'] ?? []) as List;
+        drinkList = (rawDrinks['data'] ?? rawDrinks['drinks'] ?? []) as List;
       } else {
         drinkList = [];
       }
@@ -22867,8 +23390,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('${item['name']} linked to ${selected['name']}'),
+          content: Text('${item['name']} linked to ${selected['name']}'),
           backgroundColor: Colors.green,
         ),
       );
@@ -22877,8 +23399,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error linking: $e'),
-            backgroundColor: Colors.red),
+            content: Text('Error linking: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -22893,16 +23414,14 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove Stock Link'),
-        content:
-            Text('Remove the stock link for "${item['name']}"?'),
+        content: Text('Remove the stock link for "${item['name']}"?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Remove'),
           ),
         ],
@@ -22923,9 +23442,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -22941,44 +23458,37 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
         final filtered = query.isEmpty
             ? _barDrinks
             : _barDrinks.where((d) {
-                final name =
-                    (d['name'] as String? ?? '').toLowerCase();
-                final cat =
-                    (d['category'] as String? ?? '').toLowerCase();
+                final name = (d['name'] as String? ?? '').toLowerCase();
+                final cat = (d['category'] as String? ?? '').toLowerCase();
                 final q = query.toLowerCase();
                 return name.contains(q) || cat.contains(q);
               }).toList();
 
         return Dialog(
           child: ConstrainedBox(
-            constraints:
-                const BoxConstraints(maxWidth: 480, maxHeight: 560),
+            constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
             child: Column(
               children: [
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Link "${posItem['name']}" to Stock Item',
                         style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700),
+                            fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         autofocus: true,
                         decoration: const InputDecoration(
                           hintText: 'Search bar stock items…',
-                          prefixIcon:
-                              Icon(Icons.search, size: 20),
+                          prefixIcon: Icon(Icons.search, size: 20),
                           isDense: true,
                           border: OutlineInputBorder(),
                         ),
-                        onChanged: (v) =>
-                            setDlg(() => query = v.trim()),
+                        onChanged: (v) => setDlg(() => query = v.trim()),
                       ),
                     ],
                   ),
@@ -22988,35 +23498,28 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
                   child: filtered.isEmpty
                       ? const Center(
                           child: Text('No drinks found',
-                              style: TextStyle(
-                                  color: Colors.grey)))
+                              style: TextStyle(color: Colors.grey)))
                       : ListView.builder(
                           itemCount: filtered.length,
                           itemBuilder: (_, i) {
                             final drink = filtered[i];
-                            final dName =
-                                '${drink['name'] ?? '—'}';
-                            final dCat =
-                                '${drink['category'] ?? ''}';
+                            final dName = '${drink['name'] ?? '—'}';
+                            final dCat = '${drink['category'] ?? ''}';
                             final dUnit =
                                 '${drink['unit'] ?? drink['serving_unit'] ?? ''}';
                             return ListTile(
                               dense: true,
-                              leading: const Icon(
-                                  Icons.local_bar_outlined,
+                              leading: const Icon(Icons.local_bar_outlined,
                                   size: 20),
                               title: Text(dName,
                                   style: const TextStyle(
-                                      fontWeight:
-                                          FontWeight.w600,
+                                      fontWeight: FontWeight.w600,
                                       fontSize: 13)),
                               subtitle: Text(
                                   [dCat, dUnit]
-                                      .where((s) =>
-                                          s.isNotEmpty)
+                                      .where((s) => s.isNotEmpty)
                                       .join(' • '),
-                                  style: const TextStyle(
-                                      fontSize: 11)),
+                                  style: const TextStyle(fontSize: 11)),
                               onTap: () {
                                 result = drink;
                                 Navigator.pop(ctx);
@@ -23052,8 +23555,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
     final srcId = item['source_item_id'];
     if (srcTable != 'bar_drinks' || srcId == null) return '';
     try {
-      final drink =
-          _barDrinks.firstWhere((d) => '${d['id']}' == '$srcId');
+      final drink = _barDrinks.firstWhere((d) => '${d['id']}' == '$srcId');
       return '${drink['name'] ?? srcId}';
     } catch (_) {
       return '$srcId';
@@ -23063,16 +23565,14 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
   Widget _buildOutletTab(String outletType) {
     final outlet = _outletByType(outletType);
     final items = _itemsForType(outletType);
-    final label =
-        outletType == 'main_bar' ? 'Main Bar' : 'Executive Bar';
+    final label = outletType == 'main_bar' ? 'Main Bar' : 'Executive Bar';
 
     if (outlet == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.storefront_outlined,
-                size: 48, color: Colors.grey),
+            const Icon(Icons.storefront_outlined, size: 48, color: Colors.grey),
             const SizedBox(height: 12),
             Text('No $label outlet found for this branch.',
                 style: const TextStyle(color: Colors.grey)),
@@ -23086,15 +23586,13 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
         ? items
         : items.where((i) {
             final n = (i['name'] as String? ?? '').toLowerCase();
-            final c =
-                (i['category'] as String? ?? '').toLowerCase();
+            final c = (i['category'] as String? ?? '').toLowerCase();
             return n.contains(q) || c.contains(q);
           }).toList();
 
     final linkedCount = items
         .where((i) =>
-            i['source_table'] == 'bar_drinks' &&
-            i['source_item_id'] != null)
+            i['source_table'] == 'bar_drinks' && i['source_item_id'] != null)
         .length;
 
     return Column(
@@ -23106,8 +23604,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
             children: [
               Chip(
                 avatar: const Icon(Icons.link, size: 14),
-                label: Text(
-                    '$linkedCount / ${items.length} linked',
+                label: Text('$linkedCount / ${items.length} linked',
                     style: const TextStyle(fontSize: 12)),
                 backgroundColor: linkedCount == items.length
                     ? Colors.green.shade50
@@ -23119,15 +23616,13 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
                 child: TextField(
                   decoration: const InputDecoration(
                     hintText: 'Search items…',
-                    prefixIcon:
-                        Icon(Icons.search, size: 18),
+                    prefixIcon: Icon(Icons.search, size: 18),
                     isDense: true,
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                        vertical: 8, horizontal: 10),
+                    contentPadding:
+                        EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                   ),
-                  onChanged: (v) =>
-                      setState(() => _search = v.trim()),
+                  onChanged: (v) => setState(() => _search = v.trim()),
                 ),
               ),
             ],
@@ -23144,17 +23639,14 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
           Expanded(
             child: ListView.separated(
               itemCount: filtered.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1),
+              separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (ctx, i) {
                 final item = filtered[i];
                 final iName = '${item['name'] ?? '—'}';
                 final iCat = '${item['category'] ?? '—'}';
-                final iPrice =
-                    item['selling_price'] ?? item['price'];
-                final isLinked =
-                    item['source_table'] == 'bar_drinks' &&
-                        item['source_item_id'] != null;
+                final iPrice = item['selling_price'] ?? item['price'];
+                final isLinked = item['source_table'] == 'bar_drinks' &&
+                    item['source_item_id'] != null;
                 final linkedName = _linkedDrinkName(item);
 
                 return ListTile(
@@ -23163,9 +23655,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
                         ? Colors.green.shade100
                         : Colors.orange.shade100,
                     child: Icon(
-                      isLinked
-                          ? Icons.link
-                          : Icons.link_off,
+                      isLinked ? Icons.link : Icons.link_off,
                       size: 18,
                       color: isLinked
                           ? Colors.green.shade700
@@ -23174,43 +23664,34 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
                   ),
                   title: Text(iName,
                       style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14)),
+                          fontWeight: FontWeight.w600, fontSize: 14)),
                   subtitle: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                          '$iCat  •  KES ${iPrice ?? '—'}',
-                          style: const TextStyle(
-                              fontSize: 12)),
+                      Text('$iCat  •  KES ${iPrice ?? '—'}',
+                          style: const TextStyle(fontSize: 12)),
                       if (isLinked)
                         Row(
                           children: [
                             const Icon(Icons.link,
-                                size: 12,
-                                color: Colors.green),
+                                size: 12, color: Colors.green),
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
                                 linkedName,
-                                overflow:
-                                    TextOverflow.ellipsis,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors
-                                        .green.shade700,
-                                    fontWeight:
-                                        FontWeight.w500),
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w500),
                               ),
                             ),
                           ],
                         )
                       else
                         const Text('Not linked to stock',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.orange)),
+                            style:
+                                TextStyle(fontSize: 11, color: Colors.orange)),
                     ],
                   ),
                   isThreeLine: true,
@@ -23219,42 +23700,28 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
                     children: [
                       if (isLinked) ...[
                         IconButton(
-                          icon: const Icon(
-                              Icons.edit_outlined,
-                              size: 18),
+                          icon: const Icon(Icons.edit_outlined, size: 18),
                           tooltip: 'Change Link',
-                          onPressed: () =>
-                              _linkItem(outlet, item),
+                          onPressed: () => _linkItem(outlet, item),
                         ),
                         IconButton(
-                          icon: const Icon(
-                              Icons.link_off,
-                              size: 18,
-                              color: Colors.orange),
+                          icon: const Icon(Icons.link_off,
+                              size: 18, color: Colors.orange),
                           tooltip: 'Remove Link',
-                          onPressed: () =>
-                              _unlinkItem(outlet, item),
+                          onPressed: () => _unlinkItem(outlet, item),
                         ),
                       ] else
                         FilledButton.icon(
-                          onPressed: () =>
-                              _linkItem(outlet, item),
-                          icon: const Icon(Icons.link,
-                              size: 16),
+                          onPressed: () => _linkItem(outlet, item),
+                          icon: const Icon(Icons.link, size: 16),
                           label: const Text('Link',
-                              style:
-                                  TextStyle(fontSize: 12)),
+                              style: TextStyle(fontSize: 12)),
                           style: FilledButton.styleFrom(
-                            backgroundColor:
-                                Colors.blue.shade700,
-                            padding:
-                                const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6),
+                            backgroundColor: Colors.blue.shade700,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
                             minimumSize: Size.zero,
-                            tapTargetSize:
-                                MaterialTapTargetSize
-                                    .shrinkWrap,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
                     ],
@@ -23282,13 +23749,11 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
                   children: [
                     Text('POS Stock Link',
                         style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700)),
+                            fontSize: 20, fontWeight: FontWeight.w700)),
                     SizedBox(height: 2),
                     Text(
                       'Link bar POS menu items to bar stock items for automatic stock tracking.',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -23304,21 +23769,15 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
           TabBar(
             controller: _tabs,
             tabs: const [
-              Tab(
-                  icon: Icon(Icons.local_bar, size: 18),
-                  text: 'Main Bar'),
-              Tab(
-                  icon: Icon(Icons.wine_bar, size: 18),
-                  text: 'Executive Bar'),
+              Tab(icon: Icon(Icons.local_bar, size: 18), text: 'Main Bar'),
+              Tab(icon: Icon(Icons.wine_bar, size: 18), text: 'Executive Bar'),
             ],
-            labelStyle: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13),
+            labelStyle:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
           ),
           const SizedBox(height: 8),
           if (_loading)
-            const Expanded(
-                child:
-                    Center(child: CircularProgressIndicator()))
+            const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
             Expanded(
               child: Center(
@@ -23330,8 +23789,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
                     const SizedBox(height: 12),
                     Text(_error!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.red)),
+                        style: const TextStyle(color: Colors.red)),
                     const SizedBox(height: 16),
                     FilledButton.icon(
                       onPressed: _load,
@@ -23346,9 +23804,7 @@ class _PosStockLinkSectionState extends ConsumerState<_PosStockLinkSection>
             Expanded(
               child: TabBarView(
                 controller: _tabs,
-                children: _barOutletTypes
-                    .map(_buildOutletTab)
-                    .toList(),
+                children: _barOutletTypes.map(_buildOutletTab).toList(),
               ),
             ),
         ],
@@ -23388,8 +23844,7 @@ class _RestaurantStockLinkSectionState
   @override
   void initState() {
     super.initState();
-    _tabs =
-        TabController(length: _restaurantOutletTypes.length, vsync: this);
+    _tabs = TabController(length: _restaurantOutletTypes.length, vsync: this);
     _load();
   }
 
@@ -23409,10 +23864,9 @@ class _RestaurantStockLinkSectionState
       final branchId = await repo.getBranchId();
       final dio = ref.read(dioProvider);
 
-      final outletsRes = await dio.get('/pos/outlets',
-          queryParameters: {
-            if (branchId.isNotEmpty) 'branch_id': branchId,
-          });
+      final outletsRes = await dio.get('/pos/outlets', queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
       final rawOutlets = outletsRes.data;
       List<dynamic> outletList;
       if (rawOutlets is List) {
@@ -23437,8 +23891,7 @@ class _RestaurantStockLinkSectionState
         if (oid.isEmpty) continue;
         outletsById[oid] = outlet;
         try {
-          final itemsRes =
-              await dio.get('/pos/outlets/$oid/items');
+          final itemsRes = await dio.get('/pos/outlets/$oid/items');
           final rawItems = itemsRes.data;
           List<dynamic> itemList;
           if (rawItems is List) {
@@ -23461,10 +23914,9 @@ class _RestaurantStockLinkSectionState
       }
 
       // Fetch restaurant menu items as the linking targets
-      final menuRes = await dio.get('/restaurant/menu/items',
-          queryParameters: {
-            if (branchId.isNotEmpty) 'branch_id': branchId,
-          });
+      final menuRes = await dio.get('/restaurant/menu/items', queryParameters: {
+        if (branchId.isNotEmpty) 'branch_id': branchId,
+      });
       final rawMenu = menuRes.data;
       List<dynamic> menuList;
       if (rawMenu is List) {
@@ -23537,8 +23989,7 @@ class _RestaurantStockLinkSectionState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('${item['name']} linked to ${selected['name']}'),
+          content: Text('${item['name']} linked to ${selected['name']}'),
           backgroundColor: Colors.green,
         ),
       );
@@ -23547,8 +23998,7 @@ class _RestaurantStockLinkSectionState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error linking: $e'),
-            backgroundColor: Colors.red),
+            content: Text('Error linking: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -23563,16 +24013,14 @@ class _RestaurantStockLinkSectionState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove Stock Link'),
-        content:
-            Text('Remove the stock link for "${item['name']}"?'),
+        content: Text('Remove the stock link for "${item['name']}"?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style:
-                FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Remove'),
           ),
         ],
@@ -23597,9 +24045,7 @@ class _RestaurantStockLinkSectionState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -23615,8 +24061,7 @@ class _RestaurantStockLinkSectionState
         final filtered = query.isEmpty
             ? _menuItems
             : _menuItems.where((m) {
-                final name =
-                    (m['name'] as String? ?? '').toLowerCase();
+                final name = (m['name'] as String? ?? '').toLowerCase();
                 final cat = ((m['category'] is Map
                             ? m['category']['name']
                             : m['category']) as String? ??
@@ -23628,34 +24073,29 @@ class _RestaurantStockLinkSectionState
 
         return Dialog(
           child: ConstrainedBox(
-            constraints:
-                const BoxConstraints(maxWidth: 480, maxHeight: 560),
+            constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
             child: Column(
               children: [
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Link "${posItem['name']}" to Menu Item',
                         style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700),
+                            fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         autofocus: true,
                         decoration: const InputDecoration(
                           hintText: 'Search menu items…',
-                          prefixIcon:
-                              Icon(Icons.search, size: 20),
+                          prefixIcon: Icon(Icons.search, size: 20),
                           isDense: true,
                           border: OutlineInputBorder(),
                         ),
-                        onChanged: (v) =>
-                            setDlg(() => query = v.trim()),
+                        onChanged: (v) => setDlg(() => query = v.trim()),
                       ),
                     ],
                   ),
@@ -23665,20 +24105,18 @@ class _RestaurantStockLinkSectionState
                   child: filtered.isEmpty
                       ? const Center(
                           child: Text('No menu items found',
-                              style: TextStyle(
-                                  color: Colors.grey)))
+                              style: TextStyle(color: Colors.grey)))
                       : ListView.builder(
                           itemCount: filtered.length,
                           itemBuilder: (_, i) {
                             final menu = filtered[i];
-                            final mName =
-                                '${menu['name'] ?? '—'}';
+                            final mName = '${menu['name'] ?? '—'}';
                             final rawCat = menu['category'];
                             final mCat = rawCat is Map
                                 ? '${rawCat['name'] ?? ''}'
                                 : '${rawCat ?? ''}';
-                            final mPrice = menu['price'] ??
-                                menu['selling_price'];
+                            final mPrice =
+                                menu['price'] ?? menu['selling_price'];
                             return ListTile(
                               dense: true,
                               leading: const Icon(
@@ -23686,17 +24124,14 @@ class _RestaurantStockLinkSectionState
                                   size: 20),
                               title: Text(mName,
                                   style: const TextStyle(
-                                      fontWeight:
-                                          FontWeight.w600,
+                                      fontWeight: FontWeight.w600,
                                       fontSize: 13)),
                               subtitle: Text(
                                   [
                                     if (mCat.isNotEmpty) mCat,
-                                    if (mPrice != null)
-                                      'KES $mPrice',
+                                    if (mPrice != null) 'KES $mPrice',
                                   ].join(' • '),
-                                  style: const TextStyle(
-                                      fontSize: 11)),
+                                  style: const TextStyle(fontSize: 11)),
                               onTap: () {
                                 result = menu;
                                 Navigator.pop(ctx);
@@ -23732,8 +24167,7 @@ class _RestaurantStockLinkSectionState
     final srcId = item['source_item_id'] ?? item['menu_item_id'];
     if (srcTable != 'restaurant_menu_items' || srcId == null) return '';
     try {
-      final menu =
-          _menuItems.firstWhere((m) => '${m['id']}' == '$srcId');
+      final menu = _menuItems.firstWhere((m) => '${m['id']}' == '$srcId');
       return '${menu['name'] ?? srcId}';
     } catch (_) {
       return '$srcId';
@@ -23743,16 +24177,14 @@ class _RestaurantStockLinkSectionState
   Widget _buildOutletTab(String outletType) {
     final outlet = _outletByType(outletType);
     final items = _itemsForType(outletType);
-    final label =
-        outletType == 'restaurant' ? 'Restaurant' : 'Choma Zone';
+    final label = outletType == 'restaurant' ? 'Restaurant' : 'Choma Zone';
 
     if (outlet == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.storefront_outlined,
-                size: 48, color: Colors.grey),
+            const Icon(Icons.storefront_outlined, size: 48, color: Colors.grey),
             const SizedBox(height: 12),
             Text('No $label outlet found for this branch.',
                 style: const TextStyle(color: Colors.grey)),
@@ -23766,8 +24198,7 @@ class _RestaurantStockLinkSectionState
         ? items
         : items.where((i) {
             final n = (i['name'] as String? ?? '').toLowerCase();
-            final c =
-                (i['category'] as String? ?? '').toLowerCase();
+            final c = (i['category'] as String? ?? '').toLowerCase();
             return n.contains(q) || c.contains(q);
           }).toList();
 
@@ -23786,8 +24217,7 @@ class _RestaurantStockLinkSectionState
             children: [
               Chip(
                 avatar: const Icon(Icons.link, size: 14),
-                label: Text(
-                    '$linkedCount / ${items.length} linked',
+                label: Text('$linkedCount / ${items.length} linked',
                     style: const TextStyle(fontSize: 12)),
                 backgroundColor: linkedCount == items.length
                     ? Colors.green.shade50
@@ -23799,15 +24229,13 @@ class _RestaurantStockLinkSectionState
                 child: TextField(
                   decoration: const InputDecoration(
                     hintText: 'Search items…',
-                    prefixIcon:
-                        Icon(Icons.search, size: 18),
+                    prefixIcon: Icon(Icons.search, size: 18),
                     isDense: true,
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                        vertical: 8, horizontal: 10),
+                    contentPadding:
+                        EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                   ),
-                  onChanged: (v) =>
-                      setState(() => _search = v.trim()),
+                  onChanged: (v) => setState(() => _search = v.trim()),
                 ),
               ),
             ],
@@ -23824,19 +24252,15 @@ class _RestaurantStockLinkSectionState
           Expanded(
             child: ListView.separated(
               itemCount: filtered.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1),
+              separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (ctx, i) {
                 final item = filtered[i];
                 final iName = '${item['name'] ?? '—'}';
                 final iCat = '${item['category'] ?? '—'}';
-                final iPrice =
-                    item['selling_price'] ?? item['price'];
-                final isLinked =
-                    item['source_table'] == 'restaurant_menu_items' &&
-                        (item['source_item_id'] ??
-                                item['menu_item_id']) !=
-                            null;
+                final iPrice = item['selling_price'] ?? item['price'];
+                final isLinked = item['source_table'] ==
+                        'restaurant_menu_items' &&
+                    (item['source_item_id'] ?? item['menu_item_id']) != null;
                 final linkedName = _linkedMenuName(item);
 
                 return ListTile(
@@ -23845,9 +24269,7 @@ class _RestaurantStockLinkSectionState
                         ? Colors.green.shade100
                         : Colors.orange.shade100,
                     child: Icon(
-                      isLinked
-                          ? Icons.link
-                          : Icons.link_off,
+                      isLinked ? Icons.link : Icons.link_off,
                       size: 18,
                       color: isLinked
                           ? Colors.green.shade700
@@ -23856,44 +24278,34 @@ class _RestaurantStockLinkSectionState
                   ),
                   title: Text(iName,
                       style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14)),
+                          fontWeight: FontWeight.w600, fontSize: 14)),
                   subtitle: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                          '$iCat  •  KES ${iPrice ?? '—'}',
-                          style: const TextStyle(
-                              fontSize: 12)),
+                      Text('$iCat  •  KES ${iPrice ?? '—'}',
+                          style: const TextStyle(fontSize: 12)),
                       if (isLinked)
                         Row(
                           children: [
                             const Icon(Icons.link,
-                                size: 12,
-                                color: Colors.green),
+                                size: 12, color: Colors.green),
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
                                 linkedName,
-                                overflow:
-                                    TextOverflow.ellipsis,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors
-                                        .green.shade700,
-                                    fontWeight:
-                                        FontWeight.w500),
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w500),
                               ),
                             ),
                           ],
                         )
                       else
-                        const Text(
-                            'Not linked to menu item',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.orange)),
+                        const Text('Not linked to menu item',
+                            style:
+                                TextStyle(fontSize: 11, color: Colors.orange)),
                     ],
                   ),
                   isThreeLine: true,
@@ -23902,42 +24314,28 @@ class _RestaurantStockLinkSectionState
                     children: [
                       if (isLinked) ...[
                         IconButton(
-                          icon: const Icon(
-                              Icons.edit_outlined,
-                              size: 18),
+                          icon: const Icon(Icons.edit_outlined, size: 18),
                           tooltip: 'Change Link',
-                          onPressed: () =>
-                              _linkItem(outlet, item),
+                          onPressed: () => _linkItem(outlet, item),
                         ),
                         IconButton(
-                          icon: const Icon(
-                              Icons.link_off,
-                              size: 18,
-                              color: Colors.orange),
+                          icon: const Icon(Icons.link_off,
+                              size: 18, color: Colors.orange),
                           tooltip: 'Remove Link',
-                          onPressed: () =>
-                              _unlinkItem(outlet, item),
+                          onPressed: () => _unlinkItem(outlet, item),
                         ),
                       ] else
                         FilledButton.icon(
-                          onPressed: () =>
-                              _linkItem(outlet, item),
-                          icon: const Icon(Icons.link,
-                              size: 16),
+                          onPressed: () => _linkItem(outlet, item),
+                          icon: const Icon(Icons.link, size: 16),
                           label: const Text('Link',
-                              style:
-                                  TextStyle(fontSize: 12)),
+                              style: TextStyle(fontSize: 12)),
                           style: FilledButton.styleFrom(
-                            backgroundColor:
-                                Colors.teal.shade700,
-                            padding:
-                                const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6),
+                            backgroundColor: Colors.teal.shade700,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
                             minimumSize: Size.zero,
-                            tapTargetSize:
-                                MaterialTapTargetSize
-                                    .shrinkWrap,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
                     ],
@@ -23965,13 +24363,11 @@ class _RestaurantStockLinkSectionState
                   children: [
                     Text('Restaurant Stock Link',
                         style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700)),
+                            fontSize: 20, fontWeight: FontWeight.w700)),
                     SizedBox(height: 2),
                     Text(
                       'Link restaurant POS items to menu catalog items for kitchen stock tracking.',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -23987,21 +24383,17 @@ class _RestaurantStockLinkSectionState
           TabBar(
             controller: _tabs,
             tabs: const [
-              Tab(
-                  icon: Icon(Icons.restaurant, size: 18),
-                  text: 'Restaurant'),
+              Tab(icon: Icon(Icons.restaurant, size: 18), text: 'Restaurant'),
               Tab(
                   icon: Icon(Icons.outdoor_grill, size: 18),
                   text: 'Choma Zone'),
             ],
-            labelStyle: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13),
+            labelStyle:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
           ),
           const SizedBox(height: 8),
           if (_loading)
-            const Expanded(
-                child:
-                    Center(child: CircularProgressIndicator()))
+            const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
             Expanded(
               child: Center(
@@ -24013,8 +24405,7 @@ class _RestaurantStockLinkSectionState
                     const SizedBox(height: 12),
                     Text(_error!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.red)),
+                        style: const TextStyle(color: Colors.red)),
                     const SizedBox(height: 16),
                     FilledButton.icon(
                       onPressed: _load,
@@ -24029,9 +24420,7 @@ class _RestaurantStockLinkSectionState
             Expanded(
               child: TabBarView(
                 controller: _tabs,
-                children: _restaurantOutletTypes
-                    .map(_buildOutletTab)
-                    .toList(),
+                children: _restaurantOutletTypes.map(_buildOutletTab).toList(),
               ),
             ),
         ],
@@ -24058,7 +24447,8 @@ class _BranchMenuPricingSectionState
   int? _branchId;
   String _type = 'all'; // all | restaurant | bar
   // Active bar sub-filter (only when _type == 'bar')
-  String _barSubType = 'main_bar'; // 'main_bar' = Sports Bar | 'executive_bar' = Executive Bar
+  String _barSubType =
+      'main_bar'; // 'main_bar' = Sports Bar | 'executive_bar' = Executive Bar
   String _search = '';
   bool _branchLoading = true;
   bool _saving = false;
@@ -24067,7 +24457,8 @@ class _BranchMenuPricingSectionState
   String? _execBarOutletId;
 
   // key ('itemType:itemId') → pending cost + selling edit (outletId set for POS items)
-  final Map<String, ({double cost, double? selling, String? outletId})> _pending = {};
+  final Map<String, ({double cost, double? selling, String? outletId})>
+      _pending = {};
 
   @override
   void initState() {
@@ -24088,11 +24479,14 @@ class _BranchMenuPricingSectionState
     if (raw.isNotEmpty) {
       try {
         final dio = ref.read(dioProvider);
-        final res = await dio.get('/pos/outlets', queryParameters: {'branch_id': raw});
+        final res =
+            await dio.get('/pos/outlets', queryParameters: {'branch_id': raw});
         final data = res.data;
         final outlets = data is List
             ? data
-            : (data is Map ? (data['data'] ?? data['outlets'] ?? []) as List : []);
+            : (data is Map
+                ? (data['data'] ?? data['outlets'] ?? []) as List
+                : []);
         String? mainId;
         String? execId;
         for (final o in outlets) {
@@ -24118,7 +24512,8 @@ class _BranchMenuPricingSectionState
   static String _fmt(double v) =>
       v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
-  void _onRowChanged(String key, double cost, double? selling, {String? outletId}) {
+  void _onRowChanged(String key, double cost, double? selling,
+      {String? outletId}) {
     _pending[key] = (cost: cost, selling: selling, outletId: outletId);
     setState(() {});
   }
@@ -24158,7 +24553,9 @@ class _BranchMenuPricingSectionState
         final cost = entry.value.cost;
         final selling = entry.value.selling;
         final outletId = entry.value.outletId;
-        if (itemId.startsWith('pos:') && outletId != null && outletId.isNotEmpty) {
+        if (itemId.startsWith('pos:') &&
+            outletId != null &&
+            outletId.isNotEmpty) {
           final posId = itemId.substring(4);
           await dio.patch('/pos/outlets/$outletId/items/$posId', data: {
             if (selling != null) 'price': selling,
@@ -24208,8 +24605,7 @@ class _BranchMenuPricingSectionState
       if (!mounted) return;
       AppNotifier.showSnackBar(
         context,
-        SnackBar(
-            content: Text(apiErrorMessage(e, fallback: 'Save failed'))),
+        SnackBar(content: Text(apiErrorMessage(e, fallback: 'Save failed'))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -24231,8 +24627,7 @@ class _BranchMenuPricingSectionState
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_branchId == null)
             const Expanded(
-              child: Center(
-                  child: Text('No branch assigned to your account.')),
+              child: Center(child: Text('No branch assigned to your account.')),
             )
           else
             Expanded(child: _pricingList()),
@@ -24250,13 +24645,11 @@ class _BranchMenuPricingSectionState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Menu Pricing & Costing',
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
               Text(
                 'Edit cost and selling prices. Changes save to the branch pricing table and update POS immediately.',
-                style:
-                    TextStyle(fontSize: 13, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
               ),
             ],
           ),
@@ -24268,8 +24661,7 @@ class _BranchMenuPricingSectionState
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child:
-                        CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.check, size: 18),
             label: Text(_saving
                 ? 'Saving…'
@@ -24288,8 +24680,7 @@ class _BranchMenuPricingSectionState
         SegmentedButton<String>(
           segments: const [
             ButtonSegment(value: 'all', label: Text('All')),
-            ButtonSegment(
-                value: 'restaurant', label: Text('Restaurant')),
+            ButtonSegment(value: 'restaurant', label: Text('Restaurant')),
             ButtonSegment(value: 'bar', label: Text('Bar')),
           ],
           selected: {_type},
@@ -24307,8 +24698,7 @@ class _BranchMenuPricingSectionState
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            onChanged: (v) =>
-                setState(() => _search = v.trim().toLowerCase()),
+            onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
           ),
         ),
         // Bar outlet sub-filter — only shown when Bar tab is active
@@ -24340,8 +24730,7 @@ class _BranchMenuPricingSectionState
     final args = _args!;
     final async = ref.watch(branchPricingProvider(args));
     return async.when(
-      loading: () =>
-          const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -24353,8 +24742,7 @@ class _BranchMenuPricingSectionState
                 style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: () =>
-                  ref.invalidate(branchPricingProvider(args)),
+              onPressed: () => ref.invalidate(branchPricingProvider(args)),
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
             ),
@@ -24365,9 +24753,8 @@ class _BranchMenuPricingSectionState
         var items = result.items;
         // When Bar tab is active, filter by selected outlet
         if (_type == 'bar') {
-          final targetOutletId = _barSubType == 'main_bar'
-              ? _mainBarOutletId
-              : _execBarOutletId;
+          final targetOutletId =
+              _barSubType == 'main_bar' ? _mainBarOutletId : _execBarOutletId;
           if (targetOutletId != null && targetOutletId.isNotEmpty) {
             items = items.where((i) => i.outletId == targetOutletId).toList();
           }
@@ -24381,8 +24768,8 @@ class _BranchMenuPricingSectionState
         }
         if (items.isEmpty) {
           return const Center(
-            child: Text('No items found.',
-                style: TextStyle(color: Colors.grey)),
+            child:
+                Text('No items found.', style: TextStyle(color: Colors.grey)),
           );
         }
         return Column(
@@ -24393,8 +24780,7 @@ class _BranchMenuPricingSectionState
             Expanded(
               child: ListView.separated(
                 itemCount: items.length,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(height: 6),
+                separatorBuilder: (_, __) => const SizedBox(height: 6),
                 itemBuilder: (_, i) => _EditablePricingRow(
                   key: ValueKey(
                       '${_branchId}_${items[i].key}_${_type}_$_barSubType'),
@@ -24434,8 +24820,7 @@ class _BranchMenuPricingSectionState
         Text('$label: ',
             style: const TextStyle(fontSize: 12, color: Colors.grey)),
         Text(value,
-            style: const TextStyle(
-                fontSize: 12, fontWeight: FontWeight.bold)),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
       ]),
     );
   }
@@ -24450,7 +24835,8 @@ class _EditablePricingRow extends StatefulWidget {
   });
 
   final BranchMenuItemPricing item;
-  final void Function(String key, double cost, double? selling, {String? outletId}) onChanged;
+  final void Function(String key, double cost, double? selling,
+      {String? outletId}) onChanged;
   final VoidCallback onReset;
 
   @override
@@ -24494,8 +24880,7 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
 
   double get _effSelling => _sellVal ?? widget.item.basePrice;
   double get _margin => _effSelling - _costVal;
-  double get _marginPct =>
-      _effSelling > 0 ? (_margin / _effSelling) * 100 : 0;
+  double get _marginPct => _effSelling > 0 ? (_margin / _effSelling) * 100 : 0;
 
   void _emit() {
     widget.onChanged(widget.item.key, _costVal, _sellVal,
@@ -24517,17 +24902,13 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
         side: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: (it.itemType == 'bar'
-                        ? Colors.purple
-                        : Colors.teal)
+                color: (it.itemType == 'bar' ? Colors.purple : Colors.teal)
                     .withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(6),
               ),
@@ -24536,8 +24917,7 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color:
-                      it.itemType == 'bar' ? Colors.purple : Colors.teal,
+                  color: it.itemType == 'bar' ? Colors.purple : Colors.teal,
                 ),
               ),
             ),
@@ -24548,14 +24928,12 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(it.name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600)),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   Text(
                     '${it.category ?? 'Uncategorised'}'
                     '  ·  base ${_fmt(it.basePrice)}'
                     '${it.hasOverride ? '  ·  overridden' : ''}',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
                 ],
               ),
@@ -24579,8 +24957,7 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
                   ),
                   Text(
                     '${_marginPct.toStringAsFixed(0)}%',
-                    style:
-                        TextStyle(fontSize: 11, color: marginColor),
+                    style: TextStyle(fontSize: 11, color: marginColor),
                   ),
                 ],
               ),
@@ -24596,17 +24973,13 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
     );
   }
 
-  Widget _field(
-      TextEditingController c, String label, String hint) {
+  Widget _field(TextEditingController c, String label, String hint) {
     return SizedBox(
       width: 90,
       child: TextField(
         controller: c,
-        keyboardType:
-            const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
-        ],
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,

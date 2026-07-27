@@ -988,40 +988,7 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 }
 
 String _defaultRouteForUser(User user) {
-  if (user.role == 'choma_zone_kds' || user.roles.contains('choma_zone_kds')) {
-    return '/kitchen/choma-zone';
-  }
-  if (_isCentralStoreUser(user)) {
-    return '/central-store';
-  }
-  // A cashier's home is the cashier desk — even though they're assigned to a
-  // POS outlet (e.g. restaurant) to clear its orders, their outletType must not
-  // route them into the POS module.
-  if (user.role == 'cashier' || user.roles.contains('cashier')) {
-    return '/cashier';
-  }
-  switch (user.outletType) {
-    case 'restaurant':
-      return '/pos/restaurant';
-    case 'main_bar':
-      return '/pos/main-bar';
-    case 'executive_bar':
-      return '/pos/executive-bar';
-    case 'non_consumables':
-      return '/pos/non-consumables';
-    case 'choma_zone':
-      return '/pos/choma-zone';
-    case 'kyogong_reception':
-      return '/pos/kyogong-reception';
-    case 'kyogong_spa':
-      return '/pos/kyogong-spa';
-    case 'kyogong_executive_bar':
-      return '/pos/kyogong-executive-bar';
-    case 'kyogong_sports_bar':
-      return '/pos/kyogong-sports-bar';
-    default:
-      return getRoleRoute(user.role, contextType: user.contextType);
-  }
+  return getUserHomeRoute(user);
 }
 
 bool _isCentralStoreRoute(String location) =>

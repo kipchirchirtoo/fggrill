@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../features/auth/domain/auth_notifier.dart';
 import '../theme/app_theme.dart';
 import 'app_update_button.dart';
+import 'dashboard_horizontal_access.dart';
 import 'notification_button.dart';
 import 'printer_settings_dialog.dart';
 
@@ -157,18 +158,20 @@ class _MasterDashboardShellState<T>
                       isMobile ? () => _showMobileNav(context, ref) : null,
                 ),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    layoutBuilder: (currentChild, previousChildren) {
-                      return Stack(
-                        alignment: Alignment.topLeft,
-                        children: [
-                          ...previousChildren,
-                          if (currentChild != null) currentChild,
-                        ],
-                      );
-                    },
-                    child: widget.child,
+                  child: DashboardHorizontalAccess(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      layoutBuilder: (currentChild, previousChildren) {
+                        return Stack(
+                          alignment: Alignment.topLeft,
+                          children: [
+                            ...previousChildren,
+                            if (currentChild != null) currentChild,
+                          ],
+                        );
+                      },
+                      child: widget.child,
+                    ),
                   ),
                 ),
               ],
@@ -310,8 +313,8 @@ class _MasterSideNav<T> extends ConsumerWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color:
-                                      palette?.mutedText ?? AppColors.kTextSecondary,
+                                  color: palette?.mutedText ??
+                                      AppColors.kTextSecondary,
                                 ),
                               ),
                             ],
@@ -578,7 +581,8 @@ class _MasterTopBar extends ConsumerWidget {
           const Spacer(),
           if (!isCompact) _SearchBox(hint: searchHint),
           if (!isCompact) const SizedBox(width: 16),
-          AppUpdateButton(iconColor: palette?.mutedText ?? Colors.grey.shade700),
+          AppUpdateButton(
+              iconColor: palette?.mutedText ?? Colors.grey.shade700),
           AppNotificationButton(
               iconColor: palette?.mutedText ?? Colors.grey.shade700),
           const SizedBox(width: 12),
@@ -685,7 +689,8 @@ class _MasterTopBar extends ConsumerWidget {
                   ],
                   const SizedBox(width: 8),
                   Icon(Icons.expand_more,
-                      size: 16, color: palette?.mutedText ?? Colors.grey.shade500),
+                      size: 16,
+                      color: palette?.mutedText ?? Colors.grey.shade500),
                 ],
               ),
             ),

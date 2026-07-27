@@ -1004,7 +1004,7 @@ export const getBillDetails = async (
                         name: outletRaw?.name
                     };
                     const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
-                    if (!canAccessPosOutlet(userRole, outletObj, assignedOutlets)) {
+                    if (!canAccessPosOutlet(userRole, outletObj, assignedOutlets, (req.user as any)?.branch_id ?? (req.user as any)?.branchId)) {
                         throw new AppError('Forbidden: you do not have access to this POS station', 403);
                     }
                 }
@@ -1208,13 +1208,13 @@ export const getBillDetails = async (
                 }
 
                 if (outlet) {
-                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets, (req.user as any)?.branch_id ?? (req.user as any)?.branchId)) {
                         throw new AppError('Forbidden: you do not have access to this restaurant POS station', 403);
                     }
                 } else {
-                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                     if (stationRestricted) {
-                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const roleOutletTypes = stationTypesForCashierRole(userRole, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                         const allowedTypes = new Set([
                             ...roleOutletTypes,
                             ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
@@ -1294,13 +1294,13 @@ export const getBillDetails = async (
                 }
 
                 if (outlet) {
-                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets, (req.user as any)?.branch_id ?? (req.user as any)?.branchId)) {
                         throw new AppError('Forbidden: you do not have access to this bar POS station', 403);
                     }
                 } else {
-                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                     if (stationRestricted) {
-                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const roleOutletTypes = stationTypesForCashierRole(userRole, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                         const allowedTypes = new Set([
                             ...roleOutletTypes,
                             ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
@@ -2589,13 +2589,13 @@ export const processCashierPayment = async (
                     if (Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
                         throw new AppError('Forbidden: order belongs to another branch', 403);
                     }
-                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets, (req.user as any)?.branch_id ?? (req.user as any)?.branchId)) {
                         throw new AppError('Forbidden: this cashier cannot clear orders for this restaurant POS station', 403);
                     }
                 } else {
-                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                     if (stationRestricted) {
-                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const roleOutletTypes = stationTypesForCashierRole(userRole, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                         const allowedTypes = new Set([
                             ...roleOutletTypes,
                             ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
@@ -2730,13 +2730,13 @@ export const processCashierPayment = async (
                     if (Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
                         throw new AppError('Forbidden: order belongs to another branch', 403);
                     }
-                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                    if (!canAccessPosOutlet(userRole, outlet, assignedOutlets, (req.user as any)?.branch_id ?? (req.user as any)?.branchId)) {
                         throw new AppError('Forbidden: this cashier cannot clear orders for this bar POS station', 403);
                     }
                 } else {
-                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                    const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                     if (stationRestricted) {
-                        const roleOutletTypes = stationTypesForCashierRole(userRole);
+                        const roleOutletTypes = stationTypesForCashierRole(userRole, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                         const allowedTypes = new Set([
                             ...roleOutletTypes,
                             ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)
@@ -2930,7 +2930,7 @@ export const processCashierPayment = async (
                     throw new AppError('Forbidden: order belongs to another branch', 403);
                 }
                 const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
-                if (!canAccessPosOutlet(userRole, outletObj, assignedOutlets)) {
+                if (!canAccessPosOutlet(userRole, outletObj, assignedOutlets, (req.user as any)?.branch_id ?? (req.user as any)?.branchId)) {
                     throw new AppError('Forbidden: this cashier cannot clear orders for this POS station', 403);
                 }
             }
@@ -8565,8 +8565,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
         const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
         const assignedIds = assignedOutletIds(assignedOutlets);
-        const roleOutletTypes = stationTypesForCashierRole(userRole);
-        const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+        const roleOutletTypes = stationTypesForCashierRole(userRole, effectiveBranchId);
+        const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, effectiveBranchId);
         const allowedOutletTypes = new Set([
             ...roleOutletTypes,
             ...assignedOutlets.map((outlet) => String(outlet.outlet_type || '').toLowerCase()).filter(Boolean)
@@ -8620,7 +8620,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 restaurantOrders = restaurantOrders.filter((o: any) => {
                     if (o.outlet_id) {
                         const outlet = outletMap.get(String(o.outlet_id));
-                        return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+                        return canAccessPosOutlet(userRole, outlet, assignedOutlets, effectiveBranchId);
                     }
                     return allowedOutletTypes.has('restaurant');
                 });
@@ -8659,7 +8659,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 barOrders = barOrders.filter((o: any) => {
                     if (o.outlet_id) {
                         const outlet = outletMap.get(String(o.outlet_id));
-                        return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+                        return canAccessPosOutlet(userRole, outlet, assignedOutlets, effectiveBranchId);
                     }
                     return Array.from(allowedOutletTypes).some(isBarStationType);
                 });
@@ -8674,7 +8674,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 .from('pos_outlet_shifts')
                 .select('id, branch_id, outlet_id, cashier_id, outlet:pos_outlets(id, name, outlet_type, branch_id)');
             if (effectiveBranchId) posShiftQuery = posShiftQuery.eq('branch_id', effectiveBranchId);
-            if (!isGlobal && shouldRestrictCashierStationAccess(userRole, assignedIds)) {
+            if (!isGlobal && shouldRestrictCashierStationAccess(userRole, assignedIds, effectiveBranchId)) {
                 posShiftQuery = posShiftQuery
                     .eq('cashier_id', (req.user as any)?.id)
                     .eq('status', 'open');
@@ -8687,7 +8687,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
                 if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
                 // Only this cashier's own POS outlet(s).
-                return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+                return canAccessPosOutlet(userRole, outlet, assignedOutlets, effectiveBranchId);
             });
 
             shiftLookup = Object.fromEntries(visibleShifts.map((shift: any) => [shift.id, shift]));
@@ -8967,7 +8967,7 @@ export const getUnpaidPosOrders = async (req: Request, res: Response, next: Next
 
         const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
         const assignedIds = assignedOutletIds(assignedOutlets);
-        const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+        const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, effectiveBranchId);
 
         let posShiftQuery = supabase
             .from('pos_outlet_shifts')
@@ -8986,7 +8986,7 @@ export const getUnpaidPosOrders = async (req: Request, res: Response, next: Next
             const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             if (requestedOutletId && String(shift.outlet_id) !== requestedOutletId) return false;
             if (requestedOutletType && String(outlet?.outlet_type || '').toLowerCase() !== requestedOutletType) return false;
-            return canAccessPosOutlet(userRole, outlet, assignedOutlets);
+            return canAccessPosOutlet(userRole, outlet, assignedOutlets, effectiveBranchId);
         });
 
         const shiftLookup: Record<string, any> = Object.fromEntries(visibleShifts.map((shift: any) => [shift.id, shift]));
@@ -9176,14 +9176,14 @@ export const markWaiterOrderPaid = async (req: Request, res: Response, next: Nex
                 if (Number(outlet.branch_id) !== Number((req.user as any)?.branch_id)) {
                     throw new AppError('Forbidden: order belongs to another branch', 403);
                 }
-                if (!canAccessPosOutlet(userRole, outlet, assignedOutlets)) {
+                if (!canAccessPosOutlet(userRole, outlet, assignedOutlets, (req.user as any)?.branch_id ?? (req.user as any)?.branchId)) {
                     throw new AppError('Forbidden: this cashier cannot clear orders for this POS station', 403);
                 }
             } else {
                 // Fallback check based on role & assigned outlet types if outlet_id is not assigned
-                const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds);
+                const stationRestricted = shouldRestrictCashierStationAccess(userRole, assignedIds, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                 if (stationRestricted) {
-                    const roleOutletTypes = stationTypesForCashierRole(userRole);
+                    const roleOutletTypes = stationTypesForCashierRole(userRole, (req.user as any)?.branch_id ?? (req.user as any)?.branchId);
                     const allowedTypes = new Set([
                         ...roleOutletTypes,
                         ...assignedOutlets.map(o => String(o.outlet_type || '').toLowerCase()).filter(Boolean)

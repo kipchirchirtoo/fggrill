@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import 'package:dio/dio.dart';
-import '../../../core/config/app_config.dart';
 import '../../../core/powersync/powersync_service.dart';
 import '../../../core/realtime/realtime_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -1541,49 +1539,56 @@ class _StationTabState extends ConsumerState<_StationTab> {
   Future<void> _showRoomChargeModal(
       BuildContext context, WidgetRef ref, Map<String, dynamic> bill, num amount) async {
     final nav = ref.read(dashboardNavProvider);
-    final branchId = nav.user?.branchId ?? 1;
+    final branchId = int.tryParse('${nav.user?.branchId ?? 1}') ?? 1;
+    final repository = ref.read(cashierRepositoryProvider);
 
     final searchCtrl = TextEditingController();
     List<Map<String, dynamic>> eligibleGuests = [];
-    bool searching = false;
+    bool searching = true;
     Map<String, dynamic>? selectedGuest;
+
+    Future<void> searchGuests(String q, void Function(void Function()) setModalState) async {
+      setModalState(() => searching = true);
+      try {
+        eligibleGuests = await repository.getEligibleRoomChargeGuests(
+          branchId: branchId,
+          query: q,
+        );
+        setModalState(() {});
+      } catch (e) {
+        _snack('Error loading in-house rooms: $e');
+      } finally {
+        setModalState(() => searching = false);
+      }
+    }
+
+    try {
+      eligibleGuests = await repository.getEligibleRoomChargeGuests(branchId: branchId);
+    } catch (e) {
+      _snack('Error loading in-house rooms: $e');
+    } finally {
+      searching = false;
+    }
+
+    if (!mounted) return;
 
     await showDialog<void>(
       context: context,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            Future<void> searchGuests(String q) async {
-              setModalState(() => searching = true);
-              try {
-                final dio = Dio();
-                final res = await dio.get(
-                  '${AppConfig.apiUrl}/room-charge/eligible-guests',
-                  queryParameters: {'branch_id': branchId, 'query': q},
-                );
-                if (res.data['success'] == true) {
-                  setModalState(() {
-                    eligibleGuests = List<Map<String, dynamic>>.from(res.data['guests'] ?? []);
-                  });
-                }
-              } catch (e) {
-                _snack('Error searching guests: $e');
-              } finally {
-                setModalState(() => searching = false);
-              }
-            }
-
-            if (eligibleGuests.isEmpty && !searching && searchCtrl.text.isEmpty) {
-              searchGuests('');
-            }
-
             if (selectedGuest != null) {
-              final guestName = selectedGuest!['guest_name'] ?? 'Guest';
-              final roomNo = selectedGuest!['room_number'] ?? '-';
-              final bookingRef = selectedGuest!['confirmation_number'] ?? '-';
+              final guestName = '${selectedGuest!['guest_name'] ?? 'Guest'}';
+              final roomNo = '${selectedGuest!['room_number'] ?? '-'}';
+              final bookingRef = '${selectedGuest!['confirmation_number'] ?? '-'}';
               final folioBal = _money(selectedGuest!['folio_balance'] ?? 0);
-              final outletName = _text(bill, ['outlet_name', 'outletName']) ?? 'Restaurant POS';
-              final billNo = _text(bill, ['bill_number', 'short_code', 'id']) ?? 'BILL';
+              final stayNights = _num(selectedGuest!['stay_nights']).round();
+              final outletName = _text(bill, ['outlet_name', 'outletName']).isEmpty
+                  ? 'Restaurant POS'
+                  : _text(bill, ['outlet_name', 'outletName']);
+              final billNo = _text(bill, ['bill_number', 'short_code', 'id']).isEmpty
+                  ? 'BILL'
+                  : _text(bill, ['bill_number', 'short_code', 'id']);
 
               return AlertDialog(
                 title: const Row(
@@ -1614,6 +1619,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
                             const SizedBox(height: 6),
                             Text('Guest Name: $guestName', style: const TextStyle(fontWeight: FontWeight.bold)),
                             Text('Room Number: $roomNo • Ref: $bookingRef'),
+                            if (stayNights > 0)
+                              Text('Stay Length: $stayNights night${stayNights == 1 ? '' : 's'}'),
                             Text('Current Folio Balance: $folioBal', style: TextStyle(color: Colors.grey.shade700)),
                           ],
                         ),
@@ -1697,16 +1704,17 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     TextField(
                       controller: searchCtrl,
                       decoration: InputDecoration(
-                        hintText: 'Search room #, guest name, booking ref, phone...',
+                        hintText: 'Search in-house room, guest, booking ref, phone...',
                         prefixIcon: const Icon(Icons.search),
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.arrow_forward),
-                          onPressed: () => searchGuests(searchCtrl.text.trim()),
+                          onPressed: () =>
+                              searchGuests(searchCtrl.text.trim(), setModalState),
                         ),
                         isDense: true,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      onSubmitted: (q) => searchGuests(q.trim()),
+                      onSubmitted: (q) => searchGuests(q.trim(), setModalState),
                     ),
                     const SizedBox(height: 12),
                     if (searching)
@@ -1718,7 +1726,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                       const Expanded(
                         child: Center(
                           child: Text(
-                            'No checked-in guests found matching search.',
+                            'No in-house overnight stays found for room charging.',
                             style: TextStyle(color: Colors.grey),
                           ),
                         ),
@@ -1730,11 +1738,14 @@ class _StationTabState extends ConsumerState<_StationTab> {
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, idx) {
                             final g = eligibleGuests[idx];
-                            final roomStr = g['room_number'] ?? '-';
-                            final gName = g['guest_name'] ?? 'Guest';
-                            final bRef = g['confirmation_number'] ?? '-';
+                            final roomStr = '${g['room_number'] ?? '-'}';
+                            final gName = '${g['guest_name'] ?? 'Guest'}';
+                            final bRef = '${g['confirmation_number'] ?? '-'}';
                             final bal = _money(g['folio_balance'] ?? 0);
                             final meal = g['meal_plan'] ?? 'Room Only';
+                            final stayNights = _num(g['stay_nights']).round();
+                            final checkIn = _text(g, ['check_in_date']);
+                            final checkOut = _text(g, ['check_out_date']);
 
                             return ListTile(
                               leading: CircleAvatar(
@@ -1745,7 +1756,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
                                 ),
                               ),
                               title: Text(gName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('Ref: $bRef • Meal: $meal • Bal: $bal'),
+                              subtitle: Text(
+                                'Ref: $bRef • Meal: $meal • ${stayNights > 0 ? '$stayNights night${stayNights == 1 ? '' : 's'}' : 'In-house'} • $checkIn to $checkOut • Bal: $bal',
+                              ),
                               trailing: ElevatedButton(
                                 child: const Text('Select'),
                                 onPressed: () {
@@ -1782,30 +1795,38 @@ class _StationTabState extends ConsumerState<_StationTab> {
     setState(() => _loading = true);
     try {
       final nav = ref.read(dashboardNavProvider);
-      final branchId = nav.user?.branchId ?? 1;
-      final outletName = _text(bill, ['outlet_name', 'outletName']) ?? 'Restaurant POS';
-      final billNo = _text(bill, ['bill_number', 'short_code', 'id']) ?? 'BILL';
+      final branchId = int.tryParse('${nav.user?.branchId ?? 1}') ?? 1;
+      final outletName = _text(bill, ['outlet_name', 'outletName']).isEmpty
+          ? 'Restaurant POS'
+          : _text(bill, ['outlet_name', 'outletName']);
+      final billNo = _text(bill, ['bill_number', 'short_code', 'id']).isEmpty
+          ? 'BILL'
+          : _text(bill, ['bill_number', 'short_code', 'id']);
+      final response = await ref.read(cashierRepositoryProvider).postRoomCharge({
+        'branch_id': branchId,
+        'source': _text(bill, ['source', 'source_type', 'bill_type']),
+        'source_type': _text(bill, ['source_type', 'bill_type']),
+        'bill_type': _text(bill, ['bill_type']),
+        'outlet_name': outletName,
+        'outlet_type': _text(bill, ['outlet_type', 'source_type']).isEmpty
+            ? 'POS'
+            : _text(bill, ['outlet_type', 'source_type']),
+        'bill_id': _billId(bill),
+        'bill_number': billNo,
+        'order_number': _text(bill, ['order_number', 'bill_number', 'short_code', 'id']).isEmpty
+            ? billNo
+            : _text(bill, ['order_number', 'bill_number', 'short_code', 'id']),
+        'booking_id': bookingId,
+        'room_number': roomNumber,
+        'guest_name': guestName,
+        'total_amount': amount,
+        'items': _billItems(bill),
+        'waiter_name': _text(bill, ['waiter_name', 'customer_name']).isEmpty
+            ? (nav.user?.name ?? 'Staff')
+            : _text(bill, ['waiter_name', 'customer_name']),
+      });
 
-      final dio = Dio();
-      final response = await dio.post(
-        '${AppConfig.apiUrl}/room-charge/post',
-        data: {
-          'branch_id': branchId,
-          'outlet_name': outletName,
-          'outlet_type': 'POS',
-          'bill_id': _billId(bill),
-          'bill_number': billNo,
-          'order_number': billNo,
-          'booking_id': bookingId,
-          'room_number': roomNumber,
-          'guest_name': guestName,
-          'total_amount': amount,
-          'items': _billItems(bill),
-          'waiter_name': nav.user?.name ?? 'Staff',
-        },
-      );
-
-      if (response.data['success'] == true) {
+      if (response['success'] == true) {
         _snack('Bill $billNo charged to Room $roomNumber ($guestName) successfully!');
         setState(() {
           _bill = null;
@@ -1814,7 +1835,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
         });
         ref.invalidate(cashierUnpaidBillsProvider);
       } else {
-        _snack('Failed to charge room: ${response.data['message']}');
+        _snack('Failed to charge room: ${response['message']}');
       }
     } catch (e) {
       _snack('Error posting room charge: $e');
