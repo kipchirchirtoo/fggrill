@@ -7,8 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/master_dashboard_shell.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../services/print_service.dart';
-import '../../pos/domain/models.dart';
 import '../data/repository.dart';
 import '../domain/display_scope.dart';
 import '../domain/models.dart';
@@ -48,9 +46,6 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   late KitchenKdsSection _section;
   late Future<_KitchenModuleSnapshot> _future;
   String _notificationStatus = 'unread';
-
-  // Track printed order IDs to avoid duplicate printing
-  final Set<String> _printedOrderIds = {};
 
   // Forces a rebuild every minute purely so the "stale order" cutoff below
   // (orders older than _kStaleOrderMinutes that were never cleared/served)
@@ -165,133 +160,8 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     );
   }
 
-  /// Automatically print captain order tickets as backup.
-  /// Primary printing happens at backend (Python service) when order is created.
-  /// This KDS auto-print serves as a backup in case backend printing fails,
-  /// ensuring kitchen always gets the ticket even if there's a network/service issue.
-  void _autoPrintNewCaptainOrders(List<KitchenOrder> orders) {
-    try {
-      for (final order in orders) {
-        // Only captain (POS) orders need a kitchen ticket — regular restaurant
-        // orders are not printed here (they're submitted directly by wait staff).
-        if (!order.isCaptainOrder) continue;
-
-        final printKey = order.kdsPrintKey;
-
-        // Skip if this order or recalled batch was already printed by this KDS.
-        if (_printedOrderIds.contains(printKey)) {
-          continue;
-        }
-
-        // Skip if the server already has this order's current state marked
-        // printed (by the backend's own attempt, or by another KDS/cashier
-        // screen). This is what actually survives a logout/login — the
-        // in-memory _printedOrderIds set above only protects this one
-        // screen instance for as long as it stays mounted.
-        if (order.captainOrderAlreadyPrinted) {
-          _printedOrderIds.add(printKey);
-          continue;
-        }
-
-        // Skip if order is voided or has void request (don't print cancelled orders)
-        if (order.isVoided || order.hasPendingVoidRequest) {
-          continue;
-        }
-
-        // Print freshly created tickets and recalled batches. Recalled orders
-        // arrive with status=recalled and need a fresh kitchen ticket too.
-        final status = order.status.toLowerCase();
-        if (status != 'pending' &&
-            status != 'confirmed' &&
-            status != 'recalled') {
-          continue;
-        }
-
-        // Mark as printed immediately to avoid duplicate printing. This is
-        // deliberately NOT rolled back on a print failure below — a stuck
-        // printer must not turn into this same order being retried on every
-        // 5s poll (and again on every login) forever. Staff have a manual
-        // reprint button for genuine misses.
-        _printedOrderIds.add(printKey);
-        _repo.markCaptainOrderPrinted(order.id);
-
-        // Print captain order asynchronously (BACKUP - primary print at backend)
-        _printCaptainOrder(order).then((_) {
-          debugPrint(
-              '✅ Captain order ${order.orderNumber} printed at KDS (backup)');
-        }).catchError((error) {
-          debugPrint(
-              '⚠️ Failed to print captain order ${order.orderNumber} at KDS: $error');
-        });
-      }
-    } catch (error) {
-      debugPrint('❌ Error in KDS auto-print captain orders: $error');
-    }
-  }
-
-  /// Print a captain order receipt for the kitchen
-  Future<void> _printCaptainOrder(KitchenOrder order) async {
-    final printService = PrintService();
-    final printItems =
-        order.hasRecalledItems ? order.recalledItems : order.items;
-    final printTotal = printItems.fold<double>(
-      0,
-      (sum, item) => sum + (item.unitPrice * item.quantity),
-    );
-    final effectiveTotal = printTotal > 0 ? printTotal : order.total;
-
-    // Convert kitchen order items to cart items for printing. The document
-    // header already says "RECALLED CAPTAIN ORDER" when isRecall is true, so
-    // there's no need to also prefix every single line with "RECALLED".
-    final cartItems = printItems.map((item) {
-      return CartItem(
-        productId: item.id,
-        name: [
-          item.name,
-          if (item.notes != null && item.notes!.trim().isNotEmpty)
-            '[${item.notes}]',
-        ].join(' '),
-        unitPrice: item.unitPrice,
-        qty: item.quantity,
-      );
-    }).toList();
-
-    // Create a minimal SaleResult for the captain order
-    final saleResult = SaleResult(
-      transactionId: order.id,
-      receiptNumber: order.shortCode ?? order.orderNumber,
-      total: effectiveTotal,
-      paymentMethod: 'PENDING', // Captain orders are not yet paid
-      cashierName: order.waiterName ?? 'Waiter',
-      createdAt: order.effectiveCreatedAt,
-    );
-
-    await printService.printCaptainOrder(
-      sale: saleResult,
-      items: cartItems,
-      branchName: 'FamousGate Hotels',
-      orderNumber: order.hasRecalledItems
-          ? '${order.orderNumber} RECALL'
-          : order.orderNumber,
-      shortCode: order.shortCode,
-      tableNumber: order.tableNumber?.toString(),
-      roomNumber: order.roomNumber,
-      customerName: order.customerName,
-      waiterName: order.waiterName,
-      orderType: order.orderTypeLabel,
-      isRecall: order.hasRecalledItems,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Auto-print must react to every kdsOrdersProvider update (realtime push,
-    // fallback poll, or manual refresh) — previously it only ran once inside
-    // _load(), so an order arriving after the initial screen load via
-    // Realtime would show up on the grid but never get a kitchen ticket.
-    ref.listen<AsyncValue<List<KitchenOrder>>>(_ordersProvider, (previous, next) {
-      next.whenData(_autoPrintNewCaptainOrders);
-    });
     return MasterDashboardShell<KitchenKdsSection>(
       title: widget.scope.shellTitle,
       subtitle: widget.scope.shellSubtitle,
