@@ -381,9 +381,32 @@ router.get('/reports/daily-sales',
   getDailySales
 );
 
+const KITCHEN_ORDER_ROLES = [
+  UserRole.SUPER_ADMIN,
+  UserRole.DIRECTOR,
+  UserRole.GENERAL_MANAGER,
+  UserRole.BRANCH_MANAGER,
+  UserRole.RESTAURANT,
+  UserRole.RESTAURANT_MANAGER,
+  UserRole.KITCHEN,
+  UserRole.POS_KITCHEN,
+  UserRole.CHOMA_ZONE_KDS,
+  UserRole.KITCHEN_OPERATIONS,
+  UserRole.HEAD_CHEF,
+  UserRole.SOUS_CHEF,
+  UserRole.LINE_COOK,
+  UserRole.PREP_COOK,
+  UserRole.AUDITOR,
+  UserRole.BRANCH_ACCOUNTANT,
+  UserRole.FINANCE_MANAGER,
+  UserRole.CENTRAL_STOREKEEPER,
+  UserRole.BRANCH_STOREKEEPER,
+  UserRole.STOREKEEPER,
+];
+
 // Kitchen Display - Get active orders (no join, avoids FK issues)
 router.get('/kitchen/orders',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
+  authorize(KITCHEN_ORDER_ROLES),
   async (req, res) => {
     try {
       const branchId = resolveKitchenBranchId(req);
@@ -593,7 +616,7 @@ router.get('/kitchen/orders',
 
 // Kitchen Display - Get completed restaurant order history (restaurant only)
 router.get('/kitchen/orders/history',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.BRANCH_MANAGER, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS, UserRole.AUDITOR]),
+  authorize(KITCHEN_ORDER_ROLES),
   async (req, res) => {
     try {
       const branchId = resolveKitchenBranchId(req);
@@ -768,7 +791,7 @@ router.get('/kitchen/orders/history',
 
 // Kitchen Display - Update prep status without clearing cashier payment state.
 router.put('/kitchen/orders/:orderId/status',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
+  authorize(KITCHEN_ORDER_ROLES),
   async (req, res, next) => {
     try {
       const { orderId } = req.params;
@@ -808,7 +831,7 @@ router.put('/kitchen/orders/:orderId/status',
 // won't be reprinted on the next poll or after the KDS screen remounts
 // (e.g. the operator logging out and back in).
 router.put('/kitchen/orders/:orderId/printed',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
+  authorize(KITCHEN_ORDER_ROLES),
   async (req, res, next) => {
     try {
       const { orderId } = req.params;
@@ -838,7 +861,7 @@ router.put('/kitchen/orders/:orderId/printed',
 
 // Kitchen Display - Mark item as ready
 router.put('/kitchen/orders/:orderId/items/:itemId/ready',
-  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RESTAURANT, UserRole.KITCHEN, UserRole.POS_KITCHEN, UserRole.CHOMA_ZONE_KDS]),
+  authorize(KITCHEN_ORDER_ROLES),
   async (req, res, next) => {
     try {
       const { orderId, itemId } = req.params;
