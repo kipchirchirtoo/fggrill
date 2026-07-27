@@ -149,12 +149,18 @@ export const getStockRequests = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const queryBranchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
-        let branchId = queryBranchId;
+        const rawBranchId = req.query.branch_id as string | undefined;
+        let branchId: number | null = null;
+        if (rawBranchId && rawBranchId !== 'all' && rawBranchId !== '0') {
+            const parsed = parseInt(rawBranchId, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+                branchId = parsed;
+            }
+        }
         const status = req.query.status as string;
 
         // Use standard global role check
-        const isCentralRole = isGlobalRole(req.user?.role);
+        const isCentralRole = isGlobalRole(req.user?.role) || req.user?.role === 'central_storekeeper';
 
         // Strict branch isolation: override any query parameter if not a central role
         if (!isCentralRole) {
@@ -1214,11 +1220,17 @@ export const getApprovedRequests = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const queryBranchId = req.query.branch_id ? parseInt(req.query.branch_id as string) : null;
-        let branchId = queryBranchId;
+        const rawBranchId = req.query.branch_id as string | undefined;
+        let branchId: number | null = null;
+        if (rawBranchId && rawBranchId !== 'all' && rawBranchId !== '0') {
+            const parsed = parseInt(rawBranchId, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+                branchId = parsed;
+            }
+        }
 
         // Use standard global role check
-        const isCentralRole = isGlobalRole(req.user?.role);
+        const isCentralRole = isGlobalRole(req.user?.role) || req.user?.role === 'central_storekeeper';
 
         // Strict branch isolation: override any query parameter if not a central role
         if (!isCentralRole) {

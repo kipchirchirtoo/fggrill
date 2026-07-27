@@ -7,7 +7,15 @@ import { Request } from 'express';
 export const isGlobalRole = (role: string | undefined): boolean => {
     if (!role) return false;
     // Global roles that can access data across all branches
-    const globalRoles = ['super_admin', 'general_manager', 'hr_manager', 'auditor', 'director'];
+    const globalRoles = [
+        'super_admin',
+        'general_manager',
+        'central_storekeeper',
+        'central_operations_manager',
+        'hr_manager',
+        'auditor',
+        'director'
+    ];
     return globalRoles.includes(role.toLowerCase());
 };
 

@@ -3,6 +3,7 @@ import { protect, authorize, UserRole } from '../../middleware/auth';
 import {
     getStockRequests,
     getStockRequest,
+    getApprovedRequests,
     getBranchPerformance,
     createStockRequest,
     reviewStockRequest,
@@ -18,6 +19,9 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(protect);
+
+// Approved stock requests for central store fulfillment (must come before /:id routes)
+router.get('/approved', authorize([UserRole.CENTRAL_STOREKEEPER, UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR, UserRole.DIRECTOR]), getApprovedRequests);
 
 // Stock Requests routes
 router.route('/')
