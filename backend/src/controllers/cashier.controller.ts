@@ -607,7 +607,7 @@ async function resolveCashierShortCode(
         {
             table: 'payments',
             source: 'payment',
-            select: 'id, reference, reference_number, amount, currency, payment_method, status, short_code, branch_id',
+            select: 'id, reference, reference_number, amount, payment_method, status, short_code, branch_id',
             map: (row) => row.reference || row.reference_number
         },
         {
@@ -2525,7 +2525,6 @@ export const processCashierPayment = async (
 
             const paymentPayload: any = {
                 amount: amount,
-                currency: 'KES',
                 payment_method: method,
                 status: initialStatus,
                 reference: paymentRef,
@@ -2642,7 +2641,6 @@ export const processCashierPayment = async (
                 .insert({
                     conference_booking_id: booking.id,
                     amount: amount,
-                    currency: 'KES',
                     payment_method: method,
                     status: initialStatus,
                     reference: paymentRef,
@@ -2775,7 +2773,6 @@ export const processCashierPayment = async (
                 .insert({
                     restaurant_order_id: order.id,
                     amount: amount,
-                    currency: 'KES',
                     payment_method: method,
                     status: initialStatus,
                     reference: paymentRef,
@@ -2917,7 +2914,6 @@ export const processCashierPayment = async (
                 .insert({
                     bar_order_id: order.id,
                     amount: amount,
-                    currency: 'KES',
                     payment_method: method,
                     status: initialStatus,
                     reference: paymentRef,
@@ -2997,7 +2993,6 @@ export const processCashierPayment = async (
                 .insert({
                     pos_transaction_id: transaction.id,
                     amount: amount,
-                    currency: 'KES',
                     payment_method: method,
                     status: initialStatus,
                     reference: paymentRef,
@@ -3199,7 +3194,6 @@ export const processCashierPayment = async (
                     .insert({
                         kyogong_transaction_id: transaction.id, // We need to ensure this column exists or use metadata
                         amount: amount,
-                        currency: 'KES',
                         payment_method: method,
                         status: initialStatus,
                         reference: paymentRef,
@@ -3351,7 +3345,6 @@ export const processCashierPayment = async (
                 .insert({
                     bill_id: bill.id,
                     amount: amount,
-                    currency: 'KES',
                     payment_method: method,
                     status: initialStatus,
                     reference: paymentRef,
@@ -3452,7 +3445,6 @@ export const processCashierPayment = async (
             .insert({
                 booking_id: resolvedBookingId,
                 amount: amount,
-                currency: 'KES',
                 payment_method: method,
                 status: initialStatus,
                 reference: paymentRef,
@@ -8396,7 +8388,6 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 .insert({
                     reference: stkResponse.CheckoutRequestID,
                     amount: transaction.total_amount,
-                    currency: 'KES',
                     payment_method: 'mpesa',
                     status: 'pending',
                     pos_transaction_id: transaction.id,
@@ -8430,7 +8421,6 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
             const { error: paymentError } = await supabase.from('payments').insert({
                 pos_transaction_id: transaction.id,
                 amount: transaction.total_amount,
-                currency: 'KES',
                 payment_method: 'mpesa',
                 status: 'completed',
                 reference: reference,
@@ -8604,7 +8594,6 @@ export const initiatePOSTransactionPayment = async (req: Request, res: Response,
                 pos_transaction_id: transaction.id,
                 credit_bill_id: creditBillId,
                 amount: transaction.total_amount,
-                currency: 'KES',
                 payment_method: method.toLowerCase(),
                 status: 'completed',
                 reference: paymentReference,

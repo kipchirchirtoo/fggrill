@@ -422,7 +422,6 @@ export const initiateMpesaPayment = async (
       .insert({
         reference: stkResponse.CheckoutRequestID,
         amount,
-        currency: 'KES',
         payment_method: 'mpesa',
         status: 'pending',
         booking_id: bookingId,
@@ -708,7 +707,6 @@ export const initiatePaystackPayment = async (
       .insert({
         reference: paystackResponse.data.reference,
         amount,
-        currency: 'KES',
         payment_method: 'paystack',
         status: 'pending',
         booking_id: bookingId,

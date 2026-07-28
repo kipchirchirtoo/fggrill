@@ -653,7 +653,6 @@ export const addConferencePayment = async (
             .insert({
                 conference_booking_id: id,
                 amount: amount,
-                currency: 'KES',
                 payment_method: payment_method,
                 status: 'completed', // Manual payments are usually completed immediately
                 reference: reference || `CNF-PAY-${Date.now()}`,
