@@ -7013,8 +7013,10 @@ Future<void> printRoomsReportPDF({
 
   pdf.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      pageTheme: pw.PageTheme(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      ),
       build: (pw.Context ctx) {
         return [
           // FamousGate Branding Header
@@ -7147,14 +7149,14 @@ Future<void> printRoomsReportPDF({
                 pw.Table(
                   border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
                   columnWidths: const {
-                    0: pw.FlexColumnWidth(1.1), // Room #
+                    0: pw.FlexColumnWidth(1.0), // Room #
                     1: pw.FlexColumnWidth(2.8), // Guest Name
-                    2: pw.FlexColumnWidth(2.2), // Meal Plan
-                    3: pw.FlexColumnWidth(2.5), // Check-in Date & Time
-                    4: pw.FlexColumnWidth(2.0), // Check-out Date
-                    5: pw.FlexColumnWidth(1.0), // Adults
-                    6: pw.FlexColumnWidth(1.0), // Children
-                    7: pw.FlexColumnWidth(1.1), // Total Pax
+                    2: pw.FlexColumnWidth(2.0), // Meal Plan
+                    3: pw.FlexColumnWidth(2.2), // Check-in Date & Time
+                    4: pw.FlexColumnWidth(1.8), // Check-out Date
+                    5: pw.FlexColumnWidth(0.9), // Adults
+                    6: pw.FlexColumnWidth(0.9), // Children
+                    7: pw.FlexColumnWidth(1.0), // Total Pax
                     8: pw.FlexColumnWidth(1.5), // Status
                   },
                   children: [
@@ -7333,6 +7335,7 @@ Future<void> printRoomsReportPDF({
 
   await Printing.layoutPdf(
     onLayout: (PdfPageFormat format) async => pdf.save(),
+    format: PdfPageFormat.a4.landscape,
     name:
         'Room_List_Occupancy_Pax_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
   );
