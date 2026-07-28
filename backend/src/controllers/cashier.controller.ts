@@ -8773,11 +8773,19 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 .from('pos_outlet_shifts')
                 .select('id, branch_id, outlet_id, cashier_id, outlet:pos_outlets(id, name, outlet_type, branch_id)');
             if (effectiveBranchId) posShiftQuery = posShiftQuery.eq('branch_id', effectiveBranchId);
-            if (!isGlobal && shouldRestrictCashierStationAccess(userRole, assignedIds, effectiveBranchId)) {
-                posShiftQuery = posShiftQuery
-                    .eq('cashier_id', (req.user as any)?.id)
-                    .eq('status', 'open');
-            }
+            // NOTE: outlet-level isolation is enforced below by `canAccessPosOutlet`
+            // on each shift's outlet (explicit assignment or the role's station
+            // outlet types). We deliberately do NOT also restrict to shifts THIS
+            // user personally opened, nor to currently-open shifts — doing so hid
+            // two classes of still-unpaid POS bills from the clearance list that
+            // remain resolvable by direct lookup:
+            //   (a) bills sitting in a now-closed shift (unpaid is unpaid until
+            //       settled, regardless of shift age), and
+            //   (b) bills for a station-restricted cashier who clears an outlet
+            //       they don't own the shift for — e.g. the Kyogong reception
+            //       cashier resolves to restaurant_cashier but never opens the
+            //       restaurant/choma POS shift, so `cashier_id = me` matched
+            //       nothing and the whole list came back empty.
             const { data: posShifts, error: posShiftErr } = await posShiftQuery;
             if (posShiftErr) throw posShiftErr;
 
