@@ -21,7 +21,6 @@ import '../../templates/data/document_printer.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
-import '../../shared/presentation/room_bills_view.dart';
 
 // Only these station roles handle Main Bar / Executive Bar captain orders;
 // every other cashier role (reception, restaurant, non-consumables, etc.)
@@ -199,13 +198,10 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         icon: Icons.payments,
         content: _RequiresOpenShift(child: _PaidBillsTab()),
       ),
-      // Hotel room booking bills no longer clutter the Unpaid list — they live
-      // here (guest folios) and the cashier clears them at checkout.
-      const DashboardTab(
-        label: 'Room Bills',
-        icon: Icons.meeting_room_outlined,
-        content: _RequiresOpenShift(child: RoomBillsView(canSettle: true)),
-      ),
+      // Room Bills (checked-in guest folios) live ONLY in the Reception module.
+      // The cashier settles a guest bill from the Station tab when Reception
+      // sends it over via "Pay at Cashier" (loaded by confirmation code), so no
+      // Room Bills tab is shown at the cashier station.
       const DashboardTab(
         label: 'Expenses',
         icon: Icons.receipt_long,
