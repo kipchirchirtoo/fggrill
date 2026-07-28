@@ -1514,23 +1514,6 @@ const seedOutletItemsFromExistingMenus = async (
     .upsert(sourceRows, { onConflict: 'outlet_id,sku' });
   if (upsertError) throw upsertError;
 
-  // Deactivate snapshot rows whose source item no longer exists (deleted/renamed
-  // upstream) so removed menu items stop showing up as orderable in POS.
-  const sourceTables = [...new Set(sourceRows.map((row) => row.source_table).filter(Boolean))];
-  for (const sourceTable of sourceTables) {
-    const currentSkus = sourceRows
-      .filter((row) => row.source_table === sourceTable)
-      .map((row) => row.sku);
-    if (!currentSkus.length) continue;
-    await supabase
-      .from('pos_outlet_items')
-      .update({ is_active: false })
-      .eq('outlet_id', outlet.id)
-      .eq('source_table', sourceTable)
-      .eq('is_active', true)
-      .not('sku', 'in', `(${currentSkus.map((sku) => `"${sku}"`).join(',')})`);
-  }
-
   const { data, error } = await supabase
     .from('pos_outlet_items')
     .select('*')
@@ -1584,11 +1567,6 @@ const loadActiveOutletItems = async (
   outlet: Record<string, any>,
   refreshFromSource = false
 ): Promise<Array<Record<string, any>>> => {
-  if (refreshFromSource && isFoodOrBarOutlet(outlet.outlet_type)) {
-    const synced = await seedOutletItemsFromExistingMenus(outlet);
-    if (synced.length) return synced;
-  }
-
   const { data, error } = await supabase
     .from('pos_outlet_items')
     .select('*')
@@ -1599,11 +1577,20 @@ const loadActiveOutletItems = async (
   if (error) throw error;
   let items = (data || []) as Array<Record<string, any>>;
 
-  if (String(outlet.outlet_type || '') === 'choma_zone') {
-    const hasAccompaniments = items.some((i) => String(i.category || '').toLowerCase().includes('accomp'));
-    if (!hasAccompaniments) {
-      items = await seedOutletItemsFromExistingMenus(outlet);
+  if (items.length > 0 && !refreshFromSource) {
+    if (String(outlet.outlet_type || '') === 'choma_zone') {
+      const hasAccompaniments = items.some((i) => String(i.category || '').toLowerCase().includes('accomp'));
+      if (!hasAccompaniments) {
+        const synced = await seedOutletItemsFromExistingMenus(outlet);
+        if (synced.length) return synced;
+      }
     }
+    return items;
+  }
+
+  if (refreshFromSource && isFoodOrBarOutlet(outlet.outlet_type)) {
+    const synced = await seedOutletItemsFromExistingMenus(outlet);
+    if (synced.length) return synced;
   }
 
   return items.length ? items : await seedOutletItemsFromExistingMenus(outlet);
