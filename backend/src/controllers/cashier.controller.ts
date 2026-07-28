@@ -8812,11 +8812,15 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 } else {
                     posOrdersQuery = posOrdersQuery
                         .in('payment_status', allowedStatuses)
-                        .neq('status', 'cancelled')
                         // Pending void approvals are stopped from payment. Once
                         // approved, they move to the cashier voided-orders view
                         // and never count as unpaid bills.
                         .or('void_request_status.is.null,void_request_status.eq.rejected');
+                    // NB: cancelled orders are dropped in JS below, NOT with a
+                    // `.neq('status','cancelled')` — in Postgres `status != 'cancelled'`
+                    // is NULL (and excludes the row) whenever status IS NULL, which
+                    // is the common case for live POS orders and would silently
+                    // hide every unpaid bill from the clearance list.
                 }
                 if (from && to) {
                     posOrdersQuery = posOrdersQuery
@@ -8825,7 +8829,9 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 }
                 const { data: fetchedPosOrders, error: posErr } = await posOrdersQuery;
                 if (posErr) throw posErr;
-                posOrders = fetchedPosOrders || [];
+                posOrders = (fetchedPosOrders || []).filter((o: any) =>
+                    wantsVoidedOrders || String(o.status || '').toLowerCase() !== 'cancelled'
+                );
             }
         } catch (posError: any) {
             if (!['42P01', '42703', 'PGRST205', 'PGRST204'].includes(posError?.code)) {
