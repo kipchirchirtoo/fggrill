@@ -296,10 +296,37 @@ type OpeningStocktakeReadiness = {
     openingItems?: OpeningSeedItem[];
 };
 
+function isBreakfastEligible(
+    mealPlan: unknown,
+    roomTypeName?: string,
+    roomTypeCode?: string
+): boolean {
+    const mpNormalized = String(mealPlan ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    const rtName = String(roomTypeName ?? '').trim().toLowerCase();
+    const rtCode = String(roomTypeCode ?? '').trim().toLowerCase();
+
+    const isDeluxeExecVIP =
+        rtName.includes('deluxe') ||
+        rtName.includes('executive') ||
+        rtName.includes('vip') ||
+        rtCode.includes('dlx') ||
+        rtCode.includes('dtw') ||
+        rtCode.includes('exe') ||
+        rtCode.includes('vip');
+
+    if (isDeluxeExecVIP) {
+        return true;
+    }
+
+    if (!mpNormalized || mpNormalized === 'room_only' || mpNormalized === 'ro') {
+        return false;
+    }
+
+    return BREAKFAST_ELIGIBLE_MEAL_PLANS.some((code) => mpNormalized.includes(code));
+}
+
 function mealPlanIncludesBreakfast(value: unknown): boolean {
-    const normalized = String(value ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-    if (!normalized) return false;
-    return BREAKFAST_ELIGIBLE_MEAL_PLANS.some((code) => normalized.includes(code));
+    return isBreakfastEligible(value);
 }
 
 async function getBreakfastPaxControl(branchId: number, date: string) {
@@ -312,7 +339,13 @@ async function getBreakfastPaxControl(branchId: number, date: string) {
             .maybeSingle(),
         supabase
             .from('reservations')
-            .select('adults,children,meal_plan')
+            .select(`
+                adults,children,meal_plan,
+                room:rooms!room_id(
+                    id, room_number, room_type_id,
+                    room_type:room_types!room_type_id(id, name, code)
+                )
+            `)
             .eq('branch_id', branchId)
             .eq('status', 'checked_in')
             .lte('check_in_date', date)
@@ -324,7 +357,7 @@ async function getBreakfastPaxControl(branchId: number, date: string) {
 
     let calculatedPax = 0;
     (reservations || []).forEach((row: any) => {
-        if (mealPlanIncludesBreakfast(row.meal_plan)) {
+        if (isBreakfastEligible(row.meal_plan, row.room?.room_type?.name, row.room?.room_type?.code)) {
             calculatedPax += Number(row.adults || 0) + Number(row.children || 0);
         }
     });

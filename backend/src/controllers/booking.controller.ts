@@ -26,13 +26,41 @@ function todayInNairobi(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
 }
 
-function mealPlanIncludesBreakfast(value: unknown): boolean {
-  const normalized = String(value ?? '')
+function isBreakfastEligible(
+  mealPlan: unknown,
+  roomTypeName?: string,
+  roomTypeCode?: string
+): boolean {
+  const mpNormalized = String(mealPlan ?? '')
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_');
-  if (!normalized) return false;
-  return BREAKFAST_ELIGIBLE_MEAL_PLANS.some((code) => normalized.includes(code));
+
+  const rtName = String(roomTypeName ?? '').trim().toLowerCase();
+  const rtCode = String(roomTypeCode ?? '').trim().toLowerCase();
+
+  const isDeluxeExecVIP =
+    rtName.includes('deluxe') ||
+    rtName.includes('executive') ||
+    rtName.includes('vip') ||
+    rtCode.includes('dlx') ||
+    rtCode.includes('dtw') ||
+    rtCode.includes('exe') ||
+    rtCode.includes('vip');
+
+  if (isDeluxeExecVIP) {
+    return true;
+  }
+
+  if (!mpNormalized || mpNormalized === 'room_only' || mpNormalized === 'ro') {
+    return false;
+  }
+
+  return BREAKFAST_ELIGIBLE_MEAL_PLANS.some((code) => mpNormalized.includes(code));
+}
+
+function mealPlanIncludesBreakfast(value: unknown): boolean {
+  return isBreakfastEligible(value);
 }
 
 async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
@@ -48,7 +76,11 @@ async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
       meal_plan,
       check_in_date,
       check_out_date,
-      guest:guests!guest_id(first_name,last_name)
+      guest:guests!guest_id(first_name,last_name),
+      room:rooms!room_id(
+        id, room_number, room_type_id,
+        room_type:room_types!room_type_id(id, name, code)
+      )
     `)
     .eq('branch_id', branchId)
     .eq('status', 'checked_in')
@@ -58,18 +90,48 @@ async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
   if (error) throw error;
 
   const eligibleBookings = (reservations || [])
-    .filter((row: any) => mealPlanIncludesBreakfast(row.meal_plan))
-    .map((row: any) => ({
-      reservation_id: row.id,
-      confirmation_number: row.confirmation_number,
-      guest_name: `${row.guest?.first_name || ''} ${row.guest?.last_name || ''}`.trim(),
-      meal_plan: row.meal_plan,
-      adults: Number(row.adults || 0),
-      children: Number(row.children || 0),
-      pax: Number(row.adults || 0) + Number(row.children || 0),
-      check_in_date: row.check_in_date,
-      check_out_date: row.check_out_date,
-    }));
+    .filter((row: any) =>
+      isBreakfastEligible(
+        row.meal_plan,
+        row.room?.room_type?.name,
+        row.room?.room_type?.code
+      )
+    )
+    .map((row: any) => {
+      const roomTypeName = row.room?.room_type?.name || '';
+      const roomTypeCode = row.room?.room_type?.code || '';
+      const isAutoRoomType =
+        roomTypeName.toLowerCase().includes('deluxe') ||
+        roomTypeName.toLowerCase().includes('executive') ||
+        roomTypeName.toLowerCase().includes('vip') ||
+        roomTypeCode.toLowerCase().includes('dlx') ||
+        roomTypeCode.toLowerCase().includes('dtw') ||
+        roomTypeCode.toLowerCase().includes('exe') ||
+        roomTypeCode.toLowerCase().includes('vip');
+
+      const effectiveMealPlan =
+        row.meal_plan && row.meal_plan !== 'room_only'
+          ? row.meal_plan
+          : isAutoRoomType
+          ? 'bed_breakfast'
+          : row.meal_plan || 'room_only';
+
+      return {
+        reservation_id: row.id,
+        confirmation_number: row.confirmation_number,
+        guest_name:
+          `${row.guest?.first_name || ''} ${row.guest?.last_name || ''}`.trim() ||
+          'Checked-in Guest',
+        room_number: row.room?.room_number || 'N/A',
+        room_type_name: roomTypeName || 'Standard',
+        meal_plan: effectiveMealPlan,
+        adults: Number(row.adults || 0),
+        children: Number(row.children || 0),
+        pax: Number(row.adults || 0) + Number(row.children || 0),
+        check_in_date: row.check_in_date,
+        check_out_date: row.check_out_date,
+      };
+    });
 
   return {
     calculatedPax: eligibleBookings.reduce(
