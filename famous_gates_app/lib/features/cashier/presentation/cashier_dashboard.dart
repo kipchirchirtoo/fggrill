@@ -21,6 +21,7 @@ import '../../templates/data/document_printer.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
+import '../../shared/presentation/room_bills_view.dart';
 
 // Only these station roles handle Main Bar / Executive Bar captain orders;
 // every other cashier role (reception, restaurant, non-consumables, etc.)
@@ -197,6 +198,13 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         label: 'Paid Credits',
         icon: Icons.payments,
         content: _RequiresOpenShift(child: _PaidBillsTab()),
+      ),
+      // Hotel room booking bills no longer clutter the Unpaid list — they live
+      // here (guest folios) and the cashier clears them at checkout.
+      const DashboardTab(
+        label: 'Room Bills',
+        icon: Icons.meeting_room_outlined,
+        content: _RequiresOpenShift(child: RoomBillsView(canSettle: true)),
       ),
       const DashboardTab(
         label: 'Expenses',
@@ -5685,8 +5693,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
         return Dialog(
           insetPadding: const EdgeInsets.all(24),
           child: SizedBox(
-            width: 1120,
-            height: 760,
+            width: 900,
+            height: 560,
             child: Column(
               children: [
                 Padding(
@@ -5713,8 +5721,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                         _KeyValueGrid(values: {
                           'Net sales': _money(
                               baseCashSales + baseMpesaSales + baseCardSales),
-                          'Credit bills': _money(creditBillsTotal),
-                          'Paid bills': _money(paidBillsTotal),
                           'Expenses': _money(expenseTotal),
                           'Expected cash': _money(expectedCash),
                           'Variance': _money(variance),
@@ -5733,65 +5739,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                                 onChanged: (_) => setDialogState(() {})),
                             _amountField(cardLogged, 'Card total collected',
                                 onChanged: (_) => setDialogState(() {})),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Text('Credit bills and paid bills',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: [
-                            _creditEntryPanel(
-                              context,
-                              title: 'Credit bill',
-                              staffMembers: staffOptions,
-                              staffId: creditStaffId,
-                              name: creditName,
-                              amount: creditAmount,
-                              entries: creditEntries,
-                              onAdd: () => setDialogState(() {
-                                final amount =
-                                    num.tryParse(creditAmount.text.trim()) ?? 0;
-                                if (amount <= 0) return;
-                                creditEntries.add(_ShiftCreditEntry(
-                                  staffId: creditStaffId.text.trim(),
-                                  name: creditName.text.trim(),
-                                  amount: amount,
-                                ));
-                                creditStaffId.clear();
-                                creditName.clear();
-                                creditAmount.clear();
-                              }),
-                              onRemove: (index) => setDialogState(
-                                  () => creditEntries.removeAt(index)),
-                            ),
-                            _creditEntryPanel(
-                              context,
-                              title: 'Paid bill',
-                              staffMembers: staffOptions,
-                              staffId: paidStaffId,
-                              name: paidName,
-                              amount: paidAmount,
-                              entries: paidEntries,
-                              onAdd: () => setDialogState(() {
-                                final amount =
-                                    num.tryParse(paidAmount.text.trim()) ?? 0;
-                                if (amount <= 0) return;
-                                paidEntries.add(_ShiftCreditEntry(
-                                  staffId: paidStaffId.text.trim(),
-                                  name: paidName.text.trim(),
-                                  amount: amount,
-                                  paymentMethod: 'cash',
-                                ));
-                                paidStaffId.clear();
-                                paidName.clear();
-                                paidAmount.clear();
-                              }),
-                              onRemove: (index) => setDialogState(
-                                  () => paidEntries.removeAt(index)),
-                            ),
                           ],
                         ),
                         if (expenseEntries.isNotEmpty) ...[
