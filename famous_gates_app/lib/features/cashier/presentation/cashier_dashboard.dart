@@ -8325,12 +8325,11 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final shift = ref.watch(cashierCurrentShiftProvider).valueOrNull;
-    final openingFloat = _num(shift?['opening_float']);
-    final cashSales = _num(shift?['total_cash_sales'] ?? shift?['total_cash']);
+    // The cashier records expenses "blind": the cash-drawer position (opening
+    // float, cash sales, estimated cash in drawer) is intentionally hidden from
+    // the cashier station — only the branch accountant reconciles the drawer.
     final expensesTotal =
         _expenses.fold<num>(0, (s, e) => s + _num(e['amount']));
-    final cashInDrawer = openingFloat + cashSales - expensesTotal;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -8361,32 +8360,6 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                 label: const Text('Refresh'),
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          // ── Cash position summary ───────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .primaryContainer
-                  .withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
-            ),
-            child: Wrap(
-              spacing: 32,
-              runSpacing: 8,
-              children: [
-                _statChip('Opening Float', _money(openingFloat)),
-                _statChip('Cash Sales', _money(cashSales)),
-                _statChip('Expenses Out', _money(expensesTotal),
-                    accent: Colors.red.shade700),
-                _statChip('Est. Cash in Drawer', _money(cashInDrawer),
-                    accent: Theme.of(context).colorScheme.primary, bold: true),
-              ],
-            ),
           ),
           const SizedBox(height: 24),
           // ── Record new expense ──────────────────────────────────────────
@@ -8691,22 +8664,6 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
     );
   }
 
-  Widget _statChip(String label, String value,
-      {Color? accent, bool bold = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 11, color: AppColors.kTextSecondary)),
-        Text(value,
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
-                color: accent)),
-      ],
-    );
-  }
 }
 
 // nests it (top-level for credit bills, `order`/`booking` for POS/hotel).
