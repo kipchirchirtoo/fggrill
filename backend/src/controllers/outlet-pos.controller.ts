@@ -1285,9 +1285,9 @@ const seedOutletItemsFromExistingMenus = async (
       .eq('is_available', true)
       .order('name', { ascending: true });
     
-    // For restaurant outlets, filter by branch; for choma_zone, include accompaniments and branch items
-    if (branchId && outletType === 'restaurant') {
-      query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+    // Filter strictly by the outlet's branch_id
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
     }
     const { data, error } = await query;
     if (error) throw error;
@@ -1326,7 +1326,7 @@ const seedOutletItemsFromExistingMenus = async (
           track_stock: existing?.track_stock ?? (outletType === 'choma_zone' ? false : true),
           is_active: item.is_active !== false,
           is_available: item.is_available !== false,
-          branch_id: item.branch_id ?? outlet.branch_id ?? null
+          branch_id: outlet.branch_id ?? item.branch_id ?? null
         };
       });
   }
@@ -1338,7 +1338,7 @@ const seedOutletItemsFromExistingMenus = async (
       .select('id, name, price, selling_price, cost_price, unit, is_available, is_active, branch_id, category_id')
       .eq('is_available', true)
       .order('name', { ascending: true });
-    if (branchId) query = query.or(`branch_id.is.null,branch_id.eq.${branchId}`);
+    if (branchId) query = query.eq('branch_id', branchId);
     const { data, error } = await query;
     if (error) throw error;
     const rows = (data || []) as Array<Record<string, any>>;
@@ -1567,15 +1567,28 @@ const loadActiveOutletItems = async (
   outlet: Record<string, any>,
   refreshFromSource = false
 ): Promise<Array<Record<string, any>>> => {
-  const { data, error } = await supabase
+  let query = supabase
     .from('pos_outlet_items')
     .select('*')
     .eq('outlet_id', outlet.id)
-    .eq('is_active', true)
+    .eq('is_active', true);
+
+  if (outlet.branch_id) {
+    query = query.or(`branch_id.is.null,branch_id.eq.${outlet.branch_id}`);
+  }
+
+  query = query
     .order('category', { ascending: true })
     .order('name', { ascending: true });
+
+  const { data, error } = await query;
   if (error) throw error;
-  let items = (data || []) as Array<Record<string, any>>;
+  let items = ((data || []) as Array<Record<string, any>>).filter((item) => {
+    if (outlet.branch_id && item.branch_id && Number(item.branch_id) !== Number(outlet.branch_id)) {
+      return false;
+    }
+    return true;
+  });
 
   if (items.length > 0 && !refreshFromSource) {
     if (String(outlet.outlet_type || '') === 'choma_zone') {
