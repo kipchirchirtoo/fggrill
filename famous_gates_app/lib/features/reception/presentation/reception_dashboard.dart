@@ -7160,7 +7160,7 @@ Future<void> printRoomsReportPDF({
         return [
           // FamousGate Branding Header
           pw.Row(
-            cross: pw.CrossAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               if (logoImage != null)
                 pw.Image(logoImage, width: 72, height: 50)
@@ -7169,7 +7169,7 @@ Future<void> printRoomsReportPDF({
               pw.SizedBox(width: 16),
               pw.Expanded(
                 child: pw.Column(
-                  cross: pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text('FamousGate Hotels',
                         style: pw.TextStyle(
@@ -7192,7 +7192,7 @@ Future<void> printRoomsReportPDF({
                 ),
               ),
               pw.Column(
-                cross: pw.CrossAxisAlignment.end,
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Text('ROOM LIST & OCCUPANCY',
                       style: pw.TextStyle(
@@ -7359,7 +7359,7 @@ Future<void> printRoomsReportPDF({
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Column(
-                cross: pw.CrossAxisAlignment.start,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Container(
                       width: 180,
@@ -7372,7 +7372,7 @@ Future<void> printRoomsReportPDF({
                 ],
               ),
               pw.Column(
-                cross: pw.CrossAxisAlignment.start,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Container(
                       width: 180,
