@@ -91,7 +91,6 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       check_out_date,
       total_amount,
       deposit_amount,
-      advance_payment,
       amount_paid,
       adults,
       children,
@@ -169,7 +168,6 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       // settle payments. So a partial payment made at the cashier reduces the
       // balance and the remainder stays outstanding on the room bill.
       const reservationPaid = Math.max(
-        Number(row?.advance_payment || 0),
         Number(row?.amount_paid || 0),
         Number(row?.deposit_amount || 0)
       );

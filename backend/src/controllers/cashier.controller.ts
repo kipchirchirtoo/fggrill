@@ -1140,7 +1140,6 @@ export const getBillDetails = async (
                 Number(folio?.beverage_charges || 0) +
                 Number(folio?.other_charges || 0);
             const reservationPaid = Math.max(
-                Number(reservation.advance_payment || 0),
                 Number(reservation.amount_paid || 0),
                 Number(reservation.deposit_amount || 0)
             );
@@ -3839,8 +3838,8 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 bill_type: 'hotel',
                 customer_name: resv.guest_name,
                 total_amount: resv.total_amount,
-                paid_amount: resv.advance_payment || 0,
-                balance_amount: Number(resv.total_amount) - Number(resv.advance_payment || 0),
+                paid_amount: resv.amount_paid || resv.deposit_amount || 0,
+                balance_amount: Number(resv.total_amount) - Number(resv.amount_paid || resv.deposit_amount || 0),
                 bill_date: resv.created_at,
                 status: resv.status,
                 is_hotel: true
@@ -4077,14 +4076,14 @@ async function settleNonManualBill(
     if (reservation) {
         const branchId = reservation.branch_id || reservation.room?.branch_id || null;
         const total = Number(reservation.total_amount || 0);
-        const alreadyPaid = Number(reservation.advance_payment || reservation.amount_paid || 0);
+        const alreadyPaid = Number(reservation.amount_paid || reservation.deposit_amount || 0);
         const newPaid = alreadyPaid + paymentAmount;
         const fullyPaid = total > 0 && newPaid >= total;
 
         const { data: updated, error: updErr } = await supabase
             .from('reservations')
             .update({
-                advance_payment: newPaid,
+                amount_paid: newPaid,
                 payment_status: fullyPaid ? 'paid' : 'partial',
             })
             .eq('id', id)

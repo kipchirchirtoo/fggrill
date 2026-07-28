@@ -47,7 +47,6 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
 
       const calculatedTotalCharges = currentRoomCharges + foodCharges + beverageCharges + otherCharges;
       const resPaid = Math.max(
-        Number(reservation.advance_payment || 0),
         Number(reservation.amount_paid || 0),
         Number(reservation.deposit_amount || 0)
       );
