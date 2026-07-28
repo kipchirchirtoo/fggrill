@@ -25,6 +25,7 @@ import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import PDFDocument from 'pdfkit';
 import { loadCashierVoidAudit } from '../services/cashier-void-audit.service';
+import { settleMasterBillCore, resolveMasterBillByCode } from './outlet-pos.controller';
 
 function isImmediateCashierPaymentMethod(method?: string): boolean {
     const normalized = (method || '').toLowerCase();
@@ -871,6 +872,66 @@ function buildOutletPosBillResponse(resolution: OutletPosOrderResolution): Recor
     };
 }
 
+// Build the cashier-station bill view for a master (combined) customer bill:
+// every member order's items folded into one bill with a combined total, so the
+// cashier settles all outlets' shares with a single tender.
+async function buildCashierMasterBillResponse(master: Record<string, any>): Promise<Record<string, any>> {
+    const { data: orderRows } = await supabase
+        .from('pos_shift_orders')
+        .select('*, outlet:pos_outlets(name, outlet_type)')
+        .eq('master_bill_id', master.id)
+        .not('status', 'eq', 'cancelled')
+        .order('created_at', { ascending: true });
+    const orders = (orderRows || []) as Array<Record<string, any>>;
+    let total = 0;
+    let paid = 0;
+    const items: any[] = [];
+    for (const o of orders) {
+        total += Number(o.total_amount || 0);
+        paid += Number(o.amount_paid || 0);
+        const outlet = Array.isArray(o.outlet) ? o.outlet[0] : o.outlet;
+        const oitems = Array.isArray(o.items) ? o.items : [];
+        for (const it of oitems) {
+            items.push({
+                name: it.name || it.item_name || 'POS item',
+                quantity: Number(it.quantity || it.qty || 1),
+                price: Number(it.unit_price || it.price || 0),
+                total: Number(it.line_total || it.total || 0),
+                outlet: outlet?.name || o.origin_outlet_name || null
+            });
+        }
+    }
+    const balance = Math.max(0, total - paid);
+    return {
+        success: true,
+        data: {
+            type: 'master_bill',
+            source: 'pos_master_bill',
+            master_bill_id: master.id,
+            master_bill_number: master.master_bill_number,
+            order: {
+                id: master.id,
+                order_number: master.master_bill_number,
+                short_code: master.master_bill_number,
+                guest_name: master.customer_name || 'Walk-in',
+                waiter_name: master.opening_waiter_name,
+                station_name: master.origin_outlet_name,
+                status: balance <= 0.01 ? 'cleared' : 'unpaid',
+                items
+            },
+            financials: {
+                total_amount: total,
+                amount_paid: paid,
+                balance,
+                currency: 'KES'
+            },
+            payment_status: balance <= 0.01 ? 'cleared' : (paid > 0 ? 'partial' : 'unpaid'),
+            outlet_count: new Set(orders.map((o) => String(o.outlet_id))).size,
+            order_count: orders.length
+        }
+    };
+}
+
 // Helper function to determine lookup strategy based on ID format
 function determineLookupStrategy(searchId: string): { type: string, prefix?: string } {
     // UUID pattern
@@ -979,6 +1040,24 @@ export const getBillDetails = async (
         }
 
         lookupStrategy = determineLookupStrategy(searchId);
+
+        // Combined "customer bill" lookup: a master bill number (e.g. KYO-000245),
+        // its last-3+ suffix ("245"), or ANY member order's code (full or its
+        // last-3+ suffix) resolves to the WHOLE consolidated bill, so the cashier
+        // settles every outlet's share in one tender. Runs before the single POS
+        // order lookup so a combined order returns the master bill, not one leg.
+        {
+            const masterBill = await resolveMasterBillByCode(
+                searchId, branchId ? Number(branchId) : null
+            );
+            if (masterBill) {
+                const responseData = await buildCashierMasterBillResponse(masterBill);
+                billCache.set(cacheKey, responseData, 60 * 1000);
+                timer.end(true);
+                res.json(responseData);
+                return;
+            }
+        }
 
         const outletPosLookupReference = shortCodeResolution?.source === 'pos_shift_order' && shortCodeResolution.row?.id
             ? shortCodeResolution.row.id
@@ -2364,6 +2443,43 @@ export const processCashierPayment = async (
         }
 
         const paymentRef = reference || `CASH-${Date.now()}`;
+
+        // Combined "customer bill": settle every member outlet's share in one
+        // tender (each order posts to its OWN outlet shift + stock, the master
+        // bill closes, and the other outlets confirm their portion afterwards).
+        // Matched by master bill number, its last-3+ suffix, or any member
+        // order's code — same as the lookup above.
+        {
+            const userBranch = req.user?.branch_id ? Number(req.user.branch_id) : null;
+            const masterBill = await resolveMasterBillByCode(bookingId, userBranch);
+            if (masterBill) {
+                const role = String(req.user?.role || '').toLowerCase();
+                if (userBranch && Number(masterBill.branch_id) !== userBranch && !isGlobalRole(role)) {
+                    throw new AppError('Forbidden: bill belongs to another branch', 403);
+                }
+                const cashierName =
+                    `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim() || null;
+                const { totalSettled, view, method: settledMethod } = await settleMasterBillCore(
+                    masterBill,
+                    { method: String(method), userId: String(req.user?.id), cashierName }
+                );
+                billCache.clear();
+                res.json({
+                    success: true,
+                    message: 'Combined customer bill settled',
+                    data: {
+                        type: 'master_bill',
+                        master_bill_id: masterBill.id,
+                        master_bill_number: masterBill.master_bill_number,
+                        payment_method: settledMethod,
+                        total_settled: totalSettled,
+                        amount_settled: totalSettled,
+                        bill: view
+                    }
+                });
+                return;
+            }
+        }
 
         // Check if it's an invoice (starts with INV)
         if (bookingId.startsWith('INV')) {

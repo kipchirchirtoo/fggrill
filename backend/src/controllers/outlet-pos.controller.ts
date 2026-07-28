@@ -5908,6 +5908,143 @@ export const unlinkOrderFromBill = async (req: Request, res: Response, next: Nex
 // closed, and each per-outlet sub-bill is marked 'settled' pending that outlet
 // cashier's confirmation (the origin outlet is auto-confirmed — collected
 // locally). body: { payment_method, reference? }.
+// Core settlement for a master (combined) bill — shared by the POS consolidated
+// pay endpoint AND the main cashier station (lookup + pay). Settles every member
+// order against its OWN outlet shift (per-outlet revenue + stock), closes the
+// master bill, and marks each outlet sub-bill settled (origin auto-confirmed).
+// Throws AppError on any gate. Callers do their own role/branch checks first.
+export const settleMasterBillCore = async (
+  master: Record<string, any>,
+  opts: { method: string; userId: string; cashierName: string | null }
+): Promise<{ totalSettled: number; view: Record<string, any> | null; method: PaymentMethod }> => {
+  const masterBillId = String(master.id);
+  const method = normalizePaymentMethod(opts.method);
+  if (!method) throw new AppError('Unsupported payment method', 400);
+  if (method === 'credit_bill') {
+    throw new AppError('Credit-bill settlement must be done per order, not on a consolidated bill.', 400);
+  }
+
+  const { data: memberRows, error } = await supabase
+    .from('pos_shift_orders')
+    .select('*')
+    .eq('master_bill_id', masterBillId)
+    .not('status', 'eq', 'cancelled');
+  if (error) throw error;
+  const members = (memberRows || []) as Array<Record<string, any>>;
+  const unsettled = members.filter((o) => !['paid', 'credit_bill', 'voided'].includes(String(o.payment_status)));
+  if (unsettled.length === 0) throw new AppError('This bill is already settled', 409);
+
+  // Every member's outlet shift must be open to accept payment + post stock.
+  const shiftIds = Array.from(new Set(unsettled.map((o) => String(o.shift_id))));
+  const { data: shiftRows, error: shiftErr } = await supabase
+    .from('pos_outlet_shifts')
+    .select('id, status, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
+    .in('id', shiftIds);
+  if (shiftErr) throw shiftErr;
+  const shiftById = new Map((shiftRows || []).map((s: any) => [String(s.id), s]));
+  for (const o of unsettled) {
+    const shift = shiftById.get(String(o.shift_id));
+    if (!shift) throw new AppError('An outlet shift for this bill could not be found', 404);
+    if (String(shift.status) !== 'open') {
+      const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+      throw new AppError(`The ${outlet?.name || 'outlet'} shift is closed — reopen it or settle that item separately before settling the combined bill.`, 400);
+    }
+  }
+
+  let totalSettled = 0;
+  for (const order of unsettled) {
+    const shift = shiftById.get(String(order.shift_id));
+    const balance = Math.max(0, numberValue(order.balance_amount) || numberValue(order.total_amount) - numberValue(order.amount_paid));
+    await settleOrderBalance({
+      order,
+      shift,
+      method,
+      amount: balance,
+      receivedBy: opts.userId,
+      reference: master.master_bill_number || `BILL-${masterBillId.slice(0, 8)}`
+    });
+    await supabase.from('pos_shift_orders').update({ sub_bill_status: 'settled' }).eq('id', order.id);
+    totalSettled += balance;
+  }
+
+  // Close the master bill + stamp the settlement (origin) cashier.
+  await recomputeMasterBillTotals(masterBillId);
+  const now = new Date().toISOString();
+  await supabase.from('pos_master_bills').update({
+    status: 'closed',
+    settlement_cashier_id: opts.userId,
+    settlement_cashier_name: opts.cashierName,
+    payment_method: method,
+    paid_at: now,
+    closed_at: now,
+    updated_at: now
+  }).eq('id', masterBillId);
+
+  // Each outlet sub-bill is 'settled' pending that outlet cashier's
+  // confirmation; the origin outlet is auto-confirmed (collected locally).
+  await supabase.from('pos_master_bill_settlements').update({
+    status: 'settled', collecting_cashier_id: opts.userId, payment_method: method, updated_at: now
+  }).eq('master_bill_id', masterBillId).neq('status', 'cashier_confirmed');
+  await supabase.from('pos_master_bill_settlements').update({
+    status: 'cashier_confirmed', confirmed_by: opts.userId, confirmed_at: now
+  }).eq('master_bill_id', masterBillId).eq('is_origin', true);
+
+  const view = await loadMasterBillView(masterBillId);
+  return { totalSettled, view, method };
+};
+
+// Resolve a master (combined) bill for cashier-station lookup from: the full
+// master_bill_number (e.g. KYO-000245), its last-N-char/-digit suffix, or ANY
+// member order's order_number/short_code (full or suffix). Scoped to the branch
+// and to bills not already closed. Suffix needs >= 3 chars to stay unambiguous.
+export const resolveMasterBillByCode = async (
+  rawTerm: string,
+  branchId: number | null
+): Promise<Record<string, any> | null> => {
+  const term = String(rawTerm || '').trim().toUpperCase();
+  if (!term) return null;
+  const openStatuses = ['open', 'bill_requested', 'payment_received'];
+  const isSuffix = term.length >= 3 && term.length <= 10;
+
+  // 1) Exact master bill number.
+  {
+    let q = supabase.from('pos_master_bills').select('*').eq('master_bill_number', term);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data } = await q.maybeSingle();
+    if (data) return data as Record<string, any>;
+  }
+  // 2) Suffix of the master bill number (e.g. "245" -> KYO-000245).
+  if (isSuffix) {
+    let q = supabase.from('pos_master_bills').select('*')
+      .ilike('master_bill_number', `%${term}`)
+      .in('status', openStatuses)
+      .order('created_at', { ascending: false }).limit(1);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data } = await q;
+    if (data && data.length) return data[0] as Record<string, any>;
+  }
+  // 3) A member order's code (exact or suffix) -> its master bill.
+  {
+    const filter = isSuffix
+      ? `order_number.eq.${term},short_code.eq.${term},order_number.ilike.%${term},short_code.ilike.%${term}`
+      : `order_number.eq.${term},short_code.eq.${term}`;
+    let q = supabase.from('pos_shift_orders').select('master_bill_id, created_at')
+      .not('master_bill_id', 'is', null)
+      .or(filter)
+      .order('created_at', { ascending: false }).limit(1);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data: ord } = await q;
+    const mid = ord && ord.length ? (ord[0] as any).master_bill_id : null;
+    if (mid) {
+      let mq = supabase.from('pos_master_bills').select('*').eq('id', mid);
+      if (branchId) mq = mq.eq('branch_id', branchId);
+      const { data: m } = await mq.maybeSingle();
+      if (m) return m as Record<string, any>;
+    }
+  }
+  return null;
+};
+
 export const payConsolidatedBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
@@ -5927,73 +6064,10 @@ export const payConsolidatedBill = async (req: Request, res: Response, next: Nex
     if (!master) throw new AppError('Master bill not found', 404);
     ensureBranchAccess(req, (master as any).branch_id);
 
-    const { data: memberRows, error } = await supabase
-      .from('pos_shift_orders')
-      .select('*')
-      .eq('master_bill_id', masterBillId)
-      .not('status', 'eq', 'cancelled');
-    if (error) throw error;
-    const members = (memberRows || []) as Array<Record<string, any>>;
-    const unsettled = members.filter((o) => !['paid', 'credit_bill', 'voided'].includes(String(o.payment_status)));
-    if (unsettled.length === 0) throw new AppError('This bill is already settled', 409);
-
-    // Every member's outlet shift must be open to accept payment + post stock.
-    const shiftIds = Array.from(new Set(unsettled.map((o) => String(o.shift_id))));
-    const { data: shiftRows, error: shiftErr } = await supabase
-      .from('pos_outlet_shifts')
-      .select('id, status, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
-      .in('id', shiftIds);
-    if (shiftErr) throw shiftErr;
-    const shiftById = new Map((shiftRows || []).map((s: any) => [String(s.id), s]));
-    for (const o of unsettled) {
-      const shift = shiftById.get(String(o.shift_id));
-      if (!shift) throw new AppError('An outlet shift for this bill could not be found', 404);
-      if (String(shift.status) !== 'open') {
-        const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
-        throw new AppError(`The ${outlet?.name || 'outlet'} shift is closed — reopen it or settle that item separately before settling the combined bill.`, 400);
-      }
-    }
-
-    let totalSettled = 0;
-    for (const order of unsettled) {
-      const shift = shiftById.get(String(order.shift_id));
-      const balance = Math.max(0, numberValue(order.balance_amount) || numberValue(order.total_amount) - numberValue(order.amount_paid));
-      await settleOrderBalance({
-        order,
-        shift,
-        method,
-        amount: balance,
-        receivedBy: String(req.user.id),
-        reference: (master as any).master_bill_number || `BILL-${masterBillId.slice(0, 8)}`
-      });
-      await supabase.from('pos_shift_orders').update({ sub_bill_status: 'settled' }).eq('id', order.id);
-      totalSettled += balance;
-    }
-
-    // Close the master bill + stamp the settlement (origin) cashier.
-    await recomputeMasterBillTotals(masterBillId);
     const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null;
-    const now = new Date().toISOString();
-    await supabase.from('pos_master_bills').update({
-      status: 'closed',
-      settlement_cashier_id: req.user.id,
-      settlement_cashier_name: cashierName,
-      payment_method: method,
-      paid_at: now,
-      closed_at: now,
-      updated_at: now
-    }).eq('id', masterBillId);
-
-    // Each outlet sub-bill is 'settled' pending that outlet cashier's
-    // confirmation; the origin outlet is auto-confirmed (collected locally).
-    await supabase.from('pos_master_bill_settlements').update({
-      status: 'settled', collecting_cashier_id: req.user.id, payment_method: method, updated_at: now
-    }).eq('master_bill_id', masterBillId).neq('status', 'cashier_confirmed');
-    await supabase.from('pos_master_bill_settlements').update({
-      status: 'cashier_confirmed', confirmed_by: req.user.id, confirmed_at: now
-    }).eq('master_bill_id', masterBillId).eq('is_origin', true);
-
-    const view = await loadMasterBillView(masterBillId);
+    const { totalSettled, view } = await settleMasterBillCore(master, {
+      method, userId: String(req.user.id), cashierName
+    });
     res.json({
       success: true,
       data: {
