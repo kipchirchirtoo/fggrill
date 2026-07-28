@@ -4199,6 +4199,25 @@ async function settleNonManualBill(
             .maybeSingle();
         if (updErr) throw updErr;
 
+        if (fullyPaid) {
+            try {
+                await supabase
+                    .from('folios')
+                    .update({
+                        status: 'closed',
+                        settled: true,
+                        settled_at: new Date().toISOString(),
+                        balance: 0,
+                        balance_due: 0,
+                        total_payments: newPaid,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('reservation_id', id);
+            } catch (folErr: any) {
+                logger.warn('Could not settle folio on cashier payment:', folErr?.message);
+            }
+        }
+
         await recordCashierTransactionSafe({
             branchId, cashierId, paymentAmount, payment_method, payment_reference,
             revenueType: 'hotel', referenceType: 'reservation', referenceId: id,

@@ -578,11 +578,15 @@ export const checkOutBooking = async (
       );
     }
 
-    // 2. Update booking status
+    // 2. Update booking status and payment status
+    const totalAmount = Number(booking.total_amount || 0);
     const { data: updatedBooking, error: updateError } = await supabase
       .from('reservations')
       .update({
         status: 'checked_out',
+        payment_status: 'paid',
+        amount_paid: totalAmount > 0 ? totalAmount : Number(booking.amount_paid || 0),
+        deposit_paid: true,
         checked_out_at: new Date().toISOString(),
         checked_out_by: userId,
         updated_at: new Date().toISOString()
@@ -598,19 +602,39 @@ export const checkOutBooking = async (
 
     logger.info(`Successfully checked out booking ${id}`);
 
-    // 3. Update room status if room is assigned
+    // Auto-settle folio for this reservation
+    try {
+      await supabase
+        .from('folios')
+        .update({
+          status: 'closed',
+          settled: true,
+          settled_at: new Date().toISOString(),
+          balance: 0,
+          balance_due: 0,
+          total_payments: totalAmount,
+          updated_at: new Date().toISOString()
+        })
+        .eq('reservation_id', id);
+    } catch (folioErr: any) {
+      logger.warn(`Could not close folio for booking ${id}:`, folioErr.message);
+    }
+
+    // 3. Update room status to available if room is assigned
     if (booking.room_id) {
       try {
-        await bookingService.updateRoomStatus(
-          booking.room_id,
-          RoomStatus.CLEANING,
-          userId,
-          `Room set to cleaning via check-out for booking ${booking.confirmation_number || booking.reservation_number}`
-        );
-        logger.info(`Room ${booking.room_id} status updated to cleaning`);
+        await supabase
+          .from('rooms')
+          .update({
+            status: 'available',
+            hk_status: 'vacant_clean',
+            current_guest: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', booking.room_id);
+        logger.info(`Room ${booking.room_id} status updated to available`);
       } catch (roomError) {
         logger.error('Failed to update room status during check-out:', roomError);
-        // Don't fail the checkout if room status update fails
       }
     }
 

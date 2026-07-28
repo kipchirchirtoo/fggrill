@@ -177,7 +177,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
 
       // Update room status
       if (_selectedBooking!.roomId != null && _selectedBooking!.roomId!.isNotEmpty) {
-        await _repository.updateRoomStatus(_selectedBooking!.roomId!, 'cleaning');
+        await _repository.updateRoomStatus(_selectedBooking!.roomId!, 'available');
       }
 
       if (mounted) {
