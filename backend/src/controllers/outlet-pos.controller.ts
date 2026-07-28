@@ -5696,21 +5696,29 @@ export const getWaiterOpenBills = async (req: Request, res: Response, next: Next
   try {
     assertUser(req);
     const branchId = branchIdFor(req);
-    // Managers/global users may inspect a specific waiter; everyone else sees
-    // their own orders only (matches the "same waiter's own orders" rule).
+    // Waiters (owner-scoped roles) see ONLY their own orders. A cashier/manager
+    // is NOT owner-scoped: they see every open customer bill in the branch so
+    // they can recall a combined bill and settle it (the whole point of the
+    // "all outlets" panel for the settling cashier). A manager/global may still
+    // narrow to one waiter by passing waiter_id.
     const requestedWaiter = nullableText(req.query.waiter_id);
-    const targetWaiterId = (requestedWaiter && (canManageOutlets(req) || isGlobalUser(req)))
-      ? requestedWaiter
-      : String(req.user.id);
+    const ownerScoped = shouldScopeOrdersToOwner(req);
+    const targetWaiterId = ownerScoped
+      ? String(req.user.id)
+      : (requestedWaiter && (canManageOutlets(req) || isGlobalUser(req)))
+          ? requestedWaiter
+          : null;
 
     let query = supabase
       .from('pos_shift_orders')
       .select('*, outlet:pos_outlets(id, name, outlet_type)')
-      .or(`waiter_id.eq.${targetWaiterId},created_by.eq.${targetWaiterId}`)
       .in('payment_status', ['unpaid', 'partial'])
       .not('status', 'in', '(cancelled,voided)')
       .order('created_at', { ascending: false })
       .limit(500);
+    if (targetWaiterId) {
+      query = query.or(`waiter_id.eq.${targetWaiterId},created_by.eq.${targetWaiterId}`);
+    }
     if (branchId) query = query.eq('branch_id', branchId);
 
     const { data, error } = await query;
