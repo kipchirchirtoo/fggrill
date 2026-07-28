@@ -5638,7 +5638,14 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                                   'price_per_night',
                                   'rate',
                                   'base_rate',
-                                  'base_price'
+                                  'base_price',
+                                  'type.base_price',
+                                  'type.price_per_night',
+                                  'type.base_rate',
+                                  'type.rate',
+                                  'room_type.base_price',
+                                  'room_type.price_per_night',
+                                  'room_type.rate',
                                 ]))}/night'),
                             trailing: selected
                                 ? const Icon(Icons.check_circle,
@@ -5823,14 +5830,30 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                     {
                       'label': 'Room',
                       'value': _selectedRoom == null
-                          ? '-'
+                          ? 'No room selected'
                           : 'Room ${_text(_selectedRoom!, [
                                   'room_number',
                                   'number'
-                                ])}'
+                                ]) ?? ''}'
                     },
-                    {'label': 'Guest', 'value': _selectedGuest?.name ?? '-'},
-                    {'label': 'Total', 'value': _money(total)},
+                    {'label': 'Guest', 'value': _selectedGuest?.name ?? 'No guest selected'},
+                    {
+                      'label': 'Nightly Rate',
+                      'value': _money(_num(_selectedRoom ?? const {}, [
+                        'price_per_night',
+                        'rate',
+                        'base_price',
+                        'base_rate',
+                        'type.base_price',
+                        'type.price_per_night',
+                        'type.base_rate',
+                        'type.rate',
+                        'room_type.base_price',
+                        'room_type.price_per_night',
+                        'room_type.rate',
+                      ]))
+                    },
+                    {'label': 'Total Amount', 'value': _money(total)},
                   ]),
                 ],
               ),
@@ -5913,19 +5936,29 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   }
 
   double _totalAmount() {
-    final rate = _num(_selectedRoom ?? const {},
-        ['price_per_night', 'rate', 'base_price']).toDouble();
+    final rate = _num(_selectedRoom ?? const {}, [
+      'price_per_night',
+      'rate',
+      'base_price',
+      'base_rate',
+      'type.base_price',
+      'type.price_per_night',
+      'type.base_rate',
+      'type.rate',
+      'room_type.base_price',
+      'room_type.price_per_night',
+      'room_type.rate',
+    ]).toDouble();
     final inDate = DateTime.tryParse(_checkIn.text) ?? DateTime.now();
     final outDate = DateTime.tryParse(_checkOut.text) ??
         inDate.add(const Duration(days: 1));
     final nights = outDate.difference(inDate).inDays.clamp(1, 365);
-    final meal = switch (_mealPlan) {
-      'bed_breakfast' => 1200,
-      'half_board' => 2800,
-      'full_board' => 4200,
+    final mealAddon = switch (_mealPlan) {
+      'half_board' => 1600,
+      'full_board' => 3000,
       _ => 0,
     };
-    return (rate + meal) * nights;
+    return (rate + mealAddon) * nights;
   }
 
   Future<void> _submit() async {
