@@ -420,93 +420,6 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
     }
   }
 
-  Future<void> _moveTable(ConsolidatedBill bill) async {
-    final billId = bill.masterBillId;
-    if (billId == null) return;
-    final controller = TextEditingController(text: bill.tableNumber ?? '');
-    final table = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Move table'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-              labelText: 'Table number', border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Move')),
-        ],
-      ),
-    );
-    if (table == null) return;
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(outletPosRepositoryProvider)
-          .moveMasterBillTable(masterBillId: billId, tableNumber: table);
-      if (mounted) Navigator.pop(context);
-      await widget.onChanged();
-      _snack('Bill moved to table ${table.isEmpty ? '—' : table}.');
-    } catch (e) {
-      _snack('Move failed: $e', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _transferWaiter(ConsolidatedBill bill) async {
-    final billId = bill.masterBillId;
-    if (billId == null) return;
-    List<OutletStaffMember> staff;
-    try {
-      staff = await ref.read(outletPosRepositoryProvider).getStaff();
-    } catch (e) {
-      _snack('Could not load staff: $e', error: true);
-      return;
-    }
-    if (!mounted) return;
-    final picked = await showDialog<OutletStaffMember>(
-      context: context,
-      builder: (_) => SimpleDialog(
-        title: const Text('Transfer to waiter'),
-        children: [
-          for (final w in staff)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, w),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(w.name, style: const TextStyle(fontSize: 15)),
-              ),
-            ),
-          if (staff.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No staff found.'),
-            ),
-        ],
-      ),
-    );
-    if (picked == null) return;
-    setState(() => _busy = true);
-    try {
-      await ref.read(outletPosRepositoryProvider).transferMasterBillWaiter(
-          masterBillId: billId, waiterId: picked.id, waiterName: picked.name);
-      if (mounted) Navigator.pop(context);
-      await widget.onChanged();
-      _snack('Bill transferred to ${picked.name}.');
-    } catch (e) {
-      _snack('Transfer failed: $e', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _addItems(ConsolidatedBill bill) async {
     final billId = bill.masterBillId;
     if (billId == null) return;
@@ -617,27 +530,13 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                   ),
                 if (bill.masterBillId != null) ...[
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : () => _addItems(bill),
-                        icon: const Icon(Icons.add_shopping_cart, size: 18),
-                        label: const Text('Add items (another outlet)'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : () => _transferWaiter(bill),
-                        icon: const Icon(Icons.people_alt_outlined, size: 18),
-                        label: const Text('Transfer waiter'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : () => _moveTable(bill),
-                        icon:
-                            const Icon(Icons.table_restaurant_outlined, size: 18),
-                        label: const Text('Move table'),
-                      ),
-                    ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _addItems(bill),
+                      icon: const Icon(Icons.add_shopping_cart, size: 18),
+                      label: const Text('Add items (another outlet)'),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
