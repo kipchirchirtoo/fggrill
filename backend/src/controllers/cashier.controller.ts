@@ -6581,8 +6581,12 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
             return;
         }
 
-        if (logbook.status !== 'open') {
-            throw new AppError('Only open logbooks can be submitted for audit', 400);
+        // A cashier submits a fresh (open) logbook, OR resubmits one the branch
+        // accountant/auditor returned (rejected) after correcting it. Both route
+        // to the accountant; anything already in a review queue is left alone.
+        const isResubmission = logbook.status === 'rejected';
+        if (logbook.status !== 'open' && !isResubmission) {
+            throw new AppError('Only open or returned logbooks can be submitted for review', 400);
         }
 
         // Logbooks first land with the branch accountant for review; the
@@ -6613,12 +6617,17 @@ export const submitLogbookForAudit = async (req: Request, res: Response, next: N
             metadata: { logbook_id: id, type: 'cashier_logbook', cashier_id }
         };
 
-        notificationService.notifyRole('branch_accountant', 'Cashier Logbook Submission', `Cashier logbook for ${logbook.type} has been submitted for review.`, notificationData)
+        notificationService.notifyRole('branch_accountant',
+            isResubmission ? 'Cashier Logbook Resubmitted' : 'Cashier Logbook Submission',
+            `Cashier logbook for ${logbook.type} has been ${isResubmission ? 'corrected and resubmitted' : 'submitted'} for review.`,
+            notificationData)
             .catch(e => logger.error('Failed to notify accountant of logbook submission', e));
 
         res.json({
             success: true,
-            message: 'Logbook submitted for audit successfully',
+            message: isResubmission
+                ? 'Logbook corrected and resubmitted for accountant review'
+                : 'Logbook submitted for review successfully',
             data: updated
         });
 
@@ -8001,13 +8010,29 @@ export const auditLogbook = async (req: Request, res: Response, next: NextFuncti
                         metadata: { logbook_id: id, status: updated.status }
                     }
                 ).catch(e => logger.error('Failed to notify auditor of accountant-reviewed logbook', e));
+            } else if (updated?.cashier_id) {
+                // Rejected by the branch accountant → return the logbook to the
+                // cashier station for correction. The cashier edits the figures
+                // and resubmits (submitLogbookForAudit accepts a rejected
+                // logbook), which routes it straight back here for re-review.
+                notificationService.notifyUser(
+                    updated.cashier_id,
+                    'Logbook returned for correction',
+                    `Your ${updated.type} shift logbook was returned by the branch accountant${notes ? `: ${notes}` : ''}. Open it at your cashier station, correct it and resubmit for approval.`,
+                    {
+                        type: 'warning',
+                        category: 'cashier_logbook',
+                        priority: 'high',
+                        metadata: { logbook_id: id, status: updated.status }
+                    }
+                ).catch(e => logger.error('Failed to notify cashier of returned logbook', e));
             }
 
             res.json({
                 success: true,
                 message: action === 'approve'
                     ? 'Logbook sent to auditor for final review'
-                    : 'Logbook rejected by branch accountant',
+                    : 'Logbook returned to cashier for correction',
                 data: updated
             });
             return;
@@ -8038,7 +8063,7 @@ export const auditLogbook = async (req: Request, res: Response, next: NextFuncti
             const resultTitle = action === 'approve' ? 'Logbook Approved' : 'Logbook Rejected';
             const resultMsg = action === 'approve'
                 ? `Your cashier logbook for ${updated.type} has been approved.`
-                : `Your cashier logbook for ${updated.type} was rejected. Reason: ${notes || 'No reason provided.'}`;
+                : `Your cashier logbook for ${updated.type} was returned. Reason: ${notes || 'No reason provided.'} Correct it at your cashier station and resubmit for approval.`;
 
             notificationService.notifyUser(
                 updated.cashier_id,

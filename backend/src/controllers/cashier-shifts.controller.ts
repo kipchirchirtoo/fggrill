@@ -866,9 +866,35 @@ export const getShiftLogs = async (
             return { ...shift, cashier_name: cashierName };
         }));
 
+        // Attach each closed shift's generated logbook review status so the
+        // cashier UI can surface a RETURNED (rejected) logbook and offer to
+        // correct + resubmit it to the branch accountant.
+        const enrichedShiftIds = enriched.map((s: any) => s.id).filter(Boolean);
+        const logbookByShiftId: Record<string, any> = {};
+        if (enrichedShiftIds.length) {
+            const { data: shiftLogbooks } = await supabase
+                .from('cashier_logbooks')
+                .select('id, cashier_shift_id, status, accountant_notes, audit_notes')
+                .in('cashier_shift_id', enrichedShiftIds);
+            for (const lb of shiftLogbooks || []) {
+                if (lb.cashier_shift_id) logbookByShiftId[lb.cashier_shift_id] = lb;
+            }
+        }
+        const withLogbook = enriched.map((s: any) => {
+            const lb = logbookByShiftId[s.id];
+            return lb
+                ? {
+                    ...s,
+                    logbook_id: lb.id,
+                    logbook_status: lb.status,
+                    logbook_review_notes: lb.accountant_notes || lb.audit_notes || null,
+                }
+                : s;
+        });
+
         res.status(200).json({
             success: true,
-            data: enriched
+            data: withLogbook
         });
     } catch (error) {
         next(error);

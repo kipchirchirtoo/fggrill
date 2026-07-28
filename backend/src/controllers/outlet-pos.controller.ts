@@ -3566,18 +3566,41 @@ export const kitchenDeclineVoidRequest = async (req: Request, res: Response, nex
       .single();
     if (updateErr || !updatedRow) throw updateErr || new AppError('Void request already processed', 409);
 
+    // Kitchen declined the void → the bill is valid and must be paid. Send it
+    // straight back to the waiter as a normal, UNPAID active bill: clear the
+    // void-pending state, restore each item out of 'void_requested' into the
+    // active kitchen queue, and mark the order unpaid so it can be collected /
+    // sent to the cashier for settlement.
+    const { data: declinedOrder } = await supabase
+      .from('pos_shift_orders')
+      .select('items')
+      .eq('id', requestRow.order_id)
+      .single();
+    const restoredItems = Array.isArray(declinedOrder?.items)
+      ? declinedOrder.items.map((it: any) =>
+          String(it?.kitchen_status || '').toLowerCase() === 'void_requested'
+            ? { ...it, kitchen_status: 'pending' }
+            : it)
+      : declinedOrder?.items;
+
     await supabase
       .from('pos_shift_orders')
-      .update({ void_request_status: 'rejected', kitchen_status: 'pending', updated_at: now })
+      .update({
+        void_request_status: 'rejected',
+        kitchen_status: 'pending',
+        payment_status: 'unpaid',
+        ...(restoredItems !== undefined ? { items: restoredItems } : {}),
+        updated_at: now
+      })
       .eq('id', requestRow.order_id);
 
     const kitchenName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Kitchen';
     if (requestRow.requested_by) {
       await notificationService.notifyUser(
         requestRow.requested_by,
-        'Void request declined by kitchen',
-        `Kitchen (${kitchenName}) declined the void for ${requestRow.order_number || 'the bill'}${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back in the active queue.`,
-        { type: 'warning', category: 'pos_void_request', priority: 'medium',
+        'Void declined — bill back to you (unpaid)',
+        `Kitchen (${kitchenName}) declined the void for ${requestRow.order_number || 'the bill'}${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back with you as an UNPAID bill — collect payment or send it to the cashier.`,
+        { type: 'warning', category: 'pos_void_request', priority: 'high',
           metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason } }
       );
     }
@@ -3773,18 +3796,39 @@ export const cashierDeclineVoidRequest = async (req: Request, res: Response, nex
       .single();
     if (updateErr || !updatedRow) throw updateErr || new AppError('Void request already processed', 409);
 
+    // Same as a kitchen decline: the void is refused, so the bill is valid and
+    // goes back to the waiter as an UNPAID active bill (items restored out of
+    // 'void_requested', order marked unpaid) to be collected / settled.
+    const { data: declinedOrder } = await supabase
+      .from('pos_shift_orders')
+      .select('items')
+      .eq('id', requestRow.order_id)
+      .single();
+    const restoredItems = Array.isArray(declinedOrder?.items)
+      ? declinedOrder.items.map((it: any) =>
+          String(it?.kitchen_status || '').toLowerCase() === 'void_requested'
+            ? { ...it, kitchen_status: 'pending' }
+            : it)
+      : declinedOrder?.items;
+
     await supabase
       .from('pos_shift_orders')
-      .update({ void_request_status: 'rejected', kitchen_status: 'pending', updated_at: now })
+      .update({
+        void_request_status: 'rejected',
+        kitchen_status: 'pending',
+        payment_status: 'unpaid',
+        ...(restoredItems !== undefined ? { items: restoredItems } : {}),
+        updated_at: now
+      })
       .eq('id', requestRow.order_id);
 
     const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Cashier';
     if (requestRow.requested_by) {
       await notificationService.notifyUser(
         requestRow.requested_by,
-        'Void request declined by cashier',
-        `Cashier ${cashierName} declined the void for ${requestRow.order_number || 'the bill'}${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back in the active queue.`,
-        { type: 'warning', category: 'pos_void_request', priority: 'medium',
+        'Void declined — bill back to you (unpaid)',
+        `Cashier ${cashierName} declined the void for ${requestRow.order_number || 'the bill'}${rejectionReason ? `: ${rejectionReason}` : ''}. The bill is back with you as an UNPAID bill — collect payment or send it to the cashier.`,
+        { type: 'warning', category: 'pos_void_request', priority: 'high',
           metadata: { request_id: requestId, order_id: requestRow.order_id, shift_id: requestRow.shift_id, rejection_reason: rejectionReason } }
       );
     }

@@ -5030,6 +5030,49 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                         ),
                                       ],
                                     )
+                                  else if (_text(row, ['logbook_status'])
+                                          .toLowerCase() ==
+                                      'rejected')
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.error_outline,
+                                                  size: 14,
+                                                  color: AppColors.kError),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  'Logbook returned by accountant for correction'
+                                                  '${_text(row, [
+                                                        'logbook_review_notes'
+                                                      ]).isNotEmpty ? ': ${_text(row, [
+                                                          'logbook_review_notes'
+                                                        ])}' : ''}',
+                                                  style: const TextStyle(
+                                                    color: AppColors.kError,
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          FilledButton.icon(
+                                            onPressed: () =>
+                                                _resubmitLogbook(row),
+                                            icon: const Icon(Icons.send,
+                                                size: 16),
+                                            label: const Text(
+                                                'Correct & Resubmit Logbook'),
+                                          ),
+                                        ],
+                                      ),
+                                    )
                                   else
                                     Row(
                                       children: [
@@ -5060,6 +5103,43 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
         ],
       ),
     );
+  }
+
+  /// Correct & resubmit a shift logbook the branch accountant returned
+  /// (rejected). Sends it straight back to pending_accountant_review.
+  Future<void> _resubmitLogbook(Map<String, dynamic> row) async {
+    final logbookId = _text(row, ['logbook_id']);
+    if (logbookId.isEmpty || logbookId == '-') {
+      _snack('No logbook is linked to this shift yet.');
+      return;
+    }
+    final notes = _text(row, ['logbook_review_notes']);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Resubmit logbook'),
+        content: Text(
+          'Resend this corrected shift logbook to the branch accountant for approval?'
+          '${notes.isNotEmpty ? '\n\nReturned reason: $notes' : ''}',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Resubmit')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(cashierRepositoryProvider).resubmitLogbook(logbookId);
+      ref.invalidate(cashierShiftsProvider);
+      _snack('Logbook corrected and resubmitted to the branch accountant.');
+    } catch (error) {
+      _snack('Resubmit failed: ${apiErrorMessage(error)}');
+    }
   }
 
   Future<void> _startShift() async {

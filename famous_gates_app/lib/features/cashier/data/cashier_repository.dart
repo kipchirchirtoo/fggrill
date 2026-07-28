@@ -85,6 +85,12 @@ class CashierRepository {
   Future<Map<String, dynamic>> verifyPayment(String paymentId) =>
       _postMap('/cashier/verify-payment/$paymentId', {});
 
+  /// Resubmit a RETURNED (rejected) shift logbook to the branch accountant
+  /// after the cashier has corrected it. The backend routes it straight back
+  /// to pending_accountant_review.
+  Future<Map<String, dynamic>> resubmitLogbook(String logbookId) =>
+      _postMap('/cashier/logbook/${Uri.encodeComponent(logbookId)}/submit', {});
+
   /// Backend fallback print — only call this when the client-side receipt
   /// print itself has already failed. The payment has already succeeded by
   /// this point; this is a last-resort attempt to still get a receipt out.
