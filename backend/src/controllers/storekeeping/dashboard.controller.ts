@@ -13,7 +13,6 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
       return res.status(500).json({ success: false, message: 'Central warehouse configuration missing' });
     }
 
-
     // 1. Get Inventory Summary (from branch_stock for central warehouse)
     const { data: inventoryData, error: inventoryError } = await supabase
       .from('branch_stock')
@@ -39,7 +38,7 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
     if (requestError) throw requestError;
 
     const total_requests = requests?.length || 0;
-    const pending_requests = requests?.filter((r: any) => r.status === 'PENDING').length || 0;
+    const pending_requests = requests?.filter((r: any) => ['PENDING', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL', 'UNDER_REVIEW', 'PENDING_AUDIT'].includes(r.status)).length || 0;
     const approved_requests = requests?.filter((r: any) => ['APPROVED', 'PARTIALLY_APPROVED'].includes(r.status)).length || 0;
 
     // 3. Get Dispatch Summary
@@ -55,8 +54,6 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
     const in_transit_dispatches = dispatches?.filter((d: any) => d.status === 'IN_TRANSIT').length || 0;
 
     // 4. Recent Activity (Requests & Dispatches)
-    // We'll fetch 5 of each and sort in memory for simplicity, or use a union if RPC available.
-    // Fetching separately is safer without RPC.
     const { data: recentRequests } = await supabase
       .from('stock_requests')
       .select('request_number, status, created_at')
@@ -75,9 +72,6 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
     ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 10);
 
     // 5. Top Requested Items
-    // This requires aggregation which Supabase JS client doesn't support directly without RPC.
-    // We will fetch all items from recent requests and aggregate in memory.
-    // Limiting to last 100 request items to avoid performance issues.
     const { data: requestItems } = await supabase
       .from('stock_request_items')
       .select('item_sku, requested_quantity')
@@ -119,7 +113,7 @@ export const getWarehouseDashboard = async (req: Request, res: Response) => {
           total_items,
           low_stock_items,
           total_quantity,
-          total_reserved: 0 // Not currently tracking reserved in simple schema
+          total_reserved: 0
         },
         requests: {
           total_requests,

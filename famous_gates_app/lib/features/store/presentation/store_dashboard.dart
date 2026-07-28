@@ -2564,8 +2564,8 @@ final _centralRequestsRawProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String?>(
   (ref, status) {
     final path = status != null && status.isNotEmpty
-        ? '/store/stock-requests?status=$status'
-        : '/store/stock-requests';
+        ? '/store/stock-requests?status=$status&branch_id=all'
+        : '/store/stock-requests?branch_id=all';
     return ref.read(storeRepositoryProvider).getResource(path);
   },
 );
@@ -3373,8 +3373,8 @@ class _PackingTab extends ConsumerStatefulWidget {
 
 class _PackingTabState extends ConsumerState<_PackingTab> {
   // Correct endpoint: GET /store/stock-requests?status=APPROVED
-  static const _approvedKey = '/store/stock-requests?status=APPROVED';
-  static const _partialKey = '/store/stock-requests?status=PARTIALLY_APPROVED';
+  static const _approvedKey = '/store/stock-requests?status=APPROVED&branch_id=all';
+  static const _partialKey = '/store/stock-requests?status=PARTIALLY_APPROVED&branch_id=all';
 
   @override
   Widget build(BuildContext context) {

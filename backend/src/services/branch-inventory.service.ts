@@ -1058,7 +1058,12 @@ export async function getRequests(
   }
 
   if (status) {
-    query = query.eq('status', status);
+    if (status.includes(',')) {
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      query = query.in('status', statuses);
+    } else if (status !== 'all') {
+      query = query.eq('status', status);
+    }
   }
 
   if (options?.createdFrom) {
@@ -1069,6 +1074,15 @@ export async function getRequests(
   if (error) throw error;
   if (!requests || requests.length === 0) return [];
 
+  // Get requesting branches for branch_name resolution
+  const requestingBranchIds = [...new Set(requests.map(r => r.requesting_branch_id || r.branch_id).filter(Boolean))];
+  const { data: branches } = requestingBranchIds.length
+    ? await supabase
+      .from('branches')
+      .select('id, name, code, location')
+      .in('id', requestingBranchIds)
+    : { data: [] as any[] };
+
   // Get request items
   const requestIds = requests.map(r => r.id);
   const { data: items } = await supabase
@@ -1077,14 +1091,16 @@ export async function getRequests(
     .in('request_id', requestIds);
 
   // Get item details
-  const skus = [...new Set((items || []).map(i => i.item_sku))];
-  const { data: itemDetails } = await supabase
-    .from('simple_items')
-    .select('sku, item_name, description, category, unit_of_measure')
-    .in('sku', skus);
+  const itemSkus = [...new Set((items || []).map(i => i.item_sku))];
+  const { data: itemDetails } = itemSkus.length
+    ? await supabase
+      .from('simple_items')
+      .select('sku, item_name, description, category, unit_of_measure')
+      .in('sku', itemSkus)
+    : { data: [] as any[] };
 
   // Get reviewer details (if any)
-  const reviewerIds = [...new Set(requests.map(r => r.reviewed_by).filter(id => id))];
+  const reviewerIds = [...new Set(requests.map(r => r.reviewed_by).filter(Boolean))];
   let reviewers: any[] = [];
   if (reviewerIds.length > 0) {
     const { data: r } = await supabase
@@ -1112,35 +1128,38 @@ export async function getRequests(
 
   // Map items and reviewers back to requests
   return requests.map(request => {
+    const resolvedBranchId = request.requesting_branch_id || request.branch_id;
+    const branchObj = branches?.find(b => b.id === resolvedBranchId) || { id: resolvedBranchId, name: 'Unknown', code: 'UNK', location: '' };
+    
     // Find dispatch(es) for this request
     const requestDispatches = (dispatches || []).filter(d => d.stock_request_id === request.id);
     const requestDispatchIds = requestDispatches.map(d => d.id);
     const requestDispatchItems = dispatchItems.filter(di => requestDispatchIds.includes(di.dispatch_id));
-
-    // Latest dispatch info
     const latestDispatch = requestDispatches[0] || null;
 
     return {
       ...request,
-      branch: request.requesting_branch || { name: 'Unknown' },
-      branch_name: request.requesting_branch?.name || 'Unknown',
+      branch: branchObj,
+      branch_name: branchObj.name,
+      requesting_branch_name: branchObj.name,
       dispatch_number: latestDispatch?.dispatch_number || null,
       dispatch_status: latestDispatch?.status || null,
       dispatched_at: latestDispatch?.dispatched_at || null,
-      items: (items || []).filter(i => i.request_id === request.id).map(i => {
-        const details = itemDetails?.find(id => id.sku === i.item_sku);
-        // Sum dispatched quantity across all dispatches for this item
-        const dispatched_quantity = requestDispatchItems
-          .filter(di => di.item_sku === i.item_sku)
-          .reduce((sum: number, di: any) => sum + (di.dispatched_quantity || 0), 0);
-        return {
-          ...i,
-          item: details,
-          item_name: details?.item_name || i.item_sku,
-          unit: details?.unit_of_measure || '',
-          dispatched_quantity: dispatched_quantity || null
-        };
-      }),
+      items: (items || [])
+        .filter(i => i.request_id === request.id)
+        .map(item => {
+          const details = itemDetails?.find(d => d.sku === item.item_sku);
+          const dispatched_quantity = requestDispatchItems
+            .filter(di => di.item_sku === item.item_sku)
+            .reduce((sum: number, di: any) => sum + (di.dispatched_quantity || 0), 0);
+          return {
+            ...item,
+            item: details,
+            item_name: details?.item_name || item.item_sku,
+            unit: details?.unit_of_measure || item.unit || '',
+            dispatched_quantity: dispatched_quantity || null
+          };
+        }),
       reviewed_by_user: reviewers.find(r => r.id === request.reviewed_by)
     };
   });
@@ -1154,18 +1173,20 @@ export async function getPendingRequests() {
   const { data: requests, error } = await supabase
     .from('stock_requests')
     .select('*')
-    .in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL'])
+    .in('status', ['PENDING', 'PENDING_AUDIT', 'UNDER_REVIEW', 'PENDING_BRANCH_ACCOUNTANT_APPROVAL', 'APPROVED', 'PARTIALLY_APPROVED'])
     .order('created_at', { ascending: true });
 
   if (error) throw error;
   if (!requests || requests.length === 0) return [];
 
   // Get branches for these requests
-  const branchIds = [...new Set(requests.map(r => r.requesting_branch_id))];
-  const { data: branches } = await supabase
-    .from('branches')
-    .select('id, name, code, location')
-    .in('id', branchIds);
+  const branchIds = [...new Set(requests.map(r => r.requesting_branch_id || r.branch_id).filter(Boolean))];
+  const { data: branches } = branchIds.length
+    ? await supabase
+      .from('branches')
+      .select('id, name, code, location')
+      .in('id', branchIds)
+    : { data: [] as any[] };
 
   // Get items for these requests
   const requestIds = requests.map(r => r.id);
@@ -1176,33 +1197,36 @@ export async function getPendingRequests() {
 
   // Get item details
   const itemSkus = [...new Set((items || []).map(i => i.item_sku))];
-  const { data: itemDetails } = await supabase
-    .from('simple_items')
-    .select('sku, item_name, description, category, unit_of_measure')
-    .in('sku', itemSkus);
+  const { data: itemDetails } = itemSkus.length
+    ? await supabase
+      .from('simple_items')
+      .select('sku, item_name, description, category, unit_of_measure')
+      .in('sku', itemSkus)
+    : { data: [] as any[] };
 
   // Combine data
-  return requests.map(request => ({
-    ...request,
-    branch: branches?.find(b => b.id === request.requesting_branch_id) || { id: request.requesting_branch_id, name: 'Unknown', code: 'UNK', location: '' },
-    branch_name: branches?.find(b => b.id === request.requesting_branch_id)?.name || 'Unknown',
-    items: (items || [])
-      .filter(i => i.request_id === request.id)
-      .map(item => {
-        const details = itemDetails?.find(d => d.sku === item.item_sku);
-        return {
-          ...item,
-          item: details,
-          item_name: details?.item_name || item.item_sku,
-          unit: details?.unit_of_measure || ''
-        };
-      })
-  }));
+  return requests.map(request => {
+    const resolvedBranchId = request.requesting_branch_id || request.branch_id;
+    const branchObj = branches?.find(b => b.id === resolvedBranchId) || { id: resolvedBranchId, name: 'Unknown', code: 'UNK', location: '' };
+    return {
+      ...request,
+      branch: branchObj,
+      branch_name: branchObj.name,
+      requesting_branch_name: branchObj.name,
+      items: (items || [])
+        .filter(i => i.request_id === request.id)
+        .map(item => {
+          const details = itemDetails?.find(d => d.sku === item.item_sku);
+          return {
+            ...item,
+            item: details,
+            item_name: details?.item_name || item.item_sku,
+            unit: details?.unit_of_measure || item.unit || ''
+          };
+        })
+    };
+  });
 }
-
-/**
- * Approve stock request (by central, auditor, or branch accountant).
- */
 export async function approveStockRequest(
   requestId: string,
   reviewerId: string,
