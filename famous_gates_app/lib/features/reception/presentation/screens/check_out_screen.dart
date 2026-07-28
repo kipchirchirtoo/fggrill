@@ -127,13 +127,51 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
 
     setState(() => _loadingFolio = true);
     try {
-      final folio = await _repository.getFolio(_selectedBooking!.id);
+      final raw = await _repository.getFolio(_selectedBooking!.id);
+      final folioMap = (raw['folio'] is Map)
+          ? Map<String, dynamic>.from(raw['folio'] as Map)
+          : raw;
+
+      final bookingTotal = _selectedBooking?.totalAmount ?? 0.0;
+      final bookingPaid = _selectedBooking?.amountPaid ?? _selectedBooking?.depositAmount ?? 0.0;
+
+      final rawRoom = (folioMap['room_charges'] ?? folioMap['roomCharges']) as num?;
+      final rawFood = (folioMap['food_charges'] ?? folioMap['foodCharges']) as num?;
+      final rawBev = (folioMap['beverage_charges'] ?? folioMap['beverageCharges']) as num?;
+      final rawOther = (folioMap['other_charges'] ?? folioMap['otherCharges']) as num?;
+      final rawTotal = (folioMap['total_charges'] ?? folioMap['totalCharges']) as num?;
+      final rawPayments = (folioMap['total_payments'] ?? folioMap['totalPayments']) as num?;
+      final rawBal = (folioMap['balance'] ?? folioMap['balance_due']) as num?;
+
+      final rCharges = (rawRoom != null && rawRoom.toDouble() > 0) ? rawRoom.toDouble() : bookingTotal;
+      final fCharges = rawFood?.toDouble() ?? 0.0;
+      final bCharges = rawBev?.toDouble() ?? 0.0;
+      final oCharges = rawOther?.toDouble() ?? 0.0;
+
+      final calcTotal = (rawTotal != null && rawTotal.toDouble() > 0)
+          ? rawTotal.toDouble()
+          : (rCharges + fCharges + bCharges + oCharges);
+
+      final calcPayments = rawPayments?.toDouble() ?? bookingPaid;
+      final calcBalance = rawBal?.toDouble() ?? (calcTotal - calcPayments);
+
+      final txList = raw['transactions'] is List
+          ? List<Map<String, dynamic>>.from(raw['transactions'])
+          : (folioMap['transactions'] is List
+              ? List<Map<String, dynamic>>.from(folioMap['transactions'])
+              : <Map<String, dynamic>>[]);
+
       setState(() {
-        _folio = folio;
-        _totalCharges = (folio['total_charges'] as num?)?.toDouble() ?? 0.0;
-        _totalPayments = (folio['total_payments'] as num?)?.toDouble() ?? 0.0;
-        _balance = (folio['balance'] as num?)?.toDouble() ?? 0.0;
-        _transactions = List<Map<String, dynamic>>.from(folio['transactions'] ?? []);
+        _folio = {
+          'room_charges': rCharges,
+          'food_charges': fCharges,
+          'beverage_charges': bCharges,
+          'other_charges': oCharges,
+        };
+        _totalCharges = calcTotal;
+        _totalPayments = calcPayments;
+        _balance = calcBalance > 0 ? calcBalance : 0.0;
+        _transactions = txList;
         _loadingFolio = false;
       });
     } catch (e) {
@@ -144,6 +182,141 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
         );
       }
     }
+  }
+
+  Future<void> _showCashierPaymentDialog() async {
+    if (_selectedBooking == null || _balance <= 0) return;
+
+    final amountController = TextEditingController(text: _balance.toStringAsFixed(2));
+    final refController = TextEditingController();
+    String selectedMethod = 'Cash';
+    bool isProcessing = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: const [
+                  Icon(Icons.point_of_sale, color: AppColors.kPrimary),
+                  SizedBox(width: 8),
+                  Text('Cashier Payment Station'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Guest: ${_selectedBooking!.guestName ?? "Guest"}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Room ${_selectedBooking!.roomNumber ?? "-"} • Balance KES ${_balance.toStringAsFixed(2)}',
+                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                    ),
+                    const Divider(height: 24),
+                    const Text('Payment Method', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: selectedMethod,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      items: ['Cash', 'M-Pesa', 'Card', 'Bank Transfer'].map((m) {
+                        return DropdownMenuItem(value: m, child: Text(m));
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedMethod = val);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Amount (KES)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        prefixText: 'KES ',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Payment Ref / Code (Optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: refController,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. M-Pesa Code / Receipt #',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isProcessing ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: isProcessing
+                      ? null
+                      : () async {
+                          final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
+                          if (amount <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter a valid payment amount')),
+                            );
+                            return;
+                          }
+                          setDialogState(() => isProcessing = true);
+                          try {
+                            await _repository.recordBillPayment(_selectedBooking!.id, {
+                              'payment_amount': amount,
+                              'payment_method': selectedMethod,
+                              'payment_reference': refController.text.trim(),
+                            });
+                            if (mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Payment of KES ${amount.toStringAsFixed(2)} processed successfully at Cashier Station.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              await _loadFolio();
+                            }
+                          } catch (e) {
+                            setDialogState(() => isProcessing = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Payment processing failed: $e')),
+                              );
+                            }
+                          }
+                        },
+                  icon: isProcessing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check, size: 18),
+                  label: const Text('Process Payment'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _performCheckOut() async {
@@ -360,7 +533,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
             const SizedBox(height: 16),
           ],
 
-          // Payment Collection (if balance > 0) - Future implementation
+          // Cashier Station Payment Section (if balance > 0)
           if (_balance > 0) ...[
             Card(
               elevation: 2,
@@ -372,17 +545,33 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.warning_amber, color: Colors.orange.shade700),
+                        Icon(Icons.point_of_sale, color: Colors.orange.shade800),
                         const SizedBox(width: 8),
-                        const Text('Outstanding Balance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Text('Cashier Payment Station', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('Balance: KES ${_balance.toStringAsFixed(2)}', 
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Balance Due: KES ${_balance.toStringAsFixed(2)}', 
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
                     const SizedBox(height: 4),
-                    const Text('Payment collection feature coming soon', 
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Text(
+                      'Payments are processed through the Cashier Station. Collect payment via Cash, M-Pesa, or Card to settle balance before check-out.',
+                      style: TextStyle(fontSize: 13, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _showCashierPaymentDialog,
+                        icon: const Icon(Icons.payment, size: 18),
+                        label: const Text('Collect Payment at Cashier Station'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade800,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -418,7 +607,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
           ElevatedButton(
             onPressed: _isSubmitting ? null : _performCheckOut,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _balance > 0 ? Colors.orange : AppColors.kPrimary,
+              backgroundColor: _balance > 0 ? Colors.orange.shade700 : AppColors.kPrimary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
@@ -429,7 +618,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   )
                 : Text(
-                    _balance > 0 ? 'Check-Out (Balance Outstanding)' : 'Complete Check-Out',
+                    _balance > 0 ? 'Check-Out (Pending Cashier Settlement)' : 'Complete Check-Out (Fully Paid)',
                     style: const TextStyle(fontSize: 16),
                   ),
           ),
