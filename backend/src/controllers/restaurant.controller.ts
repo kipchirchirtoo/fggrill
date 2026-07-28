@@ -5,6 +5,7 @@ import { autoDeductIngredients, deductIngredientsForItem } from './kitchen/recip
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import { assertStationShiftOpen } from '../utils/posStationShift';
 import notificationService from '../services/notification.service';
+import { linkMenuItemToRestaurantPosOutlets } from './outlet-pos.controller';
 
 /**
  * Helper to parse branch_id from query or body
@@ -245,6 +246,12 @@ export const createMenuItem = async (
     if (error) {
       throw error;
     }
+
+    // Also make it sellable at the POS immediately: link it into the branch's
+    // restaurant POS outlet(s) (pos_outlet_items). Without this the item only
+    // lands in the legacy restaurant_menu_items table and never reaches the
+    // till / kitchen. Best-effort — must not fail the create.
+    await linkMenuItemToRestaurantPosOutlets(item as Record<string, any>);
 
     res.status(201).json({
       success: true,

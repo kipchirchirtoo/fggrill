@@ -1757,6 +1757,57 @@ const syncSourceMenuFromOutletItem = async (
   }
 };
 
+/**
+ * Make a newly-created restaurant_menu_items row immediately SELLABLE at the
+ * POS by linking it into the branch's restaurant POS outlet(s) (pos_outlet_items).
+ * seedOutletItemsFromExistingMenus only runs on an empty outlet / explicit sync,
+ * so without this a menu item added from the accountant module lands in the
+ * legacy table but never reaches the till or kitchen. Best-effort + idempotent
+ * (upsert on outlet_id,sku), so it never blocks the menu-item create itself.
+ */
+export const linkMenuItemToRestaurantPosOutlets = async (
+  item: Record<string, any>
+): Promise<void> => {
+  try {
+    const itemId = item?.id;
+    if (!itemId) return;
+    let outletsQuery = supabase
+      .from('pos_outlets')
+      .select('id, branch_id, outlet_type')
+      .eq('outlet_type', 'restaurant');
+    if (item.branch_id != null) outletsQuery = outletsQuery.eq('branch_id', item.branch_id);
+    const { data: outlets } = await outletsQuery;
+    if (!outlets || !outlets.length) return;
+
+    const categoryLabel = categoryText((item as any).category) || 'Restaurant';
+    const sellingPrice = Number(item.price ?? item.selling_price ?? 0);
+    for (const outlet of outlets as Array<Record<string, any>>) {
+      const row = {
+        outlet_id: outlet.id,
+        source_table: 'restaurant_menu_items',
+        source_item_id: itemId,
+        sku: `R-${itemId}`,
+        name: item.name,
+        category: categoryLabel,
+        unit: 'each',
+        cost_price: Number(item.cost_price || 0),
+        selling_price: sellingPrice,
+        opening_stock: 0,
+        current_stock: 0,
+        track_stock: true,
+        is_active: item.is_active !== false,
+        is_available: item.is_available !== false,
+        branch_id: item.branch_id ?? outlet.branch_id ?? null,
+      };
+      await supabase
+        .from('pos_outlet_items')
+        .upsert(row, { onConflict: 'outlet_id,sku' });
+    }
+  } catch (err) {
+    logger.warn('linkMenuItemToRestaurantPosOutlets failed:', (err as Error).message);
+  }
+};
+
 export const createOutletItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
