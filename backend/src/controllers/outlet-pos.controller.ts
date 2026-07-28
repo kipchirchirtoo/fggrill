@@ -1374,7 +1374,7 @@ const seedOutletItemsFromExistingMenus = async (
         selling_price: item.price ?? item.selling_price ?? 0,
         opening_stock: 0,
         current_stock: existing?.current_stock ?? 0,
-        track_stock: existing?.track_stock ?? true,
+        track_stock: existing?.track_stock ?? false,
         is_active: item.is_active !== false,
         is_available: item.is_available !== false,
         branch_id: item.branch_id ?? outlet.branch_id ?? null
@@ -1408,7 +1408,7 @@ const seedOutletItemsFromExistingMenus = async (
             selling_price: item.price ?? item.selling_price ?? 0,
             opening_stock: 0,
             current_stock: existing?.current_stock ?? 0,
-            track_stock: existing?.track_stock ?? true,
+            track_stock: existing?.track_stock ?? false,
             is_active: item.is_active !== false,
             is_available: item.is_available !== false,
             branch_id: item.branch_id ?? outlet.branch_id ?? null
