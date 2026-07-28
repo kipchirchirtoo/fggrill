@@ -203,6 +203,17 @@ export class Folio implements IFolio {
   }
 
   static fromDatabase(data: any): Folio {
+    const roomCharges = Number(data.room_charges || 0);
+    const foodCharges = Number(data.food_charges || 0);
+    const beverageCharges = Number(data.beverage_charges || 0);
+    const otherCharges = Number(data.other_charges || 0);
+    const calculatedSum = roomCharges + foodCharges + beverageCharges + otherCharges;
+    const totalCharges = Math.max(Number(data.total_charges || 0), calculatedSum);
+    const totalPayments = Number(data.total_payments || 0);
+    const balance = (data.balance !== undefined && data.balance !== null && Number(data.balance) >= totalCharges)
+        ? Number(data.balance)
+        : Math.max(0, totalCharges - totalPayments);
+
     return new Folio({
       id: data.id,
       folioNumber: data.folio_number,
@@ -210,13 +221,13 @@ export class Folio implements IFolio {
       guestId: data.guest_id,
       branchId: data.branch_id,
       status: data.status,
-      roomCharges: data.room_charges,
-      foodCharges: data.food_charges,
-      beverageCharges: data.beverage_charges,
-      otherCharges: data.other_charges,
-      totalCharges: data.total_charges,
-      totalPayments: data.total_payments,
-      balance: data.balance,
+      roomCharges,
+      foodCharges,
+      beverageCharges,
+      otherCharges,
+      totalCharges,
+      totalPayments,
+      balance,
       settled: data.settled,
       settledAt: data.settled_at ? new Date(data.settled_at) : undefined,
       notes: data.notes,

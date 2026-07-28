@@ -261,7 +261,7 @@ Future<void> printBookingInvoicePDF({
   );
 }
 
-pw.Widget _pdfHeaderCell(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+pw.Widget pdfHeaderCell(String text, {pw.TextAlign align = pw.TextAlign.left}) {
   return pw.Padding(
     padding: const pw.EdgeInsets.all(5),
     child: pw.Text(text,
@@ -273,7 +273,10 @@ pw.Widget _pdfHeaderCell(String text, {pw.TextAlign align = pw.TextAlign.left}) 
   );
 }
 
-pw.Widget _pdfDataCell(String text, {bool isBold = false}) {
+pw.Widget _pdfHeaderCell(String text, {pw.TextAlign align = pw.TextAlign.left}) =>
+    pdfHeaderCell(text, align: align);
+
+pw.Widget pdfDataCell(String text, {bool isBold = false}) {
   return pw.Padding(
     padding: const pw.EdgeInsets.all(5),
     child: pw.Text(text,
@@ -283,7 +286,10 @@ pw.Widget _pdfDataCell(String text, {bool isBold = false}) {
   );
 }
 
-pw.Widget _pdfSummaryRow(String label, String value,
+pw.Widget _pdfDataCell(String text, {bool isBold = false}) =>
+    pdfDataCell(text, isBold: isBold);
+
+pw.Widget pdfSummaryRow(String label, String value,
     {bool isBold = false, double fontSize = 9, PdfColor? color}) {
   return pw.Padding(
     padding: const pw.EdgeInsets.symmetric(vertical: 2),
@@ -305,3 +311,8 @@ pw.Widget _pdfSummaryRow(String label, String value,
     ),
   );
 }
+
+pw.Widget _pdfSummaryRow(String label, String value,
+        {bool isBold = false, double fontSize = 9, PdfColor? color}) =>
+    pdfSummaryRow(label, value,
+        isBold: isBold, fontSize: fontSize, color: color);

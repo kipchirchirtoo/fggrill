@@ -91,6 +91,8 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       check_out_date,
       total_amount,
       deposit_amount,
+      advance_payment,
+      amount_paid,
       adults,
       children,
       meal_plan,
@@ -154,10 +156,26 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       const roomNumber = String(room?.room_number || '').trim();
       const confirmationNumber = String(row?.confirmation_number || '').trim();
       const nights = stayNights(row?.check_in_date, row?.check_out_date);
-      const roomOutstanding = Number(row?.total_amount || 0) - Number(row?.deposit_amount || 0);
-      const folioBalanceBase =
-        folio?.balance ??
-        (Number(folio?.total_charges || 0) - Number(folio?.total_payments || 0));
+      const roomGross = Number(row?.total_amount || 0);
+      // Charge-to-Room always posts to the food/beverage/other buckets (never
+      // room_charges), so those buckets ARE the POS charges — no double count
+      // with the room booking.
+      const folioPosCharges =
+        Number(folio?.food_charges || 0) +
+        Number(folio?.beverage_charges || 0) +
+        Number(folio?.other_charges || 0);
+      // All payments: the reservation's paid figure (deposit + any cashier
+      // payments, tracked cumulatively in advance_payment/amount_paid) PLUS folio
+      // settle payments. So a partial payment made at the cashier reduces the
+      // balance and the remainder stays outstanding on the room bill.
+      const reservationPaid = Math.max(
+        Number(row?.advance_payment || 0),
+        Number(row?.amount_paid || 0),
+        Number(row?.deposit_amount || 0)
+      );
+      const folioPayments = Number(folio?.total_payments || 0);
+      const totalPaid = reservationPaid + folioPayments;
+      const folioBalance = Math.max(0, roomGross + folioPosCharges - totalPaid);
 
       return {
         booking_id: row.id,
@@ -170,9 +188,11 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
         check_out_date: row.check_out_date,
         occupants: Number(row?.adults || 0) + Number(row?.children || 0),
         stay_nights: nights,
-        folio_balance: Number(folioBalanceBase || roomOutstanding),
-        total_amount: Number(row?.total_amount || 0),
-        amount_paid: Number(row?.deposit_amount || 0),
+        folio_balance: folioBalance,
+        folio_pos_charges: folioPosCharges,
+        folio_payments: totalPaid,
+        total_amount: roomGross,
+        amount_paid: totalPaid,
         meal_plan: row?.meal_plan || 'Room Only',
         eligibility_status: 'In house',
       };
@@ -343,6 +363,66 @@ export const getEligibleGuests = async (req: Request, res: Response): Promise<vo
       message: 'Failed to search eligible guests',
       error: error.message,
     });
+  }
+};
+
+// POST /room-charge/folio/:reservationId/settle
+// The cashier clears a guest's room bill at the station: records a PAYMENT on
+// the folio (a DB trigger recalculates total_payments/balance), so the room
+// bill is settled without ever sitting in the general Unpaid Bills list.
+// body: { amount, method?, reference? }
+export const settleRoomBill = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const reservationId = String(req.params.reservationId || '').trim();
+    const amount = Number(req.body.amount);
+    const method = String(req.body.method || req.body.payment_method || 'cash').trim().toLowerCase();
+    const reference = String(req.body.reference || '').trim() || null;
+    if (!reservationId) { res.status(400).json({ success: false, message: 'reservationId is required' }); return; }
+    if (!(amount > 0)) { res.status(400).json({ success: false, message: 'A positive amount is required' }); return; }
+
+    const { data: folio, error: folioErr } = await supabase
+      .from('folios')
+      .select('id, balance, total_payments, total_charges')
+      .eq('reservation_id', reservationId)
+      .maybeSingle();
+    if (folioErr) throw folioErr;
+    if (!folio) { res.status(404).json({ success: false, message: 'No room bill (folio) exists for this reservation yet.' }); return; }
+
+    const { error: txErr } = await supabase.from('transactions').insert({
+      folio_id: folio.id,
+      type: 'payment',
+      category: method,
+      amount,
+      description: `Room bill payment (${method}) at cashier`,
+      reference_number: reference,
+      performed_by: (req as any).user?.id || null,
+    });
+    if (txErr) throw txErr;
+
+    // The folio balance trigger recalculates on transaction insert; read back.
+    const { data: updated } = await supabase
+      .from('folios')
+      .select('id, balance, total_payments, total_charges, status')
+      .eq('id', folio.id)
+      .maybeSingle();
+
+    const newPayments = Number(updated?.total_payments ?? (Number(folio.total_payments || 0) + amount));
+    const newBalance = Number(updated?.balance ?? (Number(folio.total_charges || 0) - newPayments));
+    res.json({
+      success: true,
+      data: {
+        reservation_id: reservationId,
+        folio_id: folio.id,
+        amount,
+        method,
+        total_payments: newPayments,
+        balance: newBalance,
+        status: updated?.status || null,
+      },
+    });
+  } catch (error: any) {
+    logger.error('settleRoomBill failed:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to settle room bill' });
   }
 };
 
@@ -526,6 +606,11 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
       folio = createdFolioRes.data;
     }
 
+    // NOTE: the `transactions` (folio) table only has folio_id/type/category/
+    // amount/description/reference_number/performed_by/created_at — do NOT add
+    // quantity/unit_price/posted_by/transaction_date here (they don't exist and
+    // cause PGRST204 "Could not find the column"). Item/quantity detail lives on
+    // the folio_transactions audit row below instead.
     const transactionRes = await supabase
       .from('transactions')
       .insert({
@@ -536,10 +621,6 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
         description: descriptionText,
         reference_number: billRef,
         performed_by: userId,
-        quantity: Array.isArray(items) && items.length > 0 ? items.length : 1,
-        unit_price: grossAmount,
-        posted_by: userId,
-        transaction_date: new Date().toISOString(),
       })
       .select('id')
       .single();
@@ -548,12 +629,23 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
       throw transactionRes.error;
     }
 
+    const newBucketValue = Number((folio as any)[chargeBucket.folioField] || 0) + grossAmount;
+    const roomCharges = Math.max(Number(folio.room_charges || 0), Number(reservation.total_amount || 0));
+    const foodCharges = chargeBucket.folioField === 'food_charges' ? newBucketValue : Number(folio.food_charges || 0);
+    const beverageCharges = chargeBucket.folioField === 'beverage_charges' ? newBucketValue : Number(folio.beverage_charges || 0);
+    const otherCharges = chargeBucket.folioField === 'other_charges' ? newBucketValue : Number(folio.other_charges || 0);
+
+    const calculatedTotalCharges = roomCharges + foodCharges + beverageCharges + otherCharges;
+    const totalPayments = Number(folio.total_payments || 0);
+    const calculatedBalance = Math.max(0, calculatedTotalCharges - totalPayments);
+
     const folioUpdatePayload: Record<string, any> = {
-      total_charges: Number(folio.total_charges || 0) + grossAmount,
+      room_charges: roomCharges,
+      [chargeBucket.folioField]: newBucketValue,
+      total_charges: calculatedTotalCharges,
+      balance: calculatedBalance,
       updated_at: new Date().toISOString(),
     };
-    folioUpdatePayload[chargeBucket.folioField] =
-      Number((folio as any)[chargeBucket.folioField] || 0) + grossAmount;
 
     const folioUpdateRes = await supabase
       .from('folios')
@@ -564,30 +656,29 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
       throw folioUpdateRes.error;
     }
 
+    // folio_transactions audit row — only real columns: folio_id, branch_id,
+    // transaction_type (NOT NULL), category, description, amount, tax_amount,
+    // total_amount, reference, posted_by, status (CHECK: posted|voided|reversed).
+    // Outlet/waiter/pos detail is folded into the description + reference.
+    const auditDescription = [
+      descriptionText,
+      outlet_name ? `@ ${outlet_name}` : null,
+      waiter_name ? `by ${waiter_name}` : null,
+    ].filter(Boolean).join(' ');
     const roomChargeAuditRes = await supabase
       .from('folio_transactions')
       .insert({
         folio_id: folio.id,
-        booking_id,
-        guest_id: reservation.guest_id,
         branch_id: branchId,
-        room_number: roomNumber,
-        type: 'charge',
+        transaction_type: 'charge',
         category: chargeBucket.category,
-        outlet_name: outlet_name || 'Outlet',
-        outlet_type: outlet_type || 'POS',
-        pos_bill_number: bill_number || billRef,
-        pos_order_number: order_number || billRef,
+        description: auditDescription,
         amount: grossAmount,
-        tax: taxAmt,
-        discount: discAmt,
-        service_charge: scAmt,
-        description: descriptionText,
-        items_snapshot: Array.isArray(items) ? items : [],
+        tax_amount: taxAmt,
+        total_amount: grossAmount,
+        reference: bill_number || order_number || billRef,
         posted_by: userId,
-        posted_by_name: userName,
-        waiter_name: waiter_name || 'Staff',
-        status: 'active',
+        status: 'posted',
       });
 
     if (roomChargeAuditRes.error) {
