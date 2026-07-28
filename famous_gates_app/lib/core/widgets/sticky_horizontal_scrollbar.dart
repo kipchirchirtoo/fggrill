@@ -186,33 +186,47 @@ class _StickyHorizontalScrollbarState extends State<StickyHorizontalScrollbar> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildScrollRail(
-          controller: _topBarController,
-          semanticsLabel: 'Top horizontal dashboard scrollbar',
-        ),
-        SizedBox(height: widget.topSpacing),
-        Expanded(
-          child: ClipRect(
-            child: SingleChildScrollView(
-              controller: _contentController,
-              scrollDirection: Axis.horizontal,
-              physics: const ClampingScrollPhysics(),
-              child: SizedBox(
-                width: widget.contentWidth,
-                child: widget.child,
-              ),
+    // This widget is used in two very different parents:
+    //  1) a bounded-height slot (e.g. the dashboard shell's Expanded), where
+    //     the content area should FILL the remaining height and scroll; and
+    //  2) inside a vertical scrollable (ListView / Column / SingleChildScroll),
+    //     which hands down an UNBOUNDED height. Using Expanded there throws
+    //     "RenderFlex children have non-zero flex but incoming height
+    //     constraints are unbounded" and crashes layout.
+    // Adapt to the incoming constraints: fill with Expanded when bounded,
+    // shrink-wrap to the child's intrinsic height when unbounded.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded = constraints.hasBoundedHeight;
+        final content = ClipRect(
+          child: SingleChildScrollView(
+            controller: _contentController,
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: SizedBox(
+              width: widget.contentWidth,
+              child: widget.child,
             ),
           ),
-        ),
-        SizedBox(height: widget.bottomSpacing),
-        _buildScrollRail(
-          controller: _bottomBarController,
-          semanticsLabel: 'Bottom horizontal dashboard scrollbar',
-        ),
-      ],
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            _buildScrollRail(
+              controller: _topBarController,
+              semanticsLabel: 'Top horizontal dashboard scrollbar',
+            ),
+            SizedBox(height: widget.topSpacing),
+            bounded ? Expanded(child: content) : content,
+            SizedBox(height: widget.bottomSpacing),
+            _buildScrollRail(
+              controller: _bottomBarController,
+              semanticsLabel: 'Bottom horizontal dashboard scrollbar',
+            ),
+          ],
+        );
+      },
     );
   }
 }

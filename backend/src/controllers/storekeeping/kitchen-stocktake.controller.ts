@@ -1012,6 +1012,69 @@ const getPreviousKitchenStocktakeSeedRows = async (
   }
 };
 
+/**
+ * Read-only fallback: build stocktake rows straight from the fixed kitchen
+ * catalog (KITCHEN_STOCKTAKE_ITEMS) when the branch has no standards-backed
+ * rows to show. The standards-based ledger only surfaces items that have a
+ * configured recipe/channel standard, so a branch that hasn't set those up
+ * yet ends up with an empty stocktake and the storekeeper can't count
+ * anything — a regression from the paper logbook this screen replaces. This
+ * restores the canonical fixed catalog (seeded with each item's previous
+ * closing as opening) so a physical count is always possible. No writes.
+ */
+const buildFixedKitchenCatalogRows = async (
+  branchId: number,
+  stocktakeDate: string,
+  shift: 'A' | 'B',
+  itemsByKey: Map<string, any>
+): Promise<StocktakeContextRow[]> => {
+  const { data: invRows } = await supabase
+    .from('inventory_items')
+    .select('id, item_name, unit, category, sku')
+    .in('item_name', KITCHEN_STOCKTAKE_ITEMS);
+  const invByName = new Map<string, any>();
+  for (const row of (invRows || []) as any[]) {
+    if (row.item_name) invByName.set(normalizeName(row.item_name), row);
+  }
+  const invIds = [...invByName.values()].map((r) => String(r.id)).filter(Boolean);
+  const prevClosingByInvId = await getPreviousKitchenClosingByInvId(
+    branchId,
+    invIds,
+    stocktakeDate,
+    shift
+  );
+
+  return KITCHEN_STOCKTAKE_ITEMS.map((name) => {
+    const inv = invByName.get(normalizeName(name)) || null;
+    const invId = inv?.id ? String(inv.id) : null;
+    const opening = invId ? num(prevClosingByInvId.get(invId)) : 0;
+    const saved =
+      itemsByKey.get(String(invId || '')) ||
+      itemsByKey.get(normalizeName(name)) ||
+      null;
+    const closing = saved?.closing_qty != null ? num(saved.closing_qty) : opening;
+    return {
+      item_id: invId,
+      item_name: name,
+      opening_qty: opening,
+      added_qty: 0,
+      sold_qty: 0,
+      spoilage_qty: 0,
+      closing_qty: closing,
+      variance: closing - opening,
+      explanation: saved?.explanation ?? null,
+      action_taken: saved?.action_taken ?? null,
+      unit: inv?.unit || 'portion',
+      category: inv?.category || 'KITCHEN MENU',
+      item_type: 'FIXED_CATALOG',
+      channel: 'POS Restaurant',
+      item_sku: inv?.sku || null,
+      expected_qty: 0,
+      system_qty: opening,
+    } satisfies StocktakeContextRow;
+  });
+};
+
 const buildKitchenStocktakeContext = async (
   branchId: number,
   stocktakeDate: string,
@@ -1364,6 +1427,21 @@ const buildKitchenStocktakeContext = async (
     });
   }
 
+  // Fallback: a branch with no configured standards (or whose shift items
+  // match none) yields zero standards-backed rows, leaving the storekeeper
+  // with nothing to count. Seed the canonical fixed catalog so the stocktake
+  // always loads a countable ledger.
+  let usedFixedCatalog = false;
+  if (rows.length === 0) {
+    rows = await buildFixedKitchenCatalogRows(
+      branchId,
+      stocktakeDate,
+      resolvedShift,
+      itemsByKey
+    );
+    usedFixedCatalog = rows.length > 0;
+  }
+
   rows = rows
     .sort((a, b) => {
       const typeDelta = getStandardTypeRank(b.item_type) - getStandardTypeRank(a.item_type);
@@ -1385,6 +1463,7 @@ const buildKitchenStocktakeContext = async (
     kitchen_shift_status: activeKitchenShift?.status || null,
     department: activeKitchenShift?.department || 'KITCHEN',
     standards_configured: standardsCatalog.entries.length > 0,
+    fixed_catalog: usedFixedCatalog,
     auto_dispenser_name: autoDispenserName,
     auto_cheps_on_duty: autoChefsOnDuty,
     auto_confirmation_name: autoConfirmationName,
@@ -1799,6 +1878,7 @@ export const getKitchenStocktake = async (req: Request, res: Response, next: Nex
         kitchen_shift_status: context.kitchen_shift_status,
         department: context.department,
         standards_configured: context.standards_configured,
+        fixed_catalog: context.fixed_catalog,
         dispenser_name: shiftRow?.dispenser_name ?? context.auto_dispenser_name ?? null,
         cheps_on_duty: (shiftRow?.cheps_on_duty?.length ? shiftRow.cheps_on_duty : context.auto_cheps_on_duty) ?? [],
         confirmation_name: shiftRow?.confirmation_name ?? context.auto_confirmation_name ?? null,

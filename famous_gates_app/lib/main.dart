@@ -19,6 +19,7 @@ bool _updateNoticeShown = false;
 bool _isExitingFullScreen = false;
 bool _renderCrashCaptured = false;
 bool _layoutCrashCaptured = false;
+bool _buildCrashCaptured = false;
 
 bool get _isDesktop =>
     !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
@@ -109,6 +110,32 @@ Future<void> main() async {
     FlutterError.presentError(details);
   };
   ErrorWidget.builder = (details) {
+    // Capture the FIRST build-time exception (the one this placeholder is
+    // replacing) so a failing screen can be diagnosed from its real stack
+    // instead of only the generic message below. One capture per session to
+    // avoid disk thrash from the per-frame rebuild cascade.
+    if (!_buildCrashCaptured) {
+      _buildCrashCaptured = true;
+      try {
+        final buffer = StringBuffer()
+          ..writeln('=== FIRST BUILD-TIME (ErrorWidget) ERROR ===')
+          ..writeln(DateTime.now().toIso8601String())
+          ..writeln(details.toStringShort())
+          ..writeln('--- library: ${details.library} ---')
+          ..writeln('--- context: ${details.context} ---')
+          ..writeln('--- exception ---')
+          ..writeln(details.exception.toString())
+          ..writeln('--- stack (first 100 frames) ---')
+          ..writeln((details.stack?.toString() ?? '(no stack)')
+              .split('\n')
+              .take(100)
+              .join('\n'));
+        final file =
+            File('${Directory.systemTemp.path}/fggrill_widget_build_crash.txt');
+        file.writeAsStringSync(buffer.toString());
+        debugPrint('■■■ Widget build crash written to: ${file.path} ■■■');
+      } catch (_) {}
+    }
     return Material(
       color: const Color(0xFFF8FAFC),
       child: Center(

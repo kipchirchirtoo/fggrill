@@ -302,6 +302,36 @@ class _KitchenStocktakeScreenState
                   children: [
                     _ContextCard(data: data),
                     const SizedBox(height: 16),
+                    if (data['fixed_catalog'] == true) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7ED),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFFED7AA)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                size: 18, color: Color(0xFF9A3412)),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'No kitchen standards are configured for this branch yet, '
+                                'so the default kitchen catalog is loaded. You can still '
+                                'count physical stock now; the Branch Accountant can set '
+                                'recipe/channel standards later for variance analysis.',
+                                style: TextStyle(
+                                  color: Color(0xFF9A3412),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     if (items.isEmpty)
                       Container(
                         padding: const EdgeInsets.all(28),
