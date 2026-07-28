@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../../auth/domain/auth_notifier.dart';
+import '../../reception/domain/models.dart';
+import '../../reception/presentation/screens/check_out_screen.dart';
 import 'guest_invoice_pdf.dart';
 
 /// Shared "Room Bills" view: the checked-in guests' room booking bills + their
@@ -279,20 +281,34 @@ class _RoomBillsViewState extends ConsumerState<RoomBillsView> {
   }
 
   Future<void> _openFolio(Map<String, dynamic> bill) async {
-    final reservationId = '${bill['booking_id'] ?? ''}';
+    final reservationId = '${bill['booking_id'] ?? bill['id'] ?? ''}';
     if (reservationId.isEmpty) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _FolioSheet(
-        reservationId: reservationId,
-        bill: bill,
-        onSnack: _snack,
-        onPayAtCashier: widget.onPayAtCashier,
+
+    final booking = Booking(
+      id: reservationId,
+      guestId: '${bill['guest_id'] ?? bill['guestId'] ?? ''}',
+      roomId: '${bill['room_id'] ?? bill['roomId'] ?? ''}',
+      guestName: bill['guest_name']?.toString() ?? 'Guest',
+      guestPhone: bill['guest_phone']?.toString() ?? bill['phone']?.toString(),
+      guestEmail: bill['guest_email']?.toString() ?? bill['email']?.toString(),
+      roomNumber: bill['room_number']?.toString(),
+      roomType: bill['room_type']?.toString(),
+      checkIn: DateTime.tryParse('${bill['check_in'] ?? bill['check_in_date']}') ?? DateTime.now(),
+      checkOut: DateTime.tryParse('${bill['check_out'] ?? bill['check_out_date']}') ?? DateTime.now(),
+      status: bill['status']?.toString() ?? 'checked_in',
+      totalAmount: _num(bill['total_amount']),
+      amountPaid: _num(bill['amount_paid']),
+      confirmationNumber: bill['confirmation_number']?.toString(),
+      raw: Map<String, dynamic>.from(bill),
+    );
+
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CheckOutScreen(booking: booking),
       ),
     );
-    // Refresh after returning (e.g. paid at the cashier) so balances update.
+
+    // Refresh after returning so list updates.
     if (mounted) await _load();
   }
 }
