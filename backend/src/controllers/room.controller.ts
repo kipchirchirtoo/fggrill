@@ -91,35 +91,30 @@ export const getRooms = async (
 
     const enrichedRooms = (rooms || []).map((room: any) => {
       const activeRes = resByRoomId.get(String(room.id));
-      let guestName =
-        room.guest_name ||
-        (room.guest ? `${room.guest.first_name || ''} ${room.guest.last_name || ''}`.trim() : null);
-      let guestObj = room.guest;
-      let checkInDate = room.check_in_date;
-      let checkOutDate = room.check_out_date;
-      let confNum = room.confirmation_number;
-      let mealPlan = room.meal_plan;
-      let adults = room.adults ?? 1;
-      let children = room.children ?? 0;
-      let checkedInAt = room.checked_in_at;
+      let effectiveStatus = room.status;
 
-      if (activeRes) {
-        const g = activeRes.guest;
-        const gName = g ? `${g.first_name || ''} ${g.last_name || ''}`.trim() : null;
-        if (gName) guestName = gName;
-        if (g) guestObj = g;
-        checkInDate = activeRes.check_in_date || checkInDate;
-        checkOutDate = activeRes.check_out_date || checkOutDate;
-        confNum = activeRes.confirmation_number || confNum;
-        if (activeRes.meal_plan) mealPlan = activeRes.meal_plan;
-        if (activeRes.adults !== undefined && activeRes.adults !== null) adults = activeRes.adults;
-        if (activeRes.children !== undefined && activeRes.children !== null) children = activeRes.children;
-        if (activeRes.checked_in_at) checkedInAt = activeRes.checked_in_at;
+      // If room is marked occupied in DB but has no active checked_in reservation, treat as available
+      if (effectiveStatus === 'occupied' && !activeRes) {
+        effectiveStatus = 'available';
       }
+
+      let guestName = activeRes?.guest
+        ? `${activeRes.guest.first_name || ''} ${activeRes.guest.last_name || ''}`.trim()
+        : (room.guest ? `${room.guest.first_name || ''} ${room.guest.last_name || ''}`.trim() : null);
+
+      let guestObj = activeRes?.guest || room.guest;
+      let checkInDate = activeRes?.check_in_date || room.check_in_date;
+      let checkOutDate = activeRes?.check_out_date || room.check_out_date;
+      let confNum = activeRes?.confirmation_number || room.confirmation_number;
+      let mealPlan = activeRes?.meal_plan || room.meal_plan;
+      let adults = activeRes?.adults ?? room.adults ?? 1;
+      let children = activeRes?.children ?? room.children ?? 0;
+      let checkedInAt = activeRes?.checked_in_at || room.checked_in_at;
 
       return {
         ...room,
-        guest_name: guestName || (room.status === 'occupied' ? 'Occupied Guest' : null),
+        status: effectiveStatus,
+        guest_name: guestName || (effectiveStatus === 'occupied' ? 'Occupied Guest' : null),
         guest: guestObj,
         check_in_date: checkInDate,
         check_out_date: checkOutDate,
