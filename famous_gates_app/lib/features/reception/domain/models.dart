@@ -134,6 +134,11 @@ class Room {
     this.guestName,
     this.checkInDate,
     this.checkOutDate,
+    this.checkedInAt,
+    this.mealPlan,
+    this.adults = 1,
+    this.children = 0,
+    this.totalPax,
     this.pricePerNight,
     this.raw = const {},
   });
@@ -147,6 +152,11 @@ class Room {
   final String? guestName;
   final DateTime? checkInDate;
   final DateTime? checkOutDate;
+  final DateTime? checkedInAt;
+  final String? mealPlan;
+  final int adults;
+  final int children;
+  final int? totalPax;
   final double? pricePerNight;
   final Map<String, dynamic> raw;
 
@@ -167,6 +177,11 @@ class Room {
       json['current_guest'] ??
       (guestObj != null ? _name(guestObj) : null)
     );
+
+    final adultsCount = _int(json['adults'] ?? json['num_adults'] ?? json['adult_pax']) ?? 1;
+    final childrenCount = _int(json['children'] ?? json['num_children'] ?? json['child_pax']) ?? 0;
+    final totalPaxCount = _int(json['total_pax'] ?? json['pax_total'] ?? json['total_guests']) ?? (adultsCount + childrenCount);
+
     return Room(
       id: '${json['id']}',
       number: _int(rawRoomNumber) ?? 0,
@@ -185,10 +200,32 @@ class Room {
           json['check_out'] ??
           json['checkOut'] ??
           json['end_date']),
+      checkedInAt: _tryDate(json['checked_in_at'] ?? json['checkedInAt'] ?? json['check_in_time']),
+      mealPlan: _string(json['meal_plan'] ?? json['mealPlan']),
+      adults: adultsCount,
+      children: childrenCount,
+      totalPax: totalPaxCount,
       pricePerNight: _double(
           json['price_per_night'] ?? json['rate'] ?? json['base_price']),
       raw: json,
     );
+  }
+
+  String get effectiveMealPlan {
+    if (mealPlan != null && mealPlan!.trim().isNotEmpty) {
+      final mp = mealPlan!.toLowerCase();
+      if (mp.contains('bed') || mp.contains('bb') || mp.contains('breakfast')) return 'Bed & Breakfast';
+      if (mp.contains('half')) return 'Half Board';
+      if (mp.contains('full')) return 'Full Board';
+      if (mp.contains('room')) return 'Room Only';
+      return mealPlan!;
+    }
+    // Auto-include Deluxe, Executive, VIP
+    final t = (type ?? '').toLowerCase();
+    if (t.contains('deluxe') || t.contains('dlx') || t.contains('executive') || t.contains('exe') || t.contains('vip')) {
+      return 'Bed & Breakfast';
+    }
+    return 'Room Only';
   }
 
   // Convenience getters

@@ -67,6 +67,10 @@ export const getRooms = async (
         guest_id,
         check_in_date,
         check_out_date,
+        checked_in_at,
+        meal_plan,
+        adults,
+        children,
         guest:guests!guest_id(id, first_name, last_name, phone, email)
       `)
       .in('status', ['checked_in', 'confirmed']);
@@ -94,6 +98,10 @@ export const getRooms = async (
       let checkInDate = room.check_in_date;
       let checkOutDate = room.check_out_date;
       let confNum = room.confirmation_number;
+      let mealPlan = room.meal_plan;
+      let adults = room.adults ?? 1;
+      let children = room.children ?? 0;
+      let checkedInAt = room.checked_in_at;
 
       if (activeRes) {
         const g = activeRes.guest;
@@ -103,6 +111,10 @@ export const getRooms = async (
         checkInDate = activeRes.check_in_date || checkInDate;
         checkOutDate = activeRes.check_out_date || checkOutDate;
         confNum = activeRes.confirmation_number || confNum;
+        if (activeRes.meal_plan) mealPlan = activeRes.meal_plan;
+        if (activeRes.adults !== undefined && activeRes.adults !== null) adults = activeRes.adults;
+        if (activeRes.children !== undefined && activeRes.children !== null) children = activeRes.children;
+        if (activeRes.checked_in_at) checkedInAt = activeRes.checked_in_at;
       }
 
       return {
@@ -111,7 +123,12 @@ export const getRooms = async (
         guest: guestObj,
         check_in_date: checkInDate,
         check_out_date: checkOutDate,
+        checked_in_at: checkedInAt,
         confirmation_number: confNum,
+        meal_plan: mealPlan,
+        adults: adults,
+        children: children,
+        total_pax: adults + children,
       };
     });
 

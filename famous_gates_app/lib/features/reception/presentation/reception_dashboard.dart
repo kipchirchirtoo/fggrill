@@ -3771,163 +3771,6 @@ class _CashierSection extends StatelessWidget {
   }
 }
 
-class _LogbookSection extends ConsumerWidget {
-  const _LogbookSection({required this.data, required this.onRefresh});
-  final _ReceptionSnapshot data;
-  final VoidCallback onRefresh;
-
-  // Auto-reconcile the shift from today's collected payments — no manual entry.
-  Map<String, num> _reconcile() {
-    final openingFloat = _num(data.logbook, ['opening_float', 'openingFloat']);
-    num cash = 0, mpesa = 0, card = 0;
-    for (final p in data.payments) {
-      final method =
-          (_text(p, ['payment_method', 'method']) ?? '').toLowerCase();
-      final amount = _num(p, ['amount', 'total_amount', 'payment_amount']);
-      if (method.contains('mpesa')) {
-        mpesa += amount;
-      } else if (method.contains('card')) {
-        card += amount;
-      } else {
-        cash += amount;
-      }
-    }
-    return {
-      'opening': openingFloat,
-      'cash': cash,
-      'mpesa': mpesa,
-      'card': card,
-      'expected': openingFloat + cash,
-      'total': cash + mpesa + card,
-    };
-  }
-
-  Future<void> _generateAndSend(BuildContext context, WidgetRef ref) async {
-    final r = _reconcile();
-    final repo = ref.read(receptionRepositoryProvider);
-    try {
-      // 1. Auto-generate + save the logbook (cashier model fields).
-      final saved = await repo.saveLogbook({
-        'type': 'cashier',
-        'opening_float': r['opening'],
-        'closing_float': r['expected'], // expected cash in drawer
-        'total_mpesa': r['mpesa'],
-        'total_swipe': r['card'],
-        'sales_breakdown': {
-          'total_cash': r['cash'],
-          'total_mpesa': r['mpesa'],
-          'total_card': r['card'],
-          'total_revenue': r['total'],
-          'transactions': data.payments.length,
-          'source': 'reception_auto',
-        },
-        'notes':
-            'Auto-generated reception shift logbook. Cash ${_money(r['cash']!)}, M-Pesa ${_money(r['mpesa']!)}, Card ${_money(r['card']!)}.',
-        'status': 'open',
-      });
-      // 2. Send it to the auditor for review (best-effort — the save already
-      // persisted, so a submit hiccup must not look like a failure).
-      final id = _text(saved, ['id']);
-      var sent = false;
-      if (id != null) {
-        try {
-          await repo.submitLogbook(id);
-          sent = true;
-        } catch (_) {}
-      }
-      onRefresh();
-      if (context.mounted) {
-        _snack(
-            context,
-            sent
-                ? 'Shift logbook generated and sent to the auditor'
-                : 'Shift logbook saved');
-      }
-    } catch (e) {
-      if (context.mounted) {
-        _snack(
-            context, apiErrorMessage(e, fallback: 'Could not submit logbook'),
-            error: true);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final r = _reconcile();
-    return _PageScaffold(
-      title: 'Shift Logbook',
-      subtitle:
-          'Auto-generated cash-control reconciliation — submitted to the auditor.',
-      actions: [
-        OutlinedButton.icon(
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Refresh')),
-        ElevatedButton.icon(
-          onPressed: () => _generateAndSend(context, ref),
-          icon: const Icon(Icons.send_outlined, size: 16),
-          label: const Text('Generate & Send to Auditor'),
-        ),
-      ],
-      child: _buildLogbookBody(r),
-    );
-  }
-
-  Widget _buildLogbookBody(Map<String, num> r) {
-    final openingFloat = r['opening']!;
-    final cashCollected = r['cash']!;
-    final mpesaCollected = r['mpesa']!;
-    final cardCollected = r['card']!;
-    final expectedCash = r['expected']!;
-    final closingCash = _num(data.logbook, ['closing_float', 'closing_cash']);
-    final variance = closingCash > 0 ? closingCash - expectedCash : 0;
-    final status = _text(data.logbook, ['status']) ?? 'draft';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _CardPanel(
-          title: 'Cash Control',
-          child: _KeyValueList(rows: [
-            {'label': 'Opening float', 'value': _money(openingFloat)},
-            {'label': 'Cash collected today', 'value': _money(cashCollected)},
-            {'label': 'Expected cash in drawer', 'value': _money(expectedCash)},
-            {'label': 'Closing cash counted', 'value': _money(closingCash)},
-            {
-              'label': 'Variance',
-              'value':
-                  '${variance == 0 ? '' : variance > 0 ? '+' : ''}${_money(variance)}'
-            },
-            {'label': 'Status', 'value': status.toUpperCase()},
-          ]),
-        ),
-        const SizedBox(height: 12),
-        _CardPanel(
-          title: 'Other Collections (today)',
-          child: _KeyValueList(rows: [
-            {'label': 'M-Pesa', 'value': _money(mpesaCollected)},
-            {'label': 'Card', 'value': _money(cardCollected)},
-            {
-              'label': 'Total collected',
-              'value': _money(cashCollected + mpesaCollected + cardCollected)
-            },
-          ]),
-        ),
-        const SizedBox(height: 12),
-        _CardPanel(
-          title: 'Shift Notes',
-          child: Text(
-            _text(data.logbook, ['notes']) ??
-                'No notes recorded for this shift.',
-            style: const TextStyle(height: 1.5),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _HistorySection extends StatelessWidget {
   const _HistorySection({required this.data, required this.onRefresh});
   final _ReceptionSnapshot data;
@@ -4345,7 +4188,6 @@ class _ReceptionSnapshot {
         unpaidBills: [],
         creditBills: [],
         payments: [],
-        logbook: {},
         guestProfile: {},
         guestHistory: [],
         guestLoyalty: {},
@@ -7128,7 +6970,8 @@ Future<void> printRoomsReportPDF({
 
   final totalRooms = rooms.length;
   final availableRooms = rooms.where((r) => r.status == 'available').length;
-  final occupiedRooms = rooms.where((r) => r.status == 'occupied').length;
+  final occupiedRoomsList = rooms.where((r) => r.status == 'occupied').toList();
+  final occupiedRooms = occupiedRoomsList.length;
   final cleaningRooms =
       rooms.where((r) => r.status == 'cleaning' || r.status == 'dirty').length;
   final maintenanceRooms =
@@ -7137,13 +6980,40 @@ Future<void> printRoomsReportPDF({
       ? (occupiedRooms / totalRooms * 100).toStringAsFixed(1)
       : '0.0';
 
-  final numFormat = NumberFormat('#,##0.00', 'en_KE');
+  final totalAdultPax = occupiedRoomsList.fold<int>(0, (sum, r) => sum + r.adults);
+  final totalChildrenPax = occupiedRoomsList.fold<int>(0, (sum, r) => sum + r.children);
+  final totalGuestPax = occupiedRoomsList.fold<int>(
+      0, (sum, r) => sum + (r.totalPax ?? (r.adults + r.children)));
+
   final nowStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+
+  // Group rooms by Room Type
+  final Map<String, List<Room>> groupedRooms = {};
+  for (final room in rooms) {
+    final catName = (room.type != null && room.type!.trim().isNotEmpty)
+        ? room.type!.trim()
+        : 'Standard Room';
+    groupedRooms.putIfAbsent(catName, () => []).add(room);
+  }
+
+  // Sort categories logically
+  final sortedCategories = groupedRooms.keys.toList()
+    ..sort((a, b) {
+      final aLower = a.toLowerCase();
+      final bLower = b.toLowerCase();
+      if (aLower.contains('vip') && !bLower.contains('vip')) return -1;
+      if (bLower.contains('vip') && !aLower.contains('vip')) return 1;
+      if (aLower.contains('executive') && !bLower.contains('executive')) return -1;
+      if (bLower.contains('executive') && !aLower.contains('executive')) return 1;
+      if (aLower.contains('deluxe') && !bLower.contains('deluxe')) return -1;
+      if (bLower.contains('deluxe') && !aLower.contains('deluxe')) return 1;
+      return aLower.compareTo(bLower);
+    });
 
   pdf.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 28),
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.symmetric(horizontal: 28, vertical: 24),
       build: (pw.Context ctx) {
         return [
           // FamousGate Branding Header
@@ -7151,10 +7021,10 @@ Future<void> printRoomsReportPDF({
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               if (logoImage != null)
-                pw.Image(logoImage, width: 72, height: 50)
+                pw.Image(logoImage, width: 72, height: 45)
               else
                 pw.Container(width: 72),
-              pw.SizedBox(width: 16),
+              pw.SizedBox(width: 14),
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -7162,15 +7032,9 @@ Future<void> printRoomsReportPDF({
                     pw.Text('FamousGate Hotels',
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                    pw.Text('Bomet, Kenya',
+                    pw.Text('Bomet, Kenya | Tel: 0706782828 | Email: famousgatesbmt@gmail.com',
                         style: const pw.TextStyle(
-                            fontSize: 10, color: PdfColors.grey700)),
-                    pw.Text('Tel: 0706782828',
-                        style: const pw.TextStyle(
-                            fontSize: 9, color: PdfColors.grey600)),
-                    pw.Text('Email: famousgatesbmt@gmail.com',
-                        style: const pw.TextStyle(
-                            fontSize: 9, color: PdfColors.grey600)),
+                            fontSize: 9, color: PdfColors.grey700)),
                     pw.Text('www.famousgatehotels.com',
                         style: pw.TextStyle(
                             fontSize: 9,
@@ -7182,31 +7046,31 @@ Future<void> printRoomsReportPDF({
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('ROOM LIST & OCCUPANCY',
+                  pw.Text('ROOM LIST & OCCUPANCY REPORT',
                       style: pw.TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.grey800)),
-                  pw.Text('REPORT',
+                          color: PdfColors.grey900)),
+                  pw.Text('CATEGORIZED BY ROOM TYPE & GUEST PAX',
                       style: pw.TextStyle(
-                          fontSize: 14,
+                          fontSize: 10,
                           fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.grey700)),
-                  pw.SizedBox(height: 4),
+                          color: PdfColors.blue800)),
+                  pw.SizedBox(height: 2),
                   pw.Text('Printed: $nowStr',
                       style: const pw.TextStyle(
-                          fontSize: 9, color: PdfColors.grey700)),
+                          fontSize: 8, color: PdfColors.grey700)),
                 ],
               ),
             ],
           ),
-          pw.SizedBox(height: 12),
+          pw.SizedBox(height: 8),
           pw.Divider(color: PdfColors.grey400, thickness: 0.5),
-          pw.SizedBox(height: 10),
+          pw.SizedBox(height: 8),
 
-          // Operational KPI Summary Box
+          // Operational & Pax KPI Summary Box
           pw.Container(
-            padding: const pw.EdgeInsets.all(10),
+            padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: pw.BoxDecoration(
               border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
               color: PdfColors.grey100,
@@ -7215,130 +7079,196 @@ Future<void> printRoomsReportPDF({
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
               children: [
-                pw.Column(children: [
-                  pw.Text('Total Rooms',
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.grey700)),
-                  pw.SizedBox(height: 2),
-                  pw.Text('$totalRooms',
-                      style: pw.TextStyle(
-                          fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                ]),
-                pw.Column(children: [
-                  pw.Text('Occupied',
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.grey700)),
-                  pw.SizedBox(height: 2),
-                  pw.Text('$occupiedRooms',
-                      style: pw.TextStyle(
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.blue800)),
-                ]),
-                pw.Column(children: [
-                  pw.Text('Available',
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.grey700)),
-                  pw.SizedBox(height: 2),
-                  pw.Text('$availableRooms',
-                      style: pw.TextStyle(
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.green800)),
-                ]),
-                pw.Column(children: [
-                  pw.Text('Cleaning',
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.grey700)),
-                  pw.SizedBox(height: 2),
-                  pw.Text('$cleaningRooms',
-                      style: pw.TextStyle(
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.orange800)),
-                ]),
-                pw.Column(children: [
-                  pw.Text('Maintenance',
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.grey700)),
-                  pw.SizedBox(height: 2),
-                  pw.Text('$maintenanceRooms',
-                      style: pw.TextStyle(
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.red800)),
-                ]),
-                pw.Column(children: [
-                  pw.Text('Occupancy Rate',
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.grey700)),
-                  pw.SizedBox(height: 2),
-                  pw.Text('$occupancyRate%',
-                      style: pw.TextStyle(
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.purple800)),
-                ]),
+                _pdfKpiItem('Total Rooms', '$totalRooms', PdfColors.black),
+                _pdfKpiItem('Occupied', '$occupiedRooms', PdfColors.blue800),
+                _pdfKpiItem('Available', '$availableRooms', PdfColors.green800),
+                _pdfKpiItem('Cleaning', '$cleaningRooms', PdfColors.orange800),
+                _pdfKpiItem('Maintenance', '$maintenanceRooms', PdfColors.red800),
+                _pdfKpiItem('Adult Pax', '$totalAdultPax', PdfColors.purple800),
+                _pdfKpiItem('Child Pax', '$totalChildrenPax', PdfColors.teal800),
+                _pdfKpiItem('Total Guest Pax', '$totalGuestPax', PdfColors.blue900),
+                _pdfKpiItem('Occupancy Rate', '$occupancyRate%', PdfColors.purple900),
               ],
             ),
           ),
-          pw.SizedBox(height: 14),
+          pw.SizedBox(height: 12),
 
-          // Main Rooms & Occupancy Table
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-            children: [
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                children: [
-                  _pdfHeaderCell('Room #'),
-                  _pdfHeaderCell('Type'),
-                  _pdfHeaderCell('Status'),
-                  _pdfHeaderCell('Guest Name'),
-                  _pdfHeaderCell('Stay Dates'),
-                  _pdfHeaderCell('Rate (KES)'),
-                ],
-              ),
-              ...rooms.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final r = entry.value;
-                final isOccupied = r.status == 'occupied';
-                final guestName =
-                    isOccupied ? (r.guestName ?? 'Occupied Guest') : '-';
-                final datesStr = (r.checkInDate != null && r.checkOutDate != null)
-                    ? '${DateFormat('dd/MM').format(r.checkInDate!)} - ${DateFormat('dd/MM').format(r.checkOutDate!)}'
-                    : '-';
-                final rateStr = r.pricePerNight != null && r.pricePerNight! > 0
-                    ? numFormat.format(r.pricePerNight)
-                    : '-';
+          // Render tables grouped by Category
+          ...sortedCategories.map((category) {
+            final categoryRooms = groupedRooms[category] ?? [];
+            final catTotalRooms = categoryRooms.length;
+            final catOccupiedList =
+                categoryRooms.where((r) => r.status == 'occupied').toList();
+            final catOccupiedCount = catOccupiedList.length;
+            final catAdultPax = catOccupiedList.fold<int>(0, (sum, r) => sum + r.adults);
+            final catChildPax = catOccupiedList.fold<int>(0, (sum, r) => sum + r.children);
+            final catTotalPax = catOccupiedList.fold<int>(
+                0, (sum, r) => sum + (r.totalPax ?? (r.adults + r.children)));
 
-                return pw.TableRow(
-                  decoration: pw.BoxDecoration(
-                    color: idx.isOdd ? PdfColors.grey100 : PdfColors.white,
-                  ),
-                  children: [
-                    _pdfRoomDataCell(r.displayNumber, isBold: true),
-                    _pdfRoomDataCell(r.type ?? 'Standard'),
-                    _pdfRoomDataCell(
-                      r.status.toUpperCase(),
-                      color: isOccupied
-                          ? PdfColors.blue800
-                          : (r.status == 'available'
-                              ? PdfColors.green800
-                              : (r.status == 'maintenance'
-                                  ? PdfColors.red800
-                                  : PdfColors.orange800)),
-                      isBold: true,
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Category Banner
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.blue900,
+                    borderRadius: pw.BorderRadius.only(
+                      topLeft: pw.Radius.circular(3),
+                      topRight: pw.Radius.circular(3),
                     ),
-                    _pdfRoomDataCell(guestName, isBold: isOccupied),
-                    _pdfRoomDataCell(datesStr),
-                    _pdfRoomDataCell(rateStr, align: pw.TextAlign.right),
+                  ),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        '${category.toUpperCase()} CATEGORY (${catTotalRooms} ROOMS)',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.Text(
+                        'Occupied: $catOccupiedCount | Adults: $catAdultPax | Children: $catChildPax | Total Category Pax: $catTotalPax',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Category Data Table
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+                  columnWidths: const {
+                    0: pw.FlexColumnWidth(1.1), // Room #
+                    1: pw.FlexColumnWidth(2.8), // Guest Name
+                    2: pw.FlexColumnWidth(2.2), // Meal Plan
+                    3: pw.FlexColumnWidth(2.5), // Check-in Date & Time
+                    4: pw.FlexColumnWidth(2.0), // Check-out Date
+                    5: pw.FlexColumnWidth(1.0), // Adults
+                    6: pw.FlexColumnWidth(1.0), // Children
+                    7: pw.FlexColumnWidth(1.1), // Total Pax
+                    8: pw.FlexColumnWidth(1.5), // Status
+                  },
+                  children: [
+                    // Table Header
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                      children: [
+                        _pdfHeaderCell('Room #'),
+                        _pdfHeaderCell('Guest Name'),
+                        _pdfHeaderCell('Meal Plan'),
+                        _pdfHeaderCell('Check-In Date & Time'),
+                        _pdfHeaderCell('Check-Out Date'),
+                        _pdfHeaderCell('Adults', align: pw.TextAlign.center),
+                        _pdfHeaderCell('Children', align: pw.TextAlign.center),
+                        _pdfHeaderCell('Total Pax', align: pw.TextAlign.center),
+                        _pdfHeaderCell('Status', align: pw.TextAlign.center),
+                      ],
+                    ),
+
+                    // Data Rows
+                    ...categoryRooms.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final r = entry.value;
+                      final isOccupied = r.status == 'occupied';
+
+                      final guestName = isOccupied
+                          ? (r.guestName ?? 'Occupied Guest')
+                          : '-';
+                      final mealPlanStr = isOccupied
+                          ? r.effectiveMealPlan
+                          : (r.effectiveMealPlan != 'Room Only'
+                              ? '${r.effectiveMealPlan} (Included)'
+                              : '-');
+
+                      final checkInStr = isOccupied
+                          ? (r.checkedInAt != null
+                              ? DateFormat('dd/MM/yyyy HH:mm').format(r.checkedInAt!)
+                              : (r.checkInDate != null
+                                  ? DateFormat('dd/MM/yyyy').format(r.checkInDate!)
+                                  : '-'))
+                          : '-';
+
+                      final checkOutStr = isOccupied
+                          ? (r.checkOutDate != null
+                              ? DateFormat('dd/MM/yyyy').format(r.checkOutDate!)
+                              : '-')
+                          : '-';
+
+                      final adultPaxStr = isOccupied ? '${r.adults}' : '0';
+                      final childPaxStr = isOccupied ? '${r.children}' : '0';
+                      final totalPaxStr = isOccupied
+                          ? '${r.totalPax ?? (r.adults + r.children)}'
+                          : '0';
+
+                      return pw.TableRow(
+                        decoration: pw.BoxDecoration(
+                          color: idx.isOdd ? PdfColors.grey100 : PdfColors.white,
+                        ),
+                        children: [
+                          _pdfRoomDataCell(r.displayNumber, isBold: true),
+                          _pdfRoomDataCell(guestName, isBold: isOccupied),
+                          _pdfRoomDataCell(mealPlanStr),
+                          _pdfRoomDataCell(checkInStr),
+                          _pdfRoomDataCell(checkOutStr),
+                          _pdfRoomDataCell(adultPaxStr, align: pw.TextAlign.center),
+                          _pdfRoomDataCell(childPaxStr, align: pw.TextAlign.center),
+                          _pdfRoomDataCell(totalPaxStr,
+                              isBold: isOccupied, align: pw.TextAlign.center),
+                          _pdfRoomDataCell(
+                            r.status.toUpperCase(),
+                            align: pw.TextAlign.center,
+                            color: isOccupied
+                                ? PdfColors.blue800
+                                : (r.status == 'available'
+                                    ? PdfColors.green800
+                                    : (r.status == 'maintenance'
+                                        ? PdfColors.red800
+                                        : PdfColors.orange800)),
+                            isBold: true,
+                          ),
+                        ],
+                      );
+                    }),
+
+                    // Category Totals Summary Row
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                      children: [
+                        _pdfRoomDataCell('TOTALS', isBold: true),
+                        _pdfRoomDataCell(
+                            '${category.toUpperCase()} CATEGORY SUMMARY',
+                            isBold: true),
+                        _pdfRoomDataCell('Occupied: $catOccupiedCount / $catTotalRooms',
+                            isBold: true),
+                        _pdfRoomDataCell('-'),
+                        _pdfRoomDataCell('-'),
+                        _pdfRoomDataCell('$catAdultPax',
+                            isBold: true, align: pw.TextAlign.center),
+                        _pdfRoomDataCell('$catChildPax',
+                            isBold: true, align: pw.TextAlign.center),
+                        _pdfRoomDataCell('$catTotalPax',
+                            isBold: true,
+                            color: PdfColors.blue900,
+                            align: pw.TextAlign.center),
+                        _pdfRoomDataCell('-', align: pw.TextAlign.center),
+                      ],
+                    ),
                   ],
-                );
-              }),
-            ],
-          ),
-          pw.SizedBox(height: 24),
+                ),
+                pw.SizedBox(height: 14),
+              ],
+            );
+          }),
+
+          pw.SizedBox(height: 16),
 
           // Signatures Block
           pw.Row(
@@ -7348,11 +7278,11 @@ Future<void> printRoomsReportPDF({
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Container(
-                      width: 180,
+                      width: 220,
                       child: pw.Divider(
                           color: PdfColors.grey400, thickness: 0.5)),
                   pw.SizedBox(height: 2),
-                  pw.Text('Reception Officer Signature',
+                  pw.Text('Reception Officer Signature & Stamp',
                       style: const pw.TextStyle(
                           fontSize: 8, color: PdfColors.grey700)),
                 ],
@@ -7361,11 +7291,11 @@ Future<void> printRoomsReportPDF({
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Container(
-                      width: 180,
+                      width: 220,
                       child: pw.Divider(
                           color: PdfColors.grey400, thickness: 0.5)),
                   pw.SizedBox(height: 2),
-                  pw.Text('Front Office Manager Signature',
+                  pw.Text('Front Office Manager Signature & Stamp',
                       style: const pw.TextStyle(
                           fontSize: 8, color: PdfColors.grey700)),
                 ],
@@ -7376,8 +7306,8 @@ Future<void> printRoomsReportPDF({
       },
       footer: (pw.Context ctx) {
         return pw.Container(
-          margin: const pw.EdgeInsets.only(top: 10),
-          padding: const pw.EdgeInsets.only(top: 6),
+          margin: const pw.EdgeInsets.only(top: 8),
+          padding: const pw.EdgeInsets.only(top: 4),
           decoration: const pw.BoxDecoration(
             border: pw.Border(
               top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
@@ -7387,7 +7317,7 @@ Future<void> printRoomsReportPDF({
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                  'FamousGate Hotels - Reception System | www.famousgatehotels.com',
+                  'FamousGate Hotels - Reception System | Room List & Guest Pax Manifest | www.famousgatehotels.com',
                   style: const pw.TextStyle(
                       fontSize: 7, color: PdfColors.grey600)),
               pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
@@ -7403,7 +7333,20 @@ Future<void> printRoomsReportPDF({
   await Printing.layoutPdf(
     onLayout: (PdfPageFormat format) async => pdf.save(),
     name:
-        'Room_List_Occupancy_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+        'Room_List_Occupancy_Pax_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+  );
+}
+
+pw.Widget _pdfKpiItem(String label, String value, PdfColor color) {
+  return pw.Column(
+    children: [
+      pw.Text(label,
+          style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+      pw.SizedBox(height: 2),
+      pw.Text(value,
+          style: pw.TextStyle(
+              fontSize: 11, fontWeight: pw.FontWeight.bold, color: color)),
+    ],
   );
 }
 
