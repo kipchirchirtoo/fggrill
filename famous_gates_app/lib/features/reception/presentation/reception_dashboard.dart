@@ -6934,10 +6934,11 @@ Future<void> printBookingInvoicePDF({
   );
 }
 
-pw.Widget _pdfHeaderCell(String text) {
+pw.Widget _pdfHeaderCell(String text, {pw.TextAlign align = pw.TextAlign.left}) {
   return pw.Padding(
     padding: const pw.EdgeInsets.all(5),
     child: pw.Text(text,
+        textAlign: align,
         style: pw.TextStyle(
             fontWeight: pw.FontWeight.bold,
             fontSize: 8,
