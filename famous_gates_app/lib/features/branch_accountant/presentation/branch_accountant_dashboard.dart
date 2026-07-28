@@ -23080,9 +23080,16 @@ class _BranchRestaurantMenuSectionState
 
   Future<void> _showAddDialog() async {
     final nameCtrl = TextEditingController();
+    final skuCtrl = TextEditingController(
+        text: 'MENU-${DateTime.now().millisecondsSinceEpoch}');
     final priceCtrl = TextEditingController();
     final costCtrl = TextEditingController();
-    String? selectedCategoryId;
+    final openingCtrl = TextEditingController(text: '0');
+    final currentCtrl = TextEditingController(text: '0');
+    final unitCtrl = TextEditingController(text: 'each');
+    String? selectedCategory;
+    bool trackStock = true;
+    bool available = true;
     bool saving = false;
 
     final repo = ref.read(branchAccountantRepositoryProvider);
@@ -23090,22 +23097,45 @@ class _BranchRestaurantMenuSectionState
     if (!mounted) return;
     final dio = ref.read(dioProvider);
 
-    // Load categories before opening dialog
-    List<Map<String, dynamic>> cats = [];
+    List<dynamic> parseList(dynamic d) => d is List
+        ? d
+        : d is Map
+            ? ((d['data'] ??
+                d['items'] ??
+                d['categories'] ??
+                d['outlets'] ??
+                <dynamic>[]) as List)
+            : <dynamic>[];
+
+    // Resolve the branch's restaurant POS outlet (where the sellable item is
+    // created) and load ALL categories for the branch — restaurant + bar menus.
+    String? restaurantOutletId;
     try {
-      final catRes = await dio.get('/restaurant/menu/categories',
+      final res = await dio.get('/pos/outlets',
           queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId});
-      final catData = catRes.data;
-      final rawList = catData is List
-          ? catData
-          : catData is Map
-              ? ((catData['data'] ?? []) as List)
-              : <dynamic>[];
-      cats = rawList
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+      for (final o in parseList(res.data).whereType<Map>()) {
+        if ('${o['outlet_type'] ?? ''}'.toLowerCase() == 'restaurant') {
+          restaurantOutletId = '${o['id']}';
+          break;
+        }
+      }
     } catch (_) {}
+
+    final categorySet = <String>{};
+    for (final path in const [
+      '/restaurant/menu/categories',
+      '/bar/categories',
+    ]) {
+      try {
+        final res = await dio.get(path,
+            queryParameters: {if (branchId.isNotEmpty) 'branch_id': branchId});
+        for (final c in parseList(res.data).whereType<Map>()) {
+          final n = '${c['name'] ?? ''}'.trim();
+          if (n.isNotEmpty) categorySet.add(n);
+        }
+      } catch (_) {}
+    }
+    final categories = categorySet.toList()..sort();
     if (!mounted) return;
 
     await showDialog(
@@ -23113,41 +23143,100 @@ class _BranchRestaurantMenuSectionState
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) {
         return AlertDialog(
           title: const Text('Add Menu Item'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Name *')),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                value: selectedCategoryId,
-                decoration: const InputDecoration(labelText: 'Category'),
-                isExpanded: true,
-                items: [
-                  const DropdownMenuItem<String?>(
-                      value: null, child: Text('No category')),
-                  ...cats.map((cat) => DropdownMenuItem<String?>(
-                        value: '${cat['id']}',
-                        child: Text('${cat['name']}'),
-                      )),
-                ],
-                onChanged: (v) => setDlgState(() => selectedCategoryId = v),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                  controller: priceCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Selling Price *', prefixText: 'KES ')),
-              const SizedBox(height: 8),
-              TextField(
-                  controller: costCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                      labelText: 'Cost Price', prefixText: 'KES ')),
-            ]),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                    controller: nameCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Item name *')),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                        controller: skuCtrl,
+                        decoration: const InputDecoration(labelText: 'SKU *')),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String?>(
+                      value: selectedCategory,
+                      isExpanded: true,
+                      decoration:
+                          const InputDecoration(labelText: 'Category'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('No category')),
+                        ...categories.map((c) => DropdownMenuItem<String?>(
+                            value: c, child: Text(c))),
+                      ],
+                      onChanged: (v) =>
+                          setDlgState(() => selectedCategory = v),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                        controller: priceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: 'Selling price *', prefixText: 'KES ')),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                        controller: costCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: 'Cost price', prefixText: 'KES ')),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                        controller: openingCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: 'Opening stock')),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                        controller: currentCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: 'Current stock')),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                        controller: unitCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Unit')),
+                  ),
+                ]),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: trackStock,
+                  title: const Text('Track stock for this item'),
+                  onChanged: (v) => setDlgState(() => trackStock = v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: available,
+                  title: const Text('Available in POS'),
+                  onChanged: (v) => setDlgState(() => available = v),
+                ),
+              ]),
+            ),
           ),
           actions: [
             TextButton(
@@ -23158,29 +23247,58 @@ class _BranchRestaurantMenuSectionState
                   ? null
                   : () async {
                       if (nameCtrl.text.trim().isEmpty ||
+                          skuCtrl.text.trim().isEmpty ||
                           priceCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           const SnackBar(
-                              content:
-                                  Text('Name and selling price are required')),
+                              content: Text(
+                                  'Name, SKU and selling price are required')),
                         );
                         return;
                       }
                       setDlgState(() => saving = true);
                       try {
-                        await dio.post('/restaurant/menu/items', data: {
+                        final price = num.tryParse(priceCtrl.text.trim()) ?? 0;
+                        final cost = num.tryParse(costCtrl.text.trim()) ?? 0;
+                        final body = {
                           'name': nameCtrl.text.trim(),
-                          'categoryId': selectedCategoryId,
-                          'category_id': selectedCategoryId,
-                          'price': double.tryParse(priceCtrl.text) ?? 0,
-                          'selling_price': double.tryParse(priceCtrl.text) ?? 0,
-                          'cost_price':
-                              double.tryParse(costCtrl.text.trim()) ?? 0,
-                          if (branchId.isNotEmpty)
-                            'branchId': int.tryParse(branchId) ?? branchId,
+                          'sku': skuCtrl.text.trim(),
+                          'category': (selectedCategory == null ||
+                                  selectedCategory!.isEmpty)
+                              ? 'Manual'
+                              : selectedCategory,
+                          'unit': unitCtrl.text.trim().isEmpty
+                              ? 'each'
+                              : unitCtrl.text.trim(),
+                          'selling_price': price,
+                          'cost_price': cost,
+                          'opening_stock':
+                              num.tryParse(openingCtrl.text.trim()) ?? 0,
+                          'current_stock':
+                              num.tryParse(currentCtrl.text.trim()) ?? 0,
+                          'track_stock': trackStock,
+                          'is_active': available,
+                          'is_available': available,
+                          'status': available ? 'active' : 'inactive',
                           if (branchId.isNotEmpty)
                             'branch_id': int.tryParse(branchId) ?? branchId,
-                        });
+                        };
+                        // Prefer creating the SELLABLE pos_outlet_items row on
+                        // the branch's restaurant POS outlet (same as the
+                        // SuperAdmin POS Outlet Menu). Fall back to the legacy
+                        // menu-items endpoint only if no restaurant outlet
+                        // exists (the backend still links that to the POS).
+                        if (restaurantOutletId != null &&
+                            restaurantOutletId!.isNotEmpty) {
+                          await dio.post(
+                              '/pos/outlets/$restaurantOutletId/items',
+                              data: body);
+                        } else {
+                          await dio.post('/restaurant/menu/items', data: {
+                            ...body,
+                            'price': price,
+                          });
+                        }
                         if (!ctx.mounted) return;
                         Navigator.pop(ctx);
                         await _load();
@@ -23191,7 +23309,7 @@ class _BranchRestaurantMenuSectionState
                             content: Text(
                               apiErrorMessage(
                                 e,
-                                fallback: 'Could not add restaurant menu item',
+                                fallback: 'Could not add menu item',
                               ),
                             ),
                           ),
@@ -23207,8 +23325,12 @@ class _BranchRestaurantMenuSectionState
     );
 
     nameCtrl.dispose();
+    skuCtrl.dispose();
     priceCtrl.dispose();
     costCtrl.dispose();
+    openingCtrl.dispose();
+    currentCtrl.dispose();
+    unitCtrl.dispose();
   }
 
   @override
