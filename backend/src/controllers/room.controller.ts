@@ -57,9 +57,67 @@ export const getRooms = async (
       throw error;
     }
 
+    // Fetch active checked_in reservations to populate guest details for occupied rooms
+    let resQuery = supabase
+      .from('reservations')
+      .select(`
+        id,
+        confirmation_number,
+        room_id,
+        guest_id,
+        check_in_date,
+        check_out_date,
+        guest:guests!guest_id(id, first_name, last_name, phone, email)
+      `)
+      .in('status', ['checked_in', 'confirmed']);
+
+    resQuery = applyBranchFilter(resQuery, req);
+    if (req.query.branch_id && isGlobal) {
+      resQuery = resQuery.eq('branch_id', req.query.branch_id as string);
+    }
+
+    const { data: reservations } = await resQuery;
+
+    const resByRoomId = new Map<string, any>();
+    (reservations || []).forEach((r: any) => {
+      if (r.room_id) {
+        resByRoomId.set(String(r.room_id), r);
+      }
+    });
+
+    const enrichedRooms = (rooms || []).map((room: any) => {
+      const activeRes = resByRoomId.get(String(room.id));
+      let guestName =
+        room.guest_name ||
+        (room.guest ? `${room.guest.first_name || ''} ${room.guest.last_name || ''}`.trim() : null);
+      let guestObj = room.guest;
+      let checkInDate = room.check_in_date;
+      let checkOutDate = room.check_out_date;
+      let confNum = room.confirmation_number;
+
+      if (activeRes) {
+        const g = activeRes.guest;
+        const gName = g ? `${g.first_name || ''} ${g.last_name || ''}`.trim() : null;
+        if (gName) guestName = gName;
+        if (g) guestObj = g;
+        checkInDate = activeRes.check_in_date || checkInDate;
+        checkOutDate = activeRes.check_out_date || checkOutDate;
+        confNum = activeRes.confirmation_number || confNum;
+      }
+
+      return {
+        ...room,
+        guest_name: guestName || (room.status === 'occupied' ? 'Occupied Guest' : null),
+        guest: guestObj,
+        check_in_date: checkInDate,
+        check_out_date: checkOutDate,
+        confirmation_number: confNum,
+      };
+    });
+
     res.status(200).json({
       success: true,
-      data: rooms || []
+      data: enrichedRooms,
     });
   } catch (error) {
     next(error);

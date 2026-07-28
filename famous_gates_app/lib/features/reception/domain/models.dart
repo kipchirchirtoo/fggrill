@@ -132,6 +132,7 @@ class Room {
     this.floor,
     this.status = 'available',
     this.guestName,
+    this.checkInDate,
     this.checkOutDate,
     this.pricePerNight,
     this.raw = const {},
@@ -144,6 +145,7 @@ class Room {
   final int? floor;
   final String status;
   final String? guestName;
+  final DateTime? checkInDate;
   final DateTime? checkOutDate;
   final double? pricePerNight;
   final Map<String, dynamic> raw;
@@ -159,6 +161,12 @@ class Room {
         room?['room_number'] ??
         room?['roomNumber'] ??
         room?['number'];
+    final guestObj = json['guest'] is Map ? Map<String, dynamic>.from(json['guest']) : null;
+    final parsedGuestName = _string(
+      json['guest_name'] ??
+      json['current_guest'] ??
+      (guestObj != null ? _name(guestObj) : null)
+    );
     return Room(
       id: '${json['id']}',
       number: _int(rawRoomNumber) ?? 0,
@@ -166,7 +174,8 @@ class Room {
       type: _extractTypeName(json['room_type'] ?? json['type']),
       floor: _int(json['floor'] ?? json['floor_number']),
       status: '${json['status'] ?? 'available'}',
-      guestName: _string(json['guest_name'] ?? json['current_guest']),
+      guestName: parsedGuestName,
+      checkInDate: _tryDate(json['check_in_date'] ?? json['checkInDate']),
       checkOutDate: _tryDate(json['check_out_date'] ?? json['checkOutDate']),
       pricePerNight: _double(
           json['price_per_night'] ?? json['rate'] ?? json['base_price']),

@@ -22,6 +22,7 @@ import '../data/repository.dart';
 import '../domain/models.dart';
 import '../../templates/data/document_printer.dart';
 import '../../pos/domain/models.dart';
+import '../../shared/presentation/room_bills_view.dart';
 import 'screens/screens.dart';
 
 enum ReceptionSection {
@@ -30,6 +31,7 @@ enum ReceptionSection {
   checkInOut,
   breakfastPax,
   rooms,
+  roomBills,
   guests,
   guestProfile,
   housekeeping,
@@ -255,6 +257,11 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
             icon: Icons.bed_outlined,
             group: 'Front Desk'),
         MasterNavItem(
+            section: ReceptionSection.roomBills,
+            label: 'Room Bills',
+            icon: Icons.receipt_long_outlined,
+            group: 'Front Desk'),
+        MasterNavItem(
             section: ReceptionSection.cashier,
             label: 'Cashier',
             icon: Icons.point_of_sale_outlined,
@@ -344,6 +351,9 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
           onTypeChanged: (value) => setState(() => _roomTypeFilter = value),
           onRefresh: _refresh,
         );
+      case ReceptionSection.roomBills:
+        // Reception tracks room bills / folios read-only; the cashier settles.
+        return const RoomBillsView(canSettle: false);
       case ReceptionSection.guests:
         return _GuestsSection(
           data: data,
@@ -3036,6 +3046,20 @@ class _RoomsSection extends ConsumerWidget {
       subtitle:
           'Room status board, quick check-in, status changes and active booking checkout.',
       actions: [
+        ElevatedButton.icon(
+          onPressed: () => printRoomsReportPDF(
+            context: context,
+            rooms: rooms,
+            branchName: 'FamousGate Bomet',
+          ),
+          icon: const Icon(Icons.print, size: 16),
+          label: const Text('Print Room List & Occupancy'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.kPrimary,
+            foregroundColor: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 8),
         OutlinedButton.icon(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh, size: 16),
@@ -5194,11 +5218,16 @@ class _RoomCard extends StatelessWidget {
                 _StatusPill(room.status),
               ],
             ),
-            Text(room.guestName ?? 'No guest',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 11, color: AppColors.kTextSecondary)),
+            Text(
+              room.guestName ?? (room.status == 'occupied' ? 'Occupied Guest' : 'No guest'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: room.status == 'occupied' ? FontWeight.bold : FontWeight.normal,
+                color: room.status == 'occupied' ? AppColors.kPrimary : AppColors.kTextSecondary,
+              ),
+            ),
             if (onQuickCheckIn != null || onCheckout != null)
               Wrap(spacing: 4, runSpacing: 4, children: [
                 if (onQuickCheckIn != null)
@@ -7093,6 +7122,322 @@ pw.Widget _pdfDataCell(String text, {bool isBold = false}) {
         style: pw.TextStyle(
             fontSize: 8,
             fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+  );
+}
+
+Future<void> printRoomsReportPDF({
+  required BuildContext context,
+  required List<Room> rooms,
+  required String branchName,
+}) async {
+  final pdf = pw.Document();
+  pw.MemoryImage? logoImage;
+  try {
+    final logoBytes =
+        await rootBundle.load('assets/frontend_public/fglogo.png');
+    logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+  } catch (_) {}
+
+  final totalRooms = rooms.length;
+  final availableRooms = rooms.where((r) => r.status == 'available').length;
+  final occupiedRooms = rooms.where((r) => r.status == 'occupied').length;
+  final cleaningRooms =
+      rooms.where((r) => r.status == 'cleaning' || r.status == 'dirty').length;
+  final maintenanceRooms =
+      rooms.where((r) => r.status == 'maintenance').length;
+  final occupancyRate = totalRooms > 0
+      ? (occupiedRooms / totalRooms * 100).toStringAsFixed(1)
+      : '0.0';
+
+  final numFormat = NumberFormat('#,##0.00', 'en_KE');
+  final nowStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 28),
+      build: (pw.Context ctx) {
+        return [
+          // FamousGate Branding Header
+          pw.Row(
+            cross: pw.CrossAxisAlignment.start,
+            children: [
+              if (logoImage != null)
+                pw.Image(logoImage, width: 72, height: 50)
+              else
+                pw.Container(width: 72),
+              pw.SizedBox(width: 16),
+              pw.Expanded(
+                child: pw.Column(
+                  cross: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('FamousGate Hotels',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                    pw.Text('Bomet, Kenya',
+                        style: const pw.TextStyle(
+                            fontSize: 10, color: PdfColors.grey700)),
+                    pw.Text('Tel: 0706782828',
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey600)),
+                    pw.Text('Email: famousgatesbmt@gmail.com',
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey600)),
+                    pw.Text('www.famousgatehotels.com',
+                        style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blue800)),
+                  ],
+                ),
+              ),
+              pw.Column(
+                cross: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('ROOM LIST & OCCUPANCY',
+                      style: pw.TextStyle(
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.grey800)),
+                  pw.Text('REPORT',
+                      style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.grey700)),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Printed: $nowStr',
+                      style: const pw.TextStyle(
+                          fontSize: 9, color: PdfColors.grey700)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          pw.Divider(color: PdfColors.grey400, thickness: 0.5),
+          pw.SizedBox(height: 10),
+
+          // Operational KPI Summary Box
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+              color: PdfColors.grey100,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                pw.Column(children: [
+                  pw.Text('Total Rooms',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('$totalRooms',
+                      style: pw.TextStyle(
+                          fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                ]),
+                pw.Column(children: [
+                  pw.Text('Occupied',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('$occupiedRooms',
+                      style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue800)),
+                ]),
+                pw.Column(children: [
+                  pw.Text('Available',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('$availableRooms',
+                      style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.green800)),
+                ]),
+                pw.Column(children: [
+                  pw.Text('Cleaning',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('$cleaningRooms',
+                      style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.orange800)),
+                ]),
+                pw.Column(children: [
+                  pw.Text('Maintenance',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('$maintenanceRooms',
+                      style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.red800)),
+                ]),
+                pw.Column(children: [
+                  pw.Text('Occupancy Rate',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('$occupancyRate%',
+                      style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.purple800)),
+                ]),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 14),
+
+          // Main Rooms & Occupancy Table
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                children: [
+                  _pdfHeaderCell('Room #'),
+                  _pdfHeaderCell('Type'),
+                  _pdfHeaderCell('Floor'),
+                  _pdfHeaderCell('Status'),
+                  _pdfHeaderCell('Guest Name'),
+                  _pdfHeaderCell('Stay Dates'),
+                  _pdfHeaderCell('Rate (KES)'),
+                ],
+              ),
+              ...rooms.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final r = entry.value;
+                final isOccupied = r.status == 'occupied';
+                final guestName =
+                    isOccupied ? (r.guestName ?? 'Occupied Guest') : '-';
+                final datesStr = (r.checkInDate != null && r.checkOutDate != null)
+                    ? '${DateFormat('dd/MM').format(r.checkInDate!)} - ${DateFormat('dd/MM').format(r.checkOutDate!)}'
+                    : '-';
+                final rateStr = r.pricePerNight != null && r.pricePerNight! > 0
+                    ? numFormat.format(r.pricePerNight)
+                    : '-';
+
+                return pw.TableRow(
+                  decoration: pw.BoxDecoration(
+                    color: idx.isOdd ? PdfColors.grey100 : PdfColors.white,
+                  ),
+                  children: [
+                    _pdfRoomDataCell(r.displayNumber, isBold: true),
+                    _pdfRoomDataCell(r.type ?? 'Standard'),
+                    _pdfRoomDataCell(r.floor != null ? 'Floor ${r.floor}' : 'G'),
+                    _pdfRoomDataCell(
+                      r.status.toUpperCase(),
+                      color: isOccupied
+                          ? PdfColors.blue800
+                          : (r.status == 'available'
+                              ? PdfColors.green800
+                              : (r.status == 'maintenance'
+                                  ? PdfColors.red800
+                                  : PdfColors.orange800)),
+                      isBold: true,
+                    ),
+                    _pdfRoomDataCell(guestName, isBold: isOccupied),
+                    _pdfRoomDataCell(datesStr),
+                    _pdfRoomDataCell(rateStr, align: pw.TextAlign.right),
+                  ],
+                );
+              }),
+            ],
+          ),
+          pw.SizedBox(height: 24),
+
+          // Signatures Block
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                cross: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                      width: 180,
+                      child: pw.Divider(
+                          color: PdfColors.grey400, thickness: 0.5)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Reception Officer Signature',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                ],
+              ),
+              pw.Column(
+                cross: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                      width: 180,
+                      child: pw.Divider(
+                          color: PdfColors.grey400, thickness: 0.5)),
+                  pw.SizedBox(height: 2),
+                  pw.Text('Front Office Manager Signature',
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.grey700)),
+                ],
+              ),
+            ],
+          ),
+        ];
+      },
+      footer: (pw.Context ctx) {
+        return pw.Container(
+          margin: const pw.EdgeInsets.only(top: 10),
+          padding: const pw.EdgeInsets.only(top: 6),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+            ),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                  'FamousGate Hotels - Reception System | www.famousgatehotels.com',
+                  style: const pw.TextStyle(
+                      fontSize: 7, color: PdfColors.grey600)),
+              pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+                  style: const pw.TextStyle(
+                      fontSize: 7, color: PdfColors.grey600)),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+
+  await Printing.layoutPdf(
+    onLayout: (PdfPageFormat format) async => pdf.save(),
+    name:
+        'Room_List_Occupancy_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+  );
+}
+
+pw.Widget _pdfRoomDataCell(
+  String text, {
+  bool isBold = false,
+  PdfColor? color,
+  pw.TextAlign align = pw.TextAlign.left,
+}) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.all(5),
+    child: pw.Text(
+      text,
+      textAlign: align,
+      style: pw.TextStyle(
+        fontSize: 8,
+        color: color ?? PdfColors.black,
+        fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      ),
+    ),
   );
 }
 
