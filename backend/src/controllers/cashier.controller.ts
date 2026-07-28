@@ -8912,21 +8912,23 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         try {
             let posShiftQuery = supabase
                 .from('pos_outlet_shifts')
-                .select('id, branch_id, outlet_id, cashier_id, outlet:pos_outlets(id, name, outlet_type, branch_id)');
+                .select('id, branch_id, outlet_id, cashier_id, status, outlet:pos_outlets(id, name, outlet_type, branch_id)');
             if (effectiveBranchId) posShiftQuery = posShiftQuery.eq('branch_id', effectiveBranchId);
-            // NOTE: outlet-level isolation is enforced below by `canAccessPosOutlet`
-            // on each shift's outlet (explicit assignment or the role's station
-            // outlet types). We deliberately do NOT also restrict to shifts THIS
-            // user personally opened, nor to currently-open shifts — doing so hid
-            // two classes of still-unpaid POS bills from the clearance list that
-            // remain resolvable by direct lookup:
-            //   (a) bills sitting in a now-closed shift (unpaid is unpaid until
-            //       settled, regardless of shift age), and
-            //   (b) bills for a station-restricted cashier who clears an outlet
-            //       they don't own the shift for — e.g. the Kyogong reception
-            //       cashier resolves to restaurant_cashier but never opens the
-            //       restaurant/choma POS shift, so `cashier_id = me` matched
-            //       nothing and the whole list came back empty.
+            // The live "Unpaid Bills for Clearance" list only shows bills whose
+            // POS shift is still OPEN. A bill in a shift that has already CLOSED
+            // was reconciled at close and must NOT resurface days/weeks later in
+            // a new shift — leaving it unscoped flooded the list with stale
+            // orphan bills from long-closed shifts.
+            //
+            // We do NOT additionally restrict to shifts THIS user personally
+            // opened: outlet-level isolation is handled below by
+            // `canAccessPosOutlet`, so a station-restricted cashier who clears
+            // an outlet they don't own the shift for still works — e.g. the
+            // Kyogong reception cashier resolves to restaurant_cashier but never
+            // opens the restaurant/choma shift, so `cashier_id = me` matched
+            // nothing and the whole list came back empty. The voided-orders
+            // audit view is intentionally not shift-scoped.
+            if (!wantsVoidedOrders) posShiftQuery = posShiftQuery.eq('status', 'open');
             const { data: posShifts, error: posShiftErr } = await posShiftQuery;
             if (posShiftErr) throw posShiftErr;
 
