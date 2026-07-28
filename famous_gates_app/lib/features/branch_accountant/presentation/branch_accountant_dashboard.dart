@@ -22312,6 +22312,7 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
   List<String> _categories = ['All'];
   // 'main_bar' = Sports Bar  |  'executive_bar' = Executive Bar
   String _barOutletType = 'main_bar';
+  int? _branchId;
 
   @override
   void initState() {
@@ -22329,6 +22330,7 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
     try {
       final repo = ref.read(branchAccountantRepositoryProvider);
       final branchId = await repo.getBranchId();
+      _branchId = int.tryParse(branchId);
       final dio = ref.read(dioProvider);
 
       // Fetch POS outlets for the selected bar type only.
