@@ -5600,6 +5600,36 @@ const recomputeMasterBillTotals = async (masterBillId: string): Promise<void> =>
   }
 };
 
+// Generate a unique mixed letter+number bill code (same format POS orders use,
+// e.g. A7K3M9) for a combined "customer bill", retrying on the rare collision.
+const generateMasterBillShortCode = async (
+  branchId: number,
+  outletId: string,
+  userId: string
+): Promise<string> => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { code } = await createBillVerificationCode({
+      code: null,
+      billRef: `MB-${Date.now()}`,
+      billType: 'master_bill',
+      branchId,
+      outletId,
+      amount: 0,
+      generatedBy: userId
+    });
+    const { data: clashMaster } = await supabase
+      .from('pos_master_bills').select('id').eq('master_bill_number', code).maybeSingle();
+    if (clashMaster) continue;
+    // Also avoid clashing with a live POS order's short code so a lookup never
+    // resolves to two different bills.
+    const { data: clashOrder } = await supabase
+      .from('pos_shift_orders').select('id').eq('short_code', code).limit(1).maybeSingle();
+    if (!clashOrder) return code;
+  }
+  // Extremely unlikely fallback — still letter+number and unique enough.
+  return `MB${Date.now().toString(36).toUpperCase().slice(-5)}`;
+};
+
 // Load a master bill's full view (row + ALL its member orders).
 const loadMasterBillView = async (masterBillId: string): Promise<Record<string, any> | null> => {
   const { data: master } = await supabase
@@ -5833,8 +5863,12 @@ export const linkOrdersIntoBill = async (req: Request, res: Response, next: Next
     }
     if (!master) {
       const anchorOutlet = Array.isArray(anchor.outlet) ? anchor.outlet[0] : anchor.outlet;
-      const { data: num } = await supabase.rpc('next_master_bill_number', { p_branch_id: branchId });
-      const masterNumber = (typeof num === 'string' && num) ? num : `BR${branchId}-${Date.now()}`;
+      // A combined bill gets the SAME kind of mixed letter+number short code a
+      // normal POS order carries (e.g. A7K3M9), so the cashier looks it up
+      // exactly like any POS bill — not a KYO-000245 style sequential number.
+      const masterNumber = await generateMasterBillShortCode(
+        branchId, String(anchor.outlet_id || ''), String(req.user.id)
+      );
       const { data: created, error: cErr } = await supabase.from('pos_master_bills').insert({
         master_bill_number: masterNumber,
         branch_id: branchId,
