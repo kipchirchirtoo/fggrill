@@ -107,19 +107,29 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh),
           ),
-          TextButton.icon(
-            onPressed: _bills.isEmpty
-                ? null
-                : () => setState(() {
-                      _combineMode = !_combineMode;
-                      _selectedOrderIds.clear();
-                    }),
-            icon: Icon(_combineMode ? Icons.close : Icons.call_merge,
-                color: Colors.white),
-            label: Text(_combineMode ? 'Cancel' : 'Combine',
-                style: const TextStyle(color: Colors.white)),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: FilledButton.icon(
+              onPressed: _bills.isEmpty
+                  ? null
+                  : () => setState(() {
+                        _combineMode = !_combineMode;
+                        _selectedOrderIds.clear();
+                      }),
+              icon: Icon(_combineMode ? Icons.close : Icons.call_merge,
+                  size: 18),
+              label: Text(_combineMode ? 'Cancel' : 'Combine'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _combineMode
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.primary,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
         ],
       ),
       body: _loading
