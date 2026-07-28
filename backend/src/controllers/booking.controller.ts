@@ -620,8 +620,11 @@ export const checkOutBooking = async (
       logger.warn(`Could not close folio for booking ${id}:`, folioErr.message);
     }
 
-    // 3. Update room status to available if room is assigned
-    if (booking.room_id) {
+    // 3. Update room status to available if room is assigned (by room_id or room_number)
+    const roomIdToUpdate = booking.room_id;
+    const roomNoToUpdate = booking.room_number || (booking.room && booking.room.room_number);
+
+    if (roomIdToUpdate) {
       try {
         await supabase
           .from('rooms')
@@ -631,10 +634,26 @@ export const checkOutBooking = async (
             current_guest: null,
             updated_at: new Date().toISOString()
           })
-          .eq('id', booking.room_id);
-        logger.info(`Room ${booking.room_id} status updated to available`);
+          .eq('id', roomIdToUpdate);
+        logger.info(`Room ${roomIdToUpdate} status updated to available`);
       } catch (roomError) {
         logger.error('Failed to update room status during check-out:', roomError);
+      }
+    }
+    if (roomNoToUpdate) {
+      try {
+        await supabase
+          .from('rooms')
+          .update({
+            status: 'available',
+            hk_status: 'vacant_clean',
+            current_guest: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('room_number', roomNoToUpdate);
+        logger.info(`Room number ${roomNoToUpdate} status updated to available`);
+      } catch (roomError) {
+        logger.error('Failed to update room number status during check-out:', roomError);
       }
     }
 

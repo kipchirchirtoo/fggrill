@@ -193,6 +193,14 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       };
     })
     .filter((row) => {
+      const folio = folioMap.get(String(row.booking_id));
+      // Exclude closed or settled folios with zero balance, or closed folios of checked out stays
+      if (folio && (folio.status === 'closed' || folio.settled === true) && row.folio_balance <= 0) {
+        return false;
+      }
+      if (folio && folio.status === 'closed') {
+        return false;
+      }
       if (!normalizedQuery) return true;
       return [
         row.room_number,
