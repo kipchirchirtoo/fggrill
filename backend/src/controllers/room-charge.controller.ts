@@ -98,20 +98,16 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       meal_plan,
       checked_in_at,
       guest:guests!guest_id(first_name,last_name,phone,email),
-      room:rooms!room_id!inner(id, room_number, branch_id, status)
+      room:rooms!room_id(id, room_number, branch_id, status)
     `)
-    .eq('room.branch_id', branchId)
+    .eq('branch_id', branchId)
     .in('status', [...IN_HOUSE_ROOM_CHARGE_STATUSES])
-    .lte('check_in_date', today)
-    .gt('check_out_date', today)
     .order('check_in_date', { ascending: false })
     .limit(100);
 
   if (error) throw error;
 
-  const inHouseReservations = (reservations || []).filter((row: any) =>
-    isCurrentInHouseStay(row, today)
-  );
+  const inHouseReservations = reservations || [];
 
   const reservationIds = inHouseReservations.map((row: any) => row.id);
   const folioMap = new Map<string, any>();
@@ -475,16 +471,6 @@ export const getEligibleGuests = async (req: Request, res: Response): Promise<vo
   try {
     const branchId = Number(req.query.branch_id || (req as any).user?.branch_id || 1);
     const queryStr = String(req.query.query || '').trim().toLowerCase();
-
-    const roomChargingEnabled = await isFeatureEnabled(branchId, 'GUEST_ROOM_CHARGING');
-    if (!roomChargingEnabled) {
-      res.status(403).json({
-        success: false,
-        message: 'Guest Room Charging is disabled for this branch.',
-        code: 'FEATURE_DISABLED',
-      });
-      return;
-    }
 
     const eligibleGuests = await loadEligibleInHouseGuests(branchId, queryStr);
 
