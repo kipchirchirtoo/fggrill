@@ -203,6 +203,12 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           group: 'Kitchen Display',
         ),
         MasterNavItem(
+          section: KitchenKdsSection.analytics,
+          label: 'Order Intelligence',
+          icon: Icons.insights_outlined,
+          group: 'Kitchen Display',
+        ),
+        MasterNavItem(
           section: KitchenKdsSection.voidRequests,
           label: 'Void',
           icon: Icons.remove_circle_outline,
