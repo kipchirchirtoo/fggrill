@@ -1918,12 +1918,31 @@ export const getBarCaptainOrders = async (req: Request, res: Response, next: Nex
 
     logger.info(`getBarCaptainOrders - Found ${outletShifts?.length || 0} outlet shifts`);
 
+    // Each bar cashier auto-prints captain tickets only for THEIR OWN bar
+    // outlet(s). A main-bar / sports-bar order must never print at the
+    // executive-bar station (and vice-versa) — so scope shifts to the outlets
+    // this cashier's role/assignment can access. Global/manager roles see all.
+    const isGlobal = isGlobalUser(req);
+    const cashierRole = roleFor(req);
+    const assignedOutlets = await loadAssignedPosOutlets(supabase, req.user?.id);
+
     const barShiftIds = (outletShifts || [])
       .filter((shift: any) => {
         const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
         const isBarOutlet = BAR_CASHIER_CAPTAIN_ORDER_OUTLET_TYPES.has(String(outlet?.outlet_type || '') as OutletType);
-        logger.info(`Shift ${shift.id} - Outlet type: ${outlet?.outlet_type}, Is bar outlet: ${isBarOutlet}`);
-        return isBarOutlet;
+        if (!isBarOutlet) return false;
+        if (!isGlobal) {
+          const outletObj = {
+            id: shift.outlet_id,
+            outlet_type: outlet?.outlet_type,
+            branch_id: shift.branch_id,
+            name: outlet?.name,
+          };
+          if (!canAccessPosOutlet(cashierRole, outletObj, assignedOutlets, branchId)) {
+            return false;
+          }
+        }
+        return true;
       })
       .map((shift: any) => shift.id);
     const shiftsById = new Map((outletShifts || []).map((shift: any) => [shift.id, shift]));
