@@ -466,6 +466,14 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
         title: const Text('Guest Check-Out'),
         backgroundColor: AppColors.kPrimary,
         foregroundColor: Colors.white,
+        actions: [
+          if (_selectedBooking != null)
+            IconButton(
+              icon: const Icon(Icons.print),
+              tooltip: 'Generate & Print Invoice',
+              onPressed: _generateReceiptPDF,
+            ),
+        ],
       ),
       body: _selectedBooking == null ? _buildSearchView() : _buildCheckOutView(),
     );
@@ -705,24 +713,44 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Check-Out Button
-          ElevatedButton(
-            onPressed: _isSubmitting ? null : _performCheckOut,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _balance > 0 ? Colors.orange.shade700 : AppColors.kPrimary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                  )
-                : Text(
-                    _balance > 0 ? 'Check-Out (Pending Cashier Settlement)' : 'Complete Check-Out (Fully Paid)',
-                    style: const TextStyle(fontSize: 16),
+          // Action Buttons: Generate & Print Invoice + Check-Out
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _generateReceiptPDF,
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('Generate & Print Invoice'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.kPrimary,
+                    side: const BorderSide(color: AppColors.kPrimary, width: 1.5),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting ? null : _performCheckOut,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _balance > 0 ? Colors.orange.shade700 : AppColors.kPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : Text(
+                          _balance > 0 ? 'Check-Out (Pending Settlement)' : 'Complete Check-Out',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
