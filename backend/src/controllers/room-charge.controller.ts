@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import db from '../db';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
+import { billCache } from '../utils/bill-cache';
 
 const IN_HOUSE_ROOM_CHARGE_STATUSES = ['checked_in', 'checked-in', 'in-house', 'active'] as const;
 
@@ -217,14 +218,30 @@ async function settleRoomChargeSourceBill(input: {
   const billId = String(input.billId || '').trim();
   if (!billId) return;
 
+  // Invalidate bill cache so cashier station sees updated status immediately
+  billCache.invalidatePattern(billId);
+
   const now = new Date().toISOString();
 
   // 1. pos_shift_orders (Kyogong POS Shift Orders)
-  const { data: posOrder } = await supabase
-    .from('pos_shift_orders')
-    .select('id, total_amount, master_bill_id')
-    .or(`id.eq.${billId},order_number.eq.${billId},short_code.eq.${billId}`)
-    .maybeSingle();
+  // Try UUID match first, then fall back to order_number / short_code
+  let posOrder: any = null;
+  if (/^[0-9a-f-]{36}$/i.test(billId)) {
+    const { data } = await supabase
+      .from('pos_shift_orders')
+      .select('id, total_amount, master_bill_id, short_code, order_number')
+      .eq('id', billId)
+      .maybeSingle();
+    posOrder = data;
+  }
+  if (!posOrder) {
+    const { data } = await supabase
+      .from('pos_shift_orders')
+      .select('id, total_amount, master_bill_id, short_code, order_number')
+      .or(`order_number.eq.${billId},short_code.eq.${billId}`)
+      .maybeSingle();
+    posOrder = data;
+  }
 
   if (posOrder) {
     const totalAmount = Number(posOrder.total_amount || 0);
@@ -239,6 +256,10 @@ async function settleRoomChargeSourceBill(input: {
         updated_at: now,
       })
       .eq('id', posOrder.id);
+
+    // Also invalidate by short_code / order_number so any cached lookup is cleared
+    if (posOrder.short_code) billCache.invalidatePattern(posOrder.short_code);
+    if (posOrder.order_number) billCache.invalidatePattern(posOrder.order_number);
 
     if (posOrder.master_bill_id) {
       await supabase
@@ -256,11 +277,23 @@ async function settleRoomChargeSourceBill(input: {
   }
 
   // 2. unpaid_bills (Cashier Station Unpaid Bills)
-  const { data: unpaidBill } = await supabase
-    .from('unpaid_bills')
-    .select('id, total_amount, remarks')
-    .or(`id.eq.${billId},bill_number.eq.${billId}`)
-    .maybeSingle();
+  let unpaidBill: any = null;
+  if (/^[0-9a-f-]{36}$/i.test(billId)) {
+    const { data } = await supabase
+      .from('unpaid_bills')
+      .select('id, total_amount, remarks')
+      .eq('id', billId)
+      .maybeSingle();
+    unpaidBill = data;
+  }
+  if (!unpaidBill) {
+    const { data } = await supabase
+      .from('unpaid_bills')
+      .select('id, total_amount, remarks')
+      .eq('bill_number', billId)
+      .maybeSingle();
+    unpaidBill = data;
+  }
 
   if (unpaidBill) {
     const totalAmount = Number(unpaidBill.total_amount || 0);
@@ -281,11 +314,23 @@ async function settleRoomChargeSourceBill(input: {
   }
 
   // 3. shift_transactions (Kyogong POS shift transactions)
-  const { data: shiftTx } = await supabase
-    .from('shift_transactions')
-    .select('id')
-    .or(`id.eq.${billId},transaction_number.eq.${billId}`)
-    .maybeSingle();
+  let shiftTx: any = null;
+  if (/^[0-9a-f-]{36}$/i.test(billId)) {
+    const { data } = await supabase
+      .from('shift_transactions')
+      .select('id')
+      .eq('id', billId)
+      .maybeSingle();
+    shiftTx = data;
+  }
+  if (!shiftTx) {
+    const { data } = await supabase
+      .from('shift_transactions')
+      .select('id')
+      .eq('transaction_number', billId)
+      .maybeSingle();
+    shiftTx = data;
+  }
 
   if (shiftTx) {
     await supabase
@@ -299,11 +344,23 @@ async function settleRoomChargeSourceBill(input: {
   }
 
   // 4. pos_master_bills (Master Bills across outlets)
-  const { data: masterBill } = await supabase
-    .from('pos_master_bills')
-    .select('id, total_amount')
-    .or(`id.eq.${billId},master_bill_number.eq.${billId}`)
-    .maybeSingle();
+  let masterBill: any = null;
+  if (/^[0-9a-f-]{36}$/i.test(billId)) {
+    const { data } = await supabase
+      .from('pos_master_bills')
+      .select('id, total_amount')
+      .eq('id', billId)
+      .maybeSingle();
+    masterBill = data;
+  }
+  if (!masterBill) {
+    const { data } = await supabase
+      .from('pos_master_bills')
+      .select('id, total_amount')
+      .eq('master_bill_number', billId)
+      .maybeSingle();
+    masterBill = data;
+  }
 
   if (masterBill) {
     const totalAmount = Number(masterBill.total_amount || 0);
@@ -332,11 +389,23 @@ async function settleRoomChargeSourceBill(input: {
   }
 
   // 5. restaurant_orders
-  const { data: rOrder } = await supabase
-    .from('restaurant_orders')
-    .select('id, total_amount')
-    .or(`id.eq.${billId},order_number.eq.${billId}`)
-    .maybeSingle();
+  let rOrder: any = null;
+  if (/^[0-9a-f-]{36}$/i.test(billId)) {
+    const { data } = await supabase
+      .from('restaurant_orders')
+      .select('id, total_amount')
+      .eq('id', billId)
+      .maybeSingle();
+    rOrder = data;
+  }
+  if (!rOrder) {
+    const { data } = await supabase
+      .from('restaurant_orders')
+      .select('id, total_amount')
+      .eq('order_number', billId)
+      .maybeSingle();
+    rOrder = data;
+  }
 
   if (rOrder) {
     const totalAmount = Number(rOrder.total_amount || 0);
@@ -354,11 +423,23 @@ async function settleRoomChargeSourceBill(input: {
   }
 
   // 6. bar_orders
-  const { data: bOrder } = await supabase
-    .from('bar_orders')
-    .select('id, total')
-    .or(`id.eq.${billId},order_number.eq.${billId}`)
-    .maybeSingle();
+  let bOrder: any = null;
+  if (/^[0-9a-f-]{36}$/i.test(billId)) {
+    const { data } = await supabase
+      .from('bar_orders')
+      .select('id, total')
+      .eq('id', billId)
+      .maybeSingle();
+    bOrder = data;
+  }
+  if (!bOrder) {
+    const { data } = await supabase
+      .from('bar_orders')
+      .select('id, total')
+      .eq('order_number', billId)
+      .maybeSingle();
+    bOrder = data;
+  }
 
   if (bOrder) {
     const totalAmount = Number(bOrder.total || 0);
@@ -748,6 +829,18 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
       roomNumber,
       guestName,
     });
+
+    // Always purge any cached lookup for this bill so the cashier station
+    // returns fresh data immediately after a room charge is posted.
+    if (bill_id) {
+      billCache.invalidatePattern(String(bill_id));
+    }
+    if (bill_number) {
+      billCache.invalidatePattern(String(bill_number));
+    }
+    if (order_number) {
+      billCache.invalidatePattern(String(order_number));
+    }
 
     await db.query(
       `INSERT INTO audit_logs (user_id, action, resource, metadata, branch_id, created_at)
