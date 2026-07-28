@@ -81,15 +81,6 @@ class _RoomBillsViewState extends ConsumerState<RoomBillsView> {
     }
   }
 
-  void _snack(String msg, {bool error = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? Colors.red : Colors.green,
-      behavior: SnackBarBehavior.floating,
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

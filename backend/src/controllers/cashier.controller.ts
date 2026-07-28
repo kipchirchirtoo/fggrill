@@ -3827,11 +3827,10 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
 
         const hasFullAccess = fullAccessRoles.includes(userRole);
 
-        // Fetch Unpaid POS Shift Transactions (Kyogong)
-        // EVERYONE sees these if they match the branch
+        // Prepare queries for parallel execution
         let shiftQuery = supabase
             .from('shift_transactions')
-            .select('*')
+            .select('id, transaction_number, created_at, customer_name, total_amount, service_category, branch:branches(name)')
             .eq('payment_method', 'BILL')
             .eq('is_voided', false)
             .order('created_at', { ascending: false });
@@ -3840,8 +3839,40 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             shiftQuery = shiftQuery.eq('branch_id', effectiveBranchId);
         }
 
-        const { data: shiftTransactions, error: shiftError } = await shiftQuery;
-        if (shiftError) throw shiftError;
+        let query = supabase
+            .from('unpaid_bills')
+            .select('*')
+            .order('bill_date', { ascending: false });
+
+        if (effectiveBranchId) {
+            query = query.eq('branch_id', effectiveBranchId);
+        }
+
+        if (status) {
+            query = query.eq('status', status);
+        } else {
+            query = query.neq('status', 'paid');
+        }
+
+        if (customer_type) {
+            query = query.eq('customer_type', customer_type as string);
+        }
+
+        if (bill_type) {
+            query = query.eq('bill_type', bill_type as string);
+        }
+
+        // Execute queries concurrently for maximum speed
+        const [shiftRes, unpaidRes] = await Promise.all([
+            shiftQuery,
+            hasFullAccess ? query : Promise.resolve({ data: [], error: null })
+        ]);
+
+        if (shiftRes.error) throw shiftRes.error;
+        if (unpaidRes.error) throw unpaidRes.error;
+
+        const shiftTransactions = shiftRes.data || [];
+        const unpaidBills = unpaidRes.data || [];
 
         // Map Kyogong bills (shift_transactions) to unpaid_bills format
         const mappedKyogong = (shiftTransactions || []).map(tx => ({
@@ -3854,42 +3885,14 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             paid_amount: 0,
             balance_amount: tx.total_amount,
             status: 'unpaid',
-            branch_name: tx.branch?.name,
+            branch_name: (tx as any).branch?.name,
             description: `POS Transaction: ${tx.service_category || 'Items'}`,
             is_kyogong: true
         }));
 
         let combinedData: any[] = [...mappedKyogong];
 
-        // ONLY full access roles see the rest (Hotel, Invoices, Manual Bills)
         if (hasFullAccess) {
-            // Fetch Manual Unpaid Bills
-            let query = supabase
-                .from('unpaid_bills')
-                .select('*')
-                .order('bill_date', { ascending: false });
-
-            if (effectiveBranchId) {
-                query = query.eq('branch_id', effectiveBranchId);
-            }
-
-            if (status) {
-                query = query.eq('status', status);
-            } else {
-                query = query.neq('status', 'paid');
-            }
-
-            if (customer_type) {
-                query = query.eq('customer_type', customer_type as string);
-            }
-
-            if (bill_type) {
-                query = query.eq('bill_type', bill_type as string);
-            }
-
-            const { data: unpaidBills, error: billsError } = await query;
-            if (billsError) throw billsError;
-
             // `unpaid_bills` only stores `waiter_id` (FK to staff_profiles), not
             // a denormalized name, so cashiers in every outlet need it resolved
             // here to identify who is holding a credit/waiter bill.
