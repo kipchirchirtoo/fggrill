@@ -8804,19 +8804,13 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             to = req.query.to_date
                 ? new Date(String(req.query.to_date))
                 : new Date(`${date}T23:59:59.999Z`);
-        } else if (!wantsVoidedOrders) {
-            // The live "Unpaid Bills for Clearance" list shows only TODAY's
-            // bills — from the start of the current business day (Africa/
-            // Nairobi, UTC+3) to now. Combined with the open-shift scope below,
-            // this means "today's bills, from when the shift is open" — a bill
-            // from an earlier day never resurfaces in a new shift. The
-            // voided-orders audit view is intentionally left unbounded.
-            const nairobiToday = new Date(Date.now() + 3 * 60 * 60 * 1000)
-                .toISOString()
-                .slice(0, 10);
-            from = new Date(`${nairobiToday}T00:00:00+03:00`);
-            to = new Date();
         }
+        // No default time bound: the live "Unpaid Bills for Clearance" list is
+        // scoped to the currently-OPEN shift (see the pos_outlet_shifts query
+        // below), so it shows EVERY bill UNDER THAT SHIFT regardless of the
+        // calendar day — a shift opened yesterday evening still shows all its
+        // bills through today. Only an explicit date/from/to query narrows the
+        // window.
         const requestedOutletId = String(req.query.outlet_id || '').trim();
         const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
         const assignedOutlets = await loadAssignedPosOutlets(supabase, (req.user as any)?.id);
