@@ -3,6 +3,7 @@ import '../../domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../shared/presentation/guest_invoice_pdf.dart';
 
 import '../../data/repository.dart';
 
@@ -184,6 +185,84 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
     }
   }
 
+  Future<void> _generateReceiptPDF() async {
+    if (_selectedBooking == null) return;
+    final booking = _selectedBooking!;
+
+    final foodCharges = (_folio?['food_charges'] as num?)?.toDouble() ?? 0.0;
+    final bevCharges = (_folio?['beverage_charges'] as num?)?.toDouble() ?? 0.0;
+    final foodBevTotal = foodCharges + bevCharges;
+    final roomCharges = (_folio?['room_charges'] as num?)?.toDouble() ?? 0.0;
+    final otherCharges = (_folio?['other_charges'] as num?)?.toDouble() ?? 0.0;
+
+    final items = <Map<String, dynamic>>[];
+    if (roomCharges > 0) {
+      items.add({
+        'description': 'Accommodation Services (${booking.roomType ?? 'Room'} ${booking.roomNumber ?? ''})',
+        'qty': 1,
+        'unitPrice': roomCharges,
+        'totalAmount': roomCharges,
+      });
+    }
+    if (foodBevTotal > 0) {
+      items.add({
+        'description': 'Food & Beverage (POS Charges)',
+        'qty': 1,
+        'unitPrice': foodBevTotal,
+        'totalAmount': foodBevTotal,
+      });
+    }
+    if (otherCharges > 0) {
+      items.add({
+        'description': 'Other Services / Incidentals',
+        'qty': 1,
+        'unitPrice': otherCharges,
+        'totalAmount': otherCharges,
+      });
+    }
+
+    for (final tx in _transactions) {
+      if (tx['type'] == 'charge') {
+        final desc = tx['description'] ?? tx['category'] ?? 'POS Charge';
+        final amt = (tx['amount'] as num?)?.toDouble() ?? 0.0;
+        if (amt > 0 && !items.any((i) => i['description'] == desc)) {
+          items.add({
+            'description': desc,
+            'qty': 1,
+            'unitPrice': amt,
+            'totalAmount': amt,
+          });
+        }
+      }
+    }
+
+    if (items.isEmpty) {
+      items.add({
+        'description': 'Hotel Accommodation & Guest Services',
+        'qty': 1,
+        'unitPrice': _totalCharges > 0 ? _totalCharges : (booking.totalAmount ?? 0.0),
+        'totalAmount': _totalCharges > 0 ? _totalCharges : (booking.totalAmount ?? 0.0),
+      });
+    }
+
+    final nowStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+
+    await printBookingInvoicePDF(
+      context: context,
+      invoiceNumber: booking.confirmationNumber ?? 'REC-${booking.id.length > 8 ? booking.id.substring(0, 8) : booking.id}',
+      invoiceDate: nowStr,
+      dueDate: nowStr,
+      clientName: booking.guestName ?? 'Guest',
+      clientPhone: booking.guestPhone,
+      clientDetails: 'Room ${booking.roomNumber ?? "-"}',
+      items: items,
+      totalAmount: _totalCharges > 0 ? _totalCharges : (booking.totalAmount ?? 0.0),
+      amountPaid: _totalPayments,
+      balanceDue: _balance,
+      notes: 'Thank you for staying at FamousGate Hotels!',
+    );
+  }
+
   Future<void> _showCashierPaymentDialog() async {
     if (_selectedBooking == null || _balance <= 0) return;
 
@@ -285,13 +364,21 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                             });
                             if (mounted) {
                               Navigator.of(context).pop();
+                              await _loadFolio();
+                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('Payment of KES ${amount.toStringAsFixed(2)} processed successfully at Cashier Station.'),
                                   backgroundColor: Colors.green,
+                                  duration: const Duration(seconds: 8),
+                                  action: SnackBarAction(
+                                    label: 'PRINT RECEIPT',
+                                    textColor: Colors.yellow,
+                                    onPressed: () => _generateReceiptPDF(),
+                                  ),
                                 ),
                               );
-                              await _loadFolio();
+                              await _generateReceiptPDF();
                             }
                           } catch (e) {
                             setDialogState(() => isProcessing = false);
@@ -472,7 +559,22 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Folio Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Folio Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ElevatedButton.icon(
+                        onPressed: _generateReceiptPDF,
+                        icon: const Icon(Icons.receipt_long, size: 16),
+                        label: const Text('Generate Receipt'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.kPrimary,
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ],
+                  ),
                   const Divider(),
                   if (_loadingFolio)
                     const Center(child: CircularProgressIndicator())
