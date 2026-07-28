@@ -8710,6 +8710,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             }
             if (effectiveBranchId) restaurantQuery = restaurantQuery.eq('branch_id', effectiveBranchId);
             if (status !== 'all') restaurantQuery = restaurantQuery.eq('payment_status', status);
+            // Exclude room-charged orders (already settled)
+            restaurantQuery = restaurantQuery.neq('payment_status', 'room_charge');
 
             const { data, error: rErr } = await restaurantQuery;
             if (rErr && rErr.code !== '42703') throw rErr;
@@ -8749,6 +8751,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             }
             if (effectiveBranchId) barQuery = barQuery.eq('branch_id', effectiveBranchId);
             if (status !== 'all') barQuery = barQuery.eq('payment_status', status);
+            // Exclude room-charged orders (already settled)
+            barQuery = barQuery.neq('payment_status', 'room_charge');
 
             const { data, error: bErr } = await barQuery;
             if (bErr && bErr.code !== '42703') throw bErr;
@@ -8804,6 +8808,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 } else {
                     posOrdersQuery = posOrdersQuery
                         .in('payment_status', allowedStatuses)
+                        .neq('status', 'paid')
+                        .neq('payment_method', 'ROOM_CHARGE')
                         .neq('status', 'cancelled')
                         // Pending void approvals are stopped from payment. Once
                         // approved, they move to the cashier voided-orders view
