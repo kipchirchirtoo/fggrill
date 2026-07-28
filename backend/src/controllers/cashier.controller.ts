@@ -8785,10 +8785,6 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const wantsVoidedOrders = ['voided', 'void'].includes(status);
         const search = String(req.query.search || '').trim().toLowerCase();
         const requestedDate = String(req.query.date || '').trim();
-        // An unpaid bill stays unpaid until it is settled, so by default we show
-        // EVERY still-unpaid bill regardless of age (e.g. a bill from yesterday
-        // remains visible while the shift is open). Only bound by a time window
-        // when the caller explicitly requests a date or from/to range.
         const hasDateFilter = !!(requestedDate || req.query.from_date || req.query.to_date);
         let from: Date | null = null;
         let to: Date | null = null;
@@ -8800,6 +8796,18 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             to = req.query.to_date
                 ? new Date(String(req.query.to_date))
                 : new Date(`${date}T23:59:59.999Z`);
+        } else if (!wantsVoidedOrders) {
+            // The live "Unpaid Bills for Clearance" list shows only TODAY's
+            // bills — from the start of the current business day (Africa/
+            // Nairobi, UTC+3) to now. Combined with the open-shift scope below,
+            // this means "today's bills, from when the shift is open" — a bill
+            // from an earlier day never resurfaces in a new shift. The
+            // voided-orders audit view is intentionally left unbounded.
+            const nairobiToday = new Date(Date.now() + 3 * 60 * 60 * 1000)
+                .toISOString()
+                .slice(0, 10);
+            from = new Date(`${nairobiToday}T00:00:00+03:00`);
+            to = new Date();
         }
         const requestedOutletId = String(req.query.outlet_id || '').trim();
         const requestedOutletType = String(req.query.outlet_type || '').trim().toLowerCase();
