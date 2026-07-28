@@ -3015,8 +3015,9 @@ class _CheckInOutSectionState extends ConsumerState<_CheckInOutSection> {
   }
 }
 
-class _RoomsSection extends ConsumerWidget {
+class _RoomsSection extends ConsumerStatefulWidget {
   const _RoomsSection({
+    super.key,
     required this.data,
     required this.searchController,
     required this.statusFilter,
@@ -3035,16 +3036,68 @@ class _RoomsSection extends ConsumerWidget {
   final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final types = data.rooms.map((r) => r.type ?? 'standard').toSet().toList()
+  ConsumerState<_RoomsSection> createState() => _RoomsSectionState();
+}
+
+class _RoomsSectionState extends ConsumerState<_RoomsSection> {
+  @override
+  void initState() {
+    super.initState();
+    widget.searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RoomsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchController != widget.searchController) {
+      oldWidget.searchController.removeListener(_onSearchChanged);
+      widget.searchController.addListener(_onSearchChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.searchController.removeListener(_onSearchChanged);
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final types = widget.data.rooms.map((r) => r.type ?? 'standard').toSet().toList()
       ..sort();
-    final rooms = data.rooms.where((room) {
-      final query = searchController.text.toLowerCase();
-      return (query.isEmpty ||
-              room.displayNumber.toLowerCase().contains(query) ||
-              (room.guestName ?? '').toLowerCase().contains(query)) &&
-          (statusFilter == 'all' || room.status == statusFilter) &&
-          (typeFilter == 'all' || room.type == typeFilter);
+    final rooms = widget.data.rooms.where((room) {
+      final rawQuery = widget.searchController.text.trim().toLowerCase();
+      final numQuery = rawQuery.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+
+      final roomNo = (room.roomNumber ?? '').toLowerCase();
+      final dispNo = room.displayNumber.toLowerCase();
+      final cleanRoomNo = roomNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+      final cleanDispNo = dispNo.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+
+      final guestName = (room.guestName ?? '').toLowerCase();
+      final roomType = (room.type ?? '').toLowerCase();
+      final roomStatus = room.status.toLowerCase();
+      final bookingNo = (room.raw['confirmation_number'] ?? room.raw['booking_code'] ?? '').toString().toLowerCase();
+
+      final matchesQuery = rawQuery.isEmpty ||
+          roomNo.contains(rawQuery) ||
+          dispNo.contains(rawQuery) ||
+          (numQuery.isNotEmpty && (cleanRoomNo.contains(numQuery) || cleanDispNo.contains(numQuery))) ||
+          guestName.contains(rawQuery) ||
+          roomType.contains(rawQuery) ||
+          roomStatus.contains(rawQuery) ||
+          bookingNo.contains(rawQuery);
+
+      final matchesStatus = widget.statusFilter == 'all' || room.status == widget.statusFilter;
+      final matchesType = widget.typeFilter == 'all' || room.type == widget.typeFilter;
+
+      return matchesQuery && matchesStatus && matchesType;
     }).toList();
 
     return _PageScaffold(
@@ -3067,19 +3120,20 @@ class _RoomsSection extends ConsumerWidget {
         ),
         const SizedBox(width: 8),
         OutlinedButton.icon(
-            onPressed: onRefresh,
+            onPressed: widget.onRefresh,
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('Refresh')),
       ],
       child: Column(
         children: [
           _FilterBar(
-            searchController: searchController,
+            searchController: widget.searchController,
             searchHint: 'Search room or guest',
-            onSearch: onRefresh,
+            onSearch: () => setState(() {}),
+            onChanged: (_) => setState(() {}),
             filters: [
               _FilterMenu(
-                  value: statusFilter,
+                  value: widget.statusFilter,
                   label: 'Status',
                   values: const [
                     'all',
@@ -3090,34 +3144,34 @@ class _RoomsSection extends ConsumerWidget {
                     'dirty',
                     'maintenance'
                   ],
-                  onChanged: onStatusChanged),
+                  onChanged: widget.onStatusChanged),
               _FilterMenu(
-                  value: typeFilter,
+                  value: widget.typeFilter,
                   label: 'Type',
                   values: ['all', ...types],
-                  onChanged: onTypeChanged),
+                  onChanged: widget.onTypeChanged),
             ],
           ),
           const SizedBox(height: 16),
           _StatGrid(cards: [
             _StatData(
                 'Available',
-                '${data.rooms.where((r) => r.status == 'available').length}',
+                '${widget.data.rooms.where((r) => r.status == 'available').length}',
                 Icons.check_circle_outline,
                 AppColors.kSuccess),
             _StatData(
                 'Occupied',
-                '${data.rooms.where((r) => r.status == 'occupied').length}',
+                '${widget.data.rooms.where((r) => r.status == 'occupied').length}',
                 Icons.person,
                 Colors.blue),
             _StatData(
                 'Cleaning',
-                '${data.rooms.where((r) => r.status == 'cleaning' || r.status == 'dirty').length}',
+                '${widget.data.rooms.where((r) => r.status == 'cleaning' || r.status == 'dirty').length}',
                 Icons.cleaning_services,
                 AppColors.kWarning),
             _StatData(
                 'Maintenance',
-                '${data.rooms.where((r) => r.status == 'maintenance').length}',
+                '${widget.data.rooms.where((r) => r.status == 'maintenance').length}',
                 Icons.build,
                 AppColors.kError),
           ]),
@@ -3150,20 +3204,20 @@ class _RoomsSection extends ConsumerWidget {
                           room: room,
                           onQuickCheckIn: room.status == 'available'
                               ? () => _showQuickCheckInDialog(
-                                  context, ref, room, onRefresh)
+                                  context, ref, room, widget.onRefresh)
                               : null,
                           onStatus: (status) async {
                             await ref
                                 .read(receptionRepositoryProvider)
                                 .updateRoomStatus(room.id, status);
                             if (!context.mounted) return;
-                            onRefresh();
+                            widget.onRefresh();
                             _snack(context,
                                 'Room ${room.displayNumber} marked $status');
                           },
                           onCheckout: room.status == 'occupied'
                               ? () =>
-                                  _checkoutRoom(context, ref, room, onRefresh)
+                                  _checkoutRoom(context, ref, room, widget.onRefresh)
                               : null,
                         );
                       },
@@ -4838,12 +4892,14 @@ class _FilterBar extends StatelessWidget {
     required this.searchController,
     required this.searchHint,
     required this.onSearch,
+    this.onChanged,
     this.filters = const [],
   });
 
   final TextEditingController searchController;
   final String searchHint;
   final VoidCallback onSearch;
+  final ValueChanged<String>? onChanged;
   final List<Widget> filters;
 
   @override
@@ -4858,6 +4914,7 @@ class _FilterBar extends StatelessWidget {
           child: _SearchField(
             controller: searchController,
             hint: searchHint,
+            onChanged: onChanged,
             onSubmitted: (_) => onSearch(),
           ),
         ),
@@ -4875,20 +4932,34 @@ class _SearchField extends StatelessWidget {
   const _SearchField({
     required this.controller,
     required this.hint,
+    this.onChanged,
     this.onSubmitted,
   });
 
   final TextEditingController controller;
   final String hint;
+  final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      onChanged: onChanged,
       onSubmitted: onSubmitted,
-      decoration:
-          InputDecoration(prefixIcon: const Icon(Icons.search), hintText: hint),
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search),
+        hintText: hint,
+        suffixIcon: controller.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 18),
+                onPressed: () {
+                  controller.clear();
+                  onChanged?.call('');
+                },
+              )
+            : null,
+      ),
     );
   }
 }
