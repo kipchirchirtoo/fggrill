@@ -175,8 +175,16 @@ class Room {
       floor: _int(json['floor'] ?? json['floor_number']),
       status: '${json['status'] ?? 'available'}',
       guestName: parsedGuestName,
-      checkInDate: _tryDate(json['check_in_date'] ?? json['checkInDate']),
-      checkOutDate: _tryDate(json['check_out_date'] ?? json['checkOutDate']),
+      checkInDate: _tryDate(json['check_in_date'] ??
+          json['checkInDate'] ??
+          json['check_in'] ??
+          json['checkIn'] ??
+          json['start_date']),
+      checkOutDate: _tryDate(json['check_out_date'] ??
+          json['checkOutDate'] ??
+          json['check_out'] ??
+          json['checkOut'] ??
+          json['end_date']),
       pricePerNight: _double(
           json['price_per_night'] ?? json['rate'] ?? json['base_price']),
       raw: json,

@@ -38,7 +38,6 @@ enum ReceptionSection {
   conference,
   catering,
   cashier,
-  logbook,
   history,
   emailAutomation,
 }
@@ -136,7 +135,6 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
         await guard(_repo.getCreditBills(), <Map<String, dynamic>>[]);
     final payments =
         await guard(_repo.getCashierPayments(), <Map<String, dynamic>>[]);
-    final logbook = await guard(_repo.getLogbookToday(), <String, dynamic>{});
     final rawGuestProfile = _guestId == null
         ? <String, dynamic>{}
         : await guard(_repo.getGuest(_guestId!), <String, dynamic>{});
@@ -187,7 +185,6 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
       unpaidBills: unpaidBills,
       creditBills: creditBills,
       payments: payments,
-      logbook: logbook,
       guestProfile: guestProfile,
       guestHistory: guestHistory,
       guestLoyalty: guestLoyalty,
@@ -265,11 +262,6 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
             section: ReceptionSection.cashier,
             label: 'Cashier',
             icon: Icons.point_of_sale_outlined,
-            group: 'Cashier'),
-        MasterNavItem(
-            section: ReceptionSection.logbook,
-            label: 'Shift Logbook',
-            icon: Icons.fact_check_outlined,
             group: 'Cashier'),
         MasterNavItem(
             section: ReceptionSection.guests,
@@ -391,8 +383,6 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
           amount: _cashierAmount,
           method: _cashierMethod,
         );
-      case ReceptionSection.logbook:
-        return _LogbookSection(data: data, onRefresh: _refresh);
       case ReceptionSection.history:
         return _HistorySection(data: data, onRefresh: _refresh);
       case ReceptionSection.emailAutomation:
@@ -4240,7 +4230,6 @@ class _ReceptionSnapshot {
     required this.unpaidBills,
     required this.creditBills,
     required this.payments,
-    required this.logbook,
     required this.guestProfile,
     required this.guestHistory,
     required this.guestLoyalty,
@@ -4261,7 +4250,6 @@ class _ReceptionSnapshot {
   final List<Map<String, dynamic>> unpaidBills;
   final List<Map<String, dynamic>> creditBills;
   final List<Map<String, dynamic>> payments;
-  final Map<String, dynamic> logbook;
   final Map<String, dynamic> guestProfile;
   final List<Map<String, dynamic>> guestHistory;
   final Map<String, dynamic> guestLoyalty;
@@ -7305,7 +7293,6 @@ Future<void> printRoomsReportPDF({
                 children: [
                   _pdfHeaderCell('Room #'),
                   _pdfHeaderCell('Type'),
-                  _pdfHeaderCell('Floor'),
                   _pdfHeaderCell('Status'),
                   _pdfHeaderCell('Guest Name'),
                   _pdfHeaderCell('Stay Dates'),
@@ -7332,7 +7319,6 @@ Future<void> printRoomsReportPDF({
                   children: [
                     _pdfRoomDataCell(r.displayNumber, isBold: true),
                     _pdfRoomDataCell(r.type ?? 'Standard'),
-                    _pdfRoomDataCell(r.floor != null ? 'Floor ${r.floor}' : 'G'),
                     _pdfRoomDataCell(
                       r.status.toUpperCase(),
                       color: isOccupied
