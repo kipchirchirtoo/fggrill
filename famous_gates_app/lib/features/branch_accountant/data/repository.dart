@@ -1493,6 +1493,17 @@ class BranchAccountantRepository {
     await _dio.post('/cashier/unpaid-bills/$id/payment', data: data);
   }
 
+  /// Bill more to a customer credit account/tab (grows the running balance).
+  Future<Map<String, dynamic>> addChargeToCustomerBill(
+      String id, {required num amount, String? description}) async {
+    final res = await _dio.post('/cashier/unpaid-bills/$id/charge', data: {
+      'amount': amount,
+      if (description != null && description.trim().isNotEmpty)
+        'description': description.trim(),
+    });
+    return _asMap(res.data);
+  }
+
   Future<File> downloadUnpaidBillInvoice(String id) async {
     final res = await _dio.get<List<int>>(
       '/cashier/unpaid-bills/$id/pdf',

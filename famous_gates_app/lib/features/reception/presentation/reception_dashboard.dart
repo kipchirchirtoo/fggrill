@@ -198,6 +198,17 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
     });
   }
 
+  // Open the RECEPTION's own embedded Cashier section pre-loaded with a bill
+  // lookup code (from Room Bills "Pay at Cashier"), staying inside this shell.
+  void _openCashierWithBill(String lookupCode) {
+    setState(() {
+      _section = ReceptionSection.cashier;
+      _cashierBillRef = lookupCode;
+      _cashierAmount = null;
+      _cashierMethod = null;
+    });
+  }
+
   void _selectSection(ReceptionSection section) {
     if (section == ReceptionSection.cashier) {
       setState(() {
@@ -345,8 +356,12 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
           onRefresh: _refresh,
         );
       case ReceptionSection.roomBills:
-        // Reception tracks room bills / folios read-only; the cashier settles.
-        return const RoomBillsView(canSettle: false);
+        // Reception tracks room bills / folios; "Pay at Cashier" opens THIS
+        // shell's embedded Cashier section (not the standalone /cashier route).
+        return RoomBillsView(
+          canSettle: false,
+          onPayAtCashier: _openCashierWithBill,
+        );
       case ReceptionSection.guests:
         return _GuestsSection(
           data: data,
@@ -6923,15 +6938,15 @@ Future<void> printRoomsReportPDF({
                     pw.TableRow(
                       decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                       children: [
-                        _pdfHeaderCell('Room #'),
-                        _pdfHeaderCell('Guest Name'),
-                        _pdfHeaderCell('Meal Plan'),
-                        _pdfHeaderCell('Check-In Date & Time'),
-                        _pdfHeaderCell('Check-Out Date'),
-                        _pdfHeaderCell('Adults', align: pw.TextAlign.center),
-                        _pdfHeaderCell('Children', align: pw.TextAlign.center),
-                        _pdfHeaderCell('Total Pax', align: pw.TextAlign.center),
-                        _pdfHeaderCell('Status', align: pw.TextAlign.center),
+                        pdfHeaderCell('Room #'),
+                        pdfHeaderCell('Guest Name'),
+                        pdfHeaderCell('Meal Plan'),
+                        pdfHeaderCell('Check-In Date & Time'),
+                        pdfHeaderCell('Check-Out Date'),
+                        pdfHeaderCell('Adults', align: pw.TextAlign.center),
+                        pdfHeaderCell('Children', align: pw.TextAlign.center),
+                        pdfHeaderCell('Total Pax', align: pw.TextAlign.center),
+                        pdfHeaderCell('Status', align: pw.TextAlign.center),
                       ],
                     ),
 

@@ -15,6 +15,18 @@ import {
   createOutletItem,
   getActiveShift,
   getBarCaptainOrders,
+  getWaiterOpenBills,
+  getConsolidatedBill,
+  linkOrdersIntoBill,
+  unlinkOrderFromBill,
+  payConsolidatedBill,
+  getCrossOutletSettlements,
+  confirmCrossOutletSettlement,
+  disputeCrossOutletSettlement,
+  resolveDisputedSettlement,
+  addItemsToMasterBill,
+  transferMasterBillWaiter,
+  moveMasterBillTable,
   getExchangeHistory,
   getItemVoidHistoryForWaiter,
   getItemVoidRequestsForShift,
@@ -132,6 +144,25 @@ router.use((req, res, next) => {
 router.get('/printer/status', getPrinterStatus);
 router.get('/captain-orders', getBarCaptainOrders);
 router.get('/bootstrap', getPosBootstrap);
+
+// Master bills across outlets (waiter recalls their own orders from any outlet
+// and combines them into ONE master bill for the customer; the origin cashier
+// settles the whole bill and each outlet cashier confirms their part).
+router.get('/waiter/open-bills', getWaiterOpenBills);
+router.post('/bills/link', linkOrdersIntoBill);
+router.get('/bills/:masterBillId', getConsolidatedBill);
+router.post('/bills/:masterBillId/unlink-order', unlinkOrderFromBill);
+router.post('/bills/:masterBillId/add-items', addItemsToMasterBill);
+router.post('/bills/:masterBillId/transfer-waiter', transferMasterBillWaiter);
+router.post('/bills/:masterBillId/move-table', moveMasterBillTable);
+router.post('/bills/:masterBillId/pay', payConsolidatedBill);
+
+// Cross-outlet settlement confirmation (outlet cashier confirms/disputes their
+// allocated share collected by the origin/settlement cashier).
+router.get('/settlements/cross-outlet', getCrossOutletSettlements);
+router.post('/settlements/:settlementId/confirm', confirmCrossOutletSettlement);
+router.post('/settlements/:settlementId/dispute', disputeCrossOutletSettlement);
+router.post('/settlements/:settlementId/resolve', resolveDisputedSettlement);
 router.get('/outlets', getOutlets);
 router.post('/outlets', createOutlet);
 router.get('/staff', getOutletStaff);

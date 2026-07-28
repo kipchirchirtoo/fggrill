@@ -740,12 +740,6 @@ List<GoRoute> get _receptionSectionRoutes => [
         },
       ),
       GoRoute(
-        path: '/reception/logbook',
-        builder: (context, state) => const ReceptionDashboard(
-          initialSection: ReceptionSection.logbook,
-        ),
-      ),
-      GoRoute(
         path: '/reception/history',
         builder: (context, state) => const ReceptionDashboard(
           initialSection: ReceptionSection.history,

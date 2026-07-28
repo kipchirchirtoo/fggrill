@@ -208,6 +208,9 @@ class OutletPosRepository {
     String? orderType,
     String? tableNumber,
     String? roomNumber,
+    // When set, this new outlet order joins an existing master customer bill
+    // (waiter adding items from another outlet to the same bill).
+    String? masterBillId,
   }) async {
     final total = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
     final response = await _dio.post('/pos/shifts/$shiftId/orders', data: {
@@ -219,11 +222,161 @@ class OutletPosRepository {
         'table_number': tableNumber.trim(),
       if (roomNumber != null && roomNumber.trim().isNotEmpty)
         'room_number': roomNumber.trim(),
+      if (masterBillId != null && masterBillId.trim().isNotEmpty)
+        'master_bill_id': masterBillId.trim(),
       'items': items.map((item) => item.toJson()).toList(),
       'total_amount': total,
     });
     return OutletShiftOrder.fromJson(
         Map<String, dynamic>.from(_data(response.data) as Map));
+  }
+
+  // ── Consolidated customer bills (cross-outlet) ────────────────────────────
+
+  /// Every unsettled order the current waiter owns across ALL their outlets,
+  /// folded into consolidated bills.
+  Future<List<ConsolidatedBill>> getWaiterOpenBills({String? waiterId}) async {
+    final response = await _dio.get('/pos/waiter/open-bills', queryParameters: {
+      if (waiterId != null && waiterId.isNotEmpty) 'waiter_id': waiterId,
+    });
+    return _list(response.data)
+        .whereType<Map>()
+        .map((e) => ConsolidatedBill.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<ConsolidatedBill?> getConsolidatedBill(String masterBillId) async {
+    final response = await _dio.get('/pos/bills/$masterBillId');
+    final data = _data(response.data);
+    if (data is! Map) return null;
+    return ConsolidatedBill.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  /// Combine the given orders into ONE master customer bill.
+  Future<ConsolidatedBill?> linkOrdersIntoBill({
+    required List<String> orderIds,
+    String? anchorOrderId,
+    String? label,
+  }) async {
+    final response = await _dio.post('/pos/bills/link', data: {
+      'order_ids': orderIds,
+      if (anchorOrderId != null) 'anchor_order_id': anchorOrderId,
+      if (label != null && label.trim().isNotEmpty) 'label': label.trim(),
+    });
+    final data = _data(response.data);
+    if (data is! Map) return null;
+    return ConsolidatedBill.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<void> unlinkOrderFromBill({
+    required String masterBillId,
+    required String orderId,
+  }) async {
+    await _dio.post('/pos/bills/$masterBillId/unlink-order',
+        data: {'order_id': orderId});
+  }
+
+  /// Settle the whole master bill with one tender; each member order is paid
+  /// against its own outlet shift (per-outlet revenue + stock).
+  Future<Map<String, dynamic>> payConsolidatedBill({
+    required String masterBillId,
+    required String paymentMethod,
+    String? reference,
+  }) async {
+    final response = await _dio.post('/pos/bills/$masterBillId/pay', data: {
+      'payment_method': paymentMethod,
+      if (reference != null && reference.trim().isNotEmpty)
+        'reference': reference.trim(),
+    });
+    final data = _data(response.data);
+    return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+  }
+
+  // ── Cross-outlet settlements (outlet cashier confirms their share) ─────────
+
+  /// Sub-bills collected by another outlet's cashier that THIS cashier must
+  /// confirm (status='pending') or the full list (status='all').
+  Future<List<CrossOutletSettlement>> getCrossOutletSettlements(
+      {String status = 'pending'}) async {
+    final response = await _dio.get('/pos/settlements/cross-outlet',
+        queryParameters: {'status': status});
+    return _list(response.data)
+        .whereType<Map>()
+        .map((e) =>
+            CrossOutletSettlement.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<void> confirmCrossOutletSettlement(String settlementId) async {
+    await _dio.post('/pos/settlements/$settlementId/confirm');
+  }
+
+  Future<void> disputeCrossOutletSettlement(
+      {required String settlementId, required String reason}) async {
+    await _dio.post('/pos/settlements/$settlementId/dispute',
+        data: {'reason': reason});
+  }
+
+  /// The collecting (origin) cashier or a manager resolves a disputed sub-bill:
+  /// 'confirm' (accept & confirm) or 'reopen' (send back for re-confirmation).
+  Future<void> resolveDisputedSettlement(
+      {required String settlementId, String resolution = 'confirm'}) async {
+    await _dio.post('/pos/settlements/$settlementId/resolve',
+        data: {'resolution': resolution});
+  }
+
+  // ── Master bill actions (add cross-outlet items, transfer, move table) ─────
+
+  /// Add items from ANOTHER outlet to a master bill; the new order is created in
+  /// that outlet's own open shift but joins this master bill.
+  Future<ConsolidatedBill?> addItemsToMasterBill({
+    required String masterBillId,
+    required String outletId,
+    required List<OutletCartItem> items,
+    String? orderType,
+  }) async {
+    final response =
+        await _dio.post('/pos/bills/$masterBillId/add-items', data: {
+      'outlet_id': outletId,
+      if (orderType != null && orderType.trim().isNotEmpty)
+        'order_type': orderType.trim(),
+      'items': items.map((e) => e.toJson()).toList(),
+    });
+    final data = _data(response.data);
+    return data is Map
+        ? ConsolidatedBill.fromJson(Map<String, dynamic>.from(data))
+        : null;
+  }
+
+  Future<ConsolidatedBill?> transferMasterBillWaiter({
+    required String masterBillId,
+    required String waiterId,
+    String? waiterName,
+  }) async {
+    final response =
+        await _dio.post('/pos/bills/$masterBillId/transfer-waiter', data: {
+      'waiter_id': waiterId,
+      if (waiterName != null && waiterName.trim().isNotEmpty)
+        'waiter_name': waiterName.trim(),
+    });
+    final data = _data(response.data);
+    return data is Map
+        ? ConsolidatedBill.fromJson(Map<String, dynamic>.from(data))
+        : null;
+  }
+
+  Future<ConsolidatedBill?> moveMasterBillTable({
+    required String masterBillId,
+    String? tableNumber,
+  }) async {
+    final response = await _dio
+        .post('/pos/bills/$masterBillId/move-table', data: {
+      'table_number': tableNumber?.trim().isEmpty == true ? null : tableNumber
+    });
+    final data = _data(response.data);
+    return data is Map
+        ? ConsolidatedBill.fromJson(Map<String, dynamic>.from(data))
+        : null;
   }
 
   Future<OutletShiftOrder> updateOrder({
@@ -1151,6 +1304,229 @@ class OutletShiftOrder {
           : null,
     );
   }
+}
+
+/// One member order of a consolidated bill, carrying its owning outlet so the
+/// combined bill can be shown/printed grouped by outlet.
+class BillOrder {
+  const BillOrder({
+    required this.id,
+    required this.orderNumber,
+    this.shortCode,
+    required this.outletId,
+    this.outletName,
+    this.outletType,
+    required this.shiftId,
+    required this.customerName,
+    required this.totalAmount,
+    required this.balanceAmount,
+    required this.paymentStatus,
+    this.items = const [],
+  });
+
+  final String id;
+  final String orderNumber;
+  final String? shortCode;
+  final String outletId;
+  final String? outletName;
+  final String? outletType;
+  final String shiftId;
+  final String customerName;
+  final double totalAmount;
+  final double balanceAmount;
+  final String paymentStatus;
+  final List<dynamic> items;
+
+  factory BillOrder.fromJson(Map<String, dynamic> json) {
+    final items = json['items'];
+    return BillOrder(
+      id: '${json['id']}',
+      orderNumber: '${json['order_number'] ?? ''}',
+      shortCode: json['short_code'] as String?,
+      outletId: '${json['outlet_id'] ?? ''}',
+      outletName: json['outlet_name'] as String?,
+      outletType: json['outlet_type'] as String?,
+      shiftId: '${json['shift_id'] ?? ''}',
+      customerName: '${json['customer_name'] ?? 'Walk-in'}',
+      totalAmount: _num(json['total_amount']),
+      balanceAmount: _num(json['balance_amount']),
+      paymentStatus: '${json['payment_status'] ?? 'unpaid'}',
+      items: items is List ? items : const [],
+    );
+  }
+}
+
+/// A per-outlet sub-bill share of a master bill (outlet name + its amount).
+class BillOutletShare {
+  const BillOutletShare(
+      {this.outletId, this.outletName, required this.amount, this.balance = 0});
+  final String? outletId;
+  final String? outletName;
+  final double amount;
+  final double balance;
+
+  factory BillOutletShare.fromJson(Map<String, dynamic> json) =>
+      BillOutletShare(
+        outletId: json['outlet_id'] as String?,
+        outletName: json['outlet_name'] as String?,
+        amount: _num(json['amount']),
+        balance: _num(json['balance']),
+      );
+}
+
+/// A master customer bill = one or more [BillOrder]s across outlets grouped
+/// under one master_bill_id/number, presented and settled as one bill. A
+/// standalone (unlinked) order is represented as a one-outlet bill with a null
+/// [masterBillId] (nothing to settle-as-one yet).
+class ConsolidatedBill {
+  const ConsolidatedBill({
+    this.masterBillId,
+    this.masterBillNumber,
+    this.isMaster = false,
+    required this.isConsolidated,
+    required this.label,
+    required this.customerName,
+    this.tableNumber,
+    this.originOutletName,
+    this.status,
+    this.waiterId,
+    this.waiterName,
+    required this.outlets,
+    this.outletBreakdown = const [],
+    required this.orderCount,
+    required this.totalAmount,
+    required this.amountPaid,
+    required this.balanceAmount,
+    required this.paymentStatus,
+    this.createdAt,
+    required this.orders,
+  });
+
+  /// Null for a standalone (single, unlinked) order.
+  final String? masterBillId;
+  final String? masterBillNumber;
+  final bool isMaster;
+  final bool isConsolidated;
+  final String label;
+  final String customerName;
+  final String? tableNumber;
+  final String? originOutletName;
+  final String? status;
+  final String? waiterId;
+  final String? waiterName;
+  final List<String> outlets;
+  final List<BillOutletShare> outletBreakdown;
+  final int orderCount;
+  final double totalAmount;
+  final double amountPaid;
+  final double balanceAmount;
+  final String paymentStatus;
+  final DateTime? createdAt;
+  final List<BillOrder> orders;
+
+  bool get isMultiOutlet => outlets.length > 1;
+  List<String> get orderIds => orders.map((o) => o.id).toList();
+
+  factory ConsolidatedBill.fromJson(Map<String, dynamic> json) {
+    final rawOrders = json['orders'];
+    final rawOutlets = json['outlets'];
+    final rawBreakdown = json['outlet_breakdown'];
+    return ConsolidatedBill(
+      masterBillId: json['master_bill_id'] as String?,
+      masterBillNumber: json['master_bill_number'] as String?,
+      isMaster: json['is_master'] == true,
+      isConsolidated: json['is_consolidated'] == true,
+      label: '${json['label'] ?? 'Bill'}',
+      customerName: '${json['customer_name'] ?? 'Walk-in'}',
+      tableNumber:
+          json['table_number'] == null ? null : '${json['table_number']}',
+      originOutletName: json['origin_outlet_name'] as String?,
+      status: json['status'] as String?,
+      waiterId: json['waiter_id'] as String?,
+      waiterName: json['waiter_name'] as String?,
+      outlets: rawOutlets is List
+          ? rawOutlets.map((e) => '$e').toList()
+          : const [],
+      outletBreakdown: rawBreakdown is List
+          ? rawBreakdown
+              .whereType<Map>()
+              .map((e) => BillOutletShare.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      orderCount: json['order_count'] is num
+          ? (json['order_count'] as num).toInt()
+          : int.tryParse('${json['order_count'] ?? 0}') ?? 0,
+      totalAmount: _num(json['total_amount']),
+      amountPaid: _num(json['amount_paid']),
+      balanceAmount: _num(json['balance_amount']),
+      paymentStatus: '${json['payment_status'] ?? 'unpaid'}',
+      createdAt: DateTime.tryParse('${json['created_at'] ?? ''}'),
+      orders: rawOrders is List
+          ? rawOrders
+              .whereType<Map>()
+              .map((e) => BillOrder.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+}
+
+/// A per-outlet share of a master bill that was collected by ANOTHER outlet's
+/// (origin) cashier and awaits THIS outlet cashier's confirmation.
+class CrossOutletSettlement {
+  const CrossOutletSettlement({
+    required this.id,
+    this.masterBillId,
+    this.masterBillNumber,
+    required this.customerName,
+    this.tableNumber,
+    this.originOutletName,
+    this.settlementCashierName,
+    this.outletName,
+    required this.amount,
+    this.paymentMethod,
+    required this.status,
+    this.disputeReason,
+    this.viewerIsCollector = false,
+  });
+
+  final String id;
+  final String? masterBillId;
+  final String? masterBillNumber;
+  final String customerName;
+  final String? tableNumber;
+  final String? originOutletName;
+  final String? settlementCashierName;
+  final String? outletName;
+  final double amount;
+  final String? paymentMethod;
+  final String status; // settled | cashier_confirmed | disputed
+  final String? disputeReason;
+
+  /// True when the viewing cashier is the one who COLLECTED this bill (so they
+  /// can resolve a dispute); false for the outlet cashier who confirms/disputes.
+  final bool viewerIsCollector;
+
+  bool get isPending => status == 'settled';
+  bool get isConfirmed => status == 'cashier_confirmed';
+  bool get isDisputed => status == 'disputed';
+
+  factory CrossOutletSettlement.fromJson(Map<String, dynamic> j) =>
+      CrossOutletSettlement(
+        id: '${j['id']}',
+        masterBillId: j['master_bill_id'] as String?,
+        masterBillNumber: j['master_bill_number'] as String?,
+        customerName: '${j['customer_name'] ?? 'Walk-in'}',
+        tableNumber: j['table_number'] == null ? null : '${j['table_number']}',
+        originOutletName: j['origin_outlet_name'] as String?,
+        settlementCashierName: j['settlement_cashier_name'] as String?,
+        outletName: j['outlet_name'] as String?,
+        amount: _num(j['amount']),
+        paymentMethod: j['payment_method'] as String?,
+        status: '${j['status'] ?? 'settled'}',
+        disputeReason: j['dispute_reason'] as String?,
+        viewerIsCollector: j['viewer_is_collector'] == true,
+      );
 }
 
 const Map<String, String> itemVoidReasonCategories = {

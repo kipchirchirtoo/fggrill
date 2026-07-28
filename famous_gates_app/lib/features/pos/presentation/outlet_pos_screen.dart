@@ -13,6 +13,8 @@ import '../../../core/storage/secure_storage_provider.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/outlet_pos_repository.dart';
 import '../domain/models.dart';
+import 'customer_bills_panel.dart';
+import 'cross_outlet_settlements_panel.dart';
 
 enum OutletPosSection { station, orders }
 
@@ -597,6 +599,36 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               'and request void approval from the bill actions menu.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: _busy ? null : _openCustomerBills,
+                icon: const Icon(Icons.receipt_long),
+                label: const Text('Customer Bills — all outlets'),
+              ),
+            ),
+            Text(
+              'Combine a customer\'s orders from the bar, choma, restaurant and '
+              'executive bar into ONE bill, then print it for the customer.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (_isCashierOrManager) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _openCrossOutletSettlements,
+                  icon: const Icon(Icons.sync_alt),
+                  label: const Text('Cross-Outlet Settlements'),
+                ),
+              ),
+              Text(
+                'Confirm your outlet\'s share of bills collected by another '
+                'cashier before you close your shift.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             if (_kMergeBillsEnabled) ...[
               const SizedBox(height: 12),
               Align(
@@ -703,12 +735,13 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                               title: Text('Split bill'),
                             ),
                           ),
-                          // Restaurant waiters can request a whole-bill void
-                          // (goes to the branch accountant for approval).
+                          // Restaurant AND Choma Zone waiters can request a
+                          // whole-bill void — it goes to their KDS (Choma Zone
+                          // KDS for choma) for acknowledgement, then the cashier.
                           // Bartenders (Main Bar/Executive Bar/Sports Bar) do
                           // not get this — all bar voids go through the
                           // Cashier Void Management screen instead.
-                          if (_isRestaurant)
+                          if (_canRequestKitchenVoid)
                             PopupMenuItem(
                               value: 'void',
                               enabled: _canEditOrder(order) &&
@@ -1053,6 +1086,106 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     }
   }
 
+  // Cross-outlet settlement confirmation is a CASHIER/manager action, so the
+  // entry point only shows for those roles (waiters/bartenders don't settle).
+  bool get _isCashierOrManager {
+    final u = ref.read(authNotifierProvider).valueOrNull;
+    if (u == null) return false;
+    final roles = <String>{
+      u.role.toLowerCase(),
+      u.primaryRole.toLowerCase(),
+      ...u.roles.map((r) => r.toLowerCase()),
+    };
+    if (roles.any((r) => r.contains('cashier'))) return true;
+    const mgr = {
+      'super_admin', 'general_manager', 'director', 'branch_manager',
+      'branch_accountant', 'accountant', 'finance_manager',
+      'restaurant_manager', 'bar_manager',
+    };
+    return roles.any(mgr.contains);
+  }
+
+  Future<void> _openCrossOutletSettlements() async {
+    await showCrossOutletSettlementsPanel(context);
+  }
+
+  // Cross-outlet consolidated customer bills: the waiter recalls all of their
+  // own open orders across every outlet, combines them into ONE bill, prints
+  // it and settles it in one tap.
+  Future<void> _openCustomerBills() async {
+    await showCustomerBillsPanel(
+      context,
+      ref,
+      onPrintBill: _printConsolidatedBill,
+    );
+    // Refresh this station's order list in case a member order was settled.
+    if (_shift != null) {
+      try {
+        _orders = await ref.read(outletPosRepositoryProvider).getOrders(_shift!.id);
+        if (mounted) setState(() {});
+      } catch (_) {}
+    }
+  }
+
+  // Print ONE combined receipt for the customer: every item from every member
+  // order (across outlets), tagged with its outlet, under a single grand total.
+  Future<void> _printConsolidatedBill(ConsolidatedBill bill) async {
+    final items = <CartItem>[];
+    for (final order in bill.orders) {
+      for (final raw in order.items.whereType<Map>()) {
+        final m = Map<String, dynamic>.from(raw);
+        final qty = (m['quantity'] is num)
+            ? (m['quantity'] as num).toDouble()
+            : double.tryParse('${m['quantity']}') ?? 0;
+        final activeQty = (m['active_qty'] is num)
+            ? (m['active_qty'] as num).toDouble()
+            : qty;
+        final unitPrice = (m['unit_price'] is num)
+            ? (m['unit_price'] as num).toDouble()
+            : double.tryParse('${m['unit_price']}') ?? 0;
+        if (m['void_pending_approval'] == true || activeQty <= 0) continue;
+        final outletTag =
+            (order.outletName ?? '').isNotEmpty ? '[${order.outletName}] ' : '';
+        items.add(CartItem(
+          productId: '${m['outlet_item_id'] ?? ''}',
+          name: '$outletTag${m['name'] ?? m['item_name'] ?? ''}',
+          unitPrice: unitPrice,
+          qty: activeQty.round(),
+        ));
+      }
+    }
+    if (items.isEmpty) return;
+
+    final anchor = bill.orders.isNotEmpty ? bill.orders.first : null;
+    final sale = SaleResult(
+      transactionId: bill.masterBillId ?? anchor?.id ?? '',
+      createdAt: bill.createdAt ?? DateTime.now(),
+      receiptNumber:
+          bill.masterBillNumber ?? anchor?.orderNumber ?? bill.masterBillId ?? '',
+      cashierName: bill.waiterName,
+      total: bill.totalAmount,
+      paymentMethod: 'pending',
+    );
+
+    final user = ref.read(authNotifierProvider).valueOrNull;
+    final branchId = _outlet?.branchId?.toString() ?? user?.branchId;
+    await printCustomerDocument(
+      ref,
+      templateKey: 'customer_bill',
+      fallbackTitle: 'CUSTOMER BILL',
+      branchId: branchId,
+      outletId: _outlet?.id,
+      sale: sale,
+      items: items,
+      branchName: _outlet?.name ?? widget.title,
+      tableNumber: bill.tableNumber,
+      customerName: bill.customerName,
+      staffLabel: 'Waiter',
+      publicCode: anchor?.shortCode,
+      barcodeValue: anchor?.shortCode ?? anchor?.orderNumber,
+    );
+  }
+
   // The only way a waiter can reach the duplicate-print action — printing
   // is deliberately not exposed on the bill-actions popup menu, so a waiter
   // must open and look at the bill before a duplicate can be printed.
@@ -1247,6 +1380,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();
     return type == 'choma_zone';
   }
+
+  // Choma Zone runs under the restaurant/kitchen station, so its waiters request
+  // voids exactly like restaurant waiters: the request routes to the Choma Zone
+  // KDS for acknowledgement, then the cashier. (Bar voids use a different flow.)
+  bool get _canRequestKitchenVoid => _isRestaurant || _isChomaZone;
 
   bool get _isMainBar {
     final type = (_outlet?.outletType ?? widget.outletType).toLowerCase();

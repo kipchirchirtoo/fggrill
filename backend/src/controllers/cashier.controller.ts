@@ -1127,9 +1127,50 @@ export const getBillDetails = async (
                 throw new AppError('Hotel reservation not found', 404);
             }
 
-            const totalAmount = parseFloat(reservation.total_amount || 0);
-            const paidAmount = parseFloat(reservation.amount_paid || reservation.deposit_amount || 0);
-            const balance = totalAmount - paidAmount;
+            // Load the guest FOLIO so the cashier settles the WHOLE unpaid bill
+            // (room booking + every Charge-to-Room POS bill), not the room only.
+            const { data: folio } = await supabase
+                .from('folios')
+                .select('id, food_charges, beverage_charges, other_charges, total_payments')
+                .eq('reservation_id', reservation.id)
+                .maybeSingle();
+            const roomTotal = parseFloat(reservation.total_amount || 0);
+            const posCharges =
+                Number(folio?.food_charges || 0) +
+                Number(folio?.beverage_charges || 0) +
+                Number(folio?.other_charges || 0);
+            const reservationPaid = Math.max(
+                Number(reservation.advance_payment || 0),
+                Number(reservation.amount_paid || 0),
+                Number(reservation.deposit_amount || 0)
+            );
+            const folioPayments = Number(folio?.total_payments || 0);
+
+            const totalAmount = roomTotal + posCharges;
+            const paidAmount = reservationPaid + folioPayments;
+            const balance = Math.max(0, totalAmount - paidAmount);
+
+            // Itemise each Charge-to-Room POS bill from the folio audit trail.
+            const posItems: Array<Record<string, any>> = [];
+            if (folio?.id && posCharges > 0) {
+                const { data: ftx } = await supabase
+                    .from('folio_transactions')
+                    .select('description, amount, category')
+                    .eq('folio_id', folio.id)
+                    .eq('transaction_type', 'charge')
+                    .order('created_at', { ascending: true });
+                for (const t of (ftx || [])) {
+                    posItems.push({
+                        name: (t as any).description || `Charge to Room (${(t as any).category || 'POS'})`,
+                        quantity: 1,
+                        price: Number((t as any).amount || 0),
+                        total: Number((t as any).amount || 0),
+                    });
+                }
+                if (posItems.length === 0) {
+                    posItems.push({ name: 'Charge to Room (POS)', quantity: 1, price: posCharges, total: posCharges });
+                }
+            }
 
             const responseData = {
                 success: true,
@@ -1145,12 +1186,15 @@ export const getBillDetails = async (
                         status: reservation.status,
                         check_in: reservation.check_in_date || reservation.check_in,
                         check_out: reservation.check_out_date || reservation.check_out,
-                        items: [{
-                            name: `Accommodation Services (${reservation.room_type || 'Room'})`,
-                            quantity: 1,
-                            price: totalAmount,
-                            total: totalAmount
-                        }]
+                        items: [
+                            {
+                                name: `Accommodation Services (${reservation.room_type || 'Room'})`,
+                                quantity: 1,
+                                price: roomTotal,
+                                total: roomTotal,
+                            },
+                            ...posItems,
+                        ],
                     },
                     financials: {
                         total_amount: totalAmount,
@@ -3855,11 +3899,17 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 is_invoice: true
             }));
 
-            // Combine all full access data
+            // Combine all full access data.
+            // Hotel room booking bills are DELIBERATELY excluded from the
+            // cashier's general Unpaid Bills list — they now live in the
+            // Reception "Room Bills" section (guest folios) and are cleared via
+            // the cashier's dedicated Room Bills tab, not mixed in here. An
+            // explicit bill_type=hotel query still returns them (reporting).
+            const includeHotel = String(bill_type || '').toLowerCase() === 'hotel';
             combinedData = [
                 ...combinedData,
                 ...mappedUnpaidBills,
-                ...mappedHotel,
+                ...(includeHotel ? mappedHotel : []),
                 ...mappedFinance,
                 ...mappedAR
             ];
@@ -3896,6 +3946,7 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             waiter_id,
             total_amount,
             payment_terms,
+            credit_limit,
             due_date,
             remarks
         } = req.body;
@@ -3918,6 +3969,8 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             reference_type ? `ref_type=${reference_type}` : null,
             room_number ? `room=${room_number}` : null,
             payment_terms ? `terms=${payment_terms}` : null,
+            (credit_limit !== undefined && credit_limit !== null && `${credit_limit}` !== '')
+                ? `credit_limit=${credit_limit}` : null,
             customer_type ? `customer_type=${customer_type}` : null
         ].filter(Boolean).join(', ');
         const combinedRemarks = [remarks, extraContext ? `(${extraContext})` : null].filter(Boolean).join(' ');
@@ -3950,6 +4003,53 @@ export const createUnpaidBill = async (req: Request, res: Response, next: NextFu
             message: 'Unpaid bill created successfully',
             data
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// POST /cashier/unpaid-bills/:id/charge
+// Bill MORE to an existing customer credit account/tab — adds a charge and grows
+// the running balance, so a customer credit bill behaves like a billable tab
+// tracked against its credit terms (limit / due date). body: { amount, description? }
+export const addChargeToUnpaidBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const amount = Number(req.body.amount);
+        const description = String(req.body.description || '').trim();
+        if (!(amount > 0)) throw new AppError('A positive charge amount is required', 400);
+
+        const { data: bill, error: findErr } = await supabase
+            .from('unpaid_bills').select('*').eq('id', id).maybeSingle();
+        if (findErr) throw findErr;
+        if (!bill) throw new AppError('Customer credit bill not found', 404);
+        if (String(bill.status) === 'paid') {
+            throw new AppError('This account is already fully settled', 409);
+        }
+
+        const paid = Number(bill.amount_paid || 0);
+        const newTotal = Number(bill.total_amount || 0) + amount;
+        const newBalance = Math.max(0, newTotal - paid);
+        const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+        const chargeLog = `charge ${stamp}: ${description || 'item'} +${amount.toFixed(2)}`;
+        const remarks = [bill.remarks, chargeLog].filter(Boolean).join(' | ');
+
+        const { data, error } = await supabase
+            .from('unpaid_bills')
+            .update({
+                total_amount: newTotal,
+                balance_amount: newBalance,
+                balance_due: newBalance,
+                status: paid > 0 ? 'partial' : 'unpaid',
+                remarks,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+        if (error) throw error;
+
+        res.json({ success: true, message: 'Charge billed to customer account', data });
     } catch (error) {
         next(error);
     }

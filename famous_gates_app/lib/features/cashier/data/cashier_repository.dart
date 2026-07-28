@@ -488,7 +488,13 @@ class CashierRepository {
   }
 
   List<Map<String, dynamic>> _asList(dynamic value) {
-    final data = value is Map ? value['data'] ?? value['items'] ?? [] : value;
+    // Endpoints wrap the array under different keys — 'data'/'items' for most,
+    // but 'guests' for /room-charge/eligible-guests. Without 'guests' here the
+    // Charge-to-Room dropdown silently loaded nothing despite the API returning
+    // every eligible in-house guest.
+    final data = value is Map
+        ? value['data'] ?? value['items'] ?? value['guests'] ?? []
+        : value;
     if (data is List) {
       return data
           .whereType<Map>()

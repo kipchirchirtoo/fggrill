@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { randomUUID } from 'crypto';
 import { supabase } from '../config/supabase';
 import db from '../db';
 import { AppError } from '../middleware/errorHandler';
@@ -647,7 +648,38 @@ const calculateShiftSummary = async (shiftId: string) => {
   });
   const openingFloat = numberValue(shift.opening_float);
   const cashSales = numberValue(salesByMethod.cash);
-  const expectedCash = openingFloat + cashSales;
+
+  // Cross-outlet settlement (§5): a master bill spanning outlets is collected in
+  // full by ONE origin cashier. Revenue stays per outlet (salesByMethod above,
+  // keyed by shift), but the physical CASH DRAWER belongs to whoever actually
+  // received the money (pos_shift_payments.received_by):
+  //  - cash for THIS outlet that a DIFFERENT cashier collected is NOT in this
+  //    drawer ('settled through another cashier') — so this cashier is never
+  //    shown short for money someone else took;
+  //  - cash this cashier collected for OTHER outlets (recorded in those outlets'
+  //    shifts) IS in this drawer ('collected for others').
+  // For an ordinary shift (received_by == the shift cashier, no cross activity)
+  // both adjustments are 0, so expected_cash stays float + cashSales.
+  const cashierId = String(shift.cashier_id || '');
+  const cashSettledByOtherCashier = cashierId
+    ? activePayments
+        .filter((p) => normalizePaymentMethod(p.payment_method) === 'cash'
+          && p.received_by && String(p.received_by) !== cashierId)
+        .reduce((s, p) => s + numberValue(p.amount), 0)
+    : 0;
+  let cashCollectedForOthers = 0;
+  if (cashierId) {
+    const { data: crossPayments } = await supabase
+      .from('pos_shift_payments')
+      .select('amount, payment_method')
+      .eq('received_by', cashierId)
+      .neq('shift_id', shiftId);
+    cashCollectedForOthers = ((crossPayments || []) as Array<Record<string, any>>)
+      .filter((p) => normalizePaymentMethod(p.payment_method) === 'cash')
+      .reduce((s, p) => s + numberValue(p.amount), 0);
+  }
+  const ownOutletCash = Math.max(0, cashSales - cashSettledByOtherCashier);
+  const expectedCash = openingFloat + ownOutletCash + cashCollectedForOthers;
   const closingCashCounted =
     shift.closing_cash_counted === null || shift.closing_cash_counted === undefined
       ? null
@@ -669,6 +701,13 @@ const calculateShiftSummary = async (shiftId: string) => {
     open_order_count: orderRows.filter((row) => ['unpaid', 'partial'].includes(String(row.payment_status))).length,
     opening_float: openingFloat,
     expected_cash: expectedCash,
+    // Cross-outlet cash reconciliation (§5). expected_cash above is the DRAWER
+    // (physical cash this cashier is accountable for). Revenue fields
+    // (total_cash_sales etc.) remain this outlet's own revenue.
+    own_outlet_cash: ownOutletCash,
+    cash_collected_for_others: cashCollectedForOthers,
+    cash_settled_by_other_cashier: cashSettledByOtherCashier,
+    physical_cash_collected: openingFloat + ownOutletCash + cashCollectedForOthers,
     closing_cash_counted: closingCashCounted,
     cash_variance: closingCashCounted === null ? null : closingCashCounted - expectedCash,
     generated_at: new Date().toISOString()
@@ -2631,11 +2670,27 @@ export const recordShiftOrder = async (req: Request, res: Response, next: NextFu
         amount_paid: 0,
         balance_amount: totalAmount,
         items: normalizedItems,
+        // Master bill: when the waiter adds items from another outlet to an
+        // existing customer bill, the new outlet order carries the same
+        // master_bill_id so it joins that one bill (and shows as 'included').
+        // Only set when actually linking, so ordinary order placement never
+        // references these columns (safe before the migration lands).
+        ...(nullableText(req.body.master_bill_id)
+          ? {
+              master_bill_id: nullableText(req.body.master_bill_id),
+              sub_bill_status: 'included'
+            }
+          : {}),
         created_by: req.user.id
       })
       .select('*')
       .single();
     if (error || !order) throw error || new AppError('Failed to record POS order', 500);
+
+    // Keep the master bill total in step when this order joined an existing bill.
+    if (nullableText(req.body.master_bill_id)) {
+      await recomputeMasterBillTotals(String(req.body.master_bill_id)).catch(() => {});
+    }
 
     const verification = await createBillVerificationCode({
       code: order.short_code,
@@ -5333,6 +5388,987 @@ export const getExchangeHistory = async (req: Request, res: Response, next: Next
   }
 };
 
+// ── Master bills (one customer bill across outlets) ─────────────────────────
+// A customer seated at one outlet orders drinks at the bar, food at the
+// restaurant and a platter from Choma. Each is its own pos_shift_orders row in
+// its OWN outlet shift (so prep printing, stock and revenue stay per outlet),
+// grouped under ONE pos_master_bills row with a single bill number. The origin
+// cashier collects the whole amount; each outlet cashier confirms their part.
+
+const orderIsOwnedBy = (order: Record<string, any>, userId: string): boolean =>
+  String(order.waiter_id || '') === userId || String(order.created_by || '') === userId;
+
+// Shape a raw order row (optionally with a joined outlet) for the bill views.
+const mapOrderForBill = (order: Record<string, any>): Record<string, any> => {
+  const outlet = Array.isArray(order.outlet) ? order.outlet[0] : order.outlet;
+  const items = Array.isArray(order.items) ? order.items : [];
+  return {
+    id: order.id,
+    order_number: order.order_number,
+    short_code: order.short_code,
+    outlet_id: order.outlet_id,
+    outlet_type: outlet?.outlet_type || null,
+    outlet_name: outlet?.name || null,
+    shift_id: order.shift_id,
+    waiter_id: order.waiter_id,
+    waiter_name: order.waiter_name,
+    customer_name: order.customer_name || 'Walk-in',
+    table_number: order.table_number ?? null,
+    room_number: order.room_number ?? null,
+    status: order.status,
+    payment_status: order.payment_status,
+    kitchen_status: order.kitchen_status,
+    total_amount: numberValue(order.total_amount),
+    amount_paid: numberValue(order.amount_paid),
+    balance_amount: Math.max(0, numberValue(order.balance_amount) || numberValue(order.total_amount) - numberValue(order.amount_paid)),
+    master_bill_id: order.master_bill_id || null,
+    sub_bill_status: order.sub_bill_status || 'open',
+    items_count: items.length,
+    items,
+    created_at: order.created_at
+  };
+};
+
+// Per-outlet breakdown (sub-bills) for a master bill's member orders.
+const outletBreakdown = (mapped: Array<Record<string, any>>): Array<Record<string, any>> => {
+  const byOutlet = new Map<string, Record<string, any>>();
+  for (const o of mapped) {
+    const key = String(o.outlet_id || '');
+    const e = byOutlet.get(key) || {
+      outlet_id: o.outlet_id, outlet_name: o.outlet_name, outlet_type: o.outlet_type,
+      amount: 0, balance: 0, order_ids: [] as string[]
+    };
+    e.amount += numberValue(o.total_amount);
+    e.balance += numberValue(o.balance_amount);
+    e.order_ids.push(o.id);
+    byOutlet.set(key, e);
+  }
+  return Array.from(byOutlet.values());
+};
+
+// Present a standalone (un-grouped) order as a one-outlet bill card.
+const standaloneBillView = (order: Record<string, any>): Record<string, any> => {
+  const o = mapOrderForBill(order);
+  return {
+    id: o.id,
+    master_bill_id: null,
+    master_bill_number: null,
+    is_master: false,
+    is_consolidated: false,
+    label: o.customer_name || o.short_code || 'Bill',
+    customer_name: o.customer_name,
+    table_number: o.table_number,
+    origin_outlet_id: o.outlet_id,
+    origin_outlet_name: o.outlet_name,
+    waiter_id: o.waiter_id,
+    waiter_name: o.waiter_name,
+    status: 'open',
+    outlets: o.outlet_name ? [o.outlet_name] : [],
+    outlet_breakdown: outletBreakdown([o]),
+    order_count: 1,
+    total_amount: o.total_amount,
+    amount_paid: o.amount_paid,
+    balance_amount: o.balance_amount,
+    payment_status: o.payment_status,
+    created_at: o.created_at,
+    orders: [o]
+  };
+};
+
+// Assemble a master bill row + its member orders into the full bill view.
+const buildMasterBillView = (
+  master: Record<string, any>,
+  orders: Array<Record<string, any>>
+): Record<string, any> => {
+  const mapped = orders.map(mapOrderForBill);
+  const total = mapped.reduce((s, o) => s + numberValue(o.total_amount), 0);
+  const paid = mapped.reduce((s, o) => s + numberValue(o.amount_paid), 0);
+  const balance = mapped.reduce((s, o) => s + numberValue(o.balance_amount), 0);
+  const breakdown = outletBreakdown(mapped);
+  return {
+    id: master.id,
+    master_bill_id: master.id,
+    master_bill_number: master.master_bill_number,
+    is_master: true,
+    is_consolidated: breakdown.length > 1,
+    label: master.table_number
+      ? `Table ${master.table_number}`
+      : (master.customer_name || master.master_bill_number),
+    customer_name: master.customer_name || 'Walk-in',
+    table_number: master.table_number,
+    origin_outlet_id: master.origin_outlet_id,
+    origin_outlet_name: master.origin_outlet_name,
+    waiter_id: master.opening_waiter_id,
+    waiter_name: master.opening_waiter_name,
+    status: master.status,
+    settlement_cashier_id: master.settlement_cashier_id,
+    settlement_cashier_name: master.settlement_cashier_name,
+    payment_method: master.payment_method,
+    outlets: Array.from(new Set(mapped.map((o) => o.outlet_name).filter(Boolean))),
+    outlet_breakdown: breakdown,
+    order_count: mapped.length,
+    total_amount: total,
+    amount_paid: paid,
+    balance_amount: balance,
+    payment_status: balance <= 0.01 ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
+    created_at: master.created_at,
+    orders: mapped
+  };
+};
+
+// Recompute a master bill's total and rebuild its per-outlet settlement rows
+// from its current member orders. Called after link / add / unlink.
+const recomputeMasterBillTotals = async (masterBillId: string): Promise<void> => {
+  const { data: master } = await supabase
+    .from('pos_master_bills').select('*').eq('id', masterBillId).maybeSingle();
+  if (!master) return;
+  const { data: orderRows } = await supabase
+    .from('pos_shift_orders')
+    .select('id, outlet_id, total_amount, amount_paid, outlet:pos_outlets(name)')
+    .eq('master_bill_id', masterBillId)
+    .not('status', 'eq', 'cancelled');
+  const orders = (orderRows || []) as Array<Record<string, any>>;
+  const total = orders.reduce((s, o) => s + numberValue(o.total_amount), 0);
+  const paid = orders.reduce((s, o) => s + numberValue(o.amount_paid), 0);
+  await supabase.from('pos_master_bills')
+    .update({ total_amount: total, amount_paid: paid, updated_at: new Date().toISOString() })
+    .eq('id', masterBillId);
+
+  // Rebuild per-outlet settlement allocations (amounts only; confirm state kept).
+  const byOutlet = new Map<string, { amount: number; name: string | null }>();
+  for (const o of orders) {
+    const outlet = Array.isArray(o.outlet) ? o.outlet[0] : o.outlet;
+    const key = String(o.outlet_id || '');
+    const e = byOutlet.get(key) || { amount: 0, name: outlet?.name || null };
+    e.amount += numberValue(o.total_amount);
+    byOutlet.set(key, e);
+  }
+  for (const [outletId, info] of Array.from(byOutlet.entries())) {
+    await supabase.from('pos_master_bill_settlements').upsert({
+      master_bill_id: masterBillId,
+      branch_id: Number(master.branch_id),
+      outlet_id: outletId,
+      outlet_name: info.name,
+      amount: info.amount,
+      is_origin: String(outletId) === String(master.origin_outlet_id),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'master_bill_id,outlet_id' });
+  }
+};
+
+// Load a master bill's full view (row + ALL its member orders).
+const loadMasterBillView = async (masterBillId: string): Promise<Record<string, any> | null> => {
+  const { data: master } = await supabase
+    .from('pos_master_bills').select('*').eq('id', masterBillId).maybeSingle();
+  if (!master) return null;
+  const { data: orders } = await supabase
+    .from('pos_shift_orders')
+    .select('*, outlet:pos_outlets(id, name, outlet_type)')
+    .eq('master_bill_id', masterBillId)
+    .not('status', 'eq', 'cancelled')
+    .order('created_at', { ascending: true });
+  return buildMasterBillView(master, (orders || []) as Array<Record<string, any>>);
+};
+
+// Settle the remaining balance of ONE order with a single tender. Records the
+// payment against the order's OWN shift/outlet (so revenue + stock post to the
+// correct outlet) and posts the inventory sale. Used by the consolidated
+// one-tap bill settlement; payShiftOrder keeps its own richer per-order path
+// (partial amounts, staff credit bills).
+const settleOrderBalance = async (params: {
+  order: Record<string, any>;
+  shift: Record<string, any>;
+  method: PaymentMethod;
+  amount: number;
+  receivedBy: string;
+  reference?: string | null;
+}): Promise<{ payment: any; amount_paid: number; balance_amount: number; payment_status: string }> => {
+  const { order, shift, method, receivedBy } = params;
+  const currentPaid = numberValue(order.amount_paid);
+  const totalAmount = numberValue(order.total_amount);
+  const currentBalance = Math.max(0, numberValue(order.balance_amount) || totalAmount - currentPaid);
+  const amount = Math.min(params.amount > 0 ? params.amount : currentBalance, currentBalance);
+  if (amount <= 0) throw new AppError('Payment amount must be greater than zero', 400);
+
+  const { data: payment, error: paymentError } = await supabase
+    .from('pos_shift_payments')
+    .insert({
+      shift_id: order.shift_id,
+      outlet_id: order.outlet_id ?? shift.outlet_id,
+      order_id: order.id,
+      payment_method: method,
+      amount,
+      reference: params.reference || `POS-${method}-${Date.now()}`,
+      received_by: receivedBy
+    })
+    .select('*')
+    .single();
+  if (paymentError || !payment) throw paymentError || new AppError('Failed to record payment', 500);
+
+  const newPaid = currentPaid + amount;
+  const newBalance = Math.max(0, totalAmount - newPaid);
+  const isCleared = newBalance <= 0.01;
+  const nextPaymentStatus = isCleared ? 'paid' : 'partial';
+  const nextStatus = isCleared ? 'paid' : 'open';
+
+  const orderItems = Array.isArray(order.items) ? order.items as Array<Record<string, any>> : [];
+  if (isCleared && !order.inventory_posted_at) {
+    await assertPosStockAvailable(Number(shift.branch_id), order.outlet_id ?? shift.outlet_id, orderItems);
+  }
+
+  await supabase
+    .from('pos_shift_orders')
+    .update({
+      status: nextStatus,
+      payment_status: nextPaymentStatus,
+      amount_paid: newPaid,
+      balance_amount: newBalance,
+      payment_method: method,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', order.id);
+
+  if (isCleared && !order.inventory_posted_at) {
+    await postPosInventorySale({
+      branchId: Number(shift.branch_id),
+      outletId: order.outlet_id ?? shift.outlet_id,
+      shiftId: order.shift_id,
+      orderId: order.id,
+      items: orderItems,
+      actorId: receivedBy
+    });
+    await supabase
+      .from('pos_shift_orders')
+      .update({ inventory_posted_at: new Date().toISOString(), inventory_posted_by: receivedBy })
+      .eq('id', order.id);
+  }
+
+  return { payment, amount_paid: newPaid, balance_amount: newBalance, payment_status: nextPaymentStatus };
+};
+
+// GET /pos/waiter/open-bills — every unsettled order the CURRENT waiter owns,
+// across ALL their outlets in the branch, folded into consolidated bills.
+export const getWaiterOpenBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = branchIdFor(req);
+    // Managers/global users may inspect a specific waiter; everyone else sees
+    // their own orders only (matches the "same waiter's own orders" rule).
+    const requestedWaiter = nullableText(req.query.waiter_id);
+    const targetWaiterId = (requestedWaiter && (canManageOutlets(req) || isGlobalUser(req)))
+      ? requestedWaiter
+      : String(req.user.id);
+
+    let query = supabase
+      .from('pos_shift_orders')
+      .select('*, outlet:pos_outlets(id, name, outlet_type)')
+      .or(`waiter_id.eq.${targetWaiterId},created_by.eq.${targetWaiterId}`)
+      .in('payment_status', ['unpaid', 'partial'])
+      .not('status', 'in', '(cancelled,voided)')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (branchId) query = query.eq('branch_id', branchId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const orders = (data || []).filter((o: any) => {
+      const outlet = Array.isArray(o.outlet) ? o.outlet[0] : o.outlet;
+      return isFoodOrBarOutlet(outlet?.outlet_type);
+    });
+
+    // Group the waiter's orders into master bills; ungrouped orders show as
+    // standalone one-outlet cards they can combine.
+    const masterIds = Array.from(new Set(orders.map((o: any) => o.master_bill_id).filter(Boolean)));
+    const mastersById = new Map<string, any>();
+    if (masterIds.length) {
+      const { data: masters } = await supabase.from('pos_master_bills').select('*').in('id', masterIds);
+      for (const m of (masters || [])) mastersById.set(String(m.id), m);
+    }
+    const byMaster = new Map<string, any[]>();
+    const standalone: any[] = [];
+    for (const o of orders) {
+      const mid = o.master_bill_id ? String(o.master_bill_id) : null;
+      if (mid && mastersById.has(mid)) {
+        if (!byMaster.has(mid)) byMaster.set(mid, []);
+        byMaster.get(mid)!.push(o);
+      } else {
+        standalone.push(o);
+      }
+    }
+    const bills: any[] = [];
+    for (const [mid, ords] of Array.from(byMaster.entries())) {
+      bills.push(buildMasterBillView(mastersById.get(mid), ords));
+    }
+    for (const o of standalone) bills.push(standaloneBillView(o));
+    bills.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+    res.json({ success: true, data: bills });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /pos/bills/:masterBillId — one master bill: all member orders across
+// outlets + combined total + per-outlet sub-bill breakdown.
+export const getConsolidatedBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { masterBillId } = req.params;
+    const { data: master } = await supabase
+      .from('pos_master_bills').select('branch_id').eq('id', masterBillId).maybeSingle();
+    if (!master) throw new AppError('Master bill not found', 404);
+    ensureBranchAccess(req, (master as any).branch_id);
+
+    const view = await loadMasterBillView(masterBillId);
+    if (!view) throw new AppError('Master bill not found', 404);
+    if (shouldScopeOrdersToOwner(req)) {
+      const mine = view.orders.every((o: any) => String(o.waiter_id || '') === String(req.user.id));
+      if (!mine) throw new AppError('Forbidden: bill belongs to another waiter', 403);
+    }
+    res.json({ success: true, data: view });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/bills/link — link the given orders into ONE consolidated bill.
+// body: { order_ids: string[], anchor_order_id?, label? }
+export const linkOrdersIntoBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const orderIds: string[] = Array.isArray(req.body.order_ids)
+      ? req.body.order_ids.map((id: any) => String(id)).filter(Boolean)
+      : [];
+    const anchorId = nullableText(req.body.anchor_order_id);
+    const allIds = Array.from(new Set([...(anchorId ? [anchorId] : []), ...orderIds]));
+    if (allIds.length < 2) throw new AppError('Select at least two orders to combine into one bill', 400);
+
+    const { data: orders, error } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .in('id', allIds);
+    if (error) throw error;
+    if (!orders || orders.length !== allIds.length) throw new AppError('One or more orders were not found', 404);
+
+    const userId = String(req.user.id);
+    const ownerScoped = shouldScopeOrdersToOwner(req);
+    const branchId = Number((orders[0] as any).branch_id);
+    for (const o of orders as Array<Record<string, any>>) {
+      ensureBranchAccess(req, o.branch_id);
+      if (Number(o.branch_id) !== branchId) throw new AppError('All orders must belong to the same branch', 400);
+      if (ownerScoped && !orderIsOwnedBy(o, userId)) throw new AppError('You can only combine your own orders', 403);
+      if (['paid', 'credit_bill', 'voided'].includes(String(o.payment_status))) {
+        throw new AppError('Cannot combine an order that is already settled or voided', 409);
+      }
+      if (['cancelled', 'voided'].includes(String(o.status))) {
+        throw new AppError('Cannot combine a cancelled or voided order', 409);
+      }
+    }
+
+    // Reuse an existing master bill if the anchor (or any member) has one; else
+    // open a new one with a per-branch bill number (e.g. KYO-000245). The origin
+    // outlet is where the anchor order lives (where the customer is seated).
+    const anchor = (anchorId ? (orders as any[]).find((o) => String(o.id) === anchorId) : null)
+      || (orders as any[])[0];
+    let masterId: string | null = anchor.master_bill_id
+      || (orders as any[]).map((o) => o.master_bill_id).find(Boolean)
+      || null;
+    let master: any = null;
+    if (masterId) {
+      const { data } = await supabase.from('pos_master_bills').select('*').eq('id', masterId).maybeSingle();
+      master = data;
+    }
+    if (!master) {
+      const anchorOutlet = Array.isArray(anchor.outlet) ? anchor.outlet[0] : anchor.outlet;
+      const { data: num } = await supabase.rpc('next_master_bill_number', { p_branch_id: branchId });
+      const masterNumber = (typeof num === 'string' && num) ? num : `BR${branchId}-${Date.now()}`;
+      const { data: created, error: cErr } = await supabase.from('pos_master_bills').insert({
+        master_bill_number: masterNumber,
+        branch_id: branchId,
+        origin_outlet_id: anchor.outlet_id,
+        origin_outlet_name: anchorOutlet?.name || null,
+        table_number: nullableText(anchor.table_number) || nullableText(req.body.table_number),
+        customer_name: nullableText(anchor.customer_name) || nullableText(req.body.label) || 'Walk-in',
+        opening_waiter_id: anchor.waiter_id,
+        opening_waiter_name: anchor.waiter_name,
+        status: 'open'
+      }).select('*').single();
+      if (cErr || !created) throw cErr || new AppError('Failed to open master bill', 500);
+      master = created;
+      masterId = created.id;
+    }
+
+    const { error: updErr } = await supabase
+      .from('pos_shift_orders')
+      .update({ master_bill_id: masterId, sub_bill_status: 'included', updated_at: new Date().toISOString() })
+      .in('id', allIds);
+    if (updErr) throw updErr;
+
+    await recomputeMasterBillTotals(masterId!);
+    const view = await loadMasterBillView(masterId!);
+    res.json({ success: true, data: view });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/bills/:customerBillId/unlink-order — remove an order from a bill.
+// body: { order_id }
+export const unlinkOrderFromBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { masterBillId } = req.params;
+    const orderId = nullableText(req.body.order_id);
+    if (!orderId) throw new AppError('order_id is required', 400);
+
+    const { data: order, error } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .eq('id', orderId)
+      .eq('master_bill_id', masterBillId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!order) throw new AppError('Order is not part of this bill', 404);
+    ensureBranchAccess(req, (order as any).branch_id);
+    if (shouldScopeOrdersToOwner(req) && !orderIsOwnedBy(order as any, String(req.user.id))) {
+      throw new AppError('You can only edit your own bills', 403);
+    }
+    if (['paid', 'credit_bill', 'voided'].includes(String((order as any).payment_status))) {
+      throw new AppError('Cannot remove an order that is already settled', 409);
+    }
+
+    await supabase
+      .from('pos_shift_orders')
+      .update({ master_bill_id: null, sub_bill_status: 'open', updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+    await recomputeMasterBillTotals(masterBillId);
+    const view = await loadMasterBillView(masterBillId);
+    res.json({ success: true, data: view });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/bills/:masterBillId/pay — the origin/settlement cashier collects the
+// WHOLE bill in one tender. Each member order is settled against its own outlet
+// shift (so revenue + stock attribute to the correct outlet), the master bill is
+// closed, and each per-outlet sub-bill is marked 'settled' pending that outlet
+// cashier's confirmation (the origin outlet is auto-confirmed — collected
+// locally). body: { payment_method, reference? }.
+export const payConsolidatedBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const role = roleFor(req);
+    if (!isCashierStationRole(role, req.user?.branch_id) && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
+      throw new AppError('Only a cashier or manager can settle a customer bill', 403);
+    }
+    const { masterBillId } = req.params;
+    const method = normalizePaymentMethod(req.body.payment_method || req.body.method || 'cash');
+    if (!method) throw new AppError('Unsupported payment method', 400);
+    if (method === 'credit_bill') {
+      throw new AppError('Credit-bill settlement must be done per order, not on a consolidated bill.', 400);
+    }
+
+    const { data: master } = await supabase
+      .from('pos_master_bills').select('*').eq('id', masterBillId).maybeSingle();
+    if (!master) throw new AppError('Master bill not found', 404);
+    ensureBranchAccess(req, (master as any).branch_id);
+
+    const { data: memberRows, error } = await supabase
+      .from('pos_shift_orders')
+      .select('*')
+      .eq('master_bill_id', masterBillId)
+      .not('status', 'eq', 'cancelled');
+    if (error) throw error;
+    const members = (memberRows || []) as Array<Record<string, any>>;
+    const unsettled = members.filter((o) => !['paid', 'credit_bill', 'voided'].includes(String(o.payment_status)));
+    if (unsettled.length === 0) throw new AppError('This bill is already settled', 409);
+
+    // Every member's outlet shift must be open to accept payment + post stock.
+    const shiftIds = Array.from(new Set(unsettled.map((o) => String(o.shift_id))));
+    const { data: shiftRows, error: shiftErr } = await supabase
+      .from('pos_outlet_shifts')
+      .select('id, status, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
+      .in('id', shiftIds);
+    if (shiftErr) throw shiftErr;
+    const shiftById = new Map((shiftRows || []).map((s: any) => [String(s.id), s]));
+    for (const o of unsettled) {
+      const shift = shiftById.get(String(o.shift_id));
+      if (!shift) throw new AppError('An outlet shift for this bill could not be found', 404);
+      if (String(shift.status) !== 'open') {
+        const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
+        throw new AppError(`The ${outlet?.name || 'outlet'} shift is closed — reopen it or settle that item separately before settling the combined bill.`, 400);
+      }
+    }
+
+    let totalSettled = 0;
+    for (const order of unsettled) {
+      const shift = shiftById.get(String(order.shift_id));
+      const balance = Math.max(0, numberValue(order.balance_amount) || numberValue(order.total_amount) - numberValue(order.amount_paid));
+      await settleOrderBalance({
+        order,
+        shift,
+        method,
+        amount: balance,
+        receivedBy: String(req.user.id),
+        reference: (master as any).master_bill_number || `BILL-${masterBillId.slice(0, 8)}`
+      });
+      await supabase.from('pos_shift_orders').update({ sub_bill_status: 'settled' }).eq('id', order.id);
+      totalSettled += balance;
+    }
+
+    // Close the master bill + stamp the settlement (origin) cashier.
+    await recomputeMasterBillTotals(masterBillId);
+    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null;
+    const now = new Date().toISOString();
+    await supabase.from('pos_master_bills').update({
+      status: 'closed',
+      settlement_cashier_id: req.user.id,
+      settlement_cashier_name: cashierName,
+      payment_method: method,
+      paid_at: now,
+      closed_at: now,
+      updated_at: now
+    }).eq('id', masterBillId);
+
+    // Each outlet sub-bill is 'settled' pending that outlet cashier's
+    // confirmation; the origin outlet is auto-confirmed (collected locally).
+    await supabase.from('pos_master_bill_settlements').update({
+      status: 'settled', collecting_cashier_id: req.user.id, payment_method: method, updated_at: now
+    }).eq('master_bill_id', masterBillId).neq('status', 'cashier_confirmed');
+    await supabase.from('pos_master_bill_settlements').update({
+      status: 'cashier_confirmed', confirmed_by: req.user.id, confirmed_at: now
+    }).eq('master_bill_id', masterBillId).eq('is_origin', true);
+
+    const view = await loadMasterBillView(masterBillId);
+    res.json({
+      success: true,
+      data: {
+        master_bill_id: masterBillId,
+        master_bill_number: (master as any).master_bill_number,
+        payment_method: method,
+        total_settled: totalSettled,
+        bill: view
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Cross-outlet settlement confirmation (cashier) ──────────────────────────
+// After the origin cashier settles a master bill, every OTHER outlet's sub-bill
+// is 'settled' — the money was collected for them by the origin cashier. Each
+// outlet cashier confirms (or disputes) their allocated amount before closing
+// their shift. They cannot change the amount, only confirm / dispute.
+
+// The POS outlet ids the current cashier is responsible for (role station types
+// in their branch + any explicit assignments).
+const resolveCashierOutletIds = async (req: Request): Promise<string[]> => {
+  const branchId = branchIdFor(req);
+  const role = roleFor(req);
+  const ids = new Set<string>();
+  const assigned = await loadAssignedPosOutlets(supabase, req.user?.id);
+  for (const id of assignedOutletIds(assigned)) ids.add(id);
+  const types = stationTypesForCashierRole(role, req.user?.branch_id);
+  if (branchId && types.length) {
+    const { data } = await supabase
+      .from('pos_outlets').select('id').eq('branch_id', branchId).in('outlet_type', types);
+    for (const o of (data || [])) ids.add(String(o.id));
+  }
+  // Also cover any outlet where this cashier has an open POS shift right now.
+  const { data: shifts } = await supabase
+    .from('pos_outlet_shifts').select('outlet_id').eq('cashier_id', String(req.user?.id || '')).eq('status', 'open');
+  for (const s of (shifts || [])) if ((s as any).outlet_id) ids.add(String((s as any).outlet_id));
+  return Array.from(ids);
+};
+
+// Count of cross-outlet settlements still awaiting THIS cashier's confirmation
+// for the given outlets (used by the shift-close gate).
+export const countUnconfirmedCrossOutletSettlements = async (
+  branchId: number,
+  outletIds: string[]
+): Promise<number> => {
+  if (!outletIds.length) return 0;
+  const { count } = await supabase
+    .from('pos_master_bill_settlements')
+    .select('id', { count: 'exact', head: true })
+    .eq('branch_id', branchId)
+    .in('outlet_id', outletIds)
+    .eq('is_origin', false)
+    .eq('status', 'settled');
+  return count || 0;
+};
+
+const mapSettlementRow = (row: Record<string, any>): Record<string, any> => {
+  const master = Array.isArray(row.master) ? row.master[0] : row.master;
+  return {
+    id: row.id,
+    master_bill_id: row.master_bill_id,
+    master_bill_number: master?.master_bill_number || null,
+    customer_name: master?.customer_name || 'Walk-in',
+    table_number: master?.table_number || null,
+    origin_outlet_id: master?.origin_outlet_id || null,
+    origin_outlet_name: master?.origin_outlet_name || null,
+    settlement_cashier_id: master?.settlement_cashier_id || null,
+    settlement_cashier_name: master?.settlement_cashier_name || null,
+    outlet_id: row.outlet_id,
+    outlet_name: row.outlet_name,
+    amount: numberValue(row.amount),
+    payment_method: row.payment_method || master?.payment_method || null,
+    is_origin: row.is_origin === true,
+    status: row.status,
+    confirmed_at: row.confirmed_at || null,
+    dispute_reason: row.dispute_reason || null,
+    created_at: row.created_at
+  };
+};
+
+// GET /pos/settlements/cross-outlet — sub-bills collected by ANOTHER outlet's
+// cashier that this cashier must confirm (default) or the full history.
+export const getCrossOutletSettlements = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const branchId = branchIdFor(req);
+    const outletIds = await resolveCashierOutletIds(req);
+    if (outletIds.length === 0) { res.json({ success: true, data: [] }); return; }
+
+    const statusFilter = String(req.query.status || 'pending').toLowerCase();
+    let query = supabase
+      .from('pos_master_bill_settlements')
+      .select('*, master:pos_master_bills(master_bill_number, customer_name, table_number, origin_outlet_id, origin_outlet_name, settlement_cashier_id, settlement_cashier_name, payment_method)')
+      .in('outlet_id', outletIds)
+      .eq('is_origin', false)
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (branchId) query = query.eq('branch_id', branchId);
+    if (statusFilter === 'pending') query = query.eq('status', 'settled');
+    else if (statusFilter !== 'all') query = query.eq('status', statusFilter);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = [...(data || [])];
+    // Also surface disputes on bills THIS cashier collected as the origin/
+    // settlement cashier, so they can resolve them from the same screen.
+    const { data: myMasters } = await supabase
+      .from('pos_master_bills').select('id').eq('settlement_cashier_id', String(req.user.id));
+    const myMasterIds = (myMasters || []).map((m: any) => m.id);
+    if (myMasterIds.length) {
+      const { data: disputed } = await supabase
+        .from('pos_master_bill_settlements')
+        .select('*, master:pos_master_bills(master_bill_number, customer_name, table_number, origin_outlet_id, origin_outlet_name, settlement_cashier_id, settlement_cashier_name, payment_method)')
+        .in('master_bill_id', myMasterIds)
+        .eq('status', 'disputed');
+      const seen = new Set(rows.map((r: any) => String(r.id)));
+      for (const d of (disputed || [])) {
+        if (!seen.has(String((d as any).id))) { rows.push(d); seen.add(String((d as any).id)); }
+      }
+    }
+    const userId = String(req.user.id);
+    const mapped = rows.map((r: any) => {
+      const m = mapSettlementRow(r);
+      m.viewer_is_collector = String(m.settlement_cashier_id || '') === userId;
+      return m;
+    });
+    res.json({ success: true, data: mapped });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/settlements/:settlementId/confirm — the outlet cashier confirms
+// their allocated amount was collected on their behalf (amount is read-only).
+export const confirmCrossOutletSettlement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const role = roleFor(req);
+    if (!isCashierStationRole(role, req.user?.branch_id) && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
+      throw new AppError('Only the outlet cashier can confirm a settlement', 403);
+    }
+    const { settlementId } = req.params;
+    const { data: row, error } = await supabase
+      .from('pos_master_bill_settlements').select('*').eq('id', settlementId).maybeSingle();
+    if (error) throw error;
+    if (!row) throw new AppError('Settlement not found', 404);
+    ensureBranchAccess(req, (row as any).branch_id);
+
+    const outletIds = await resolveCashierOutletIds(req);
+    if (!isGlobalUser(req) && !SHIFT_MANAGER_ROLES.has(role) && !outletIds.includes(String((row as any).outlet_id))) {
+      throw new AppError('This settlement belongs to another outlet', 403);
+    }
+    if ((row as any).is_origin) throw new AppError('The origin outlet is confirmed automatically', 400);
+    if (String((row as any).status) !== 'settled') {
+      throw new AppError(`Cannot confirm a settlement that is ${(row as any).status}`, 409);
+    }
+
+    const { data: updated, error: updErr } = await supabase
+      .from('pos_master_bill_settlements')
+      .update({ status: 'cashier_confirmed', confirmed_by: req.user.id, confirmed_at: new Date().toISOString(), dispute_reason: null, updated_at: new Date().toISOString() })
+      .eq('id', settlementId).select('*').single();
+    if (updErr) throw updErr;
+    res.json({ success: true, data: mapSettlementRow(updated) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/settlements/:settlementId/dispute — raise a dispute (needs a reason).
+export const disputeCrossOutletSettlement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const role = roleFor(req);
+    if (!isCashierStationRole(role, req.user?.branch_id) && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
+      throw new AppError('Only the outlet cashier can dispute a settlement', 403);
+    }
+    const reason = nullableText(req.body.reason || req.body.dispute_reason);
+    if (!reason) throw new AppError('A dispute reason is required', 400);
+    const { settlementId } = req.params;
+    const { data: row, error } = await supabase
+      .from('pos_master_bill_settlements').select('*').eq('id', settlementId).maybeSingle();
+    if (error) throw error;
+    if (!row) throw new AppError('Settlement not found', 404);
+    ensureBranchAccess(req, (row as any).branch_id);
+
+    const outletIds = await resolveCashierOutletIds(req);
+    if (!isGlobalUser(req) && !SHIFT_MANAGER_ROLES.has(role) && !outletIds.includes(String((row as any).outlet_id))) {
+      throw new AppError('This settlement belongs to another outlet', 403);
+    }
+    if (String((row as any).status) === 'cashier_confirmed') {
+      throw new AppError('Cannot dispute a settlement that is already confirmed', 409);
+    }
+
+    const { data: updated, error: updErr } = await supabase
+      .from('pos_master_bill_settlements')
+      .update({ status: 'disputed', dispute_reason: reason, updated_at: new Date().toISOString() })
+      .eq('id', settlementId).select('*, master:pos_master_bills(settlement_cashier_id, master_bill_number)').single();
+    if (updErr) throw updErr;
+
+    // Flag the collecting (origin) cashier so the dispute gets resolved.
+    const master = Array.isArray((updated as any).master) ? (updated as any).master[0] : (updated as any).master;
+    if (master?.settlement_cashier_id) {
+      void notificationService.notifyUser(
+        String(master.settlement_cashier_id),
+        'Cross-outlet settlement disputed',
+        `${(updated as any).outlet_name || 'An outlet'} disputed their KES ${numberValue((updated as any).amount).toLocaleString('en-KE')} share of bill ${master.master_bill_number}: ${reason}`,
+        { type: 'warning', category: 'pos_settlement', priority: 'high', metadata: { settlement_id: settlementId, branch_id: Number((row as any).branch_id) } }
+      ).catch(() => {});
+    }
+    res.json({ success: true, data: mapSettlementRow(updated) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/bills/:masterBillId/add-items — add items from ANOTHER outlet to an
+// existing master bill. The new order is created in that outlet's OWN open shift
+// (correct prep printing / stock / revenue) but tagged with this master_bill_id
+// so it joins the same customer bill. body: { outlet_id, items:[...], order_type? }
+export const addItemsToMasterBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { masterBillId } = req.params;
+    const outletId = nullableText(req.body.outlet_id);
+    const items = Array.isArray(req.body.items) ? req.body.items as Array<Record<string, any>> : [];
+    if (!outletId) throw new AppError('outlet_id is required', 400);
+    if (!items.length) throw new AppError('At least one item is required', 400);
+
+    const { data: master } = await supabase.from('pos_master_bills').select('*').eq('id', masterBillId).maybeSingle();
+    if (!master) throw new AppError('Master bill not found', 404);
+    ensureBranchAccess(req, (master as any).branch_id);
+    if (String((master as any).status) === 'closed') throw new AppError('This bill is already closed', 409);
+    if (shouldScopeOrdersToOwner(req) && (master as any).opening_waiter_id
+        && String((master as any).opening_waiter_id) !== String(req.user.id)) {
+      throw new AppError('You can only add to your own bill', 403);
+    }
+
+    const { data: outlet } = await supabase.from('pos_outlets').select('*').eq('id', outletId).maybeSingle();
+    if (!outlet) throw new AppError('Outlet not found', 404);
+    if (Number((outlet as any).branch_id) !== Number((master as any).branch_id)) {
+      throw new AppError('Outlet belongs to another branch', 400);
+    }
+    const { data: openShift } = await supabase
+      .from('pos_outlet_shifts').select('*')
+      .eq('outlet_id', outletId).eq('status', 'open')
+      .order('opened_at', { ascending: false }).limit(1).maybeSingle();
+    if (!openShift) {
+      throw new AppError(`${(outlet as any).name || 'That outlet'} has no open shift — its cashier must open a shift before items can be added there.`, 400);
+    }
+
+    const normalizedItems = await normalizeOrderItems(outletId, items);
+    await assertPosStockAvailable(Number((outlet as any).branch_id), outletId, normalizedItems);
+    const totalAmount = normalizedItems.reduce((s, it) => s + numberValue(it.line_total), 0);
+    const context = orderContextPatch(req.body, null, (outlet as any).outlet_type);
+    const waiterId = (master as any).opening_waiter_id || req.user.id;
+    const waiterName = (master as any).opening_waiter_name
+      || `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null;
+
+    const { data: order, error } = await supabase.from('pos_shift_orders').insert({
+      shift_id: (openShift as any).id,
+      outlet_id: outletId,
+      branch_id: (outlet as any).branch_id,
+      source_type: 'manual',
+      order_number: `POS-${Date.now()}`,
+      customer_name: (master as any).customer_name || 'Walk-in',
+      ...context,
+      waiter_id: waiterId,
+      waiter_name: waiterName,
+      status: 'open',
+      kitchen_status: 'pending',
+      payment_status: 'unpaid',
+      total_amount: totalAmount,
+      amount_paid: 0,
+      balance_amount: totalAmount,
+      items: normalizedItems,
+      master_bill_id: masterBillId,
+      sub_bill_status: 'included',
+      created_by: req.user.id
+    }).select('*').single();
+    if (error || !order) throw error || new AppError('Failed to add items', 500);
+
+    await createBillVerificationCode({
+      code: order.short_code,
+      billRef: String(order.order_number || order.id),
+      billType: billTypeForOutlet((outlet as any).outlet_type),
+      branchId: Number((outlet as any).branch_id),
+      outletId,
+      amount: totalAmount,
+      generatedBy: String(req.user.id),
+      notes: 'Master bill cross-outlet add',
+      metadata: { source_table: 'pos_shift_orders', source_id: order.id, master_bill_id: masterBillId }
+    }).catch(() => {});
+    await updateStockForItems((openShift as any).id, outletId, normalizedItems, 1);
+    recordKitchenConsumption(normalizedItems, Number((outlet as any).branch_id), (openShift as any).id, order.id)
+      .catch((e) => logger.warn('recordKitchenConsumption failed', e as any));
+    await recomputeMasterBillTotals(masterBillId);
+
+    const view = await loadMasterBillView(masterBillId);
+    res.status(201).json({ success: true, data: view });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/bills/:masterBillId/transfer-waiter — reassign the bill (and its
+// still-open member orders) to another waiter. body: { waiter_id, waiter_name? }
+export const transferMasterBillWaiter = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { masterBillId } = req.params;
+    const newWaiterId = nullableText(req.body.waiter_id);
+    if (!newWaiterId) throw new AppError('waiter_id is required', 400);
+
+    const { data: master } = await supabase.from('pos_master_bills').select('*').eq('id', masterBillId).maybeSingle();
+    if (!master) throw new AppError('Master bill not found', 404);
+    ensureBranchAccess(req, (master as any).branch_id);
+    if (shouldScopeOrdersToOwner(req) && (master as any).opening_waiter_id
+        && String((master as any).opening_waiter_id) !== String(req.user.id)) {
+      throw new AppError('You can only transfer your own bill', 403);
+    }
+    const { data: newWaiter } = await supabase
+      .from('users').select('id, first_name, last_name, branch_id').eq('id', newWaiterId).maybeSingle();
+    if (!newWaiter) throw new AppError('Waiter not found', 404);
+    if ((newWaiter as any).branch_id && Number((newWaiter as any).branch_id) !== Number((master as any).branch_id)) {
+      throw new AppError('Waiter belongs to another branch', 400);
+    }
+    const newName = `${(newWaiter as any).first_name || ''} ${(newWaiter as any).last_name || ''}`.trim()
+      || nullableText(req.body.waiter_name) || null;
+
+    const now = new Date().toISOString();
+    await supabase.from('pos_master_bills')
+      .update({ opening_waiter_id: newWaiterId, opening_waiter_name: newName, updated_at: now })
+      .eq('id', masterBillId);
+    await supabase.from('pos_shift_orders')
+      .update({ waiter_id: newWaiterId, waiter_name: newName, updated_at: now })
+      .eq('master_bill_id', masterBillId)
+      .not('payment_status', 'in', '(paid,credit_bill,voided)');
+
+    const view = await loadMasterBillView(masterBillId);
+    res.json({ success: true, data: view });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/bills/:masterBillId/move-table — change the bill's table. body: { table_number }
+export const moveMasterBillTable = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { masterBillId } = req.params;
+    const tableNumber = nullableText(req.body.table_number);
+
+    const { data: master } = await supabase.from('pos_master_bills').select('*').eq('id', masterBillId).maybeSingle();
+    if (!master) throw new AppError('Master bill not found', 404);
+    ensureBranchAccess(req, (master as any).branch_id);
+    if (shouldScopeOrdersToOwner(req) && (master as any).opening_waiter_id
+        && String((master as any).opening_waiter_id) !== String(req.user.id)) {
+      throw new AppError('You can only move your own bill', 403);
+    }
+
+    const now = new Date().toISOString();
+    await supabase.from('pos_master_bills')
+      .update({ table_number: tableNumber, updated_at: now }).eq('id', masterBillId);
+    await supabase.from('pos_shift_orders')
+      .update({ table_number: tableNumber, updated_at: now })
+      .eq('master_bill_id', masterBillId)
+      .not('payment_status', 'in', '(paid,credit_bill,voided)');
+
+    const view = await loadMasterBillView(masterBillId);
+    res.json({ success: true, data: view });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /pos/settlements/:settlementId/resolve — the collecting (origin) cashier
+// or a manager resolves a disputed sub-bill: 'confirm' (accept & confirm) or
+// 'reopen' (send back to the outlet cashier to re-confirm). body: { resolution? }
+export const resolveDisputedSettlement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const role = roleFor(req);
+    if (!isCashierStationRole(role, req.user?.branch_id) && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
+      throw new AppError('Not permitted', 403);
+    }
+    const { settlementId } = req.params;
+    const resolution = nullableText(req.body.resolution) === 'reopen' ? 'reopen' : 'confirm';
+
+    const { data: row } = await supabase
+      .from('pos_master_bill_settlements')
+      .select('*, master:pos_master_bills(settlement_cashier_id)')
+      .eq('id', settlementId).maybeSingle();
+    if (!row) throw new AppError('Settlement not found', 404);
+    ensureBranchAccess(req, (row as any).branch_id);
+    if (String((row as any).status) !== 'disputed') throw new AppError('Only a disputed settlement can be resolved', 409);
+
+    const master = Array.isArray((row as any).master) ? (row as any).master[0] : (row as any).master;
+    const isCollector = String(master?.settlement_cashier_id || '') === String(req.user.id)
+      || String((row as any).collecting_cashier_id || '') === String(req.user.id);
+    if (!isCollector && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
+      throw new AppError('Only the collecting cashier or a manager can resolve this dispute', 403);
+    }
+
+    const nextStatus = resolution === 'reopen' ? 'settled' : 'cashier_confirmed';
+    const { data: updated, error } = await supabase
+      .from('pos_master_bill_settlements')
+      .update({
+        status: nextStatus,
+        confirmed_by: nextStatus === 'cashier_confirmed' ? req.user.id : null,
+        confirmed_at: nextStatus === 'cashier_confirmed' ? new Date().toISOString() : null,
+        dispute_reason: nextStatus === 'settled' ? (row as any).dispute_reason : null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', settlementId)
+      .select('*, master:pos_master_bills(master_bill_number, customer_name, table_number, origin_outlet_id, origin_outlet_name, settlement_cashier_id, settlement_cashier_name, payment_method)')
+      .single();
+    if (error) throw error;
+    res.json({ success: true, data: mapSettlementRow(updated) });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const payShiftOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
@@ -5582,6 +6618,15 @@ export const closeShift = async (req: Request, res: Response, next: NextFunction
       .in('payment_status', ['unpaid', 'partial']);
     if (openOrders && openOrders.length > 0) {
       throw new AppError(`Cannot close shift: ${openOrders.length} unsettled bill(s) on this station. Settle every order or record it as a credit bill before closing.`, 400);
+    }
+
+    // Block close until this outlet has confirmed every cross-outlet settlement
+    // collected on its behalf by another (origin) cashier — cashier accountability.
+    const pendingSettlements = await countUnconfirmedCrossOutletSettlements(
+      Number(shift.branch_id), [String(shift.outlet_id)]
+    );
+    if (pendingSettlements > 0) {
+      throw new AppError(`Cannot close shift: ${pendingSettlements} cross-outlet settlement(s) for this station still need your confirmation. Confirm them in Cross-Outlet Settlements first.`, 400);
     }
 
     const requestedClosingCash = req.body.closing_cash_counted ?? req.body.closingCashCounted;

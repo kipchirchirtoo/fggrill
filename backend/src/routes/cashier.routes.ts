@@ -6,6 +6,7 @@ import {
     verifyPayment,
     getUnpaidBills,
     createUnpaidBill,
+    addChargeToUnpaidBill,
     recordBillPayment,
     confirmUnpaidBill,
     getCreditBills,
@@ -178,6 +179,13 @@ router.route('/unpaid-bills')
 
 router.route('/unpaid-bills/:id/payment')
     .post(recordBillPayment);
+
+// Bill more to a customer credit account/tab (grows the running balance).
+router.route('/unpaid-bills/:id/charge')
+    .post(
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'branch_accountant'] as any),
+        addChargeToUnpaidBill
+    );
 
 router.route('/unpaid-bills/:id/confirm')
     .patch(

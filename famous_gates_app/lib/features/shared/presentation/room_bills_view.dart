@@ -6,8 +6,6 @@ import 'package:intl/intl.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../../auth/domain/auth_notifier.dart';
-import '../../pos/domain/models.dart';
-import '../../templates/data/document_printer.dart';
 import 'guest_invoice_pdf.dart';
 
 /// Shared "Room Bills" view: the checked-in guests' room booking bills + their
@@ -15,9 +13,14 @@ import 'guest_invoice_pdf.dart';
 /// read-only to track; the Cashier embeds it with [canSettle]. Hotel room bills
 /// no longer appear in the cashier's general Unpaid Bills — they live here.
 class RoomBillsView extends ConsumerStatefulWidget {
-  const RoomBillsView({super.key, this.canSettle = false});
+  const RoomBillsView({super.key, this.canSettle = false, this.onPayAtCashier});
 
   final bool canSettle;
+
+  /// When provided, "Pay at Cashier" hands the lookup code to this callback
+  /// instead of navigating to the standalone /cashier route — so Reception can
+  /// open its OWN embedded Cashier section (staying inside the Reception shell).
+  final void Function(String lookupCode)? onPayAtCashier;
 
   @override
   ConsumerState<RoomBillsView> createState() => _RoomBillsViewState();
@@ -286,6 +289,7 @@ class _RoomBillsViewState extends ConsumerState<RoomBillsView> {
         reservationId: reservationId,
         bill: bill,
         onSnack: _snack,
+        onPayAtCashier: widget.onPayAtCashier,
       ),
     );
     // Refresh after returning (e.g. paid at the cashier) so balances update.
@@ -298,11 +302,13 @@ class _FolioSheet extends ConsumerStatefulWidget {
     required this.reservationId,
     required this.bill,
     required this.onSnack,
+    this.onPayAtCashier,
   });
 
   final String reservationId;
   final Map<String, dynamic> bill;
   final void Function(String, {bool error}) onSnack;
+  final void Function(String lookupCode)? onPayAtCashier;
 
   @override
   ConsumerState<_FolioSheet> createState() => _FolioSheetState();
@@ -416,10 +422,16 @@ class _FolioSheetState extends ConsumerState<_FolioSheet> {
       _s(_b['confirmation_number']).isNotEmpty ? _s(_b['confirmation_number']) : widget.reservationId;
 
   void _pay() {
-    // Hand off to the Cashier Station pre-loaded with the room bill lookup code;
-    // the station resolves the HTL reservation and shows the guest + bill.
+    // Hand off to the Cashier pre-loaded with the room bill lookup code; the
+    // cashier resolves the HTL reservation and shows the guest + WHOLE folio
+    // bill. Prefer the host's embedded cashier (keeps the Reception shell); only
+    // fall back to the standalone /cashier route when no host callback is given.
     Navigator.of(context).pop();
-    context.go('/cashier?billRef=${Uri.encodeComponent(_lookupCode)}');
+    if (widget.onPayAtCashier != null) {
+      widget.onPayAtCashier!(_lookupCode);
+    } else {
+      context.go('/cashier?billRef=${Uri.encodeComponent(_lookupCode)}');
+    }
   }
 
   Future<void> _generateInvoice() async {

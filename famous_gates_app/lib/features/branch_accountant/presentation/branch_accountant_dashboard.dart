@@ -11356,6 +11356,12 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                               TextButton(
                                   onPressed: () => _showRecord(context, e),
                                   child: const Text('View')),
+                              if (_text(e, ['status']) != 'paid')
+                                TextButton.icon(
+                                  onPressed: () => _addCharge(e),
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add Charge'),
+                                ),
                               if (outstanding(e) > 0)
                                 FilledButton.tonal(
                                     onPressed: () => _payCustomerBill(e),
@@ -11433,6 +11439,38 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
     }
   }
 
+  // Bill more to a customer credit tab — grows the running balance so the
+  // account behaves like a billable tab tracked against its credit terms.
+  Future<void> _addCharge(Map<String, dynamic> bill) async {
+    final data = await _formDialog(
+      context,
+      'Bill to ${_text(bill, ['customer_name'])}',
+      const ['amount', 'description'],
+    );
+    if (data == null) return;
+    final amount = num.tryParse('${data['amount']}'.trim()) ?? 0;
+    if (amount <= 0) {
+      if (mounted) _notify(context, 'Enter a charge amount greater than zero');
+      return;
+    }
+    try {
+      await ref
+          .read(branchAccountantRepositoryProvider)
+          .addChargeToCustomerBill(
+        '${bill['id']}',
+        amount: amount,
+        description: '${data['description'] ?? ''}'.trim(),
+      );
+      if (mounted) _notify(context, 'Charge billed to customer account');
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        _notify(context,
+            'Failed to add charge: ${e is DioException ? (e.response?.data is Map ? (e.response?.data['message'] ?? e.message) : e.message) : e}');
+      }
+    }
+  }
+
   Future<void> _downloadInvoice(Map<String, dynamic> bill) async {
     try {
       final file = await ref
@@ -11472,6 +11510,7 @@ class _CustomerCreditBillDialogState
   String _customerType = 'corporate';
   final _dueDateCtrl = TextEditingController(text: _today());
   final _termsCtrl = TextEditingController();
+  final _creditLimitCtrl = TextEditingController();
   final _remarksCtrl = TextEditingController();
   final List<Map<String, dynamic>> _lines = [
     {'description': '', 'quantity': 1.0, 'unitPrice': 0.0},
@@ -11484,6 +11523,7 @@ class _CustomerCreditBillDialogState
     _phoneCtrl.dispose();
     _dueDateCtrl.dispose();
     _termsCtrl.dispose();
+    _creditLimitCtrl.dispose();
     _remarksCtrl.dispose();
     super.dispose();
   }
@@ -11522,6 +11562,8 @@ class _CustomerCreditBillDialogState
         'total_amount': num.parse(_total.toStringAsFixed(2)),
         if (_termsCtrl.text.trim().isNotEmpty)
           'payment_terms': _termsCtrl.text.trim(),
+        if (_creditLimitCtrl.text.trim().isNotEmpty)
+          'credit_limit': num.tryParse(_creditLimitCtrl.text.trim()) ?? 0,
         'due_date': _dueDateCtrl.text.trim(),
         if (_remarksCtrl.text.trim().isNotEmpty)
           'remarks': _remarksCtrl.text.trim(),
@@ -11599,10 +11641,25 @@ class _CustomerCreditBillDialogState
                 ),
               ]),
               const SizedBox(height: 10),
-              TextField(
-                controller: _termsCtrl,
-                decoration: const InputDecoration(labelText: 'Payment Terms'),
-              ),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _termsCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Payment Terms (e.g. Net 30)'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _creditLimitCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Credit Limit (KES, optional)'),
+                  ),
+                ),
+              ]),
               const SizedBox(height: 14),
               Row(children: [
                 const Expanded(
