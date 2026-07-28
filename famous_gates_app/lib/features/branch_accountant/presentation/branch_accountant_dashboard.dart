@@ -22611,26 +22611,28 @@ class _BranchBarMenuSectionState extends ConsumerState<_BranchBarMenuSection> {
             ],
           ),
           const SizedBox(height: 12),
-          // Bar outlet selector: Sports Bar (main_bar) | Executive Bar (executive_bar)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FilterChip(
-                avatar: const Icon(Icons.sports_bar, size: 16),
-                label: const Text('Sports Bar'),
-                selected: _barOutletType == 'main_bar',
-                onSelected: (_) => _switchOutlet('main_bar'),
-              ),
-              const SizedBox(width: 8),
-              FilterChip(
-                avatar: const Icon(Icons.local_bar, size: 16),
-                label: const Text('Executive Bar'),
-                selected: _barOutletType == 'executive_bar',
-                onSelected: (_) => _switchOutlet('executive_bar'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          // Bar outlet selector: Sports Bar (main_bar) | Executive Bar (executive_bar) (Kyogong branch only)
+          if (_branchId == 1) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FilterChip(
+                  avatar: const Icon(Icons.sports_bar, size: 16),
+                  label: const Text('Sports Bar'),
+                  selected: _barOutletType == 'main_bar',
+                  onSelected: (_) => _switchOutlet('main_bar'),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  avatar: const Icon(Icons.local_bar, size: 16),
+                  label: const Text('Executive Bar'),
+                  selected: _barOutletType == 'executive_bar',
+                  onSelected: (_) => _switchOutlet('executive_bar'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           // Category filter chips
           if (_categories.length > 1)
             SizedBox(
@@ -24940,8 +24942,8 @@ class _BranchMenuPricingSectionState
             onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
           ),
         ),
-        // Bar outlet sub-filter — only shown when Bar tab is active
-        if (_type == 'bar') ...[
+        // Bar outlet sub-filter — only shown when Bar tab is active and branch is Kyogong (1)
+        if (_type == 'bar' && _branchId == 1) ...[
           FilterChip(
             avatar: const Icon(Icons.sports_bar, size: 16),
             label: const Text('Sports Bar'),
