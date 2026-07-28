@@ -1181,8 +1181,13 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       tableNumber: bill.tableNumber,
       customerName: bill.customerName,
       staffLabel: 'Waiter',
-      publicCode: anchor?.shortCode,
-      barcodeValue: anchor?.shortCode ?? anchor?.orderNumber,
+      // A combined bill must print ITS OWN master code (e.g. Q68UR6) as the
+      // lookup code + barcode — never a member outlet order's short code — so
+      // the cashier looks up the one combined bill. Standalone bills still use
+      // their own order short code.
+      publicCode: bill.masterBillNumber ?? anchor?.shortCode,
+      barcodeValue:
+          bill.masterBillNumber ?? anchor?.shortCode ?? anchor?.orderNumber,
     );
   }
 

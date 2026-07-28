@@ -107,25 +107,42 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh),
           ),
+          // Explicit Material + InkWell (not FilledButton) so no app-wide button
+          // theme can wash the background out — this button stayed invisible on
+          // the light AppBar when themed. Solid navy (red in cancel mode).
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: FilledButton.icon(
-              onPressed: _bills.isEmpty
-                  ? null
-                  : () => setState(() {
-                        _combineMode = !_combineMode;
-                        _selectedOrderIds.clear();
-                      }),
-              icon: Icon(_combineMode ? Icons.close : Icons.call_merge,
-                  size: 18),
-              label: Text(_combineMode ? 'Cancel' : 'Combine'),
-              style: FilledButton.styleFrom(
-                backgroundColor: _combineMode
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            child: Material(
+              color: _bills.isEmpty
+                  ? const Color(0xFF9AA5B1)
+                  : (_combineMode
+                      ? const Color(0xFFC62828)
+                      : const Color(0xFF0F2E5E)),
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: _bills.isEmpty
+                    ? null
+                    : () => setState(() {
+                          _combineMode = !_combineMode;
+                          _selectedOrderIds.clear();
+                        }),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_combineMode ? Icons.close : Icons.call_merge,
+                          size: 18, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Text(_combineMode ? 'Cancel' : 'Combine',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
