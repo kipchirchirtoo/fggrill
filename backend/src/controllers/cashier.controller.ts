@@ -8853,7 +8853,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                         menu_item:restaurant_menu_items(name)
                     )
                 `)
-                .neq('payment_status', 'paid')
+                .not('payment_status', 'in', '("paid","room_charge","charged_to_room","settled")')
                 .neq('status', 'cancelled')
                 .order('created_at', { ascending: false });
 

@@ -68,3 +68,4 @@ Error: PostgreSQL is not available
     at Function._load (node:internal/modules/cjs/loader:1108:12)
     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
 2026-05-30T11:59:54.120Z [ERROR]: CRITICAL: Missing required Supabase env vars in database config.
+2026-07-28T21:26:02.467Z [ERROR]: CRITICAL: Missing required Supabase env vars in database config.

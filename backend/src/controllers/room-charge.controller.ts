@@ -101,6 +101,7 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       children,
       meal_plan,
       checked_in_at,
+      checked_out_at,
       guest:guests!guest_id(first_name,last_name,phone,email),
       room:rooms!room_id(id, room_number, branch_id, status)
     `)
@@ -198,10 +199,18 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
     })
     .filter((row) => {
       const folio = folioMap.get(String(row.booking_id));
-      const resStatus = String(row.eligibility_status || '').toLowerCase().trim();
+      const rawRes = inHouseReservations.find((r: any) => String(r.id) === String(row.booking_id));
+      const resStatus = String(rawRes?.status || '').toLowerCase().trim();
       
+      // Exclude checked_out, completed, or cancelled reservations or those with checked_out_at
+      if (
+        ['checked_out', 'checked-out', 'completed', 'cancelled'].includes(resStatus) ||
+        rawRes?.checked_out_at != null
+      ) {
+        return false;
+      }
       // Exclude closed or settled folios
-      if (folio && (folio.status === 'closed' || folio.settled === true || folio.balance_due <= 0 && folio.status === 'closed')) {
+      if (folio && (folio.status === 'closed' || folio.settled === true || (folio.balance_due <= 0 && folio.status === 'closed'))) {
         return false;
       }
       // Exclude stays whose check-out date is today or in the past AND folio balance is 0
@@ -223,57 +232,178 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
 async function settleRoomChargeSourceBill(input: {
   source?: string;
   billId?: string;
+  billNumber?: string;
+  orderNumber?: string;
+  shortCode?: string;
   bookingId: string;
   roomNumber: string;
   guestName: string;
 }) {
-  const billId = String(input.billId || '').trim();
-  if (!billId) return;
+  const searchTokens = Array.from(
+    new Set(
+      [input.billId, input.billNumber, input.orderNumber, input.shortCode]
+        .map((t) => String(t || '').trim())
+        .filter(Boolean)
+    )
+  );
+  if (searchTokens.length === 0) return;
 
-  // Invalidate bill cache so cashier station sees updated status immediately
-  billCache.invalidatePattern(billId);
+  for (const token of searchTokens) {
+    billCache.invalidatePattern(token);
+  }
 
   const now = new Date().toISOString();
 
   // 1. pos_shift_orders (Kyogong POS Shift Orders)
-  // Try UUID match first, then fall back to order_number / short_code
-  let posOrder: any = null;
-  if (/^[0-9a-f-]{36}$/i.test(billId)) {
-    const { data } = await supabase
-      .from('pos_shift_orders')
-      .select('id, total_amount, master_bill_id, short_code, order_number')
-      .eq('id', billId)
-      .maybeSingle();
-    posOrder = data;
+  for (const token of searchTokens) {
+    let posOrder: any = null;
+    if (/^[0-9a-f-]{36}$/i.test(token)) {
+      const { data } = await supabase
+        .from('pos_shift_orders')
+        .select('id, total_amount, master_bill_id, short_code, order_number')
+        .eq('id', token)
+        .maybeSingle();
+      posOrder = data;
+    }
+    if (!posOrder) {
+      const { data } = await supabase
+        .from('pos_shift_orders')
+        .select('id, total_amount, master_bill_id, short_code, order_number')
+        .or(`order_number.eq.${token},short_code.eq.${token}`)
+        .maybeSingle();
+      posOrder = data;
+    }
+
+    if (posOrder) {
+      const totalAmount = Number(posOrder.total_amount || 0);
+      await supabase
+        .from('pos_shift_orders')
+        .update({
+          payment_status: 'paid',
+          payment_method: 'ROOM_CHARGE',
+          amount_paid: totalAmount,
+          balance_amount: 0,
+          status: 'paid',
+          sub_bill_status: 'settled',
+          updated_at: now,
+        })
+        .eq('id', posOrder.id);
+
+      if (posOrder.short_code) billCache.invalidatePattern(posOrder.short_code);
+      if (posOrder.order_number) billCache.invalidatePattern(posOrder.order_number);
+
+      if (posOrder.master_bill_id) {
+        await supabase
+          .from('pos_master_bills')
+          .update({
+            status: 'closed',
+            payment_method: 'ROOM_CHARGE',
+            amount_paid: totalAmount,
+            paid_at: now,
+            closed_at: now,
+            updated_at: now,
+          })
+          .eq('id', posOrder.master_bill_id);
+      }
+      break;
+    }
   }
-  if (!posOrder) {
-    const { data } = await supabase
-      .from('pos_shift_orders')
-      .select('id, total_amount, master_bill_id, short_code, order_number')
-      .or(`order_number.eq.${billId},short_code.eq.${billId}`)
-      .maybeSingle();
-    posOrder = data;
+
+  // 2. unpaid_bills (Cashier Station Unpaid Bills)
+  for (const token of searchTokens) {
+    let unpaidBill: any = null;
+    if (/^[0-9a-f-]{36}$/i.test(token)) {
+      const { data } = await supabase
+        .from('unpaid_bills')
+        .select('id, total_amount, remarks')
+        .eq('id', token)
+        .maybeSingle();
+      unpaidBill = data;
+    }
+    if (!unpaidBill) {
+      const { data } = await supabase
+        .from('unpaid_bills')
+        .select('id, total_amount, remarks')
+        .eq('bill_number', token)
+        .maybeSingle();
+      unpaidBill = data;
+    }
+
+    if (unpaidBill) {
+      const totalAmount = Number(unpaidBill.total_amount || 0);
+      const remarks = [unpaidBill.remarks, `Charged to room ${input.roomNumber} (${input.guestName})`]
+        .filter(Boolean)
+        .join(' • ');
+
+      await supabase
+        .from('unpaid_bills')
+        .update({
+          paid_amount: totalAmount,
+          balance_amount: 0,
+          status: 'paid',
+          remarks,
+          updated_at: now,
+        })
+        .eq('id', unpaidBill.id);
+      break;
+    }
   }
 
-  if (posOrder) {
-    const totalAmount = Number(posOrder.total_amount || 0);
-    await supabase
-      .from('pos_shift_orders')
-      .update({
-        payment_status: 'room_charge',
-        amount_paid: totalAmount,
-        balance_amount: 0,
-        status: 'paid',
-        sub_bill_status: 'settled',
-        updated_at: now,
-      })
-      .eq('id', posOrder.id);
+  // 3. shift_transactions (Kyogong POS shift transactions)
+  for (const token of searchTokens) {
+    let shiftTx: any = null;
+    if (/^[0-9a-f-]{36}$/i.test(token)) {
+      const { data } = await supabase
+        .from('shift_transactions')
+        .select('id')
+        .eq('id', token)
+        .maybeSingle();
+      shiftTx = data;
+    }
+    if (!shiftTx) {
+      const { data } = await supabase
+        .from('shift_transactions')
+        .select('id')
+        .eq('transaction_number', token)
+        .maybeSingle();
+      shiftTx = data;
+    }
 
-    // Also invalidate by short_code / order_number so any cached lookup is cleared
-    if (posOrder.short_code) billCache.invalidatePattern(posOrder.short_code);
-    if (posOrder.order_number) billCache.invalidatePattern(posOrder.order_number);
+    if (shiftTx) {
+      await supabase
+        .from('shift_transactions')
+        .update({
+          payment_method: 'ROOM_CHARGE',
+          status: 'paid',
+          updated_at: now,
+        })
+        .eq('id', shiftTx.id);
+      break;
+    }
+  }
 
-    if (posOrder.master_bill_id) {
+  // 4. pos_master_bills (Master Bills across outlets)
+  for (const token of searchTokens) {
+    let masterBill: any = null;
+    if (/^[0-9a-f-]{36}$/i.test(token)) {
+      const { data } = await supabase
+        .from('pos_master_bills')
+        .select('id, total_amount')
+        .eq('id', token)
+        .maybeSingle();
+      masterBill = data;
+    }
+    if (!masterBill) {
+      const { data } = await supabase
+        .from('pos_master_bills')
+        .select('id, total_amount')
+        .eq('master_bill_number', token)
+        .maybeSingle();
+      masterBill = data;
+    }
+
+    if (masterBill) {
+      const totalAmount = Number(masterBill.total_amount || 0);
       await supabase
         .from('pos_master_bills')
         .update({
@@ -284,203 +414,112 @@ async function settleRoomChargeSourceBill(input: {
           closed_at: now,
           updated_at: now,
         })
-        .eq('id', posOrder.master_bill_id);
+        .eq('id', masterBill.id);
+
+      await supabase
+        .from('pos_shift_orders')
+        .update({
+          payment_status: 'paid',
+          payment_method: 'ROOM_CHARGE',
+          balance_amount: 0,
+          status: 'paid',
+          sub_bill_status: 'settled',
+          updated_at: now,
+        })
+        .eq('master_bill_id', masterBill.id);
+      break;
     }
   }
 
-  // 2. unpaid_bills (Cashier Station Unpaid Bills)
-  let unpaidBill: any = null;
-  if (/^[0-9a-f-]{36}$/i.test(billId)) {
-    const { data } = await supabase
-      .from('unpaid_bills')
-      .select('id, total_amount, remarks')
-      .eq('id', billId)
-      .maybeSingle();
-    unpaidBill = data;
-  }
-  if (!unpaidBill) {
-    const { data } = await supabase
-      .from('unpaid_bills')
-      .select('id, total_amount, remarks')
-      .eq('bill_number', billId)
-      .maybeSingle();
-    unpaidBill = data;
-  }
-
-  if (unpaidBill) {
-    const totalAmount = Number(unpaidBill.total_amount || 0);
-    const remarks = [unpaidBill.remarks, `Charged to room ${input.roomNumber} (${input.guestName})`]
-      .filter(Boolean)
-      .join(' • ');
-
-    await supabase
-      .from('unpaid_bills')
-      .update({
-        paid_amount: totalAmount,
-        balance_amount: 0,
-        status: 'paid',
-        remarks,
-        updated_at: now,
-      })
-      .eq('id', unpaidBill.id);
-  }
-
-  // 3. shift_transactions (Kyogong POS shift transactions)
-  let shiftTx: any = null;
-  if (/^[0-9a-f-]{36}$/i.test(billId)) {
-    const { data } = await supabase
-      .from('shift_transactions')
-      .select('id')
-      .eq('id', billId)
-      .maybeSingle();
-    shiftTx = data;
-  }
-  if (!shiftTx) {
-    const { data } = await supabase
-      .from('shift_transactions')
-      .select('id')
-      .eq('transaction_number', billId)
-      .maybeSingle();
-    shiftTx = data;
-  }
-
-  if (shiftTx) {
-    await supabase
-      .from('shift_transactions')
-      .update({
-        payment_method: 'ROOM_CHARGE',
-        status: 'paid',
-        updated_at: now,
-      })
-      .eq('id', shiftTx.id);
-  }
-
-  // 4. pos_master_bills (Master Bills across outlets)
-  let masterBill: any = null;
-  if (/^[0-9a-f-]{36}$/i.test(billId)) {
-    const { data } = await supabase
-      .from('pos_master_bills')
-      .select('id, total_amount')
-      .eq('id', billId)
-      .maybeSingle();
-    masterBill = data;
-  }
-  if (!masterBill) {
-    const { data } = await supabase
-      .from('pos_master_bills')
-      .select('id, total_amount')
-      .eq('master_bill_number', billId)
-      .maybeSingle();
-    masterBill = data;
-  }
-
-  if (masterBill) {
-    const totalAmount = Number(masterBill.total_amount || 0);
-    await supabase
-      .from('pos_master_bills')
-      .update({
-        status: 'closed',
-        payment_method: 'ROOM_CHARGE',
-        amount_paid: totalAmount,
-        paid_at: now,
-        closed_at: now,
-        updated_at: now,
-      })
-      .eq('id', masterBill.id);
-
-    await supabase
-      .from('pos_shift_orders')
-      .update({
-        payment_status: 'room_charge',
-        balance_amount: 0,
-        status: 'paid',
-        sub_bill_status: 'settled',
-        updated_at: now,
-      })
-      .eq('master_bill_id', masterBill.id);
-  }
-
   // 5. restaurant_orders
-  let rOrder: any = null;
-  if (/^[0-9a-f-]{36}$/i.test(billId)) {
-    const { data } = await supabase
-      .from('restaurant_orders')
-      .select('id, total_amount')
-      .eq('id', billId)
-      .maybeSingle();
-    rOrder = data;
-  }
-  if (!rOrder) {
-    const { data } = await supabase
-      .from('restaurant_orders')
-      .select('id, total_amount')
-      .eq('order_number', billId)
-      .maybeSingle();
-    rOrder = data;
-  }
+  for (const token of searchTokens) {
+    let rOrder: any = null;
+    if (/^[0-9a-f-]{36}$/i.test(token)) {
+      const { data } = await supabase
+        .from('restaurant_orders')
+        .select('id, total_amount')
+        .eq('id', token)
+        .maybeSingle();
+      rOrder = data;
+    }
+    if (!rOrder) {
+      const { data } = await supabase
+        .from('restaurant_orders')
+        .select('id, total_amount')
+        .or(`order_number.eq.${token},short_code.eq.${token}`)
+        .maybeSingle();
+      rOrder = data;
+    }
 
-  if (rOrder) {
-    const totalAmount = Number(rOrder.total_amount || 0);
-    await supabase
-      .from('restaurant_orders')
-      .update({
-        payment_status: 'room_charge',
-        payment_method: 'ROOM_CHARGE',
-        amount_paid: totalAmount,
-        balance_amount: 0,
-        status: 'delivered',
-        updated_at: now,
-      })
-      .eq('id', rOrder.id);
+    if (rOrder) {
+      const totalAmount = Number(rOrder.total_amount || 0);
+      await supabase
+        .from('restaurant_orders')
+        .update({
+          payment_status: 'paid',
+          payment_method: 'ROOM_CHARGE',
+          amount_paid: totalAmount,
+          balance_amount: 0,
+          status: 'delivered',
+          updated_at: now,
+        })
+        .eq('id', rOrder.id);
+      break;
+    }
   }
 
   // 6. bar_orders
-  let bOrder: any = null;
-  if (/^[0-9a-f-]{36}$/i.test(billId)) {
-    const { data } = await supabase
-      .from('bar_orders')
-      .select('id, total')
-      .eq('id', billId)
-      .maybeSingle();
-    bOrder = data;
-  }
-  if (!bOrder) {
-    const { data } = await supabase
-      .from('bar_orders')
-      .select('id, total')
-      .eq('order_number', billId)
-      .maybeSingle();
-    bOrder = data;
-  }
+  for (const token of searchTokens) {
+    let bOrder: any = null;
+    if (/^[0-9a-f-]{36}$/i.test(token)) {
+      const { data } = await supabase
+        .from('bar_orders')
+        .select('id, total')
+        .eq('id', token)
+        .maybeSingle();
+      bOrder = data;
+    }
+    if (!bOrder) {
+      const { data } = await supabase
+        .from('bar_orders')
+        .select('id, total')
+        .or(`order_number.eq.${token},short_code.eq.${token}`)
+        .maybeSingle();
+      bOrder = data;
+    }
 
-  if (bOrder) {
-    const totalAmount = Number(bOrder.total || 0);
-    await supabase
-      .from('bar_orders')
-      .update({
-        payment_status: 'room_charge',
-        payment_method: 'ROOM_CHARGE',
-        amount_paid: totalAmount,
-        balance_amount: 0,
-        status: 'completed',
-        updated_at: now,
-      })
-      .eq('id', bOrder.id);
+    if (bOrder) {
+      const totalAmount = Number(bOrder.total || 0);
+      await supabase
+        .from('bar_orders')
+        .update({
+          payment_status: 'paid',
+          payment_method: 'ROOM_CHARGE',
+          amount_paid: totalAmount,
+          balance_amount: 0,
+          status: 'completed',
+          updated_at: now,
+        })
+        .eq('id', bOrder.id);
+      break;
+    }
   }
 
   // 7. pos_orders (legacy fallback)
-  await supabase
-    .from('pos_orders')
-    .update({
-      payment_status: 'room_charge',
-      status: 'completed',
-      payment_method: 'Room Charge',
-      room_number: input.roomNumber,
-      guest_name: input.guestName,
-      booking_id: input.bookingId,
-      updated_at: now,
-    })
-    .eq('id', billId);
+  for (const token of searchTokens) {
+    await supabase
+      .from('pos_orders')
+      .update({
+        payment_status: 'paid',
+        status: 'completed',
+        payment_method: 'Room Charge',
+        room_number: input.roomNumber,
+        guest_name: input.guestName,
+        booking_id: input.bookingId,
+        updated_at: now,
+      })
+      .or(`id.eq.${token},order_number.eq.${token}`);
+  }
 }
 
 export const getEligibleGuests = async (req: Request, res: Response): Promise<void> => {
@@ -827,6 +866,9 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
     await settleRoomChargeSourceBill({
       source,
       billId: bill_id,
+      billNumber: bill_number,
+      orderNumber: order_number,
+      shortCode: req.body.short_code,
       bookingId: String(booking_id),
       roomNumber,
       guestName,

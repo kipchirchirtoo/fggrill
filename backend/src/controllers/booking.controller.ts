@@ -5,6 +5,7 @@ import { Room, RoomStatus } from '../models/Room';
 import { RatePlan } from '../models/RatePlan';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import db from '../db';
 import { supabase } from '../config/database';
 import { bookingService, BookingRequest } from '../services/booking.service';
 import { emailService } from '../services/email.service';
@@ -638,6 +639,10 @@ export const checkOutBooking = async (
             updated_at: new Date().toISOString()
           })
           .eq('id', roomIdToUpdate);
+        await db.query(
+          "UPDATE rooms SET status = 'available', hk_status = 'vacant_clean', current_guest = null, updated_at = NOW() WHERE id = $1",
+          [roomIdToUpdate]
+        );
         logger.info(`Room ${roomIdToUpdate} status updated to available`);
       } catch (roomError) {
         logger.error('Failed to update room status during check-out:', roomError);
@@ -654,6 +659,10 @@ export const checkOutBooking = async (
             updated_at: new Date().toISOString()
           })
           .eq('room_number', roomNoToUpdate);
+        await db.query(
+          "UPDATE rooms SET status = 'available', hk_status = 'vacant_clean', current_guest = null, updated_at = NOW() WHERE room_number = $1",
+          [roomNoToUpdate]
+        );
         logger.info(`Room number ${roomNoToUpdate} status updated to available`);
       } catch (roomError) {
         logger.error('Failed to update room number status during check-out:', roomError);
