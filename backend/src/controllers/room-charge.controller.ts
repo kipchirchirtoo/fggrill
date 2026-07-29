@@ -46,7 +46,11 @@ function isCurrentInHouseStay(row: any, today: string): boolean {
   const checkIn = String(row?.check_in_date || '').trim();
   const checkOut = String(row?.check_out_date || '').trim();
   if (!checkIn || !checkOut) return false;
-  if (checkIn > today || checkOut <= today) return false;
+  // A guest is in-house from check-in through their check-out DAY (they still
+  // occupy the room the morning they leave, until they actually check out), so
+  // charges are allowed while checkOut >= today. Only reject a stay whose
+  // check-out day is already in the past, or whose check-in is still future.
+  if (checkIn > today || checkOut < today) return false;
   return stayNights(checkIn, checkOut) >= 1;
 }
 
