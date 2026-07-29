@@ -18,7 +18,21 @@ const num = (v: any): number => {
     return Number.isFinite(n) ? n : 0;
 };
 
-const NON_STORE_TYPES = ['bar_store'];
+const NON_STORE_TYPES = ['bar_store', 'kitchen'];
+
+// The store stocktake counts RAW store items only (foodstuffs, dry goods,
+// stationery, non-consumables). Bar stock (store_type 'bar_store') and prepared
+// kitchen-menu dishes (category 'KITCHEN MENU', which belong to the Kitchen
+// Stocktake and often carry no store_type) must never appear here, for any
+// branch.
+const isStoreCountableItem = (i: any): boolean => {
+    if (!i) return false;
+    const storeType = String(i.store_type || '').toLowerCase();
+    if (NON_STORE_TYPES.includes(storeType)) return false;
+    const category = String(i.category || '').trim().toLowerCase();
+    if (category === 'kitchen menu') return false;
+    return true;
+};
 
 // Cashier roles that tend the store/foodstuffs side (all non-bar cashiers).
 // Used to auto-resolve the shift_id for a store stocktake the same way
@@ -187,7 +201,9 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
         if (recErr) throw recErr;
 
         if (existingRecords && existingRecords.length > 0) {
-            const rawResult = existingRecords.map((r: any) => ({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || null }));
+            const rawResult = existingRecords
+                .filter((r: any) => isStoreCountableItem(r.item))
+                .map((r: any) => ({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || null }));
             const result = await enrichWithShiftInfo(rawResult);
             res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
@@ -204,12 +220,12 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
         const { data: invItems, error: invErr } = await supabase.from('inventory_items').select('id, sku, item_name, unit, category, store_type').in('sku', allSkus);
         if (invErr) throw invErr;
 
-        const invMap = new Map((invItems || []).filter((i: any) => !NON_STORE_TYPES.includes(i.store_type)).map((i: any) => [i.sku as string, i]));
+        const invMap = new Map((invItems || []).filter(isStoreCountableItem).map((i: any) => [i.sku as string, i]));
 
         const missingSkus = allSkus.filter((sku) => !invMap.has(sku));
         if (missingSkus.length > 0) {
             const { data: simpleRows } = await supabase.from('simple_items').select('sku, item_name, unit, category, store_type').in('sku', missingSkus).not('store_type', 'in', `(${NON_STORE_TYPES.join(',')})`);
-            for (const s of (simpleRows || [])) invMap.set(s.sku, { id: null, ...s });
+            for (const s of (simpleRows || []).filter(isStoreCountableItem)) invMap.set(s.sku, { id: null, ...s });
         }
 
         const dayStart = (shiftWindow as any).from ?? `${rawDate}T00:00:00.000Z`;
