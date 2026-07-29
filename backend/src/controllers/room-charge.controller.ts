@@ -198,11 +198,15 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
     })
     .filter((row) => {
       const folio = folioMap.get(String(row.booking_id));
-      // Exclude closed or settled folios with zero balance, or closed folios of checked out stays
-      if (folio && (folio.status === 'closed' || folio.settled === true) && row.folio_balance <= 0) {
+      const resStatus = String(row.eligibility_status || '').toLowerCase().trim();
+      
+      // Exclude closed or settled folios
+      if (folio && (folio.status === 'closed' || folio.settled === true || folio.balance_due <= 0 && folio.status === 'closed')) {
         return false;
       }
-      if (folio && folio.status === 'closed') {
+      // Exclude stays whose check-out date is today or in the past AND folio balance is 0
+      const checkOutDateStr = String(row.check_out_date || '').trim();
+      if (checkOutDateStr && checkOutDateStr <= today && row.folio_balance <= 0) {
         return false;
       }
       if (!normalizedQuery) return true;

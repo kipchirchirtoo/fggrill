@@ -52,8 +52,16 @@ router.put('/:id/check-in',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
   checkInBooking
 );
+router.post('/:id/check-in',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
+  checkInBooking
+);
 
 router.put('/:id/check-out',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
+  checkOutBooking
+);
+router.post('/:id/check-out',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
   checkOutBooking
 );

@@ -8233,6 +8233,8 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  String _searchQuery = '';
+  bool _filterCurrentShiftOnly = false;
 
   // Manual entry
   final _descCtrl = TextEditingController();
@@ -8240,6 +8242,7 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
   final _paidToCtrl = TextEditingController();
   final _receiptCtrl = TextEditingController();
   final _poRefCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
   String _category = 'SUPPLIES';
 
   // PO mode
@@ -8259,6 +8262,7 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
     _paidToCtrl.dispose();
     _receiptCtrl.dispose();
     _poRefCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -8269,16 +8273,12 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
   }
 
   Future<void> _load() async {
-    final shiftId = _openShiftId();
-    if (shiftId == null || shiftId.isEmpty) {
-      setState(() { _loading = false; });
-      return;
-    }
     setState(() { _loading = true; _error = null; });
     try {
+      final shiftId = _openShiftId();
       final repo = ref.read(cashierRepositoryProvider);
       final results = await Future.wait([
-        repo.getShiftExpenses(shiftId),
+        repo.getExpenses(shiftId: _filterCurrentShiftOnly ? shiftId : null),
         repo.getPendingPOs(),
       ]);
       if (!mounted) return;
@@ -8295,7 +8295,6 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
 
   Future<void> _recordExpense() async {
     final shiftId = _openShiftId();
-    if (shiftId == null || shiftId.isEmpty) return;
 
     final String description;
     final num amount;
@@ -8352,20 +8351,41 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
     }
   }
 
+  String _recordedBy(Map<String, dynamic> row) {
+    final user = row['recorded_by_user'];
+    if (user is Map) {
+      final fn = user['first_name'] ?? '';
+      final ln = user['last_name'] ?? '';
+      final name = '$fn $ln'.trim();
+      if (name.isNotEmpty) return name;
+    }
+    final direct = _text(row, ['recorded_by_name', 'recorded_by', 'created_by']);
+    if (direct.isNotEmpty && direct != '-') return direct;
+    return 'Staff';
+  }
+
   @override
   Widget build(BuildContext context) {
-    // The cashier records expenses "blind": the cash-drawer position (opening
-    // float, cash sales, estimated cash in drawer) is intentionally hidden from
-    // the cashier station — only the branch accountant reconciles the drawer.
+    final filteredExpenses = _expenses.where((e) {
+      if (_searchQuery.trim().isEmpty) return true;
+      final q = _searchQuery.trim().toLowerCase();
+      final desc = _text(e, ['purpose_description', 'description']).toLowerCase();
+      final cat = _text(e, ['purpose_category', 'category']).toLowerCase();
+      final paid = _text(e, ['paid_to_name', 'paid_to']).toLowerCase();
+      final recBy = _recordedBy(e).toLowerCase();
+      final rcpt = _text(e, ['receipt_number', 'po_reference']).toLowerCase();
+      return desc.contains(q) || cat.contains(q) || paid.contains(q) || recBy.contains(q) || rcpt.contains(q);
+    }).toList();
+
     final expensesTotal =
-        _expenses.fold<num>(0, (s, e) => s + _num(e['amount']));
+        filteredExpenses.fold<num>(0, (s, e) => s + _num(e['amount']));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header + cash position ──────────────────────────────────────
+          // ── Header (No cash drawer position or float cards) ─────────────
           Row(
             children: [
               Expanded(
@@ -8554,21 +8574,82 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
             ],
           ),
           const SizedBox(height: 32),
-          // ── Recorded expenses list ──────────────────────────────────────
-          Row(
+          // ── Expense History Header & Filters ───────────────────────────
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              Text('Recorded this Shift',
-                  style: Theme.of(context).textTheme.titleMedium),
-              const Spacer(),
-              if (_expenses.isNotEmpty)
-                Chip(
-                  label: Text(
-                      '${_expenses.length} entries  •  ${_money(expensesTotal)}',
-                      style: const TextStyle(fontSize: 12)),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Expense History',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 12),
+                  ChoiceChip(
+                    label: const Text('All History'),
+                    selected: !_filterCurrentShiftOnly,
+                    onSelected: (sel) {
+                      if (sel && _filterCurrentShiftOnly) {
+                        setState(() => _filterCurrentShiftOnly = false);
+                        _load();
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  ChoiceChip(
+                    label: const Text('Current Shift Only'),
+                    selected: _filterCurrentShiftOnly,
+                    onSelected: (sel) {
+                      if (sel && !_filterCurrentShiftOnly) {
+                        setState(() => _filterCurrentShiftOnly = true);
+                        _load();
+                      }
+                    },
+                  ),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 240,
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                      decoration: InputDecoration(
+                        hintText: 'Search expenses…',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ),
+                  if (filteredExpenses.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    Chip(
+                      label: Text(
+                          '${filteredExpenses.length} entries  •  ${_money(expensesTotal)}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           if (_loading)
             const Center(
                 child: Padding(
@@ -8577,109 +8658,156 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
           else if (_error != null)
             Text(_error!,
                 style: const TextStyle(color: Colors.red))
-          else if (_expenses.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
+          else if (filteredExpenses.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
-                  child: Text('No expenses recorded yet for this shift.',
-                      style: TextStyle(color: AppColors.kTextSecondary))),
+                  child: Text(
+                      _searchQuery.isNotEmpty
+                          ? 'No expenses match "$_searchQuery".'
+                          : (_filterCurrentShiftOnly
+                              ? 'No expenses recorded yet for this shift.'
+                              : 'No expense history found for this branch.'),
+                      style: const TextStyle(color: AppColors.kTextSecondary))),
             )
           else
             Card(
+              elevation: 1,
+              clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
+                  Container(
+                    color: Colors.grey.shade100,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: const Row(
                       children: [
+                        SizedBox(
+                            width: 130,
+                            child: Text('Date & Time',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
                         Expanded(
                             flex: 3,
                             child: Text('Description',
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
                                     fontSize: 12))),
                         Expanded(
+                            flex: 2,
                             child: Text('Category',
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
                                     fontSize: 12))),
                         Expanded(
+                            flex: 2,
                             child: Text('Paid To',
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12))),
+                        Expanded(
+                            flex: 2,
+                            child: Text('Recorded By',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
                                     fontSize: 12))),
                         SizedBox(
-                            width: 100,
+                            width: 110,
                             child: Text('Amount',
                                 textAlign: TextAlign.right,
                                 style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
                                     fontSize: 12))),
                       ],
                     ),
                   ),
                   const Divider(height: 1),
-                  ..._expenses.asMap().entries.map((e) {
+                  ...filteredExpenses.asMap().entries.map((e) {
                     final row = e.value;
+                    final dt = _date(row['created_at']);
+                    final desc = _text(row, ['purpose_description', 'description']);
+                    final cat = _text(row, ['purpose_category', 'category']);
+                    final paidTo = _text(row, ['paid_to_name', 'paid_to']);
+                    final recBy = _recordedBy(row);
+                    final amt = _num(row['amount']);
+
                     return Container(
                       color: e.key.isEven ? null : Colors.grey.shade50,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
                       child: Row(
                         children: [
+                          SizedBox(
+                              width: 130,
+                              child: Text(dt,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700))),
                           Expanded(
                               flex: 3,
-                              child: Text(
-                                  _text(row, [
-                                    'purpose_description',
-                                    'description'
-                                  ]),
-                                  style: const TextStyle(fontSize: 13))),
+                              child: Text(desc,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500))),
                           Expanded(
+                              flex: 2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(cat,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blue.shade800)),
+                              )),
+                          Expanded(
+                              flex: 2,
                               child: Text(
-                                  _text(row, [
-                                    'purpose_category',
-                                    'category'
-                                  ]),
+                                  paidTo.isNotEmpty ? paidTo : '—',
                                   style: const TextStyle(fontSize: 12))),
                           Expanded(
-                              child: Text(
-                                  _text(row, ['paid_to_name', 'paid_to']),
+                              flex: 2,
+                              child: Text(recBy,
                                   style: const TextStyle(fontSize: 12))),
                           SizedBox(
-                              width: 100,
+                              width: 110,
                               child: Text(
-                                _money(_num(row['amount'])),
+                                _money(amt),
                                 textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
                                     fontSize: 13,
-                                    color: Colors.red),
+                                    color: Colors.red.shade700),
                               )),
                         ],
                       ),
                     );
                   }),
                   const Divider(height: 1),
-                  Padding(
+                  Container(
+                    color: Colors.red.shade50.withOpacity(0.4),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                        horizontal: 16, vertical: 12),
                     child: Row(
                       children: [
                         const Expanded(
-                            flex: 5,
-                            child: Text('Total',
+                            child: Text('Total Expenses',
                                 style:
                                     TextStyle(fontWeight: FontWeight.w700))),
                         SizedBox(
-                          width: 100,
+                          width: 120,
                           child: Text(
                             _money(expensesTotal),
                             textAlign: TextAlign.right,
                             style: TextStyle(
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 14,
-                                color: Colors.red.shade700),
+                                color: Colors.red.shade800),
                           ),
                         ),
                       ],

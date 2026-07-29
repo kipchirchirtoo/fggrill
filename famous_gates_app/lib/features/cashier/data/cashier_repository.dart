@@ -386,19 +386,27 @@ class CashierRepository {
     }
   }
 
-  /// Fetch petty-cash expenses already recorded against [shiftId].
-  Future<List<Map<String, dynamic>>> getShiftExpenses(String shiftId) async {
+  /// Fetch petty-cash expenses already recorded. If [shiftId] is provided, filters
+  /// by shift; otherwise fetches overall branch expense history.
+  Future<List<Map<String, dynamic>>> getExpenses({String? shiftId}) async {
     try {
-      return await _getList('/kyogong/petty-cash',
-          query: {'shift_id': shiftId, 'limit': '200'});
+      final queryParams = <String, dynamic>{'limit': '500'};
+      if (shiftId != null && shiftId.isNotEmpty) {
+        queryParams['shift_id'] = shiftId;
+      }
+      return await _getList('/kyogong/petty-cash', query: queryParams);
     } catch (_) {
       return [];
     }
   }
 
-  /// Record a petty-cash expense for the current shift.
+  /// Backward-compatible wrapper for getExpenses
+  Future<List<Map<String, dynamic>>> getShiftExpenses(String shiftId) =>
+      getExpenses(shiftId: shiftId);
+
+  /// Record a petty-cash expense for the current shift or branch.
   Future<Map<String, dynamic>> recordShiftExpense({
-    required String shiftId,
+    String? shiftId,
     required num amount,
     required String category,
     required String description,
@@ -407,7 +415,7 @@ class CashierRepository {
     String? poReference,
   }) {
     return _postMap('/kyogong/petty-cash', {
-      'shift_id': shiftId,
+      if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
       'amount': amount,
       'category': category,
       'description': description,

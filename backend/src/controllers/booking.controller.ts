@@ -63,7 +63,23 @@ function mealPlanIncludesBreakfast(value: unknown): boolean {
   return isBreakfastEligible(value);
 }
 
+// Nairobi calendar date (YYYY-MM-DD) of a stored timestamp. check_in_date /
+// check_out_date are stored at Nairobi-midnight (UTC+3), so comparing raw
+// timestamps to a date string drops check-out-day guests — convert to the
+// Nairobi date first.
+function nairobiDateOf(value: unknown): string | null {
+  if (!value) return null;
+  const d = new Date(value as string);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
+}
+
 async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
+  // The correct source of truth is `reservations` (no fallback tables). Fetch
+  // EVERY currently checked-in guest for the branch, then keep the ones who are
+  // in-house on the breakfast morning: checked in on/before the breakfast date
+  // AND checking out on/after it (check-out day INCLUSIVE — a guest still gets
+  // breakfast the morning they leave).
   const { data: reservations, error } = await supabase
     .from('reservations')
     .select(`
@@ -83,62 +99,48 @@ async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
       )
     `)
     .eq('branch_id', branchId)
-    .eq('status', 'checked_in')
-    .lte('check_in_date', date)
-    .gt('check_out_date', date);
+    .eq('status', 'checked_in');
 
   if (error) throw error;
 
-  const eligibleBookings = (reservations || [])
-    .filter((row: any) =>
-      isBreakfastEligible(
-        row.meal_plan,
-        row.room?.room_type?.name,
-        row.room?.room_type?.code
-      )
-    )
-    .map((row: any) => {
-      const roomTypeName = row.room?.room_type?.name || '';
-      const roomTypeCode = row.room?.room_type?.code || '';
-      const isAutoRoomType =
-        roomTypeName.toLowerCase().includes('deluxe') ||
-        roomTypeName.toLowerCase().includes('executive') ||
-        roomTypeName.toLowerCase().includes('vip') ||
-        roomTypeCode.toLowerCase().includes('dlx') ||
-        roomTypeCode.toLowerCase().includes('dtw') ||
-        roomTypeCode.toLowerCase().includes('exe') ||
-        roomTypeCode.toLowerCase().includes('vip');
+  const inHouse = (reservations || []).filter((row: any) => {
+    const ci = nairobiDateOf(row.check_in_date);
+    const co = nairobiDateOf(row.check_out_date);
+    if (ci && ci > date) return false; // arrives after the breakfast date
+    if (co && co < date) return false; // already left before the breakfast date
+    return true;
+  });
 
-      const effectiveMealPlan =
-        row.meal_plan && row.meal_plan !== 'room_only'
-          ? row.meal_plan
-          : isAutoRoomType
-          ? 'bed_breakfast'
-          : row.meal_plan || 'room_only';
-
-      return {
-        reservation_id: row.id,
-        confirmation_number: row.confirmation_number,
-        guest_name:
-          `${row.guest?.first_name || ''} ${row.guest?.last_name || ''}`.trim() ||
-          'Checked-in Guest',
-        room_number: row.room?.room_number || 'N/A',
-        room_type_name: roomTypeName || 'Standard',
-        meal_plan: effectiveMealPlan,
-        adults: Number(row.adults || 0),
-        children: Number(row.children || 0),
-        pax: Number(row.adults || 0) + Number(row.children || 0),
-        check_in_date: row.check_in_date,
-        check_out_date: row.check_out_date,
-      };
-    });
+  // Show ALL in-house guests with their REAL meal plan (no room-type guessing /
+  // relabelling). `breakfast_eligible` is an informational flag only — reception
+  // reconciles paid-extra / complimentary / exclusions from the confirmation form.
+  const eligibleBookings = inHouse.map((row: any) => ({
+    reservation_id: row.id,
+    confirmation_number: row.confirmation_number,
+    guest_name:
+      `${row.guest?.first_name || ''} ${row.guest?.last_name || ''}`.trim() ||
+      'Checked-in Guest',
+    room_number: row.room?.room_number || 'N/A',
+    room_type_name: row.room?.room_type?.name || 'Standard',
+    meal_plan: String(row.meal_plan || '').trim() || 'room_only',
+    breakfast_eligible: isBreakfastEligible(
+      row.meal_plan,
+      row.room?.room_type?.name,
+      row.room?.room_type?.code
+    ),
+    adults: Number(row.adults || 0),
+    children: Number(row.children || 0),
+    pax: Number(row.adults || 0) + Number(row.children || 0),
+    check_in_date: row.check_in_date,
+    check_out_date: row.check_out_date,
+  }));
 
   return {
     calculatedPax: eligibleBookings.reduce(
       (sum: number, row: any) => sum + Number(row.pax || 0),
       0
     ),
-    checkedInReservations: reservations?.length || 0,
+    checkedInReservations: eligibleBookings.length,
     eligibleReservations: eligibleBookings.length,
     eligibleBookings,
   };
@@ -568,12 +570,13 @@ export const checkOutBooking = async (
 
     logger.info(`Booking ${id} current status: ${booking.status}`);
 
-    // Allow checkout from 'checked_in', 'confirmed', or 'pending' status
-    const allowedStatuses = ['checked_in', 'confirmed', 'pending'];
-    if (!allowedStatuses.includes(booking.status)) {
+    // Allow checkout from any active or checked-in status
+    const allowedStatuses = ['checked_in', 'checked-in', 'in-house', 'active', 'confirmed', 'pending', 'arrived'];
+    const currentStatus = String(booking.status || '').trim().toLowerCase();
+    if (!allowedStatuses.includes(currentStatus)) {
       logger.warn(`Cannot check out booking ${id} - status is ${booking.status}`);
       throw new AppError(
-        `Cannot check out: Booking status is "${booking.status}". Only bookings with status ${allowedStatuses.join(', ')} can be checked out.`, 
+        `Cannot check out: Booking status is "${booking.status}". Only active or checked-in bookings can be checked out.`, 
         400
       );
     }
