@@ -2162,6 +2162,39 @@ class _StationTabState extends ConsumerState<_StationTab> {
       });
 
       if (response['success'] == true) {
+        // Print a ROOM CHARGE slip — the bill is charged to the guest's folio
+        // (not paid in cash), so it prints as a room charge and is then cleared
+        // from the station. Done before clearing the bill so its items/code are
+        // still available.
+        try {
+          await printCustomerDocument(
+            ref,
+            templateKey: 'room_charge',
+            fallbackTitle: 'ROOM CHARGE',
+            branchId: '$branchId',
+            outletId: _text(bill, ['outlet_id', 'outletId']).isNotEmpty
+                ? _text(bill, ['outlet_id', 'outletId'])
+                : nav.user?.outletId,
+            sale: SaleResult(
+              transactionId: '${response['folio_transaction_id'] ?? billNo}',
+              createdAt: DateTime.now(),
+              receiptNumber: billNo,
+              cashierName: nav.user?.name,
+              total: amount.toDouble(),
+              paymentMethod: 'CHARGE TO ROOM',
+            ),
+            items: _receiptItemsFromBill(bill, amount),
+            branchName: nav.branchName,
+            roomNumber: roomNumber,
+            customerName: guestName,
+            publicCode: _billShortCode(bill).isNotEmpty
+                ? _billShortCode(bill)
+                : billNo,
+          );
+        } catch (printError) {
+          _snack('Charged to room, but slip print failed: '
+              '${apiErrorMessage(printError)}');
+        }
         _snack('Bill $billNo charged to Room $roomNumber ($guestName) successfully!');
         setState(() {
           _bill = null;
