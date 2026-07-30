@@ -885,6 +885,24 @@ function buildOutletPosBillResponse(resolution: OutletPosOrderResolution): Recor
 // Build the cashier-station bill view for a master (combined) customer bill:
 // every member order's items folded into one bill with a combined total, so the
 // cashier settles all outlets' shares with a single tender.
+async function getCashierCollectedForMasterBill(masterBillId: string): Promise<number> {
+    const { rows } = await db.query(
+        `
+            select coalesce(sum(amount), 0) as total
+            from cashier_transactions
+            where (
+                reference_type = 'pos_master_bills'
+                and reference_id = $1::uuid
+            ) or (
+                source_document_type = 'pos_master_bills'
+                and source_document_id = $1::uuid
+            )
+        `,
+        [masterBillId]
+    );
+    return Number(rows[0]?.total || 0);
+}
+
 async function buildCashierMasterBillResponse(master: Record<string, any>): Promise<Record<string, any>> {
     const { data: orderRows } = await supabase
         .from('pos_shift_orders')
@@ -894,11 +912,11 @@ async function buildCashierMasterBillResponse(master: Record<string, any>): Prom
         .order('created_at', { ascending: true });
     const orders = (orderRows || []) as Array<Record<string, any>>;
     let total = 0;
-    let paid = 0;
+    let posPaid = 0;
     const items: any[] = [];
     for (const o of orders) {
         total += Number(o.total_amount || 0);
-        paid += Number(o.amount_paid || 0);
+        posPaid += Number(o.amount_paid || 0);
         const outlet = Array.isArray(o.outlet) ? o.outlet[0] : o.outlet;
         const oitems = Array.isArray(o.items) ? o.items : [];
         for (const it of oitems) {
@@ -911,7 +929,10 @@ async function buildCashierMasterBillResponse(master: Record<string, any>): Prom
             });
         }
     }
-    const balance = Math.max(0, total - paid);
+    const cashierCollected = Math.min(total, await getCashierCollectedForMasterBill(String(master.id)));
+    const balance = Math.max(0, total - cashierCollected);
+    const status = balance <= 0.01 ? 'cleared' : (cashierCollected > 0 ? 'partial' : 'unpaid');
+    const cashierClearancePending = posPaid > 0.01 && cashierCollected <= 0.01;
     return {
         success: true,
         data: {
@@ -926,16 +947,18 @@ async function buildCashierMasterBillResponse(master: Record<string, any>): Prom
                 guest_name: master.customer_name || 'Walk-in',
                 waiter_name: master.opening_waiter_name,
                 station_name: master.origin_outlet_name,
-                status: balance <= 0.01 ? 'cleared' : 'unpaid',
+                status,
                 items
             },
             financials: {
                 total_amount: total,
-                amount_paid: paid,
+                amount_paid: cashierCollected,
                 balance,
-                currency: 'KES'
+                currency: 'KES',
+                pos_amount_paid: posPaid
             },
-            payment_status: balance <= 0.01 ? 'cleared' : (paid > 0 ? 'partial' : 'unpaid'),
+            payment_status: status,
+            cashier_clearance_pending: cashierClearancePending,
             outlet_count: new Set(orders.map((o) => String(o.outlet_id))).size,
             order_count: orders.length
         }
@@ -2476,12 +2499,57 @@ export const processCashierPayment = async (
                 if (userBranch && Number(masterBill.branch_id) !== userBranch && !isGlobalRole(role)) {
                     throw new AppError('Forbidden: bill belongs to another branch', 403);
                 }
+                const currentMasterView = await buildCashierMasterBillResponse(masterBill);
+                const currentMasterData = (currentMasterView as any)?.data || {};
+                const currentMasterBalance = Number(currentMasterData?.financials?.balance || 0);
+                if (currentMasterBalance <= 0.01) {
+                    billCache.clear();
+                    res.json({
+                        success: true,
+                        message: 'Combined customer bill is already cleared',
+                        data: currentMasterData
+                    });
+                    return;
+                }
+
+                const { data: memberRows, error: memberError } = await supabase
+                    .from('pos_shift_orders')
+                    .select('id, payment_status, status')
+                    .eq('master_bill_id', masterBill.id)
+                    .not('status', 'eq', 'cancelled');
+                if (memberError) throw memberError;
+                const unsettledMembers = (memberRows || []).filter((row: any) => {
+                    const paymentStatus = String(row.payment_status || '').toLowerCase();
+                    const rowStatus = String(row.status || '').toLowerCase();
+                    return !['paid', 'credit_bill', 'voided'].includes(paymentStatus) &&
+                        !['cancelled', 'voided'].includes(rowStatus);
+                });
+
                 const cashierName =
                     `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim() || null;
-                const { totalSettled, view, method: settledMethod } = await settleMasterBillCore(
-                    masterBill,
-                    { method: String(method), userId: String(req.user?.id), cashierName }
-                );
+                let totalSettled = 0;
+                let settledMethod = String(method);
+                let billView: Record<string, any> | null = null;
+
+                if (unsettledMembers.length > 0) {
+                    const settled = await settleMasterBillCore(
+                        masterBill,
+                        { method: String(method), userId: String(req.user?.id), cashierName }
+                    );
+                    totalSettled = settled.totalSettled;
+                    settledMethod = settled.method;
+                    billView = settled.view;
+                } else {
+                    const cashierPaymentAmount = Number(amount);
+                    if (!Number.isFinite(cashierPaymentAmount) || cashierPaymentAmount <= 0) {
+                        throw new AppError('Payment amount must be greater than zero', 400);
+                    }
+                    totalSettled = Math.min(cashierPaymentAmount, currentMasterBalance);
+                    if (totalSettled <= 0) {
+                        throw new AppError('Combined customer bill is already cleared', 409);
+                    }
+                }
+
                 await recordCashierTransactionSafe({
                     branchId: userBranch,
                     cashierId: String(req.user?.id || ''),
@@ -2499,10 +2567,15 @@ export const processCashierPayment = async (
                     orderNumber: String(masterBill.master_bill_number || ''),
                     customerName: String(masterBill.customer_name || masterBill.master_bill_number || 'Walk-in')
                 });
+                const refreshedMasterView = await buildCashierMasterBillResponse(masterBill);
+                billView = (refreshedMasterView as any)?.data || billView;
+                const remainingMasterBalance = Number(billView?.financials?.balance || 0);
                 billCache.clear();
                 res.json({
                     success: true,
-                    message: 'Combined customer bill settled',
+                    message: remainingMasterBalance <= 0.01
+                        ? 'Combined customer bill settled'
+                        : 'Combined customer bill payment recorded',
                     data: {
                         type: 'master_bill',
                         master_bill_id: masterBill.id,
@@ -2510,7 +2583,7 @@ export const processCashierPayment = async (
                         payment_method: settledMethod,
                         total_settled: totalSettled,
                         amount_settled: totalSettled,
-                        bill: view
+                        bill: billView
                     }
                 });
                 return;
