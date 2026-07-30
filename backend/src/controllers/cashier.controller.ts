@@ -1242,13 +1242,22 @@ export const getBillDetails = async (
                 Number(folio?.food_charges || 0) +
                 Number(folio?.beverage_charges || 0) +
                 Number(folio?.other_charges || 0);
-            const reservationPaid = reservation.deposit_paid
-                ? Math.max(Number(reservation.amount_paid || 0), Number(reservation.deposit_amount || 0))
-                : Number(reservation.amount_paid || 0);
+
+            // folio.total_payments is the canonical payment ledger.
+            // reservation.amount_paid now mirrors it after every hotel payment
+            // (see receptionCashierPayment.service.ts), so we MUST NOT add both
+            // together — that would double-count every payment.
+            // We use folio.total_payments when a folio exists; otherwise fall back
+            // to reservation.amount_paid (e.g. a direct deposit before any folio
+            // was created).
             const folioPayments = Number(folio?.total_payments || 0);
+            const paidAmount = folio
+                ? folioPayments
+                : (reservation.deposit_paid
+                    ? Math.max(Number(reservation.amount_paid || 0), Number(reservation.deposit_amount || 0))
+                    : Number(reservation.amount_paid || 0));
 
             const totalAmount = roomTotal + posCharges;
-            const paidAmount = reservationPaid + folioPayments;
             const balance = Math.max(0, totalAmount - paidAmount);
 
             // Itemise each Charge-to-Room POS bill from the folio audit trail.

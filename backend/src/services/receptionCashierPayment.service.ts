@@ -445,6 +445,7 @@ export async function recordHotelCashierPayment(
       `
         UPDATE reservations
         SET
+          amount_paid = GREATEST(COALESCE(amount_paid, 0), $3),
           payment_status = $2,
           deposit_paid = CASE WHEN $3 > 0 THEN TRUE ELSE deposit_paid END,
           updated_at = NOW()
