@@ -3888,7 +3888,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                     : null;
                 return {
                     ...bill,
-                    paid_amount: Number(bill.paid_amount || bill.amount_paid || 0),
+                    paid_amount: Number((bill as any).paid_amount || bill.amount_paid || 0),
                     balance_amount: Number(bill.balance_amount || bill.balance_due || (Number(bill.total_amount || 0) - Number(bill.amount_paid || 0))),
                     room_number: null,
                     waiter_name: waiterName || null,
