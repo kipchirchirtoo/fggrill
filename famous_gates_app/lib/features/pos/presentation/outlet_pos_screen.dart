@@ -668,12 +668,26 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                               style:
                                   const TextStyle(fontWeight: FontWeight.w800)),
                           Text(
-                            'Paid ${formatKes(order.amountPaid)} • Bal ${formatKes(_orderBalance(order))}',
+                            order.cashierClearancePending
+                                ? 'Awaiting cashier station clearance'
+                                : 'Paid ${formatKes(order.amountPaid)} • Bal ${formatKes(_orderBalance(order))}',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ),
-                      if (['unpaid', 'partial'].contains(order.paymentStatus))
+                      if (order.cashierClearancePending)
+                        Chip(
+                          label: const Text('Cashier Pending'),
+                          avatar: Icon(
+                            Icons.point_of_sale_outlined,
+                            size: 16,
+                            color: Colors.orange.shade900,
+                          ),
+                          backgroundColor: Colors.orange.shade50,
+                          visualDensity: VisualDensity.compact,
+                        )
+                      else if (['unpaid', 'partial']
+                          .contains(order.paymentStatus))
                         const Chip(
                           label: Text('Unpaid'),
                           avatar: Icon(Icons.hourglass_empty, size: 16),
@@ -1098,9 +1112,15 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     };
     if (roles.any((r) => r.contains('cashier'))) return true;
     const mgr = {
-      'super_admin', 'general_manager', 'director', 'branch_manager',
-      'branch_accountant', 'accountant', 'finance_manager',
-      'restaurant_manager', 'bar_manager',
+      'super_admin',
+      'general_manager',
+      'director',
+      'branch_manager',
+      'branch_accountant',
+      'accountant',
+      'finance_manager',
+      'restaurant_manager',
+      'bar_manager',
     };
     return roles.any(mgr.contains);
   }
@@ -1111,17 +1131,19 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
 
   // Cross-outlet consolidated customer bills: the waiter recalls all of their
   // own open orders across every outlet, combines them into ONE bill, prints
-  // it and settles it in one tap.
+  // it and hands it to Cashier Station for settlement.
   Future<void> _openCustomerBills() async {
     await showCustomerBillsPanel(
       context,
       ref,
       onPrintBill: _printConsolidatedBill,
     );
-    // Refresh this station's order list in case a member order was settled.
+    // Refresh this station's order list in case a member order was combined or
+    // its cashier-clearance state changed.
     if (_shift != null) {
       try {
-        _orders = await ref.read(outletPosRepositoryProvider).getOrders(_shift!.id);
+        _orders =
+            await ref.read(outletPosRepositoryProvider).getOrders(_shift!.id);
         if (mounted) setState(() {});
       } catch (_) {}
     }
@@ -1160,8 +1182,10 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     final sale = SaleResult(
       transactionId: bill.masterBillId ?? anchor?.id ?? '',
       createdAt: bill.createdAt ?? DateTime.now(),
-      receiptNumber:
-          bill.masterBillNumber ?? anchor?.orderNumber ?? bill.masterBillId ?? '',
+      receiptNumber: bill.masterBillNumber ??
+          anchor?.orderNumber ??
+          bill.masterBillId ??
+          '',
       cashierName: bill.waiterName,
       total: bill.totalAmount,
       paymentMethod: 'pending',
@@ -1940,7 +1964,8 @@ class _PosPalette {
   static const _chomaLightSurface = Color(0xFFFFFFFF);
   static const _chomaLightSurfaceAlt = Color(0xFFFEF3C7);
   static const _chomaLightBorder = Color(0xFFFDE68A);
-  static const _chomaLightAccent = Color(0xFFEAB308); // Distinct Light Yellow Accent
+  static const _chomaLightAccent =
+      Color(0xFFEAB308); // Distinct Light Yellow Accent
   static const _chomaLightText = Color(0xFF451A03);
   static const _chomaLightTextMuted = Color(0xFF92400E);
 

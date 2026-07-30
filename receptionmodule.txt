@@ -1,0 +1,246 @@
+This reception map is solid and it confirms the most important architectural decision:
+
+> **Reception should use `reservations` for stay operations, `folios` for guest financials, and the master cashier shift for every payment physically collected by Reception.**
+
+The system should not allow screens to calculate their own versions of occupancy, balances or payment totals.
+
+## Correct source of truth by area
+
+| Reception area                        | Primary source of truth                                   |
+| ------------------------------------- | --------------------------------------------------------- |
+| Reservation lifecycle                 | `reservations`                                            |
+| Physical room configuration           | `rooms`                                                   |
+| Effective occupancy                   | Active `reservations` reconciled with `rooms`             |
+| Accommodation charges                 | Guest `folio`                                             |
+| Restaurant/bar charges posted to room | Folio charge transactions                                 |
+| Room payment collection               | `cashier_transactions` linked to the master cashier shift |
+| Guest balance                         | Folio charges less verified payments                      |
+| Breakfast pax                         | Active checked-in stays plus breakfast entitlement        |
+| Checkout                              | Reservation status plus validated folio settlement        |
+| Housekeeping readiness                | Housekeeping state, triggered by actual checkout          |
+
+## Main issues that should now be addressed
+
+### 1. Check-in must have one backend-controlled process
+
+The Flutter check-in screens should not independently update the room after calling the backend.
+
+The backend check-in endpoint should atomically:
+
+```text
+Validate reservation
+Validate room readiness
+Set reservation = checked_in
+Set checked_in_at/by
+Set room = occupied
+Set current guest
+Create or verify folio
+Write audit history
+```
+
+Flutter should only call the endpoint and refresh the returned result.
+
+This prevents situations where:
+
+```text
+Reservation says checked_in
+Room says available
+```
+
+or:
+
+```text
+Room says occupied
+Reservation check-in failed
+```
+
+### 2. Effective room status needs one shared resolver
+
+Every screen should use the same backend calculation:
+
+```text
+Live checked-in reservation → Occupied
+Confirmed upcoming reservation → Reserved
+No active reservation → Use physical room/housekeeping state
+Maintenance/out-of-order → Always override booking state
+```
+
+The Rooms screen, reservation screen, housekeeping screen and booking availability engine must not each determine room state differently.
+
+### 3. Folio must control checkout
+
+The checkout endpoint should validate the complete folio:
+
+```text
+Accommodation charges
+Overstay room-night charges
+Restaurant charges
+Bar charges
+Other charges
+Verified payments
+Approved credit
+Approved complimentary/write-off
+```
+
+Checkout must be blocked when:
+
+```text
+actual folio balance > 0
+AND no approved settlement authority exists
+```
+
+It must never change `amount_paid` to the reservation total merely because the user clicked Checkout.
+
+### 4. Room payment and room revenue must remain separate
+
+The system needs two reports:
+
+#### Accommodation revenue
+
+What the hotel earned from occupied room nights during the business date.
+
+```text
+Room nights
+Overstay extensions
+Accommodation packages
+Daily meal-plan accommodation charges
+```
+
+#### Room collections
+
+What cashiers actually received during their shifts.
+
+```text
+Cash room payments
+M-Pesa room payments
+Card room payments
+Room credit repayments
+```
+
+This explains why a cashier logbook can correctly show **Rooms KES 0** even though rooms were occupied: no room payment may have been collected during that cashier shift.
+
+But the daily accommodation revenue report should still show room sales.
+
+### 5. Breakfast Pax should use entitlement, not only occupancy
+
+Current calculation should become:
+
+```text
+Checked-in occupants
+AND stay active for breakfast morning
+AND breakfast included in meal plan/package
+```
+
+Then:
+
+```text
++ Paid extra breakfast
++ Approved complimentary breakfast
+- Valid exclusions
+```
+
+Room-only guests should remain visible under **Excluded**, but must not increase calculated breakfast pax.
+
+Overstay extensions should automatically keep eligible guests in the next morning’s breakfast list.
+
+### 6. Reception payment paths must all reach one cashier service
+
+These payment sources should call the same backend settlement engine:
+
+```text
+Room folio payment
+Reservation deposit
+Check-in payment
+Checkout payment
+Conference payment
+Catering payment
+Additional service payment
+Credit invoice repayment
+```
+
+Every actual payment should create:
+
+```text
+payments
+folio payment where applicable
+cashier_transactions
+shift transaction/logbook detail
+source-document update
+audit entry
+```
+
+and link to:
+
+```text
+cashier_shift_log_id
+branch_id
+cashier_id
+source_module
+source_document_id
+payment_method
+revenue_type
+```
+
+### 7. The dashboard should be broken into domain sections
+
+`reception_dashboard.dart` can remain the shell, but the internal sections should be extracted into independent feature widgets:
+
+```text
+overview_section.dart
+reservations_section.dart
+check_in_out_section.dart
+breakfast_pax_section.dart
+rooms_section.dart
+guests_section.dart
+housekeeping_section.dart
+conference_section.dart
+catering_section.dart
+reception_cashier_section.dart
+```
+
+Each section should depend on a shared Reception state/controller rather than maintaining separate copies of bookings, rooms and folios.
+
+## Recommended processing flow
+
+```text
+Reservation created
+        ↓
+Room allocated
+        ↓
+Guest checks in
+        ↓
+Reservation becomes checked_in
+Room becomes occupied
+Folio remains open
+        ↓
+Daily room nights and overstay charges posted
+        ↓
+Restaurant/bar/services may post to folio
+        ↓
+Payments collected through master cashier shift
+        ↓
+Folio balance recalculated
+        ↓
+Checkout validates settlement
+        ↓
+Reservation becomes checked_out
+Room becomes dirty
+Housekeeping task created
+        ↓
+Folio/invoice closed
+```
+
+## Best next implementation task
+
+The strongest next step is to create a shared **Reception Stay State service** on the backend that becomes the only place responsible for:
+
+```text
+effective room status
+active stay determination
+overstay status
+breakfast-date eligibility
+room-charge eligibility
+checkout eligibility
+```
+
+That will remove the current duplicated rules across booking, rooms, breakfast pax, room-charge and checkout controllers.

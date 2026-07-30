@@ -354,8 +354,8 @@ class OutletPosRepository {
         queryParameters: {'status': status});
     return _list(response.data)
         .whereType<Map>()
-        .map((e) =>
-            CrossOutletSettlement.fromJson(Map<String, dynamic>.from(e)))
+        .map(
+            (e) => CrossOutletSettlement.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 
@@ -548,8 +548,8 @@ class OutletPosRepository {
 
   Future<List<Map<String, dynamic>>> searchVoidableBills(String query) async {
     if (query.trim().isEmpty) return [];
-    final response = await _dio.get('/pos/voids/cashier/search',
-        queryParameters: {'q': query.trim()});
+    final response = await _dio
+        .get('/pos/voids/cashier/search', queryParameters: {'q': query.trim()});
     return _list(response.data)
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
@@ -595,7 +595,8 @@ class OutletPosRepository {
       return OutletShiftOrder.fromJson(
           Map<String, dynamic>.from(_data(response.data) as Map));
     } on DioException catch (error) {
-      throw StateError(_errorMessage(error, 'Could not void the selected item(s).'));
+      throw StateError(
+          _errorMessage(error, 'Could not void the selected item(s).'));
     }
   }
 
@@ -910,13 +911,17 @@ class OutletPosRepository {
     required String orderId,
   }) async {
     try {
-      final response = await _dio.post('/pos/shifts/$shiftId/orders/$orderId/original-printed');
+      final response = await _dio
+          .post('/pos/shifts/$shiftId/orders/$orderId/original-printed');
       if (response.data != null && response.data['data'] != null) {
-        return OutletShiftOrder.fromJson(response.data['data'] as Map<String, dynamic>);
+        return OutletShiftOrder.fromJson(
+            response.data['data'] as Map<String, dynamic>);
       }
       throw StateError('Empty response from server');
     } on DioException catch (e) {
-      final msg = e.response?.data?['message']?.toString() ?? e.message ?? 'Failed to mark original bill as printed';
+      final msg = e.response?.data?['message']?.toString() ??
+          e.message ??
+          'Failed to mark original bill as printed';
       throw StateError(msg);
     }
   }
@@ -1264,6 +1269,7 @@ class OutletShiftOrder {
     this.items = const [],
     this.billReprintCount = 0,
     this.originalBillPrintedAt,
+    this.cashierClearancePending = false,
   });
 
   final String id;
@@ -1295,6 +1301,7 @@ class OutletShiftOrder {
   // is only used to proactively disable the menu item in the UI).
   final int billReprintCount;
   final DateTime? originalBillPrintedAt;
+  final bool cashierClearancePending;
 
   bool get canReprintBill => billReprintCount < 1;
 
@@ -1354,6 +1361,7 @@ class OutletShiftOrder {
       originalBillPrintedAt: json['original_bill_printed_at'] != null
           ? DateTime.tryParse(json['original_bill_printed_at'].toString())
           : null,
+      cashierClearancePending: json['cashier_clearance_pending'] == true,
     );
   }
 }
@@ -1496,13 +1504,13 @@ class ConsolidatedBill {
       status: json['status'] as String?,
       waiterId: json['waiter_id'] as String?,
       waiterName: json['waiter_name'] as String?,
-      outlets: rawOutlets is List
-          ? rawOutlets.map((e) => '$e').toList()
-          : const [],
+      outlets:
+          rawOutlets is List ? rawOutlets.map((e) => '$e').toList() : const [],
       outletBreakdown: rawBreakdown is List
           ? rawBreakdown
               .whereType<Map>()
-              .map((e) => BillOutletShare.fromJson(Map<String, dynamic>.from(e)))
+              .map(
+                  (e) => BillOutletShare.fromJson(Map<String, dynamic>.from(e)))
               .toList()
           : const [],
       orderCount: json['order_count'] is num

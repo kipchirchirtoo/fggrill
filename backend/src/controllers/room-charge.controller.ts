@@ -5,6 +5,12 @@ import { logger } from '../utils/logger';
 import { billCache } from '../utils/bill-cache';
 import { AppError } from '../middleware/errorHandler';
 import { recordHotelCashierPayment } from '../services/receptionCashierPayment.service';
+import {
+  buildStaySnapshot,
+  isInHouseStay,
+  loadStaySnapshots,
+  todayInNairobi,
+} from '../services/receptionStayState.service';
 
 const IN_HOUSE_ROOM_CHARGE_STATUSES = ['checked_in', 'checked-in', 'in-house', 'active'] as const;
 
@@ -16,10 +22,6 @@ const isFeatureEnabled = async (branchId: number, featureKey: string): Promise<b
   if (res.rows.length === 0) return false;
   return Boolean(res.rows[0].is_enabled);
 };
-
-function todayInNairobi(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
-}
 
 function normalizeGuestName(row: any): string {
   const guest = Array.isArray(row?.guest) ? row.guest[0] : row?.guest;
@@ -40,20 +42,6 @@ function stayNights(checkIn: string | null | undefined, checkOut: string | null 
   const end = new Date(`${checkOut}T00:00:00Z`).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
   return Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
-}
-
-function isCurrentInHouseStay(row: any, today: string): boolean {
-  const status = String(row?.status || '').trim().toLowerCase();
-  if (!IN_HOUSE_ROOM_CHARGE_STATUSES.includes(status as any)) return false;
-  const checkIn = String(row?.check_in_date || '').trim();
-  const checkOut = String(row?.check_out_date || '').trim();
-  if (!checkIn || !checkOut) return false;
-  // A guest is in-house from check-in through their check-out DAY (they still
-  // occupy the room the morning they leave, until they actually check out), so
-  // charges are allowed while checkOut >= today. Only reject a stay whose
-  // check-out day is already in the past, or whose check-in is still future.
-  if (checkIn > today || checkOut < today) return false;
-  return stayNights(checkIn, checkOut) >= 1;
 }
 
 function resolveChargeBucket(outletName?: string, outletType?: string): {
@@ -86,37 +74,14 @@ function resolveChargeBucket(outletName?: string, outletType?: string): {
 
 async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
   const today = todayInNairobi();
-  const { data: reservations, error } = await supabase
-    .from('reservations')
-    .select(`
-      id,
-      confirmation_number,
-      guest_id,
-      room_id,
-      status,
-      check_in_date,
-      check_out_date,
-      total_amount,
-      deposit_amount,
-      amount_paid,
-      adults,
-      children,
-      meal_plan,
-      checked_in_at,
-      checked_out_at,
-      guest:guests!guest_id(first_name,last_name,phone,email),
-      room:rooms!room_id(id, room_number, branch_id, status)
-    `)
-    .eq('branch_id', branchId)
-    .in('status', [...IN_HOUSE_ROOM_CHARGE_STATUSES])
-    .order('check_in_date', { ascending: false })
-    .limit(100);
+  const inHouseReservations = await loadStaySnapshots(branchId, {
+    asOfDate: today,
+    includeConfirmed: false,
+    search: queryStr,
+    limit: 150,
+  });
 
-  if (error) throw error;
-
-  const inHouseReservations = reservations || [];
-
-  const reservationIds = inHouseReservations.map((row: any) => row.id);
+  const reservationIds = inHouseReservations.map((row: any) => row.reservation_id);
   const folioMap = new Map<string, any>();
 
   if (reservationIds.length > 0) {
@@ -147,18 +112,14 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
     }
   }
 
-  const normalizedQuery = queryStr.trim().toLowerCase();
-
   return inHouseReservations
     .map((row: any) => {
-      const folio = folioMap.get(String(row.id));
-      const guestName = normalizeGuestName(row);
-      const guest = relationRecord<any>(row?.guest);
-      const room = relationRecord<any>(row?.room);
+      const folio = folioMap.get(String(row.reservation_id));
+      const guest = relationRecord<any>(row?.raw?.guest);
       const phone = String(guest?.phone || '').trim();
-      const roomNumber = String(room?.room_number || '').trim();
+      const roomNumber = String(row?.room_number || '').trim();
       const confirmationNumber = String(row?.confirmation_number || '').trim();
-      const nights = stayNights(row?.check_in_date, row?.check_out_date);
+      const nights = stayNights(row?.check_in_date, row?.effective_checkout_date || row?.check_out_date);
       const roomGross = Number(row?.total_amount || 0);
       // Charge-to-Room always posts to the food/beverage/other buckets (never
       // room_charges), so those buckets ARE the POS charges — no double count
@@ -171,23 +132,21 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       // payments, tracked cumulatively in advance_payment/amount_paid) PLUS folio
       // settle payments. So a partial payment made at the cashier reduces the
       // balance and the remainder stays outstanding on the room bill.
-      const reservationPaid = row?.deposit_paid
-        ? Math.max(Number(row?.amount_paid || 0), Number(row?.deposit_amount || 0))
-        : Number(row?.amount_paid || 0);
+      const reservationPaid = Number(row?.amount_paid || 0);
       const folioPayments = Number(folio?.total_payments || 0);
       const totalPaid = reservationPaid + folioPayments;
       const folioBalance = Math.max(0, roomGross + folioPosCharges - totalPaid);
 
       return {
-        booking_id: row.id,
-        folio_id: folio?.id || row.id,
+        booking_id: row.reservation_id,
+        folio_id: folio?.id || row.reservation_id,
         room_number: roomNumber,
-        guest_name: guestName,
+        guest_name: row.guest_name,
         guest_phone: phone,
-        confirmation_number: confirmationNumber || `RSV-${row.id}`,
+        confirmation_number: confirmationNumber || `RSV-${row.reservation_id}`,
         check_in_date: row.check_in_date,
-        check_out_date: row.check_out_date,
-        occupants: Number(row?.adults || 0) + Number(row?.children || 0),
+        check_out_date: row.effective_checkout_date || row.check_out_date,
+        occupants: Number(row?.pax || 0),
         stay_nights: nights,
         folio_balance: folioBalance,
         folio_pos_charges: folioPosCharges,
@@ -195,37 +154,20 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
         total_amount: roomGross,
         amount_paid: totalPaid,
         meal_plan: row?.meal_plan || 'Room Only',
-        eligibility_status: 'In house',
+        eligibility_status: row?.overstay ? 'In house (overstay)' : 'In house',
+        overstay: Boolean(row?.overstay),
       };
     })
     .filter((row) => {
       const folio = folioMap.get(String(row.booking_id));
-      const rawRes = inHouseReservations.find((r: any) => String(r.id) === String(row.booking_id));
-      const resStatus = String(rawRes?.status || '').toLowerCase().trim();
-      
-      // Exclude checked_out, completed, or cancelled reservations or those with checked_out_at
-      if (
-        ['checked_out', 'checked-out', 'completed', 'cancelled'].includes(resStatus) ||
-        rawRes?.checked_out_at != null
-      ) {
-        return false;
-      }
       // Exclude closed or settled folios
       if (folio && (folio.status === 'closed' || folio.settled === true || (folio.balance_due <= 0 && folio.status === 'closed'))) {
         return false;
       }
-      // Exclude stays whose check-out date is today or in the past AND folio balance is 0
-      const checkOutDateStr = String(row.check_out_date || '').trim();
-      if (checkOutDateStr && checkOutDateStr <= today && row.folio_balance <= 0) {
+      if (row.folio_balance <= 0 && !row.overstay) {
         return false;
       }
-      if (!normalizedQuery) return true;
-      return [
-        row.room_number,
-        row.guest_name,
-        row.confirmation_number,
-        row.guest_phone,
-      ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
+      return true;
     })
     .sort((a, b) => String(a.room_number).localeCompare(String(b.room_number)));
 }
@@ -693,7 +635,8 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    if (!isCurrentInHouseStay(reservation, today)) {
+    const reservationSnapshot = buildStaySnapshot(reservation, today);
+    if (!isInHouseStay(reservationSnapshot.raw, today)) {
       res.status(400).json({
         success: false,
         message: 'Only current in-house overnight stays can be charged to room.',

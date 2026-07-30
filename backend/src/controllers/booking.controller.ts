@@ -10,104 +10,12 @@ import { supabase } from '../config/database';
 import { bookingService, BookingRequest } from '../services/booking.service';
 import { emailService } from '../services/email.service';
 import { isGlobalRole } from '../utils/branchIsolation';
-
-const BREAKFAST_ELIGIBLE_MEAL_PLANS = [
-  'bb',
-  'hb',
-  'fb',
-  'bed_breakfast',
-  'half_board',
-  'full_board',
-  'bed & breakfast',
-  'half board',
-  'full board',
-];
-
-function todayInNairobi(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
-}
-
-function isBreakfastEligible(
-  mealPlan?: unknown,
-  roomTypeName?: string,
-  roomTypeCode?: string
-): boolean {
-  // All checked-in in-house guests are eligible for breakfast until checked out
-  return true;
-}
-
-function mealPlanIncludesBreakfast(value: unknown): boolean {
-  return isBreakfastEligible(value);
-}
-
-// Nairobi calendar date (YYYY-MM-DD) of a stored timestamp.
-function nairobiDateOf(value: unknown): string | null {
-  if (!value) return null;
-  const d = new Date(value as string);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
-}
-
-async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
-  // Fetch EVERY currently checked-in guest for the branch. Any guest with status = 'checked_in'
-  // is in-house until they officially check out.
-  const { data: reservations, error } = await supabase
-    .from('reservations')
-    .select(`
-      id,
-      confirmation_number,
-      guest_id,
-      room_id,
-      adults,
-      children,
-      meal_plan,
-      check_in_date,
-      check_out_date,
-      guest:guests!guest_id(first_name,last_name),
-      room:rooms!room_id(
-        id, room_number, room_type_id,
-        room_type:room_types!room_type_id(id, name, code)
-      )
-    `)
-    .eq('branch_id', branchId)
-    .eq('status', 'checked_in');
-
-  if (error) throw error;
-
-  const inHouse = (reservations || []).filter((row: any) => {
-    const ci = nairobiDateOf(row.check_in_date);
-    if (ci && ci > date) return false; // arrives after the breakfast date
-    // Checked-in guests remain in-house until officially checked out.
-    return true;
-  });
-
-  const eligibleBookings = inHouse.map((row: any) => ({
-    reservation_id: row.id,
-    confirmation_number: row.confirmation_number,
-    guest_name:
-      `${row.guest?.first_name || ''} ${row.guest?.last_name || ''}`.trim() ||
-      'Checked-in Guest',
-    room_number: row.room?.room_number || 'N/A',
-    room_type_name: row.room?.room_type?.name || 'Standard',
-    meal_plan: String(row.meal_plan || '').trim() || 'bb',
-    breakfast_eligible: true,
-    adults: Number(row.adults || 0),
-    children: Number(row.children || 0),
-    pax: Number(row.adults || 0) + Number(row.children || 0),
-    check_in_date: row.check_in_date,
-    check_out_date: row.check_out_date,
-  }));
-
-  return {
-    calculatedPax: eligibleBookings.reduce(
-      (sum: number, row: any) => sum + Number(row.pax || 0),
-      0
-    ),
-    checkedInReservations: eligibleBookings.length,
-    eligibleReservations: eligibleBookings.length,
-    eligibleBookings,
-  };
-}
+import {
+  buildBreakfastPaxSnapshot,
+  handoffRoomToHousekeeping,
+  performReceptionCheckIn,
+  todayInNairobi,
+} from '../services/receptionStayState.service';
 
 async function getBreakfastPaxRecord(branchId: number, date: string) {
   const { data, error } = await supabase
@@ -416,63 +324,10 @@ export const checkInBooking = async (
 
     logger.info(`Check-in attempt for booking ${id} by user ${userId}`);
 
-    // 1. Get the booking
-    const { data: booking, error: fetchError } = await supabase
-      .from('reservations')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (fetchError) {
-      logger.error(`Error fetching booking ${id}:`, fetchError);
-      throw new AppError('Booking not found', 404);
-    }
-
-    if (!booking) {
-      logger.warn(`Booking ${id} not found`);
-      throw new AppError('Booking not found', 404);
-    }
-
-    logger.info(`Booking ${id} current status: ${booking.status}`);
-
-    if (booking.status !== 'confirmed') {
-      logger.warn(`Cannot check in booking ${id} - status is ${booking.status}, must be confirmed`);
-      throw new AppError(`Cannot check in: Booking status is "${booking.status}". Only confirmed bookings can be checked in.`, 400);
-    }
-
-    // 2. Update booking status
-    const { data: updatedBooking, error: updateError } = await supabase
-      .from('reservations')
-      .update({
-        status: 'checked_in',
-        checked_in_at: new Date().toISOString(),
-        checked_in_by: userId,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (updateError) {
-      logger.error(`Error updating booking ${id} to checked_in:`, updateError);
-      throw updateError;
-    }
-
-    // 3. Update room status if room is assigned
-    if (booking.room_id) {
-      try {
-        await bookingService.updateRoomStatus(
-          booking.room_id,
-          RoomStatus.OCCUPIED,
-          userId,
-          `Room occupied via check-in for booking ${booking.confirmation_number}`
-        );
-        logger.info(`Room ${booking.room_id} status updated to OCCUPIED`);
-      } catch (roomError) {
-        logger.error('Failed to update room status during check-in:', roomError);
-        // Don't fail the check-in if room status update fails
-      }
-    }
+    const updatedBooking = await performReceptionCheckIn({
+      reservationId: id,
+      userId,
+    });
 
     logger.info(`Successfully checked in booking ${id}`);
 
@@ -644,48 +499,16 @@ export const checkOutBooking = async (
 
 
     // 3. Update room status to available if room is assigned (by room_id or room_number)
-    const roomIdToUpdate = booking.room_id;
-    const roomNoToUpdate = booking.room_number || (booking.room && booking.room.room_number);
-
-    if (roomIdToUpdate) {
-      try {
-        await supabase
-          .from('rooms')
-          .update({
-            status: 'available',
-            hk_status: 'vacant_clean',
-            current_guest: null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', roomIdToUpdate);
-        await db.query(
-          "UPDATE rooms SET status = 'available', hk_status = 'vacant_clean', current_guest = null, updated_at = NOW() WHERE id = $1",
-          [roomIdToUpdate]
-        );
-        logger.info(`Room ${roomIdToUpdate} status updated to available`);
-      } catch (roomError) {
-        logger.error('Failed to update room status during check-out:', roomError);
-      }
-    }
-    if (roomNoToUpdate) {
-      try {
-        await supabase
-          .from('rooms')
-          .update({
-            status: 'available',
-            hk_status: 'vacant_clean',
-            current_guest: null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('room_number', roomNoToUpdate);
-        await db.query(
-          "UPDATE rooms SET status = 'available', hk_status = 'vacant_clean', current_guest = null, updated_at = NOW() WHERE room_number = $1",
-          [roomNoToUpdate]
-        );
-        logger.info(`Room number ${roomNoToUpdate} status updated to available`);
-      } catch (roomError) {
-        logger.error('Failed to update room number status during check-out:', roomError);
-      }
+    try {
+      await handoffRoomToHousekeeping({
+        reservationId: id,
+        branchId: Number(booking.branch_id || 0),
+        roomId: booking.room_id || null,
+        roomNumber: booking.room_number || null,
+        requestedBy: userId,
+      });
+    } catch (roomError) {
+      logger.error('Failed to hand room to housekeeping during check-out:', roomError);
     }
 
     res.status(200).json({ success: true, data: updatedBooking });
@@ -750,9 +573,12 @@ export const getDailyBreakfastPax = async (
     }
 
     const [calculated, record] = await Promise.all([
-      calculateBreakfastPaxSnapshot(branchId, date),
+      buildBreakfastPaxSnapshot(branchId, date),
       getBreakfastPaxRecord(branchId, date),
     ]);
+    const snapshot = record?.source_snapshot && typeof record.source_snapshot === 'object'
+      ? record.source_snapshot
+      : {};
 
     res.status(200).json({
       success: true,
@@ -768,7 +594,19 @@ export const getDailyBreakfastPax = async (
         confirmed_by: record?.confirmed_by ?? null,
         checked_in_reservations: calculated.checkedInReservations,
         eligible_reservations: calculated.eligibleReservations,
-        eligible_bookings: calculated.eligibleBookings,
+        eligible_bookings: calculated.allBookings,
+        included_bookings: calculated.includedBookings,
+        excluded_bookings: calculated.excludedBookings,
+        confirmed_adults: Number(snapshot?.confirmed_adults || 0),
+        confirmed_children: Number(snapshot?.confirmed_children || 0),
+        paid_entries: Array.isArray(snapshot?.paid_entries) ? snapshot.paid_entries : [],
+        complimentary_entries: Array.isArray(snapshot?.complimentary_entries) ? snapshot.complimentary_entries : [],
+        excluded_booking_ids: Array.isArray(snapshot?.excluded_booking_ids) ? snapshot.excluded_booking_ids : [],
+        early_breakfast_ids: Array.isArray(snapshot?.early_breakfast_ids) ? snapshot.early_breakfast_ids : [],
+        packed_breakfast_ids: Array.isArray(snapshot?.packed_breakfast_ids) ? snapshot.packed_breakfast_ids : [],
+        dietary_notes: snapshot?.dietary_notes && typeof snapshot.dietary_notes === 'object'
+          ? snapshot.dietary_notes
+          : {},
       }
     });
   } catch (error) {
@@ -798,7 +636,7 @@ export const upsertDailyBreakfastPax = async (
       throw new AppError('status must be draft, confirmed, or locked', 400);
     }
 
-    const calculated = await calculateBreakfastPaxSnapshot(branchId, date);
+    const calculated = await buildBreakfastPaxSnapshot(branchId, date);
     const existing = await getBreakfastPaxRecord(branchId, date);
     if (existing?.status === 'locked') {
       throw new AppError('BREAKFAST_PAX_LOCKED: This breakfast pax record is already locked', 409);
@@ -825,7 +663,32 @@ export const upsertDailyBreakfastPax = async (
         generated_at: new Date().toISOString(),
         checked_in_reservations: calculated.checkedInReservations,
         eligible_reservations: calculated.eligibleReservations,
-        eligible_bookings: calculated.eligibleBookings,
+        eligible_bookings: calculated.allBookings,
+        included_bookings: calculated.includedBookings,
+        excluded_bookings: calculated.excludedBookings,
+        confirmed_adults: Number(req.body.confirmed_adults ?? req.body.confirmedAdults ?? 0),
+        confirmed_children: Number(req.body.confirmed_children ?? req.body.confirmedChildren ?? 0),
+        paid_entries: Array.isArray(req.body.paid_entries ?? req.body.paidEntries)
+          ? (req.body.paid_entries ?? req.body.paidEntries)
+          : [],
+        complimentary_entries: Array.isArray(req.body.complimentary_entries ?? req.body.complimentaryEntries)
+          ? (req.body.complimentary_entries ?? req.body.complimentaryEntries)
+          : [],
+        excluded_booking_ids: Array.isArray(req.body.excluded_booking_ids ?? req.body.excludedBookingIds)
+          ? (req.body.excluded_booking_ids ?? req.body.excludedBookingIds)
+          : [],
+        early_breakfast_ids: Array.isArray(req.body.early_breakfast_ids ?? req.body.earlyBreakfastIds)
+          ? (req.body.early_breakfast_ids ?? req.body.earlyBreakfastIds)
+          : [],
+        packed_breakfast_ids: Array.isArray(req.body.packed_breakfast_ids ?? req.body.packedBreakfastIds)
+          ? (req.body.packed_breakfast_ids ?? req.body.packedBreakfastIds)
+          : [],
+        dietary_notes:
+          req.body.dietary_notes && typeof req.body.dietary_notes === 'object'
+            ? req.body.dietary_notes
+            : req.body.dietaryNotes && typeof req.body.dietaryNotes === 'object'
+            ? req.body.dietaryNotes
+            : {},
       },
       created_by: existing?.created_by ?? req.user?.id ?? null,
       confirmed_by: ['confirmed', 'locked'].includes(status)

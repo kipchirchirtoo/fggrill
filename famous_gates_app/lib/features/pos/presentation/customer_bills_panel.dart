@@ -6,7 +6,7 @@ import '../data/outlet_pos_repository.dart';
 
 /// Opens the cross-outlet "Customer Bills" panel where a waiter recalls all of
 /// their own open orders across every outlet, combines them into ONE customer
-/// bill, prints it, and settles it with a single tender.
+/// bill, then prints it for Cashier Station to clear.
 Future<void> showCustomerBillsPanel(
   BuildContext context,
   WidgetRef ref, {
@@ -168,8 +168,9 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: FilledButton.icon(
-                  onPressed:
-                      _selectedOrderIds.length < 2 || _busy ? null : _combineSelected,
+                  onPressed: _selectedOrderIds.length < 2 || _busy
+                      ? null
+                      : _combineSelected,
                   icon: const Icon(Icons.call_merge),
                   label: Text(
                     'Combine ${_selectedOrderIds.length} order(s) into one bill',
@@ -265,7 +266,8 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
                       children: [
                         for (final o in bill.outlets)
                           Chip(
-                            label: Text(o, style: const TextStyle(fontSize: 11)),
+                            label:
+                                Text(o, style: const TextStyle(fontSize: 11)),
                             visualDensity: VisualDensity.compact,
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
@@ -341,85 +343,6 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
     ));
   }
 
-  bool get _isCashierOrManager {
-    final u = ref.read(authNotifierProvider).valueOrNull;
-    if (u == null) return false;
-    final roles = <String>{
-      u.role.toLowerCase(),
-      u.primaryRole.toLowerCase(),
-      ...u.roles.map((r) => r.toLowerCase()),
-    };
-    if (roles.any((r) => r.contains('cashier'))) return true;
-    const mgr = {
-      'super_admin', 'general_manager', 'director', 'branch_manager',
-      'branch_accountant', 'accountant', 'finance_manager',
-      'restaurant_manager', 'bar_manager',
-    };
-    return roles.any(mgr.contains);
-  }
-
-  /// Cashier/manager settles the whole combined bill with one tender. Each
-  /// member order posts its payment to its OWN outlet shift (per-outlet revenue
-  /// + stock); the other outlets confirm their share afterwards from the
-  /// Cross-outlet Settlements panel.
-  Future<void> _settleBill(ConsolidatedBill bill) async {
-    final billId = bill.masterBillId;
-    if (billId == null) return;
-    final method = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Settle ${_money(bill.balanceAmount)} — choose tender',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.payments_outlined),
-              title: const Text('Cash'),
-              onTap: () => Navigator.pop(ctx, 'cash'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.phone_android),
-              title: const Text('M-Pesa'),
-              onTap: () => Navigator.pop(ctx, 'mpesa'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.credit_card),
-              title: const Text('Card'),
-              onTap: () => Navigator.pop(ctx, 'card'),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (method == null) return;
-    setState(() => _busy = true);
-    try {
-      await ref.read(outletPosRepositoryProvider).payConsolidatedBill(
-            masterBillId: billId,
-            paymentMethod: method,
-            reference: bill.masterBillNumber,
-          );
-      if (widget.onPrintBill != null) {
-        try {
-          await widget.onPrintBill!(bill);
-        } catch (_) {/* printing is best-effort after a successful settle */}
-      }
-      if (mounted) Navigator.pop(context);
-      await widget.onChanged();
-      _snack(
-          'Bill ${bill.masterBillNumber ?? ''} settled (${method.toUpperCase()}).');
-    } catch (e) {
-      _snack('Settle failed: $e', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _addItems(ConsolidatedBill bill) async {
     final billId = bill.masterBillId;
     if (billId == null) return;
@@ -443,8 +366,7 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
     setState(() => _busy = true);
     try {
       final repo = ref.read(outletPosRepositoryProvider);
-      await repo.unlinkOrderFromBill(
-          masterBillId: billId, orderId: order.id);
+      await repo.unlinkOrderFromBill(masterBillId: billId, orderId: order.id);
       if (mounted) Navigator.pop(context);
       await widget.onChanged();
       _snack('Removed ${order.outletName ?? 'order'} from the bill.');
@@ -540,28 +462,6 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                   ),
                 ],
                 const SizedBox(height: 12),
-                // A cashier/manager settles the whole combined bill here with a
-                // single tender; each outlet's share posts to its own shift and
-                // the other outlets confirm their portion afterwards. A waiter
-                // only builds/prints it and hands it to the cashier.
-                if (_isCashierOrManager &&
-                    bill.masterBillId != null &&
-                    bill.balanceAmount > 0) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _busy ? null : () => _settleBill(bill),
-                      icon: const Icon(Icons.point_of_sale),
-                      label: Text('Settle & Pay  ${_money(bill.balanceAmount)}'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.green.shade700,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size.fromHeight(48),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
                 if (widget.onPrintBill != null)
                   SizedBox(
                     width: double.infinity,
@@ -579,16 +479,15 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                       label: const Text('Print customer bill'),
                     ),
                   ),
-                if (!_isCashierOrManager)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Give this bill to the customer — a cashier settles it.',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Cashier Station clears this customer bill after lookup by the Master Bill code.',
+                    style:
+                        theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
+                ),
               ],
             ),
           ),
@@ -626,8 +525,8 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
             ),
             if (order.shortCode != null)
               Text('#${order.shortCode}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: Colors.grey)),
+                  style:
+                      theme.textTheme.bodySmall?.copyWith(color: Colors.grey)),
             const SizedBox(height: 6),
             for (final raw in items)
               Padding(
@@ -636,10 +535,11 @@ class _BillDetailSheetState extends ConsumerState<_BillDetailSheet> {
                   children: [
                     Text('${raw['quantity'] ?? 1}× ',
                         style: const TextStyle(fontWeight: FontWeight.w600)),
-                    Expanded(child: Text('${raw['name'] ?? raw['item_name'] ?? 'Item'}')),
-                    Text(_money(
-                        ((raw['unit_price'] as num?)?.toDouble() ?? 0) *
-                            ((raw['quantity'] as num?)?.toDouble() ?? 1))),
+                    Expanded(
+                        child: Text(
+                            '${raw['name'] ?? raw['item_name'] ?? 'Item'}')),
+                    Text(_money(((raw['unit_price'] as num?)?.toDouble() ?? 0) *
+                        ((raw['quantity'] as num?)?.toDouble() ?? 1))),
                   ],
                 ),
               ),
@@ -839,7 +739,7 @@ class _AddItemsFromOutletSheetState
                                 ListTile(
                                   leading: const Icon(Icons.storefront),
                                   title: Text(o.name),
-                                  subtitle: Text(o.outletType ?? ''),
+                                  subtitle: Text(o.outletType),
                                   onTap: _busy ? null : () => _loadItems(o),
                                 ),
                               if (_outlets.isEmpty)
@@ -880,8 +780,8 @@ class _AddItemsFromOutletSheetState
                                         ? () =>
                                             setState(() => _qty[it.id] = q - 1)
                                         : null,
-                                    icon: const Icon(
-                                        Icons.remove_circle_outline),
+                                    icon:
+                                        const Icon(Icons.remove_circle_outline),
                                   ),
                                   SizedBox(
                                       width: 24,
@@ -890,8 +790,7 @@ class _AddItemsFromOutletSheetState
                                   IconButton(
                                     onPressed: () =>
                                         setState(() => _qty[it.id] = q + 1),
-                                    icon:
-                                        const Icon(Icons.add_circle_outline),
+                                    icon: const Icon(Icons.add_circle_outline),
                                   ),
                                 ],
                               );

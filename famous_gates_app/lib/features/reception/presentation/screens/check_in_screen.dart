@@ -138,11 +138,6 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
       // Perform check-in
       await _repository.checkInBooking(_selectedBooking!.id);
 
-      // Update room status
-      if (_selectedBooking!.roomId != null && _selectedBooking!.roomId!.isNotEmpty) {
-        await _repository.updateRoomStatus(_selectedBooking!.roomId!, 'occupied');
-      }
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

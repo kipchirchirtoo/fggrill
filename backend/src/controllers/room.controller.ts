@@ -2,6 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import {
+  loadStaySnapshots,
+  resolveEffectiveRoomState,
+  todayInNairobi,
+} from '../services/receptionStayState.service';
 
 // @desc    Get all rooms
 // @route   GET /api/rooms
@@ -57,95 +62,55 @@ export const getRooms = async (
       throw error;
     }
 
-    // Fetch active checked_in reservations to populate guest details for occupied rooms
-    let resQuery = supabase
-      .from('reservations')
-      .select(`
-        id,
-        status,
-        confirmation_number,
-        room_id,
-        guest_id,
-        check_in_date,
-        check_out_date,
-        checked_in_at,
-        meal_plan,
-        adults,
-        children,
-        guest:guests!guest_id(id, first_name, last_name, phone, email)
-      `)
-      .in('status', ['checked_in', 'confirmed'])
-      .order('created_at', { ascending: false });
-
-    resQuery = applyBranchFilter(resQuery, req);
-    if (req.query.branch_id && isGlobal) {
-      resQuery = resQuery.eq('branch_id', req.query.branch_id as string);
-    }
-
-    const { data: reservations } = await resQuery;
-
+    const scopedBranchId = Number(
+      req.query.branch_id ||
+      (isGlobal ? 0 : req.user?.branch_id || 0)
+    );
+    const staySnapshots = scopedBranchId
+      ? await loadStaySnapshots(scopedBranchId, {
+          asOfDate: todayInNairobi(),
+          includeConfirmed: true,
+          limit: 400,
+        })
+      : [];
     const checkedInByRoomId = new Map<string, any>();
     const confirmedByRoomId = new Map<string, any>();
-    (reservations || []).forEach((r: any) => {
-      if (!r.room_id) return;
-      const roomKey = String(r.room_id);
-      if (r.status === 'checked_in' && !checkedInByRoomId.has(roomKey)) {
-        checkedInByRoomId.set(roomKey, r);
+    staySnapshots.forEach((stay) => {
+      if (!stay.room_id) return;
+      if (stay.in_house && !checkedInByRoomId.has(stay.room_id)) {
+        checkedInByRoomId.set(stay.room_id, stay);
         return;
       }
-      if (r.status === 'confirmed' && !confirmedByRoomId.has(roomKey)) {
-        confirmedByRoomId.set(roomKey, r);
+      if (!stay.in_house && stay.status.toLowerCase() === 'confirmed' && !confirmedByRoomId.has(stay.room_id)) {
+        confirmedByRoomId.set(stay.room_id, stay);
       }
     });
 
     const enrichedRooms = (rooms || []).map((room: any) => {
-      const roomKey = String(room.id);
-      const checkedInRes = checkedInByRoomId.get(roomKey);
-      const confirmedRes = confirmedByRoomId.get(roomKey);
-      const activeRes = checkedInRes || confirmedRes || null;
-      let effectiveStatus = String(room.status || 'available').toLowerCase();
-
-      if (checkedInRes) {
-        effectiveStatus = 'occupied';
-      } else if (
-        confirmedRes &&
-        !['maintenance', 'cleaning', 'dirty'].includes(effectiveStatus)
-      ) {
-        effectiveStatus = 'reserved';
-      } else if (
-        ['occupied', 'reserved'].includes(effectiveStatus) &&
-        !activeRes
-      ) {
-        effectiveStatus = 'available';
-      }
-
-      const guestName = activeRes?.guest
-        ? `${activeRes.guest.first_name || ''} ${activeRes.guest.last_name || ''}`.trim()
-        : null;
-
-      const guestObj = activeRes?.guest || null;
-      const checkInDate = activeRes?.check_in_date || null;
-      const checkOutDate = activeRes?.check_out_date || null;
-      const confNum = activeRes?.confirmation_number || null;
-      const mealPlan = activeRes?.meal_plan || null;
-      const adults = activeRes?.adults ?? 0;
-      const children = activeRes?.children ?? 0;
-      const checkedInAt = activeRes?.checked_in_at || null;
+      const resolved = resolveEffectiveRoomState(
+        room,
+        checkedInByRoomId,
+        confirmedByRoomId,
+        todayInNairobi()
+      );
+      const activeRes = resolved.activeStay || resolved.reservedStay || null;
+      const effectiveStatus = resolved.status;
 
       return {
         ...room,
         status: effectiveStatus,
-        guest_name: guestName || (checkedInRes ? 'Occupied Guest' : null),
-        guest: guestObj,
-        check_in_date: checkInDate,
-        check_out_date: checkOutDate,
-        checked_in_at: checkedInAt,
-        confirmation_number: confNum,
-        meal_plan: mealPlan,
-        adults: adults,
-        children: children,
-        total_pax: adults + children,
+        guest_name: activeRes?.guest_name || null,
+        guest: activeRes?.raw?.guest || null,
+        check_in_date: activeRes?.check_in_date || null,
+        check_out_date: activeRes?.effective_checkout_date || activeRes?.check_out_date || null,
+        checked_in_at: activeRes?.checked_in_at || null,
+        confirmation_number: activeRes?.confirmation_number || null,
+        meal_plan: activeRes?.meal_plan || null,
+        adults: activeRes?.adults ?? 0,
+        children: activeRes?.children ?? 0,
+        total_pax: activeRes?.pax ?? 0,
         current_guest: activeRes?.guest_id || null,
+        overstay: activeRes?.overstay ?? false,
       };
     });
 

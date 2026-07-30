@@ -7,6 +7,7 @@ import { normalizeQty } from '../utils/unitNormalization';
 import { getActiveShiftMode } from '../services/shiftConfigService';
 import db from '../db';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
+import { buildBreakfastPaxSnapshot, todayInNairobi } from '../services/receptionStayState.service';
 
 interface AuthenticatedRequest extends Request {
     user?: {
@@ -22,9 +23,7 @@ const asyncWrap = <T extends Request = Request>(fn: (req: T, res: Response) => P
 
 const n = (v: any): number => Number.isFinite(Number(v)) ? Number(v) : 0;
 const absMoney = (v: any): number => Math.abs(n(v));
-const todayInNairobi = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
 const OPENING_STOCKTAKE_ACCEPTED_STATUSES = ['submitted', 'reviewed', 'approved', 'posted'];
-const BREAKFAST_ELIGIBLE_MEAL_PLANS = ['bb', 'hb', 'fb', 'bed_breakfast', 'half_board', 'full_board', 'bed & breakfast', 'half board', 'full board'];
 const STOCKTAKE_CONTROL_MODES = ['RAW_ONLY', 'PRODUCED_ONLY', 'BOTH', 'NONE'];
 const STOCKTAKE_LOCATIONS = ['KITCHEN', 'STORE', 'BOTH', 'NONE'];
 const PREP_BATCH_STATUSES = ['sent', 'returned', 'cancelled'];
@@ -296,52 +295,24 @@ type OpeningStocktakeReadiness = {
     openingItems?: OpeningSeedItem[];
 };
 
-function isBreakfastEligible(
-    mealPlan?: unknown,
-    roomTypeName?: string,
-    roomTypeCode?: string
-): boolean {
-    return true;
-}
-
-function mealPlanIncludesBreakfast(value: unknown): boolean {
-    return isBreakfastEligible(value);
-}
-
 async function getBreakfastPaxControl(branchId: number, date: string) {
-    const [{ data: control, error: controlError }, { data: reservations, error: reservationsError }] = await Promise.all([
+    const [{ data: control, error: controlError }, calculated] = await Promise.all([
         supabase
             .from('accommodation_breakfast_pax')
             .select('*')
             .eq('branch_id', branchId)
             .eq('breakfast_date', date)
             .maybeSingle(),
-        supabase
-            .from('reservations')
-            .select(`
-                adults,children,meal_plan,check_in_date,
-                room:rooms!room_id(
-                    id, room_number, room_type_id,
-                    room_type:room_types!room_type_id(id, name, code)
-                )
-            `)
-            .eq('branch_id', branchId)
-            .eq('status', 'checked_in')
+        buildBreakfastPaxSnapshot(branchId, date),
     ]);
 
     if (controlError) throw new AppError(controlError.message, 500);
-    if (reservationsError) throw new AppError(reservationsError.message, 500);
-
-    let calculatedPax = 0;
-    (reservations || []).forEach((row: any) => {
-        calculatedPax += Number(row.adults || 0) + Number(row.children || 0);
-    });
 
     return {
         branch_id: branchId,
         breakfast_date: date,
-        calculated_pax: calculatedPax,
-        confirmed_pax: control?.confirmed_pax ?? calculatedPax,
+        calculated_pax: calculated.calculatedPax,
+        confirmed_pax: control?.confirmed_pax ?? calculated.calculatedPax,
         status: control?.status ?? 'unconfirmed',
         adjustment_reason: control?.adjustment_reason ?? null,
         confirmed_at: control?.confirmed_at ?? null

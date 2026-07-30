@@ -2482,6 +2482,23 @@ export const processCashierPayment = async (
                     masterBill,
                     { method: String(method), userId: String(req.user?.id), cashierName }
                 );
+                await recordCashierTransactionSafe({
+                    branchId: userBranch,
+                    cashierId: String(req.user?.id || ''),
+                    paymentAmount: totalSettled,
+                    payment_method: settledMethod,
+                    payment_reference: paymentRef,
+                    revenueType: 'pos_master_bill',
+                    referenceType: 'pos_master_bills',
+                    referenceId: String(masterBill.id),
+                    sourceModule: 'pos',
+                    sourceDocumentType: 'pos_master_bills',
+                    sourceDocumentId: String(masterBill.id),
+                    sourceDocumentNumber: String(masterBill.master_bill_number || ''),
+                    billNumber: String(masterBill.master_bill_number || ''),
+                    orderNumber: String(masterBill.master_bill_number || ''),
+                    customerName: String(masterBill.customer_name || masterBill.master_bill_number || 'Walk-in')
+                });
                 billCache.clear();
                 res.json({
                     success: true,
@@ -4290,6 +4307,12 @@ async function recordCashierTransactionSafe(p: {
     branchId: number | null; cashierId?: string; paymentAmount: number;
     payment_method?: string; payment_reference?: string;
     revenueType?: string; referenceType: string; referenceId: string; customerName?: string;
+    sourceModule?: string;
+    sourceDocumentType?: string;
+    sourceDocumentId?: string;
+    sourceDocumentNumber?: string;
+    billNumber?: string;
+    orderNumber?: string;
 }): Promise<void> {
     try {
         const { data: txNum } = await supabase.rpc('generate_cashier_transaction_number');
@@ -4304,6 +4327,12 @@ async function recordCashierTransactionSafe(p: {
                 revenue_type: p.revenueType,
                 reference_type: p.referenceType,
                 reference_id: p.referenceId,
+                source_module: p.sourceModule,
+                source_document_type: p.sourceDocumentType,
+                source_document_id: p.sourceDocumentId,
+                source_document_number: p.sourceDocumentNumber,
+                bill_number: p.billNumber,
+                order_number: p.orderNumber,
                 payment_method: p.payment_method,
                 amount: p.paymentAmount,
                 payment_reference: p.payment_reference,

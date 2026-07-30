@@ -684,7 +684,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
   int _bookingPax(Map<String, dynamic> booking) =>
       _bookingAdults(booking) + _bookingChildren(booking);
 
-  bool _isBaseBookingEligible(Map<String, dynamic> booking) => true;
+  bool _isBaseBookingEligible(Map<String, dynamic> booking) =>
+      booking['breakfast_eligible'] == true;
 
   String? _authorizationTypeForBooking(Map<String, dynamic> booking) =>
       _authorizationTypeByBookingId[_bookingKey(booking)];
@@ -694,6 +695,9 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     final authType = _authorizationTypeByBookingId[key];
     if (authType == 'paid_extra' || authType == 'complimentary') {
       return true;
+    }
+    if (!_isBaseBookingEligible(booking)) {
+      return false;
     }
     return !_excludedBookingIds.contains(key);
   }
@@ -6602,12 +6606,6 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
         'amount_paid': num.tryParse(_deposit.text) ?? 0,
         'status': status,
       });
-      final roomId = _text(_selectedRoom!, ['id']);
-      if (roomId != null && status == 'confirmed') {
-        await ref
-            .read(receptionRepositoryProvider)
-            .updateRoomStatus(roomId, 'reserved');
-      }
       widget.onSuccess();
       if (mounted) Navigator.pop(context);
     } finally {
@@ -6964,7 +6962,7 @@ Future<void> _showQuickCheckInDialog(BuildContext context, WidgetRef ref,
             onPressed: selected == null
                 ? null
                 : () async {
-                    await repo.createBookingRow({
+                    final booking = await repo.createBookingRow({
                       'room_id': room.id,
                       'guest_id': selected!.id,
                       'check_in':
@@ -6973,9 +6971,15 @@ Future<void> _showQuickCheckInDialog(BuildContext context, WidgetRef ref,
                           .format(DateTime.now().add(const Duration(days: 1))),
                       'adults': 1,
                       'children': 0,
-                      'status': 'checked_in',
+                      'status': 'confirmed',
                     });
-                    await repo.updateRoomStatus(room.id, 'occupied');
+                    final bookingId =
+                        (booking['id'] ?? booking['bookingId'] ?? '').toString();
+                    if (bookingId.isEmpty) {
+                      throw Exception(
+                          'Quick check-in could not continue because the booking ID was not returned.');
+                    }
+                    await repo.checkIn(bookingId);
                     onSuccess();
                     if (context.mounted) Navigator.pop(context);
                   },
@@ -7017,9 +7021,6 @@ Future<void> _checkIn(BuildContext context, WidgetRef ref, Booking booking,
       await repo.updateBooking(booking.id, bookingEdit);
     }
     await repo.checkIn(booking.id);
-    if (booking.roomId != null && booking.roomId!.isNotEmpty) {
-      await repo.updateRoomStatus(booking.roomId!, 'occupied');
-    }
     onSuccess();
     if (context.mounted) _snack(context, 'Guest checked in');
   } catch (e) {
@@ -7321,11 +7322,6 @@ Future<void> _cancelBooking(BuildContext context, WidgetRef ref,
   final confirmed = await _confirm(context, 'Cancel this reservation?');
   if (!confirmed) return;
   await ref.read(receptionRepositoryProvider).cancelBooking(booking.id);
-  if (booking.roomId != null) {
-    await ref
-        .read(receptionRepositoryProvider)
-        .updateRoomStatus(booking.roomId!, 'available');
-  }
   onSuccess();
   if (context.mounted) _snack(context, 'Reservation cancelled');
 }

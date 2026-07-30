@@ -2719,6 +2719,14 @@ export const getShiftOrders = async (req: Request, res: Response, next: NextFunc
     // action can be disabled without a second round trip per order.
     const orderIds = (data || []).map((order: any) => order.id);
     const activeExchangeOrderIds = new Set<string>();
+    const masterBillIds = Array.from(
+      new Set(
+        (data || [])
+          .map((order: any) => String(order.master_bill_id || '').trim())
+          .filter(Boolean)
+      )
+    );
+    const cashierSettledMasterBillIds = await loadCashierSettledMasterBillIds(masterBillIds);
     if (orderIds.length) {
       const { data: exchangeRows, error: exchangeError } = await supabase
         .from('pos_item_exchange_requests')
@@ -2734,6 +2742,11 @@ export const getShiftOrders = async (req: Request, res: Response, next: NextFunc
 
     const enriched = (data || []).map((order: any) => ({
       ...order,
+      cashier_clearance_pending: Boolean(
+        order.master_bill_id &&
+          ['paid', 'partial'].includes(String(order.payment_status || '').toLowerCase()) &&
+          !cashierSettledMasterBillIds.has(String(order.master_bill_id))
+      ),
       has_active_exchange_request: activeExchangeOrderIds.has(order.id)
     }));
 
@@ -5555,6 +5568,30 @@ export const getExchangeHistory = async (req: Request, res: Response, next: Next
 const orderIsOwnedBy = (order: Record<string, any>, userId: string): boolean =>
   String(order.waiter_id || '') === userId || String(order.created_by || '') === userId;
 
+async function loadCashierSettledMasterBillIds(masterBillIds: string[]): Promise<Set<string>> {
+  const ids = Array.from(new Set(masterBillIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (ids.length === 0) return new Set<string>();
+  const { rows } = await db.query(
+    `
+      select distinct coalesce(reference_id::text, source_document_id::text) as master_bill_id
+      from cashier_transactions
+      where (
+        reference_type = 'pos_master_bills'
+        and reference_id = any($1::uuid[])
+      ) or (
+        source_document_type = 'pos_master_bills'
+        and source_document_id = any($1::uuid[])
+      )
+    `,
+    [ids]
+  );
+  return new Set(
+    rows
+      .map((row: Record<string, any>) => String(row.master_bill_id || '').trim())
+      .filter(Boolean)
+  );
+}
+
 // Shape a raw order row (optionally with a joined outlet) for the bill views.
 const mapOrderForBill = (order: Record<string, any>): Record<string, any> => {
   const outlet = Array.isArray(order.outlet) ? order.outlet[0] : order.outlet;
@@ -6195,36 +6232,10 @@ export const resolveMasterBillByCode = async (
 export const payConsolidatedBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     assertUser(req);
-    const role = roleFor(req);
-    if (!isCashierStationRole(role, req.user?.branch_id) && !SHIFT_MANAGER_ROLES.has(role) && !isGlobalUser(req)) {
-      throw new AppError('Only a cashier or manager can settle a customer bill', 403);
-    }
-    const { masterBillId } = req.params;
-    const method = normalizePaymentMethod(req.body.payment_method || req.body.method || 'cash');
-    if (!method) throw new AppError('Unsupported payment method', 400);
-    if (method === 'credit_bill') {
-      throw new AppError('Credit-bill settlement must be done per order, not on a consolidated bill.', 400);
-    }
-
-    const { data: master } = await supabase
-      .from('pos_master_bills').select('*').eq('id', masterBillId).maybeSingle();
-    if (!master) throw new AppError('Master bill not found', 404);
-    ensureBranchAccess(req, (master as any).branch_id);
-
-    const cashierName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || null;
-    const { totalSettled, view } = await settleMasterBillCore(master, {
-      method, userId: String(req.user.id), cashierName
-    });
-    res.json({
-      success: true,
-      data: {
-        master_bill_id: masterBillId,
-        master_bill_number: (master as any).master_bill_number,
-        payment_method: method,
-        total_settled: totalSettled,
-        bill: view
-      }
-    });
+    throw new AppError(
+      'Combined customer bills must be cleared from Cashier Station so the cashier ledger and shift totals stay correct.',
+      409
+    );
   } catch (error) {
     next(error);
   }
