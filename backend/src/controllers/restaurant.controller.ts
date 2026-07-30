@@ -159,7 +159,7 @@ export const getMenuItems = async (
     const { data: items, error } = await query
       .order('sort_order', {
         ascending: true,
-        referencedTable: 'restaurant_menu_categories',
+        referencedTable: 'category',
       })
       .order('name', { ascending: true })
       .limit(limit);
