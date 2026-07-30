@@ -903,6 +903,187 @@ async function getCashierCollectedForMasterBill(masterBillId: string): Promise<n
     return Number(rows[0]?.total || 0);
 }
 
+async function loadOutstandingCashierMasterBills(params: {
+    shiftIds: string[];
+    from: Date | null;
+    to: Date | null;
+}): Promise<{ rows: Array<Record<string, any>>; memberOrderIds: string[] }> {
+    if (!params.shiftIds.length) {
+        return { rows: [], memberOrderIds: [] };
+    }
+
+    let candidateQuery = supabase
+        .from('pos_shift_orders')
+        .select('id, master_bill_id, shift_id, created_at')
+        .in('shift_id', params.shiftIds)
+        .not('master_bill_id', 'is', null);
+    if (params.from && params.to) {
+        candidateQuery = candidateQuery
+            .gte('created_at', params.from.toISOString())
+            .lte('created_at', params.to.toISOString());
+    }
+
+    const { data: candidateRows, error: candidateErr } = await candidateQuery;
+    if (candidateErr) throw candidateErr;
+
+    const masterBillIds = Array.from(
+        new Set(
+            (candidateRows || [])
+                .map((row: any) => String(row.master_bill_id || '').trim())
+                .filter(Boolean)
+        )
+    );
+    if (!masterBillIds.length) {
+        return { rows: [], memberOrderIds: [] };
+    }
+
+    const [masterRowsRes, memberRowsRes, cashierRefRes, cashierSourceRes] = await Promise.all([
+        supabase
+            .from('pos_master_bills')
+            .select('id, master_bill_number, branch_id, customer_name, table_number, origin_outlet_id, origin_outlet_name, opening_waiter_id, opening_waiter_name, status, created_at')
+            .in('id', masterBillIds),
+        supabase
+            .from('pos_shift_orders')
+            .select(`
+                id, master_bill_id, shift_id, outlet_id, order_number, short_code,
+                customer_name, waiter_id, waiter_name, created_by, total_amount,
+                amount_paid, balance_amount, payment_status, status, created_at,
+                captain_printed_at, original_bill_printed_at, last_bill_printed_at,
+                bill_reprint_count, outlet:pos_outlets(id, name, outlet_type)
+            `)
+            .in('master_bill_id', masterBillIds),
+        supabase
+            .from('cashier_transactions')
+            .select('id, reference_id, amount')
+            .eq('reference_type', 'pos_master_bills')
+            .in('reference_id', masterBillIds),
+        supabase
+            .from('cashier_transactions')
+            .select('id, source_document_id, amount')
+            .eq('source_document_type', 'pos_master_bills')
+            .in('source_document_id', masterBillIds)
+    ]);
+
+    if (masterRowsRes.error) throw masterRowsRes.error;
+    if (memberRowsRes.error) throw memberRowsRes.error;
+    if (cashierRefRes.error) throw cashierRefRes.error;
+    if (cashierSourceRes.error) throw cashierSourceRes.error;
+
+    const masters = (masterRowsRes.data || []) as Array<Record<string, any>>;
+    const members = ((memberRowsRes.data || []) as Array<Record<string, any>>).filter((row) => {
+        const status = String(row.status || '').toLowerCase();
+        const paymentStatus = String(row.payment_status || '').toLowerCase();
+        return status !== 'cancelled' && status !== 'voided' && paymentStatus !== 'voided';
+    });
+
+    const membersByMaster = new Map<string, Array<Record<string, any>>>();
+    for (const member of members) {
+        const masterId = String(member.master_bill_id || '').trim();
+        if (!masterId) continue;
+        const list = membersByMaster.get(masterId) || [];
+        list.push(member);
+        membersByMaster.set(masterId, list);
+    }
+
+    const cashierTotals = new Map<string, number>();
+    const seenCashierTx = new Set<string>();
+    for (const row of [...(cashierRefRes.data || []), ...(cashierSourceRes.data || [])] as Array<Record<string, any>>) {
+        const txId = String(row.id || '').trim();
+        if (txId && seenCashierTx.has(txId)) continue;
+        if (txId) seenCashierTx.add(txId);
+        const masterId = String(row.reference_id || row.source_document_id || '').trim();
+        if (!masterId) continue;
+        cashierTotals.set(masterId, (cashierTotals.get(masterId) || 0) + Number(row.amount || 0));
+    }
+
+    const rows: Array<Record<string, any>> = [];
+    for (const master of masters) {
+        const masterId = String(master.id || '').trim();
+        const memberRows = membersByMaster.get(masterId) || [];
+        if (!memberRows.length) continue;
+
+        const totalAmount = memberRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+        if (totalAmount <= 0) continue;
+
+        const memberPosPaid = memberRows.reduce((sum, row) => sum + Number(row.amount_paid || 0), 0);
+        const cashierPaid = Math.min(totalAmount, cashierTotals.get(masterId) || 0);
+        const balanceAmount = Math.max(0, totalAmount - cashierPaid);
+        if (balanceAmount <= 0.009) continue;
+
+        const outletNames = Array.from(new Set(
+            memberRows
+                .map((row) => {
+                    const outlet = Array.isArray(row.outlet) ? row.outlet[0] : row.outlet;
+                    return String(outlet?.name || '').trim();
+                })
+                .filter(Boolean)
+        ));
+        const waiterName = String(
+            master.opening_waiter_name
+            || memberRows.find((row) => String(row.waiter_name || '').trim())?.waiter_name
+            || ''
+        ).trim();
+        const createdAt = String(
+            master.created_at
+            || memberRows
+                .map((row) => String(row.created_at || ''))
+                .filter(Boolean)
+                .sort()[0]
+            || new Date().toISOString()
+        );
+        const latestPrintedAt = memberRows
+            .map((row) => row.last_bill_printed_at || row.original_bill_printed_at || row.captain_printed_at || null)
+            .filter(Boolean)
+            .sort()
+            .slice(-1)[0] || null;
+
+        rows.push({
+            id: masterId,
+            source: 'pos_master_bill',
+            source_type: 'MASTER_BILL',
+            bill_type: 'master_bill',
+            bill_label: 'Customer Bill',
+            master_bill_id: masterId,
+            master_bill_number: master.master_bill_number,
+            order_number: master.master_bill_number,
+            bill_number: master.master_bill_number,
+            short_code: master.master_bill_number,
+            scan_reference: master.master_bill_number,
+            location: master.table_number
+                ? `Table ${master.table_number}`
+                : (outletNames.length ? outletNames.join(' • ') : '—'),
+            guest_name: master.customer_name || 'Walk-in',
+            customer_name: master.customer_name || 'Walk-in',
+            total_amount: totalAmount,
+            paid_amount: cashierPaid,
+            balance_amount: balanceAmount,
+            payment_status: cashierPaid > 0.009 ? 'partial' : 'unpaid',
+            status: cashierPaid > 0.009 ? 'partial' : 'unpaid',
+            created_at: createdAt,
+            bill_date: createdAt,
+            last_bill_printed_at: latestPrintedAt,
+            bill_reprint_count: memberRows.reduce((sum, row) => sum + Number(row.bill_reprint_count || 0), 0),
+            branch_id: master.branch_id,
+            outlet_id: master.origin_outlet_id,
+            outlet_name: master.origin_outlet_name || outletNames[0] || null,
+            station_name: outletNames.join(', '),
+            waiter: null,
+            waiter_id: master.opening_waiter_id || memberRows.find((row) => row.waiter_id)?.waiter_id || null,
+            waiter_name: waiterName,
+            order_count: memberRows.length,
+            pos_amount_paid: memberPosPaid,
+            cashier_clearance_pending: memberPosPaid > cashierPaid + 0.009,
+            is_waiter_order: true,
+            is_master_bill: true
+        });
+    }
+
+    return {
+        rows,
+        memberOrderIds: members.map((row) => String(row.id || '')).filter(Boolean)
+    };
+}
+
 async function buildCashierMasterBillResponse(master: Record<string, any>): Promise<Record<string, any>> {
     const { data: orderRows } = await supabase
         .from('pos_shift_orders')
@@ -9086,6 +9267,8 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         }
 
         let posOrders: any[] = [];
+        let masterBillRows: any[] = [];
+        let masterMemberOrderIds = new Set<string>();
         let posShiftIds: string[] = [];
         let shiftLookup: Record<string, any> = {};
         try {
@@ -9154,6 +9337,16 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 posOrders = (fetchedPosOrders || []).filter((o: any) =>
                     wantsVoidedOrders || String(o.status || '').toLowerCase() !== 'cancelled'
                 );
+
+                if (!wantsVoidedOrders) {
+                    const masterBillData = await loadOutstandingCashierMasterBills({
+                        shiftIds: posShiftIds,
+                        from,
+                        to
+                    });
+                    masterBillRows = masterBillData.rows;
+                    masterMemberOrderIds = new Set(masterBillData.memberOrderIds);
+                }
             }
         } catch (posError: any) {
             if (!['42P01', '42703', 'PGRST205', 'PGRST204'].includes(posError?.code)) {
@@ -9270,8 +9463,12 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 })(),
                 is_waiter_order: true
             })),
+            ...masterBillRows,
             ...posOrders
-            .filter((o: any) => wantsVoidedOrders || !isNullifiedZeroPosOrder(o))
+            .filter((o: any) =>
+                wantsVoidedOrders
+                    || (!isNullifiedZeroPosOrder(o) && !masterMemberOrderIds.has(String(o.id || '')))
+            )
             .map((o: any) => {
                 const shift = shiftLookup[o.shift_id];
                 const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;

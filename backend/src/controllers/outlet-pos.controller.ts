@@ -6189,6 +6189,17 @@ export const resolveMasterBillByCode = async (
   if (!term) return null;
   const openStatuses = ['open', 'bill_requested', 'payment_received'];
   const isSuffix = term.length >= 3 && term.length <= 10;
+  const normalizedUuid = isValidUUID(term) ? term : null;
+
+  // 0) Direct UUID lookup — cashier unpaid-queue rows keep the real master-bill
+  // id for downstream payment posting, so allow the raw master id to resolve
+  // back to the consolidated customer bill as well.
+  if (normalizedUuid) {
+    let q = supabase.from('pos_master_bills').select('*').eq('id', normalizedUuid);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data } = await q.maybeSingle();
+    if (data) return data as Record<string, any>;
+  }
 
   // 1) Exact master bill number.
   {

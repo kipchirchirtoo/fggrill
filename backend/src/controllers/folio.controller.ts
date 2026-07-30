@@ -2,17 +2,32 @@ import { Request, Response, NextFunction } from 'express';
 import { Folio } from '../models/Folio';
 import { AppError } from '../middleware/errorHandler';
 import { supabase } from '../config/database';
+import { automationService } from '../services/automation.service';
 
 export const getFolio = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { reservationId } = req.params;
-    let folio = await Folio.findByReservationId(reservationId);
-
-    const { data: reservation, error: resError } = await supabase
+    let { data: reservation, error: resError } = await supabase
       .from('reservations')
       .select('*')
       .eq('id', reservationId)
       .single();
+
+    if (!resError && reservation?.branch_id) {
+      await automationService.syncOverdueInHouseStays({
+        branchId: Number(reservation.branch_id),
+      });
+
+      const refreshed = await supabase
+        .from('reservations')
+        .select('*')
+        .eq('id', reservationId)
+        .single();
+      reservation = refreshed.data;
+      resError = refreshed.error;
+    }
+
+    let folio = await Folio.findByReservationId(reservationId);
 
     // Lazy creation: if folio doesn't exist, create it
     if (!folio) {
@@ -129,11 +144,19 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
       referenceNumber: t.reference || t.reference_number || t.bill_number || t.order_number || '',
       reference: t.reference || t.reference_number || t.bill_number || t.order_number || '',
       performedBy: t.performed_by || t.created_by,
-      createdAt: t.created_at || new Date().toISOString()
+      createdAt: t.created_at || new Date().toISOString(),
+      sourceTable: 'folio_transactions'
     }));
 
     const allTxnsMap = new Map();
-    for (const t of [...tx1, ...tx2]) {
+    for (const t of [
+      ...tx1.map(tx => ({
+        ...tx,
+        reference: tx.referenceNumber || '',
+        sourceTable: 'transactions'
+      })),
+      ...tx2
+    ]) {
       allTxnsMap.set(t.id, t);
     }
     const transactions = Array.from(allTxnsMap.values()).sort((a: any, b: any) =>
@@ -269,6 +292,7 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
       success: true,
       data: {
         folio,
+        reservation,
         transactions,
         items: invoiceItems,
         charge_lines: chargeLines
@@ -285,14 +309,98 @@ export const addTransaction = async (req: Request, res: Response, next: NextFunc
     const folio = await Folio.findByReservationId(reservationId);
     if (!folio) throw new AppError('Folio not found', 404);
 
+    const description = String(req.body?.description || '').trim();
+    const amount = Number(req.body?.amount || 0);
+
+    if (!description) {
+      throw new AppError('Service name is required', 400);
+    }
+
+    if (!(amount > 0)) {
+      throw new AppError('A valid service amount is required', 400);
+    }
+
     const transaction = await folio.addTransaction({
       ...req.body,
+      amount,
+      category: 'Additional Service',
+      description,
       performedBy: req.user?.id
     });
 
     res.status(201).json({
       success: true,
       data: transaction
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateTransaction = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { reservationId, transactionId } = req.params;
+    const folio = await Folio.findByReservationId(reservationId);
+    if (!folio) throw new AppError('Folio not found', 404);
+
+    const existing = await folio.getTransactionById(transactionId);
+    if (!existing) throw new AppError('Transaction not found', 404);
+
+    if (
+      String(existing.type || '').toLowerCase() !== 'charge' ||
+      String(existing.category || '').trim().toLowerCase() !== 'additional service'
+    ) {
+      throw new AppError('Only additional service charges can be edited here', 400);
+    }
+
+    const description = String(req.body?.description || '').trim();
+    const amount = Number(req.body?.amount || 0);
+
+    if (!description) {
+      throw new AppError('Service name is required', 400);
+    }
+
+    if (!(amount > 0)) {
+      throw new AppError('A valid service amount is required', 400);
+    }
+
+    const transaction = await folio.updateTransaction(transactionId, {
+      category: 'Additional Service',
+      description,
+      amount,
+      performedBy: req.user?.id,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: transaction,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteTransaction = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { reservationId, transactionId } = req.params;
+    const folio = await Folio.findByReservationId(reservationId);
+    if (!folio) throw new AppError('Folio not found', 404);
+
+    const existing = await folio.getTransactionById(transactionId);
+    if (!existing) throw new AppError('Transaction not found', 404);
+
+    if (
+      String(existing.type || '').toLowerCase() !== 'charge' ||
+      String(existing.category || '').trim().toLowerCase() !== 'additional service'
+    ) {
+      throw new AppError('Only additional service charges can be deleted here', 400);
+    }
+
+    await folio.deleteTransaction(transactionId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Additional service deleted successfully',
     });
   } catch (error) {
     next(error);

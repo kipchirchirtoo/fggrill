@@ -42,6 +42,14 @@ class Booking {
         json['guest'] is Map ? Map<String, dynamic>.from(json['guest']) : null;
     final room =
         json['room'] is Map ? Map<String, dynamic>.from(json['room']) : null;
+    final effectiveCheckout = json['effective_checkout_date'] ??
+        json['effectiveCheckOutDate'] ??
+        json['effective_checkout'] ??
+        json['effectiveCheckOut'];
+    final effectiveCheckIn = json['effective_check_in_date'] ??
+        json['effectiveCheckInDate'] ??
+        json['effective_check_in'] ??
+        json['effectiveCheckIn'];
     return Booking(
       id: '${json['id']}',
       guestId: _string(json['guest_id'] ?? json['guestId'] ?? guest?['id']),
@@ -63,11 +71,13 @@ class Booking {
           json['roomType'] ??
           room?['room_type'] ??
           room?['type']),
-      checkIn: _date(json['check_in'] ??
+      checkIn: _date(effectiveCheckIn ??
+          json['check_in'] ??
           json['checkIn'] ??
           json['checkin_date'] ??
           json['check_in_date']),
-      checkOut: _date(json['check_out'] ??
+      checkOut: _date(effectiveCheckout ??
+          json['check_out'] ??
           json['checkOut'] ??
           json['checkout_date'] ??
           json['check_out_date']),
@@ -182,6 +192,15 @@ class Room {
     final childrenCount = _int(json['children'] ?? json['num_children'] ?? json['child_pax']) ?? 0;
     final totalPaxCount = _int(json['total_pax'] ?? json['pax_total'] ?? json['total_guests']) ?? (adultsCount + childrenCount);
 
+    final effectiveCheckout = json['effective_checkout_date'] ??
+        json['effectiveCheckOutDate'] ??
+        json['effective_checkout'] ??
+        json['effectiveCheckOut'];
+    final effectiveCheckIn = json['effective_check_in_date'] ??
+        json['effectiveCheckInDate'] ??
+        json['effective_check_in'] ??
+        json['effectiveCheckIn'];
+
     return Room(
       id: '${json['id']}',
       number: _int(rawRoomNumber) ?? 0,
@@ -190,12 +209,14 @@ class Room {
       floor: _int(json['floor'] ?? json['floor_number']),
       status: '${json['status'] ?? 'available'}',
       guestName: parsedGuestName,
-      checkInDate: _tryDate(json['check_in_date'] ??
+      checkInDate: _tryDate(effectiveCheckIn ??
+          json['check_in_date'] ??
           json['checkInDate'] ??
           json['check_in'] ??
           json['checkIn'] ??
           json['start_date']),
-      checkOutDate: _tryDate(json['check_out_date'] ??
+      checkOutDate: _tryDate(effectiveCheckout ??
+          json['check_out_date'] ??
           json['checkOutDate'] ??
           json['check_out'] ??
           json['checkOut'] ??

@@ -233,8 +233,7 @@ class ReceptionRepository {
           'complimentary_entries': complimentaryEntries,
         if (excludedBookingIds != null)
           'excluded_booking_ids': excludedBookingIds,
-        if (earlyBreakfastIds != null)
-          'early_breakfast_ids': earlyBreakfastIds,
+        if (earlyBreakfastIds != null) 'early_breakfast_ids': earlyBreakfastIds,
         if (packedBreakfastIds != null)
           'packed_breakfast_ids': packedBreakfastIds,
         if (dietaryNotes != null) 'dietary_notes': dietaryNotes,
@@ -593,8 +592,26 @@ class ReceptionRepository {
     return _payload(response.data);
   }
 
-  Future<void> addFolioTransaction(String bookingId, Map<String, dynamic> data) async {
-    await _dio.post('/folios/reservation/$bookingId/transaction', data: data);
+  Future<Map<String, dynamic>> addFolioTransaction(
+      String bookingId, Map<String, dynamic> data) async {
+    final response = await _dio
+        .post('/folios/reservation/$bookingId/transaction', data: data);
+    return _payload(response.data);
+  }
+
+  Future<Map<String, dynamic>> updateFolioTransaction(
+      String bookingId, String transactionId, Map<String, dynamic> data) async {
+    final response = await _dio.put(
+      '/folios/reservation/$bookingId/transaction/$transactionId',
+      data: data,
+    );
+    return _payload(response.data);
+  }
+
+  Future<void> deleteFolioTransaction(
+      String bookingId, String transactionId) async {
+    await _dio
+        .delete('/folios/reservation/$bookingId/transaction/$transactionId');
   }
 
   Future<List<Map<String, dynamic>>> getHousekeepingRooms() async {

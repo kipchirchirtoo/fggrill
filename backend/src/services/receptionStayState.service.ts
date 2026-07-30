@@ -3,6 +3,7 @@ import db from '../db';
 import { supabase } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { RoomStatus } from '../models/Room';
+import { automationService } from './automation.service';
 
 const BREAKFAST_ELIGIBLE_MEAL_PLANS = new Set([
   'bb',
@@ -260,6 +261,7 @@ export async function loadStaySnapshots(
   const asOfDate = options?.asOfDate || todayInNairobi();
   const includeConfirmed = Boolean(options?.includeConfirmed);
   const limit = options?.limit ?? 250;
+  await automationService.syncOverdueInHouseStays({ branchId });
   const statuses = includeConfirmed
     ? Array.from(new Set([...CHECKED_IN_STATUSES, ...CONFIRMED_STATUSES]))
     : Array.from(CHECKED_IN_STATUSES);

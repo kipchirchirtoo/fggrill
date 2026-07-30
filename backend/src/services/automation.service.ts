@@ -163,6 +163,12 @@ class AutomationService {
     logger.info('Automation service initialized with scheduled tasks');
   }
 
+  async syncOverdueInHouseStays(options?: {
+    branchId?: number | null;
+  }): Promise<{ extendedReservations: number; postedExtraNights: number }> {
+    return this.autoCheckoutOverdue(options);
+  }
+
   // Send check-in reminders
   private async sendCheckInReminders() {
     try {
@@ -390,7 +396,12 @@ class AutomationService {
   }
 
   // Auto-extend overdue in-house stays instead of force-checking them out.
-  private async autoCheckoutOverdue() {
+  private async autoCheckoutOverdue(options?: {
+    branchId?: number | null;
+  }): Promise<{ extendedReservations: number; postedExtraNights: number }> {
+    let extendedReservations = 0;
+    let postedExtraNights = 0;
+
     try {
       const now = new Date();
       const nairobiNow = nairobiNowContext(now);
@@ -398,6 +409,13 @@ class AutomationService {
       const client = await db.getClient();
 
       try {
+        const params: any[] = [];
+        let branchSql = '';
+        if (options?.branchId) {
+          params.push(Number(options.branchId));
+          branchSql = ` AND r.branch_id = $${params.length}`;
+        }
+
         const result = await client.query(
           `
             SELECT
@@ -405,6 +423,7 @@ class AutomationService {
               r.branch_id,
               r.guest_id,
               r.room_id,
+              r.booking_id,
               r.confirmation_number,
               r.status,
               r.check_in_date,
@@ -426,12 +445,11 @@ class AutomationService {
             LEFT JOIN rooms rm ON rm.id = r.room_id
             WHERE LOWER(TRIM(COALESCE(r.status, ''))) = 'checked_in'
               AND r.check_out_date IS NOT NULL
+              ${branchSql}
             ORDER BY r.check_out_date ASC, r.updated_at ASC NULLS LAST
-          `
+          `,
+          params
         );
-
-        let extendedReservations = 0;
-        let postedExtraNights = 0;
 
         for (const reservation of result.rows) {
           const effectiveCheckoutDate = nairobiDateString(reservation.check_out_date);
@@ -439,6 +457,9 @@ class AutomationService {
           if (!effectiveCheckoutDate || !checkInDate) {
             continue;
           }
+          const originalCheckoutDate =
+            nairobiDateString(reservation.original_check_out_date) ||
+            effectiveCheckoutDate;
 
           const daysBehind = Math.max(0, diffDays(effectiveCheckoutDate, nairobiNow.date));
           const todayReachedCutoff =
@@ -450,7 +471,10 @@ class AutomationService {
             continue;
           }
 
-          const bookedNights = Math.max(1, diffDays(checkInDate, reservation.original_check_out_date || effectiveCheckoutDate));
+          const bookedNights = Math.max(
+            1,
+            diffDays(checkInDate, originalCheckoutDate)
+          );
           const currentTotalAmount = Number(reservation.total_amount || 0);
           const currentSubtotal = Number(reservation.subtotal || 0);
           const currentTaxAmount = Number(reservation.tax_amount || 0);
@@ -770,11 +794,13 @@ class AutomationService {
         logger.info(
           `Auto-extended ${extendedReservations} overdue in-house reservation(s) and posted ${postedExtraNights} extra room night(s)`
         );
+        return { extendedReservations, postedExtraNights };
       } finally {
         client.release();
       }
     } catch (error) {
       logger.error('Error auto-extending overdue in-house stays:', error);
+      throw error;
     }
   }
 

@@ -318,7 +318,8 @@ class _EmbeddedCashierTabsState extends State<_EmbeddedCashierTabs> {
     final current = _scrollController.offset;
     final target = right
         ? (current + 280).clamp(0.0, _scrollController.position.maxScrollExtent)
-        : (current - 280).clamp(0.0, _scrollController.position.maxScrollExtent);
+        : (current - 280)
+            .clamp(0.0, _scrollController.position.maxScrollExtent);
     _scrollController.animateTo(
       target.toDouble(),
       duration: const Duration(milliseconds: 250),
@@ -358,7 +359,8 @@ class _EmbeddedCashierTabsState extends State<_EmbeddedCashierTabs> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.kDivider),
                 ),
-                child: const Icon(Icons.chevron_left, size: 20, color: AppColors.kTextPrimary),
+                child: const Icon(Icons.chevron_left,
+                    size: 20, color: AppColors.kTextPrimary),
               ),
             ),
           ),
@@ -414,7 +416,8 @@ class _EmbeddedCashierTabsState extends State<_EmbeddedCashierTabs> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.kDivider),
                 ),
-                child: const Icon(Icons.chevron_right, size: 20, color: AppColors.kTextPrimary),
+                child: const Icon(Icons.chevron_right,
+                    size: 20, color: AppColors.kTextPrimary),
               ),
             ),
           ),
@@ -643,15 +646,26 @@ class _StationTabState extends ConsumerState<_StationTab> {
     if (_corporateCustomers.isNotEmpty || _corporateCustomersLoading) return;
     setState(() => _corporateCustomersLoading = true);
     try {
-      final customers = await ref.read(cashierRepositoryProvider).getCorporateCustomers();
+      final customers =
+          await ref.read(cashierRepositoryProvider).getCorporateCustomers();
       if (!mounted) return;
       setState(() {
         _corporateCustomers = customers
-            .where((c) => c['is_active'] == true || c['is_active'] == 1 || c['is_active'] == 'true' || c['is_active'] == 't')
+            .where((c) =>
+                c['is_active'] == true ||
+                c['is_active'] == 1 ||
+                c['is_active'] == 'true' ||
+                c['is_active'] == 't')
             .toList();
       });
     } catch (e) {
-      if (mounted) AppNotifier.showSnackBar(context, SnackBar(content: Text('Failed to load corporate accounts: ${apiErrorMessage(e)}'), backgroundColor: AppColors.kError));
+      if (mounted)
+        AppNotifier.showSnackBar(
+            context,
+            SnackBar(
+                content: Text(
+                    'Failed to load corporate accounts: ${apiErrorMessage(e)}'),
+                backgroundColor: AppColors.kError));
     } finally {
       if (mounted) setState(() => _corporateCustomersLoading = false);
     }
@@ -687,7 +701,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
       if (!mounted) return;
 
       Map<String, dynamic>? selectedGuest;
-      final currentBookingId = '${_selectedRoomChargeGuest?['booking_id'] ?? ''}';
+      final currentBookingId =
+          '${_selectedRoomChargeGuest?['booking_id'] ?? ''}';
       if (currentBookingId.isNotEmpty) {
         for (final guest in guests) {
           if ('${guest['booking_id'] ?? ''}' == currentBookingId) {
@@ -882,6 +897,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
   @override
   Widget build(BuildContext context) {
     final currentShift = ref.watch(cashierCurrentShiftProvider);
+    final currentShiftDetail = ref.watch(cashierCurrentShiftDetailProvider);
     final unpaidBills = ref.watch(
         cashierUnpaidBillsProvider(CashierBillFilters(search: _unpaidSearch)));
     return SingleChildScrollView(
@@ -896,6 +912,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
               // during an active shift. Only the accountant sees real
               // collections at reconciliation time.
               final txns = _num(shift['transaction_count']).toInt();
+              final clearedBills = currentShiftDetail.maybeWhen(
+                data: (detail) =>
+                    _currentShiftClearedBillsCount(_payload(detail), txns),
+                orElse: () => txns,
+              );
               final unpaidCount = unpaidBills.maybeWhen(
                   data: (bills) => bills.length, orElse: () => null);
               return Row(
@@ -925,7 +946,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   Expanded(
                     child: StatCard(
                       label: 'Shift Transactions',
-                      value: '$txns',
+                      value: '$clearedBills',
                       icon: Icons.access_time,
                       color: AppColors.kPrimary,
                     ),
@@ -957,6 +978,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     _lookupPanel(),
                     const SizedBox(height: 16),
                     _unpaidQueuePanel(unpaidBills),
+                    const SizedBox(height: 16),
+                    _shiftTransactionsPanel(currentShiftDetail),
                   ],
                 ),
               ),
@@ -1333,6 +1356,277 @@ class _StationTabState extends ConsumerState<_StationTab> {
     );
   }
 
+  Widget _shiftTransactionsPanel(AsyncValue<Map<String, dynamic>> detail) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Current Shift Transactions',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () =>
+                      ref.invalidate(cashierCurrentShiftDetailProvider),
+                  icon: const Icon(Icons.refresh, size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Latest payment lines recorded in this open cashier shift.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.kTextSecondary,
+                  ),
+            ),
+            const SizedBox(height: 14),
+            detail.when(
+              loading: () => const LoadingSkeleton(type: SkeletonType.list),
+              error: (_, __) => const EmptyState(
+                message: 'Unable to load shift transactions',
+              ),
+              data: (raw) {
+                final shift = _payload(raw);
+                final transactions = _currentShiftTransactions(shift);
+                if (transactions.isEmpty) {
+                  return const EmptyState(
+                    message: 'No transactions recorded for this shift yet',
+                  );
+                }
+                return Column(
+                  children: [
+                    for (var i = 0; i < transactions.length; i++) ...[
+                      _shiftTransactionTile(transactions[i]),
+                      if (i != transactions.length - 1)
+                        Divider(color: Colors.grey.shade200, height: 1),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _currentShiftTransactions(
+      Map<String, dynamic> shift) {
+    final seen = <String>{};
+    final rows = <Map<String, dynamic>>[];
+
+    void addAll(dynamic source) {
+      if (source is! List) return;
+      for (final item in source) {
+        final row = _payload(item);
+        if (row.isEmpty) continue;
+        final amount = _num(
+          row['amount'] ?? row['total_amount'] ?? row['paid_amount'],
+        );
+        if (amount <= 0) continue;
+        final key = [
+          _text(row, ['id', 'transaction_id']),
+          _text(row, ['reference', 'payment_reference', 'receipt_number']),
+          _text(row, ['created_at', 'transaction_time', 'recorded_at']),
+          amount.toStringAsFixed(2),
+          _text(row, ['payment_method', 'method']),
+        ].join('|');
+        if (!seen.add(key)) continue;
+        rows.add(row);
+      }
+    }
+
+    addAll(shift['transaction_history']);
+    addAll(shift['transactions']);
+    addAll(shift['lines']);
+
+    rows.sort((a, b) {
+      final left = DateTime.tryParse(
+            _text(a, ['created_at', 'transaction_time', 'recorded_at']),
+          ) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final right = DateTime.tryParse(
+            _text(b, ['created_at', 'transaction_time', 'recorded_at']),
+          ) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return right.compareTo(left);
+    });
+
+    return rows.take(12).toList();
+  }
+
+  int _currentShiftClearedBillsCount(
+    Map<String, dynamic> shift,
+    int fallback,
+  ) {
+    final seen = <String>{};
+
+    void addAll(dynamic source) {
+      if (source is! List) return;
+      for (final item in source) {
+        final row = _payload(item);
+        if (row.isEmpty) continue;
+        final amount = _num(
+          row['amount'] ?? row['total_amount'] ?? row['paid_amount'],
+        );
+        if (amount <= 0) continue;
+
+        final section = _text(row, ['section', 'source_table']).toLowerCase();
+        if (!section.contains('cleared')) continue;
+
+        final reference = _text(row, [
+          'source_document_number',
+          'order_number',
+          'bill_number',
+          'short_code',
+          'receipt_number',
+          'payment_reference',
+          'reference',
+          'source_id',
+          'id',
+        ]).trim();
+        if (reference.isEmpty) continue;
+
+        seen.add(reference);
+      }
+    }
+
+    addAll(shift['transaction_history']);
+    addAll(shift['transactions']);
+    addAll(shift['lines']);
+
+    if (seen.isNotEmpty) return seen.length;
+
+    final summary = _payload(shift['summary']);
+    final paidBillsCount = _num(
+      shift['paid_bills_count'] ?? summary['paid_bills_count'],
+    ).toInt();
+    if (paidBillsCount > 0) return paidBillsCount;
+
+    return fallback;
+  }
+
+  Widget _shiftTransactionTile(Map<String, dynamic> row) {
+    final amount = _money(
+      _num(row['amount'] ?? row['total_amount'] ?? row['paid_amount']),
+    );
+    final method =
+        _receiptMethodLabel(_text(row, ['payment_method', 'method']));
+    final reference = _text(row, [
+      'payment_reference',
+      'reference',
+      'receipt_number',
+      'transaction_number',
+      'order_number',
+      'short_code',
+    ]);
+    final customer = _text(row, [
+      'customer_name',
+      'guest_name',
+      'staff_name',
+      'paid_by',
+      'payer_name',
+    ]);
+    final timestamp = _text(row, [
+      'created_at',
+      'transaction_time',
+      'recorded_at',
+    ]);
+    final section = _text(row, [
+      'section',
+      'source_table',
+      'reference_type',
+      'bill_type',
+    ]);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.kPrimary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.receipt_long_outlined,
+              size: 18,
+              color: AppColors.kPrimary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        customer.isEmpty ? method : customer,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      amount,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.kPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _txnChip(method),
+                    if (reference.isNotEmpty) _txnChip(reference),
+                    if (section.isNotEmpty)
+                      _txnChip(section.replaceAll('_', ' ')),
+                    if (timestamp.isNotEmpty) _txnChip(_date(timestamp)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _txnChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: AppColors.kTextSecondary,
+        ),
+      ),
+    );
+  }
+
   Widget _paymentPanel() {
     final balance = _balanceFromBill(_bill);
     if (_bill != null && _amountController.text.isEmpty) {
@@ -1355,8 +1649,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 _methodChip('mpesa_manual', 'M-Pesa', Icons.phone_android),
                 _methodChip('card_manual', 'Card', Icons.credit_card),
                 _methodChip('credit_bill', 'Staff Credit', Icons.badge),
-                _methodChip('corporate_credit', 'Corporate Credit', Icons.business),
-                _methodChip('room_charge', 'Charge to Room', Icons.bedroom_parent),
+                _methodChip(
+                    'corporate_credit', 'Corporate Credit', Icons.business),
+                _methodChip(
+                    'room_charge', 'Charge to Room', Icons.bedroom_parent),
               ],
             ),
             const SizedBox(height: 16),
@@ -1402,8 +1698,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 decoration: const InputDecoration(
                   labelText: 'Select room to charge',
                   prefixIcon: Icon(Icons.meeting_room_outlined),
-                  helperText:
-                      'Only checked-in overnight stays are shown here.',
+                  helperText: 'Only checked-in overnight stays are shown here.',
                 ),
                 items: _eligibleRoomChargeGuests
                     .map(
@@ -1422,7 +1717,9 @@ class _StationTabState extends ConsumerState<_StationTab> {
                         setState(() {
                           _selectedRoomChargeGuest = bookingId == null
                               ? null
-                              : _eligibleRoomChargeGuests.cast<Map<String, dynamic>?>().firstWhere(
+                              : _eligibleRoomChargeGuests
+                                  .cast<Map<String, dynamic>?>()
+                                  .firstWhere(
                                     (guest) =>
                                         '${guest?['booking_id'] ?? ''}' ==
                                         bookingId,
@@ -1596,12 +1893,16 @@ class _StationTabState extends ConsumerState<_StationTab> {
               else
                 DropdownButtonFormField<String>(
                   value: _selectedCorporateCustomerId,
-                  decoration: const InputDecoration(labelText: 'Select Corporate Account'),
-                  items: _corporateCustomers.map((c) => DropdownMenuItem<String>(
-                    value: c['id'],
-                    child: Text(c['company_name'] ?? 'Unknown Company'),
-                  )).toList(),
-                  onChanged: (val) => setState(() => _selectedCorporateCustomerId = val),
+                  decoration: const InputDecoration(
+                      labelText: 'Select Corporate Account'),
+                  items: _corporateCustomers
+                      .map((c) => DropdownMenuItem<String>(
+                            value: c['id'],
+                            child: Text(c['company_name'] ?? 'Unknown Company'),
+                          ))
+                      .toList(),
+                  onChanged: (val) =>
+                      setState(() => _selectedCorporateCustomerId = val),
                 ),
             ],
             const SizedBox(height: 12),
@@ -1725,21 +2026,18 @@ class _StationTabState extends ConsumerState<_StationTab> {
                             final price = _num(svc['price'] ??
                                 svc['base_price'] ??
                                 svc['default_price']);
-                            final name = _text(svc,
-                                ['service_name', 'name', 'description']);
+                            final name = _text(
+                                svc, ['service_name', 'name', 'description']);
                             return ActionChip(
                               label: Text(
-                                price > 0
-                                    ? '$name (${_money(price)})'
-                                    : name,
+                                price > 0 ? '$name (${_money(price)})' : name,
                                 style: const TextStyle(fontSize: 12),
                               ),
                               onPressed: () {
                                 setLocal(() {
                                   nameCtrl.text = name;
                                   if (price > 0) {
-                                    amountCtrl.text =
-                                        price.toStringAsFixed(0);
+                                    amountCtrl.text = price.toStringAsFixed(0);
                                   }
                                 });
                               },
@@ -1801,8 +2099,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
     setState(() {
       _extraCharges.add(result);
       // Bump the payment amount by the charge.
-      final currentAmount =
-          num.tryParse(_amountController.text.trim()) ?? 0;
+      final currentAmount = num.tryParse(_amountController.text.trim()) ?? 0;
       _amountController.text =
           (currentAmount + result.amount).toStringAsFixed(0);
     });
@@ -1840,7 +2137,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
 
   Future<void> _loadUnpaidBill(Map<String, dynamic> row) async {
     final displayReference = _billLookupReference(row);
-    final directId = _billId(row);
+    final directId = _queueLookupReference(row);
     final lookupReference = directId.isNotEmpty ? directId : displayReference;
     if (lookupReference.isEmpty) {
       return _snack('This bill has no lookup reference');
@@ -1851,9 +2148,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
     // balance) is then confirmed from the server in the background below.
     final rowBalance = _balanceFromBill(row);
     setState(() {
-      _selectedUnpaidRef = displayReference.isNotEmpty
-          ? displayReference
-          : lookupReference;
+      _selectedUnpaidRef =
+          displayReference.isNotEmpty ? displayReference : lookupReference;
       _lookupController.text = lookupReference;
       _bill = row;
       _amountController.text =
@@ -1915,21 +2211,25 @@ class _StationTabState extends ConsumerState<_StationTab> {
       );
       return;
     } else if (_method == 'corporate_credit') {
-        if (_selectedCorporateCustomerId == null) {
-          return _snack('Select a corporate account to charge');
-        }
-        await ref.read(cashierRepositoryProvider).chargeCorporateCredit({
-          'pos_bill_id': bill['id'],
-          'corporate_customer_id': _selectedCorporateCustomerId,
-          'amount': amount,
-        });
-        ref.invalidate(cashierUnpaidBillsProvider);
-        if (mounted) {
-          AppNotifier.showSnackBar(context, const SnackBar(content: Text('Charged to Corporate Credit'), backgroundColor: AppColors.kSuccess));
-          _applyOptimisticBillSettlement(amount);
-          _amountController.clear();
-        }
-        return;
+      if (_selectedCorporateCustomerId == null) {
+        return _snack('Select a corporate account to charge');
+      }
+      await ref.read(cashierRepositoryProvider).chargeCorporateCredit({
+        'pos_bill_id': bill['id'],
+        'corporate_customer_id': _selectedCorporateCustomerId,
+        'amount': amount,
+      });
+      ref.invalidate(cashierUnpaidBillsProvider);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context,
+            const SnackBar(
+                content: Text('Charged to Corporate Credit'),
+                backgroundColor: AppColors.kSuccess));
+        _applyOptimisticBillSettlement(amount);
+        _amountController.clear();
+      }
+      return;
     }
 
     if (_method == 'mpesa_manual' && _referenceController.text.trim().isEmpty) {
@@ -2058,8 +2358,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
   }
 
   // ignore: unused_element, use_build_context_synchronously
-  Future<void> _showRoomChargeModal(
-      BuildContext context, WidgetRef ref, Map<String, dynamic> bill, num amount) async {
+  Future<void> _showRoomChargeModal(BuildContext context, WidgetRef ref,
+      Map<String, dynamic> bill, num amount) async {
     final nav = ref.read(dashboardNavProvider);
     final branchId = int.tryParse('${nav.user?.branchId ?? 1}') ?? 1;
     final repository = ref.read(cashierRepositoryProvider);
@@ -2069,7 +2369,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
     bool searching = true;
     Map<String, dynamic>? selectedGuest;
 
-    Future<void> searchGuests(String q, void Function(void Function()) setModalState) async {
+    Future<void> searchGuests(
+        String q, void Function(void Function()) setModalState) async {
       setModalState(() => searching = true);
       try {
         eligibleGuests = await repository.getEligibleRoomChargeGuests(
@@ -2085,7 +2386,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
     }
 
     try {
-      eligibleGuests = await repository.getEligibleRoomChargeGuests(branchId: branchId);
+      eligibleGuests =
+          await repository.getEligibleRoomChargeGuests(branchId: branchId);
     } catch (e) {
       _snack('Error loading in-house rooms: $e');
     } finally {
@@ -2102,15 +2404,18 @@ class _StationTabState extends ConsumerState<_StationTab> {
             if (selectedGuest != null) {
               final guestName = '${selectedGuest!['guest_name'] ?? 'Guest'}';
               final roomNo = '${selectedGuest!['room_number'] ?? '-'}';
-              final bookingRef = '${selectedGuest!['confirmation_number'] ?? '-'}';
+              final bookingRef =
+                  '${selectedGuest!['confirmation_number'] ?? '-'}';
               final folioBal = _money(selectedGuest!['folio_balance'] ?? 0);
               final stayNights = _num(selectedGuest!['stay_nights']).round();
-              final outletName = _text(bill, ['outlet_name', 'outletName']).isEmpty
-                  ? 'Restaurant POS'
-                  : _text(bill, ['outlet_name', 'outletName']);
-              final billNo = _text(bill, ['bill_number', 'short_code', 'id']).isEmpty
-                  ? 'BILL'
-                  : _text(bill, ['bill_number', 'short_code', 'id']);
+              final outletName =
+                  _text(bill, ['outlet_name', 'outletName']).isEmpty
+                      ? 'Restaurant POS'
+                      : _text(bill, ['outlet_name', 'outletName']);
+              final billNo =
+                  _text(bill, ['bill_number', 'short_code', 'id']).isEmpty
+                      ? 'BILL'
+                      : _text(bill, ['bill_number', 'short_code', 'id']);
 
               return AlertDialog(
                 title: const Row(
@@ -2137,13 +2442,20 @@ class _StationTabState extends ConsumerState<_StationTab> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text('GUEST INFORMATION',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue)),
                             const SizedBox(height: 6),
-                            Text('Guest Name: $guestName', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Guest Name: $guestName',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
                             Text('Room Number: $roomNo • Ref: $bookingRef'),
                             if (stayNights > 0)
-                              Text('Stay Length: $stayNights night${stayNights == 1 ? '' : 's'}'),
-                            Text('Current Folio Balance: $folioBal', style: TextStyle(color: Colors.grey.shade700)),
+                              Text(
+                                  'Stay Length: $stayNights night${stayNights == 1 ? '' : 's'}'),
+                            Text('Current Folio Balance: $folioBal',
+                                style: TextStyle(color: Colors.grey.shade700)),
                           ],
                         ),
                       ),
@@ -2159,11 +2471,17 @@ class _StationTabState extends ConsumerState<_StationTab> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text('BILL INFORMATION',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black54)),
                             const SizedBox(height: 6),
                             Text('Outlet: $outletName • Bill #: $billNo'),
                             Text('Amount to Charge: ${_money(amount)}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.kPrimary, fontSize: 16)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.kPrimary,
+                                    fontSize: 16)),
                           ],
                         ),
                       ),
@@ -2177,7 +2495,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
                         ),
                         child: Text(
                           'This bill will be posted to Room $roomNo under $guestName and added to the guest’s final accommodation charges.',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.amber.shade900),
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.amber.shade900),
                         ),
                       ),
                     ],
@@ -2226,15 +2547,17 @@ class _StationTabState extends ConsumerState<_StationTab> {
                     TextField(
                       controller: searchCtrl,
                       decoration: InputDecoration(
-                        hintText: 'Search in-house room, guest, booking ref, phone...',
+                        hintText:
+                            'Search in-house room, guest, booking ref, phone...',
                         prefixIcon: const Icon(Icons.search),
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.arrow_forward),
-                          onPressed: () =>
-                              searchGuests(searchCtrl.text.trim(), setModalState),
+                          onPressed: () => searchGuests(
+                              searchCtrl.text.trim(), setModalState),
                         ),
                         isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                       onSubmitted: (q) => searchGuests(q.trim(), setModalState),
                     ),
@@ -2271,13 +2594,19 @@ class _StationTabState extends ConsumerState<_StationTab> {
 
                             return ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: AppColors.kPrimary.withValues(alpha: 0.1),
+                                backgroundColor:
+                                    AppColors.kPrimary.withValues(alpha: 0.1),
                                 child: Text(
                                   roomStr,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.kPrimary),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: AppColors.kPrimary),
                                 ),
                               ),
-                              title: Text(gName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              title: Text(gName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold)),
                               subtitle: Text(
                                 'Ref: $bRef • Meal: $meal • ${stayNights > 0 ? '$stayNights night${stayNights == 1 ? '' : 's'}' : 'In-house'} • $checkIn to $checkOut • Bal: $bal',
                               ),
@@ -2475,7 +2804,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
           ? 'Restaurant POS'
           : _text(bill, ['outlet_name', 'outletName']);
       final shortCode = _billShortCode(bill);
-      final orderNo = _text(bill, ['order_number', 'orderNumber', 'bill_number', 'short_code', 'id']);
+      final orderNo = _text(bill,
+          ['order_number', 'orderNumber', 'bill_number', 'short_code', 'id']);
       final realBillId = _billId(bill);
       final displayBillNo = shortCode.isNotEmpty
           ? shortCode
@@ -2485,7 +2815,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   ? 'BILL'
                   : _text(bill, ['bill_number', 'billNumber', 'id'])));
 
-      final response = await ref.read(cashierRepositoryProvider).postRoomCharge({
+      final response =
+          await ref.read(cashierRepositoryProvider).postRoomCharge({
         'branch_id': branchId,
         'source': _text(bill, ['source', 'source_type', 'bill_type']),
         'source_type': _text(bill, ['source_type', 'bill_type']),
@@ -2767,8 +3098,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
     try {
       var bill = row;
       if (_receiptItemsFromBill(row, 0).length <= 1) {
-        final lookupRef = _billId(row).isNotEmpty
-            ? _billId(row)
+        final lookupRef = _queueLookupReference(row).isNotEmpty
+            ? _queueLookupReference(row)
             : _billLookupReference(row);
         if (lookupRef.isNotEmpty) {
           final fetched = await ref
@@ -2785,7 +3116,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
           financials['balance'] ??
           bill['balance_amount'] ??
           bill['balance']);
-      
+
       final receiptItems = _receiptItemsFromBill(bill, total);
       if (total <= 0 && receiptItems.isNotEmpty) {
         total = receiptItems.fold<num>(
@@ -5181,8 +5512,8 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
               ElevatedButton.icon(
                 onPressed: canRequestShift ? _startShift : null,
                 icon: const Icon(Icons.play_arrow, size: 16),
-                label: Text(
-                    hasPendingShift ? 'Awaiting Approval' : 'Open Shift'),
+                label:
+                    Text(hasPendingShift ? 'Awaiting Approval' : 'Open Shift'),
               ),
             ],
           ),
@@ -5589,8 +5920,7 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
   }
 
   Future<void> _startShift() async {
-    final opening =
-        await _numberDialog(context, 'Open Shift', 'Opening float');
+    final opening = await _numberDialog(context, 'Open Shift', 'Opening float');
     if (opening == null) return;
     try {
       await ref.read(cashierRepositoryProvider).startShift(opening);
@@ -6215,7 +6545,6 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
             openingFloat + rawCashSales + cashPaidCredits - cashExpenses;
         final variance = actualCash - expectedCash;
 
-
         return Dialog(
           insetPadding: const EdgeInsets.all(24),
           child: SizedBox(
@@ -6259,7 +6588,8 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                           spacing: 12,
                           runSpacing: 12,
                           children: [
-                            _amountField(cashAtHand, 'Cash at hand (incl. Opening Float)',
+                            _amountField(cashAtHand,
+                                'Cash at hand (incl. Opening Float)',
                                 onChanged: (_) => setDialogState(() {})),
                             _amountField(mpesaLogged, 'M-Pesa total collected',
                                 onChanged: (_) => setDialogState(() {})),
@@ -6393,7 +6723,6 @@ Widget _amountField(
     ),
   );
 }
-
 
 List<_ShiftStaffMember> _shiftStaffMembers(
   List<Map<String, dynamic>> rows,
@@ -7317,8 +7646,7 @@ class _BillSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final financials = _asMap(bill['financials']);
     final items = _billItems(bill);
-    final extraTotal =
-        extraCharges.fold<num>(0, (sum, e) => sum + e.amount);
+    final extraTotal = extraCharges.fold<num>(0, (sum, e) => sum + e.amount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -7477,8 +7805,7 @@ class _BillSummary extends StatelessWidget {
             );
           }),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.kSuccess.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
@@ -7501,7 +7828,6 @@ class _BillSummary extends StatelessWidget {
     );
   }
 }
-
 
 class _MpesaMatches extends StatelessWidget {
   const _MpesaMatches({required this.matches, required this.onUse});
@@ -8376,12 +8702,31 @@ String _text(Map<String, dynamic> row, List<String> keys) {
 String _billId(Map<String, dynamic> bill) {
   final direct = _text(bill, ['id']);
   if (direct.isNotEmpty) return direct;
-  for (final nestedKey in ['order', 'booking', 'invoice', 'bill', 'transaction']) {
+  for (final nestedKey in [
+    'order',
+    'booking',
+    'invoice',
+    'bill',
+    'transaction'
+  ]) {
     final nested = _asMap(bill[nestedKey]);
     final nestedId = _text(nested, ['id']);
     if (nestedId.isNotEmpty) return nestedId;
   }
   return '';
+}
+
+String _queueLookupReference(Map<String, dynamic> bill) {
+  final billType = _text(bill, ['bill_type', 'type']).toLowerCase();
+  final lookupReference = _billLookupReference(bill);
+  final isMasterBill = bill['is_master_bill'] == true ||
+      billType == 'master_bill' ||
+      billType == 'pos_master_bill';
+  if (isMasterBill && lookupReference.isNotEmpty) {
+    return lookupReference;
+  }
+  final directId = _billId(bill);
+  return directId.isNotEmpty ? directId : lookupReference;
 }
 
 /// Finds a bill's real short_code, which getBillDetails nests under a
@@ -8805,7 +9150,10 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final shiftId =
           _filterCurrentShiftOnly ? await _resolveOpenShiftId() : null;
@@ -8824,7 +9172,10 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.toString(); _loading = false; });
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
@@ -8884,7 +9235,10 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
       _paidToCtrl.clear();
       _receiptCtrl.clear();
       _poRefCtrl.clear();
-      setState(() { _selectedPO = null; _saving = false; });
+      setState(() {
+        _selectedPO = null;
+        _saving = false;
+      });
       await _load();
       if (mounted) AppNotifier.show(context, 'Expense recorded — cash reduced');
     } catch (e) {
@@ -8902,7 +9256,8 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
       final name = '$fn $ln'.trim();
       if (name.isNotEmpty) return name;
     }
-    final direct = _text(row, ['recorded_by_name', 'recorded_by', 'created_by']);
+    final direct =
+        _text(row, ['recorded_by_name', 'recorded_by', 'created_by']);
     if (direct.isNotEmpty && direct != '-') return direct;
     return 'Staff';
   }
@@ -8912,12 +9267,17 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
     final filteredExpenses = _expenses.where((e) {
       if (_searchQuery.trim().isEmpty) return true;
       final q = _searchQuery.trim().toLowerCase();
-      final desc = _text(e, ['purpose_description', 'description']).toLowerCase();
+      final desc =
+          _text(e, ['purpose_description', 'description']).toLowerCase();
       final cat = _text(e, ['purpose_category', 'category']).toLowerCase();
       final paid = _text(e, ['paid_to_name', 'paid_to']).toLowerCase();
       final recBy = _recordedBy(e).toLowerCase();
       final rcpt = _text(e, ['receipt_number', 'po_reference']).toLowerCase();
-      return desc.contains(q) || cat.contains(q) || paid.contains(q) || recBy.contains(q) || rcpt.contains(q);
+      return desc.contains(q) ||
+          cat.contains(q) ||
+          paid.contains(q) ||
+          recBy.contains(q) ||
+          rcpt.contains(q);
     }).toList();
 
     final expensesTotal =
@@ -9021,10 +9381,15 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                        'PO #${_text(_selectedPO!, ['po_number', 'reference'])}',
+                        'PO #${_text(_selectedPO!, [
+                              'po_number',
+                              'reference'
+                            ])}',
                         style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text(
-                        'Supplier: ${_text(_selectedPO!, ['supplier_name', 'vendor_name'])}'),
+                    Text('Supplier: ${_text(_selectedPO!, [
+                          'supplier_name',
+                          'vendor_name'
+                        ])}'),
                     Text(
                         'Amount: ${_money(_num(_selectedPO!['total_amount'] ?? _selectedPO!['amount']))}',
                         style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -9042,8 +9407,8 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                   width: 320,
                   child: TextField(
                     controller: _descCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Description / Reason *'),
+                    decoration: const InputDecoration(
+                        labelText: 'Description / Reason *'),
                   ),
                 ),
                 SizedBox(
@@ -9059,15 +9424,15 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                   width: 200,
                   child: TextField(
                     controller: _paidToCtrl,
-                    decoration: const InputDecoration(labelText: 'Paid to (name)'),
+                    decoration:
+                        const InputDecoration(labelText: 'Paid to (name)'),
                   ),
                 ),
                 SizedBox(
                   width: 180,
                   child: TextField(
                     controller: _receiptCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Receipt No.'),
+                    decoration: const InputDecoration(labelText: 'Receipt No.'),
                   ),
                 ),
                 SizedBox(
@@ -9128,8 +9493,10 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('Expense History',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(width: 12),
                   ChoiceChip(
                     label: const Text('All History'),
@@ -9185,7 +9552,8 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                     Chip(
                       label: Text(
                           '${filteredExpenses.length} entries  •  ${_money(expensesTotal)}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ],
@@ -9199,8 +9567,7 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                     padding: EdgeInsets.all(32),
                     child: CircularProgressIndicator()))
           else if (_error != null)
-            Text(_error!,
-                style: const TextStyle(color: Colors.red))
+            Text(_error!, style: const TextStyle(color: Colors.red))
           else if (filteredExpenses.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
@@ -9269,7 +9636,8 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                   ...filteredExpenses.asMap().entries.map((e) {
                     final row = e.value;
                     final dt = _date(row['created_at']);
-                    final desc = _text(row, ['purpose_description', 'description']);
+                    final desc =
+                        _text(row, ['purpose_description', 'description']);
                     final cat = _text(row, ['purpose_category', 'category']);
                     final paidTo = _text(row, ['paid_to_name', 'paid_to']);
                     final recBy = _recordedBy(row);
@@ -9310,8 +9678,7 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                               )),
                           Expanded(
                               flex: 2,
-                              child: Text(
-                                  paidTo.isNotEmpty ? paidTo : '—',
+                              child: Text(paidTo.isNotEmpty ? paidTo : '—',
                                   style: const TextStyle(fontSize: 12))),
                           Expanded(
                               flex: 2,
@@ -9340,8 +9707,7 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
                       children: [
                         const Expanded(
                             child: Text('Total Expenses',
-                                style:
-                                    TextStyle(fontWeight: FontWeight.w700))),
+                                style: TextStyle(fontWeight: FontWeight.w700))),
                         SizedBox(
                           width: 120,
                           child: Text(
@@ -9363,7 +9729,6 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
       ),
     );
   }
-
 }
 
 // nests it (top-level for credit bills, `order`/`booking` for POS/hotel).
@@ -9396,9 +9761,10 @@ Map<String, dynamic> _optimisticBillAfterPayment(
       _num(financials['total_amount'] ?? updated['total_amount']).toDouble();
   final currentPaid =
       _num(financials['amount_paid'] ?? updated['amount_paid']).toDouble();
-  final currentBalance =
-      _num(financials['balance'] ?? updated['balance'] ?? updated['balance_amount'])
-          .toDouble();
+  final currentBalance = _num(financials['balance'] ??
+          updated['balance'] ??
+          updated['balance_amount'])
+      .toDouble();
   final applied = paidAmount > currentBalance ? currentBalance : paidAmount;
   final nextPaid = currentPaid + applied;
   final nextBalance = (total - nextPaid) > 0 ? (total - nextPaid) : 0.0;

@@ -1,5 +1,31 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../config/supabase';
+import {
+  isCashierStationRole,
+  resolveCashierStationRole,
+} from '../../utils/posStationAccess';
+
+const BRANCH_WIDE_EXPENSE_ROLES = new Set([
+  'super_admin',
+  'general_manager',
+  'branch_manager',
+  'branch_accountant',
+  'accountant',
+  'auditor',
+]);
+
+const normalizeRole = (req: Request): string =>
+  resolveCashierStationRole(req.user?.role, req.user?.branch_id);
+
+const canViewBranchWideExpenses = (req: Request): boolean =>
+  BRANCH_WIDE_EXPENSE_ROLES.has(normalizeRole(req));
+
+const shouldRestrictExpenseHistoryToOwner = (req: Request): boolean => {
+  if (canViewBranchWideExpenses(req)) return false;
+  const role = normalizeRole(req);
+  if (isCashierStationRole(role, req.user?.branch_id)) return true;
+  return role === 'receptionist' || role === 'branch_receptionist' || role === 'front_desk_supervisor';
+};
 
 /**
  * Record petty cash entry
@@ -40,7 +66,7 @@ export const recordPettyCash = async (req: Request, res: Response) => {
     if (shift_id) {
       const { data: shift, error: shiftError } = await supabase
         .from('cashier_shift_logs')
-        .select('id, status, branch_id')
+        .select('id, status, branch_id, cashier_id')
         .eq('id', shift_id)
         .single();
 
@@ -56,6 +82,16 @@ export const recordPettyCash = async (req: Request, res: Response) => {
         return res.status(400).json({
           success: false,
           error: 'Cannot record an expense for a shift that is not open'
+        });
+      }
+
+      if (
+        shouldRestrictExpenseHistoryToOwner(req)
+        && String(shift.cashier_id || '') !== String(recorded_by || '')
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only record expenses against your own open shift'
         });
       }
     }
@@ -138,6 +174,8 @@ export const getPettyCashEntries = async (req: Request, res: Response) => {
   try {
     const { shift_id, start_date, end_date, category } = req.query;
     const branch_id = req.user?.branch_id;
+    const recorded_by = req.user?.id;
+    const restrictToOwner = shouldRestrictExpenseHistoryToOwner(req);
 
     let query = supabase
       .from('shift_reconciliation_expenses')
@@ -150,6 +188,10 @@ export const getPettyCashEntries = async (req: Request, res: Response) => {
 
     if (shift_id) {
       query = query.eq('shift_id', shift_id);
+    }
+
+    if (restrictToOwner && recorded_by) {
+      query = query.eq('recorded_by', recorded_by);
     }
 
     if (start_date) {
@@ -189,6 +231,8 @@ export const getPettyCashSummary = async (req: Request, res: Response) => {
   try {
     const { shift_id, start_date, end_date } = req.query;
     const branch_id = req.user?.branch_id;
+    const recorded_by = req.user?.id;
+    const restrictToOwner = shouldRestrictExpenseHistoryToOwner(req);
 
     let query = supabase
       .from('shift_reconciliation_expenses')
@@ -197,6 +241,10 @@ export const getPettyCashSummary = async (req: Request, res: Response) => {
 
     if (shift_id) {
       query = query.eq('shift_id', shift_id);
+    }
+
+    if (restrictToOwner && recorded_by) {
+      query = query.eq('recorded_by', recorded_by);
     }
 
     if (start_date) {

@@ -2,6 +2,7 @@ import { logger } from '../utils/logger';
 import schedulerService from './scheduler.service';
 import db from '../db';
 import { runGRNStockBackfill } from '../controllers/storekeeping/grn.controller';
+import { automationService } from './automation.service';
 
 /**
  * Service to handle application startup tasks
@@ -24,6 +25,13 @@ class StartupService {
       logger.info(`GRN stock backfill on startup: ${JSON.stringify(backfillResult)}`);
     } catch (err: any) {
       logger.warn('GRN stock backfill skipped (non-critical):', err.message);
+    }
+
+    try {
+      void automationService;
+      logger.info('Reception automation service initialized');
+    } catch (error) {
+      logger.error('Error initializing automation service:', error);
     }
 
     try {

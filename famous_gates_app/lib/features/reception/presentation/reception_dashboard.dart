@@ -102,14 +102,19 @@ class _ReceptionDashboardState extends ConsumerState<ReceptionDashboard> {
     }
 
     final results = await Future.wait([
-      guard(_repo.getBookingRows(params: {'limit': 250}), <Map<String, dynamic>>[]),
+      guard(_repo.getBookingRows(params: {'limit': 250}),
+          <Map<String, dynamic>>[]),
       guard(_repo.getRoomRows(), <Map<String, dynamic>>[]),
-      guard(_repo.getGuestRows(search: _searchController.text), <Map<String, dynamic>>[]),
-      guard(_repo.getHousekeepingTasks(params: {'status': 'pending'}), <Map<String, dynamic>>[]),
+      guard(_repo.getGuestRows(search: _searchController.text),
+          <Map<String, dynamic>>[]),
+      guard(_repo.getHousekeepingTasks(params: {'status': 'pending'}),
+          <Map<String, dynamic>>[]),
       guard(_repo.getHousekeepingRoomGrid(), <Map<String, dynamic>>[]),
       guard(_repo.getConferenceHalls(), <Map<String, dynamic>>[]),
-      guard(_repo.getConferenceBookings(params: {'status': 'confirmed'}), <Map<String, dynamic>>[]),
-      guard(_repo.getCateringBookings(params: {'status': 'confirmed'}), <Map<String, dynamic>>[]),
+      guard(_repo.getConferenceBookings(params: {'status': 'confirmed'}),
+          <Map<String, dynamic>>[]),
+      guard(_repo.getCateringBookings(params: {'status': 'confirmed'}),
+          <Map<String, dynamic>>[]),
       guard(_repo.getCashierStats(), <String, dynamic>{}),
       guard(_repo.getUnpaidBills(), <Map<String, dynamic>>[]),
       guard(_repo.getCreditBills(), <Map<String, dynamic>>[]),
@@ -804,8 +809,7 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
       }
     }
 
-    final confirmedAdults =
-        (data['confirmed_adults'] as num?)?.toInt() ?? 0;
+    final confirmedAdults = (data['confirmed_adults'] as num?)?.toInt() ?? 0;
     final confirmedChildren =
         (data['confirmed_children'] as num?)?.toInt() ?? 0;
     if (confirmedAdults > 0 || confirmedChildren > 0) {
@@ -821,10 +825,14 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
 
   void _removeAuthorizationForBooking(String bookingKey) {
     _authorizationTypeByBookingId.remove(bookingKey);
-    _paidEntries
-        .removeWhere((row) => _bookingKey(row) == bookingKey || (row['reservation_id']?.toString() ?? '') == bookingKey || (row['confirmation_number']?.toString() ?? '') == bookingKey);
-    _complimentaryEntries
-        .removeWhere((row) => _bookingKey(row) == bookingKey || (row['reservation_id']?.toString() ?? '') == bookingKey || (row['confirmation_number']?.toString() ?? '') == bookingKey);
+    _paidEntries.removeWhere((row) =>
+        _bookingKey(row) == bookingKey ||
+        (row['reservation_id']?.toString() ?? '') == bookingKey ||
+        (row['confirmation_number']?.toString() ?? '') == bookingKey);
+    _complimentaryEntries.removeWhere((row) =>
+        _bookingKey(row) == bookingKey ||
+        (row['reservation_id']?.toString() ?? '') == bookingKey ||
+        (row['confirmation_number']?.toString() ?? '') == bookingKey);
     _syncPaidComplimentaryControllers();
   }
 
@@ -968,12 +976,11 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
               (data['checked_in_reservations'] as num?)?.toInt() ?? 0;
           final status =
               (data['status']?.toString() ?? 'unconfirmed').toLowerCase();
-          final bookings =
-              (data['all_bookings'] as List?)?.whereType<Map>().toList() ??
-                  (data['eligible_bookings'] as List?)
-                      ?.whereType<Map>()
-                      .toList() ??
-                  const <Map>[];
+          final bookings = (data['all_bookings'] as List?)
+                  ?.whereType<Map>()
+                  .toList() ??
+              (data['eligible_bookings'] as List?)?.whereType<Map>().toList() ??
+              const <Map>[];
 
           final typedBookings =
               bookings.map((b) => Map<String, dynamic>.from(b)).toList();
@@ -984,8 +991,9 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
           final Set<String> occupiedRooms = {};
           final includedBookings =
               typedBookings.where(_isBookingIncluded).toList();
-          final excludedBookings =
-              typedBookings.where((booking) => !_isBookingIncluded(booking)).toList();
+          final excludedBookings = typedBookings
+              .where((booking) => !_isBookingIncluded(booking))
+              .toList();
           for (final b in includedBookings) {
             calcAdults += _bookingAdults(b);
             calcChildren += _bookingChildren(b);
@@ -1153,9 +1161,11 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                       Text('Calculated: $calcTotal',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(width: 14),
-                      _barInput('Confirmed Adults', _confirmedAdultsController, 125),
+                      _barInput(
+                          'Confirmed Adults', _confirmedAdultsController, 125),
                       const SizedBox(width: 10),
-                      _barInput('Confirmed Children', _confirmedChildrenController, 130),
+                      _barInput('Confirmed Children',
+                          _confirmedChildrenController, 130),
                       const SizedBox(width: 10),
                       _barInput('Paid Extra', _paidExtraController, 105,
                           readOnly: true),
@@ -1236,15 +1246,18 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                                 isDense: true,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFCBD5E1)),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFCBD5E1)),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: AppColors.kPrimary, width: 1.5),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.kPrimary, width: 1.5),
                                 ),
                                 contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 7),
@@ -1275,10 +1288,12 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  _tabButton(0, 'Breakfast Guests (${includedBookings.length})'),
+                  _tabButton(
+                      0, 'Breakfast Guests (${includedBookings.length})'),
                   _tabButton(1, 'Expected Arrivals'),
                   _tabButton(2, 'Checkout Today'),
-                  _tabButton(3, 'Paid & Complimentary (${_paidEntries.length + _complimentaryEntries.length})'),
+                  _tabButton(3,
+                      'Paid & Complimentary (${_paidEntries.length + _complimentaryEntries.length})'),
                   _tabButton(4, 'Changes / Audit (${_versionsHistory.length})'),
                 ],
               ),
@@ -1316,7 +1331,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: const BorderRadius.only(
@@ -1329,7 +1345,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                   children: [
                     Text(
                       'Included Adults: $calcAdults | Included Children: $calcChildren | Excluded: $excludedCount | Paid Extra: $paidExtra | Complimentary: $compl',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13),
                     ),
                     Text(
                       'Final Confirmed Pax: $finalConfirmedTotal',
@@ -1382,7 +1399,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                   children: [
                     _dialogSummaryRow('Confirmed Adults', '$adults'),
                     _dialogSummaryRow('Confirmed Children', '$children'),
-                    _dialogSummaryRow('Excluded Stays', '${_excludedBookingIds.length}'),
+                    _dialogSummaryRow(
+                        'Excluded Stays', '${_excludedBookingIds.length}'),
                     _dialogSummaryRow('Paid Authorisations', '$paid'),
                     _dialogSummaryRow('Complimentary Authorisations', '$compl'),
                     const Divider(),
@@ -1404,11 +1422,13 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                 children: [
                   Chip(
                     avatar: const Icon(Icons.alarm, size: 16),
-                    label: Text('Early Breakfast: ${_earlyBreakfastIds.length}'),
+                    label:
+                        Text('Early Breakfast: ${_earlyBreakfastIds.length}'),
                   ),
                   Chip(
                     avatar: const Icon(Icons.takeout_dining, size: 16),
-                    label: Text('Packed Breakfast: ${_packedBreakfastIds.length}'),
+                    label:
+                        Text('Packed Breakfast: ${_packedBreakfastIds.length}'),
                   ),
                   Chip(
                     avatar: const Icon(Icons.note_alt, size: 16),
@@ -1715,8 +1735,7 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     final children = int.tryParse(_confirmedChildrenController.text) ?? 0;
     final paid = int.tryParse(_paidExtraController.text) ?? 0;
     final compl = int.tryParse(_complimentaryController.text) ?? 0;
-    final total =
-        adults + children + paid + compl - _excludedBookingIds.length;
+    final total = adults + children + paid + compl - _excludedBookingIds.length;
 
     String titleMap;
     String subtitleMap;
@@ -1876,18 +1895,15 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.grey300),
                   children: [
-                    if (incRoomNumbers)
-                      _tableHeaderCell('Room'),
-                    if (incBookingRefs)
-                      _tableHeaderCell('Booking Ref'),
+                    if (incRoomNumbers) _tableHeaderCell('Room'),
+                    if (incBookingRefs) _tableHeaderCell('Booking Ref'),
                     if (incGuestNames && reportType != 'kitchen_plan')
                       _tableHeaderCell('Guest Name'),
                     _tableHeaderCell('Meal Plan'),
                     _tableHeaderCell('Adults'),
                     _tableHeaderCell('Children'),
                     _tableHeaderCell('Total Pax'),
-                    if (incDietaryNotes)
-                      _tableHeaderCell('Dietary / Notes'),
+                    if (incDietaryNotes) _tableHeaderCell('Dietary / Notes'),
                   ],
                 ),
                 ...bookings.asMap().entries.map((entry) {
@@ -1912,8 +1928,7 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                         _tableDataCell(b['room_number']?.toString() ??
                             b['room']?.toString() ??
                             '-'),
-                      if (incBookingRefs)
-                        _tableDataCell(refStr),
+                      if (incBookingRefs) _tableDataCell(refStr),
                       if (incGuestNames && reportType != 'kitchen_plan')
                         _tableDataCell(isExcluded
                             ? '${b['guest_name']} [EXCLUDED]'
@@ -1925,8 +1940,7 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                           '${(b['adults'] as num? ?? 1) + (b['children'] as num? ?? 0)}',
                           isBold: true),
                       if (incDietaryNotes)
-                        _tableDataCell(
-                            notes.isEmpty ? '-' : notes.join(', ')),
+                        _tableDataCell(notes.isEmpty ? '-' : notes.join(', ')),
                     ],
                   );
                 }),
@@ -2050,8 +2064,9 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     String paymentMethod = 'cash';
     final candidates =
         bookings.where((booking) => !_isBookingIncluded(booking)).toList();
-    Map<String, dynamic>? selected =
-        candidates.isNotEmpty ? Map<String, dynamic>.from(candidates.first) : null;
+    Map<String, dynamic>? selected = candidates.isNotEmpty
+        ? Map<String, dynamic>.from(candidates.first)
+        : null;
 
     showDialog(
       context: context,
@@ -2096,7 +2111,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                             alignment: Alignment.centerLeft,
                             child: Text(
                               'Pax: ${_bookingAdults(selected!)} adults, ${_bookingChildren(selected!)} children',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ),
                         const SizedBox(height: 10),
@@ -2114,9 +2130,12 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                               labelText: 'Payment Method',
                               border: OutlineInputBorder()),
                           items: const [
-                            DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                            DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
-                            DropdownMenuItem(value: 'card', child: Text('Card')),
+                            DropdownMenuItem(
+                                value: 'cash', child: Text('Cash')),
+                            DropdownMenuItem(
+                                value: 'mpesa', child: Text('M-Pesa')),
+                            DropdownMenuItem(
+                                value: 'card', child: Text('Card')),
                             DropdownMenuItem(
                                 value: 'room_charge',
                                 child: Text('Room Charge')),
@@ -2159,8 +2178,9 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     final authCtrl = TextEditingController(text: 'GM / Reception');
     final candidates =
         bookings.where((booking) => !_isBookingIncluded(booking)).toList();
-    Map<String, dynamic>? selected =
-        candidates.isNotEmpty ? Map<String, dynamic>.from(candidates.first) : null;
+    Map<String, dynamic>? selected = candidates.isNotEmpty
+        ? Map<String, dynamic>.from(candidates.first)
+        : null;
 
     showDialog(
       context: context,
@@ -2205,7 +2225,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                             alignment: Alignment.centerLeft,
                             child: Text(
                               'Pax: ${_bookingAdults(selected!)} adults, ${_bookingChildren(selected!)} children',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ),
                         const SizedBox(height: 10),
@@ -2253,8 +2274,7 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     );
   }
 
-  Widget _barInput(
-      String label, TextEditingController controller, double width,
+  Widget _barInput(String label, TextEditingController controller, double width,
       {bool readOnly = false}) {
     return SizedBox(
       width: width,
@@ -2291,7 +2311,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: AppColors.kPrimary, width: 1.5),
+                borderSide:
+                    const BorderSide(color: AppColors.kPrimary, width: 1.5),
               ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -2348,7 +2369,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
     final filtered = bookings.where((b) {
       final q = _searchController.text.toLowerCase();
       final guest = (b['guest_name'] ?? '').toString().toLowerCase();
-      final room = (b['room_number'] ?? b['room'] ?? '').toString().toLowerCase();
+      final room =
+          (b['room_number'] ?? b['room'] ?? '').toString().toLowerCase();
       final refStr = (b['confirmation_number'] ?? '').toString().toLowerCase();
       if (q.isNotEmpty &&
           !guest.contains(q) &&
@@ -2395,9 +2417,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                 backgroundColor: isExcluded
                     ? Colors.red.shade100
                     : AppColors.kPrimary.withValues(alpha: 0.1),
-                foregroundColor: isExcluded
-                    ? Colors.red.shade900
-                    : AppColors.kPrimary,
+                foregroundColor:
+                    isExcluded ? Colors.red.shade900 : AppColors.kPrimary,
               ),
               title: Text(
                 'Room ${b['room_number'] ?? '-'} | ${b['guest_name'] ?? 'Guest'}',
@@ -2468,8 +2489,10 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                               const Text('Booking Info',
                                   style:
                                       TextStyle(fontWeight: FontWeight.bold)),
-                              Text('Adults: ${_bookingAdults(Map<String, dynamic>.from(b))}'),
-                              Text('Children: ${_bookingChildren(Map<String, dynamic>.from(b))}'),
+                              Text(
+                                  'Adults: ${_bookingAdults(Map<String, dynamic>.from(b))}'),
+                              Text(
+                                  'Children: ${_bookingChildren(Map<String, dynamic>.from(b))}'),
                               Text('Status: ${b['status'] ?? 'Checked-In'}'),
                               Text(
                                   'Entitlement: ${b['breakfast_inclusion_reason'] ?? 'Room only'}'),
@@ -2486,7 +2509,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                               Row(
                                 children: [
                                   Checkbox(
-                                    value: _earlyBreakfastIds.contains(bookingKey),
+                                    value:
+                                        _earlyBreakfastIds.contains(bookingKey),
                                     onChanged: (v) => setState(() {
                                       if (v == true) {
                                         _earlyBreakfastIds.add(bookingKey);
@@ -2501,7 +2525,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                               Row(
                                 children: [
                                   Checkbox(
-                                    value: _packedBreakfastIds.contains(bookingKey),
+                                    value: _packedBreakfastIds
+                                        .contains(bookingKey),
                                     onChanged: (v) => setState(() {
                                       if (v == true) {
                                         _packedBreakfastIds.add(bookingKey);
@@ -2603,9 +2628,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
   }
 
   Widget _buildExpectedArrivalsTab(List<Map<String, dynamic>> bookings) {
-    final arrivingToday = bookings
-        .where((booking) => booking['check_in_today'] == true)
-        .toList();
+    final arrivingToday =
+        bookings.where((booking) => booking['check_in_today'] == true).toList();
     if (arrivingToday.isEmpty) {
       return const Center(
         child: Text('No in-house breakfast guests started today.'),
@@ -2616,13 +2640,16 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
       children: arrivingToday.map((b) {
         return ListTile(
           leading: const Icon(Icons.flight_land, color: Colors.blue),
-          title: Text('${b['guest_name'] ?? 'Arrival Guest'} (${b['room_number'] ?? 'Unassigned'})'),
-          subtitle: Text('Arrival: ${b['check_in_date'] ?? 'Today'} • Plan: ${b['meal_plan'] ?? 'BB'}'),
+          title: Text(
+              '${b['guest_name'] ?? 'Arrival Guest'} (${b['room_number'] ?? 'Unassigned'})'),
+          subtitle: Text(
+              'Arrival: ${b['check_in_date'] ?? 'Today'} • Plan: ${b['meal_plan'] ?? 'BB'}'),
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             color: Colors.blue.shade50,
             child: const Text('Started Today',
-                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                style:
+                    TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
           ),
         );
       }).toList(),
@@ -2698,7 +2725,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                                   final p = _paidEntries[idx];
                                   return Card(
                                     child: ListTile(
-                                      title: Text('${p['guest']} (${p['room']})'),
+                                      title:
+                                          Text('${p['guest']} (${p['room']})'),
                                       subtitle: Text(
                                           '${p['adults']} adults, ${p['children']} children • KES ${p['amount']} (${p['method']})'),
                                       trailing: Text(p['time']),
@@ -2728,7 +2756,8 @@ class _BreakfastPaxSectionState extends ConsumerState<_BreakfastPaxSection> {
                                   final c = _complimentaryEntries[idx];
                                   return Card(
                                     child: ListTile(
-                                      title: Text('${c['guest']} (${c['room']})'),
+                                      title:
+                                          Text('${c['guest']} (${c['room']})'),
                                       subtitle: Text(
                                           '${c['adults']} adults, ${c['children']} children • Reason: ${c['reason']}'),
                                       trailing: Text('Auth: ${c['auth']}'),
@@ -2849,24 +2878,9 @@ class _OverviewSection extends ConsumerWidget {
     final occupied = data.rooms.where((r) => r.status == 'occupied').length;
 
     return _PageScaffold(
-      title: 'Front Desk Dashboard',
+      title: 'Front Desk Overview',
       subtitle: DateFormat('EEEE, MMMM d • HH:mm').format(DateTime.now()),
-      actions: [
-        ElevatedButton.icon(
-          onPressed: () => onAction(ReceptionSection.cashier),
-          icon: const Icon(Icons.point_of_sale, size: 16),
-          label: const Text('Cashier Station'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.teal.shade700,
-            foregroundColor: Colors.white,
-          ),
-        ),
-        ElevatedButton.icon(
-          onPressed: () => _showNewBookingDialog(context, ref, onRefresh),
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('New Booking'),
-        ),
-      ],
+      actions: const [],
       child: Column(
         children: [
           _StatGrid(cards: [
@@ -2880,84 +2894,114 @@ class _OverviewSection extends ConsumerWidget {
                 Icons.logout_outlined, AppColors.kError),
           ]),
           const SizedBox(height: 20),
-          _OperationsPulseSection(data: data, onAction: onAction),
-          const SizedBox(height: 20),
           _ResponsivePair(
-            leftFlex: 2,
             left: _CardPanel(
-              title: 'Room Status',
-              action: TextButton(
-                onPressed: () => onAction(ReceptionSection.rooms),
-                child: const Text('View all rooms'),
+              title: 'Quick Actions',
+              child: Column(
+                children: [
+                  _ClassicQuickActionTile(
+                    icon: Icons.calendar_month_outlined,
+                    title: 'Reservations',
+                    subtitle: 'Create, review and update bookings.',
+                    onTap: () => onAction(ReceptionSection.reservations),
+                  ),
+                  const SizedBox(height: 10),
+                  _ClassicQuickActionTile(
+                    icon: Icons.login_outlined,
+                    title: 'Check In / Out',
+                    subtitle: 'Open arrival and departure workflows.',
+                    onTap: () => onAction(ReceptionSection.checkInOut),
+                  ),
+                  const SizedBox(height: 10),
+                  _ClassicQuickActionTile(
+                    icon: Icons.bed_outlined,
+                    title: 'Rooms',
+                    subtitle: 'View room status by number and category.',
+                    onTap: () => onAction(ReceptionSection.rooms),
+                  ),
+                  const SizedBox(height: 10),
+                  _ClassicQuickActionTile(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'Room Bills',
+                    subtitle: 'Open guest folios and room billing.',
+                    onTap: () => onAction(ReceptionSection.roomBills),
+                  ),
+                ],
               ),
-              child: _RoomsTable(rooms: data.rooms.take(10).toList()),
             ),
             right: Column(
               children: [
-                _BookingMiniList(
-                  title: "Today's Arrivals",
-                  bookings: arrivals.take(5).toList(),
-                  empty: 'No arrivals today',
-                  actionLabel: 'Check in',
-                  onOpen: () => onAction(ReceptionSection.checkInOut),
+                _CardPanel(
+                  title: 'Front Desk Tools',
+                  child: Column(
+                    children: [
+                      _ClassicQuickActionTile(
+                        icon: Icons.free_breakfast_outlined,
+                        title: 'Breakfast Pax',
+                        subtitle: 'Review active breakfast-entitled stays.',
+                        onTap: () => onAction(ReceptionSection.breakfastPax),
+                      ),
+                      const SizedBox(height: 10),
+                      _ClassicQuickActionTile(
+                        icon: Icons.people_alt_outlined,
+                        title: 'Guests',
+                        subtitle: 'Open guest records and profiles.',
+                        onTap: () => onAction(ReceptionSection.guests),
+                      ),
+                      const SizedBox(height: 10),
+                      _ClassicQuickActionTile(
+                        icon: Icons.cleaning_services_outlined,
+                        title: 'Housekeeping',
+                        subtitle: 'Review room tasks and service queue.',
+                        onTap: () => onAction(ReceptionSection.housekeeping),
+                      ),
+                      const SizedBox(height: 10),
+                      _ClassicQuickActionTile(
+                        icon: Icons.point_of_sale_outlined,
+                        title: 'Cashier',
+                        subtitle: 'Go to cashier station and folio settlement.',
+                        onTap: () => onAction(ReceptionSection.cashier),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
-                _BookingMiniList(
-                  title: "Today's Departures",
-                  bookings: departures.take(5).toList(),
-                  empty: 'No departures today',
-                  actionLabel: 'Check out',
-                  onOpen: () => onAction(ReceptionSection.checkInOut),
+                _CardPanel(
+                  title: 'Additional Access',
+                  child: Column(
+                    children: [
+                      _ClassicQuickActionTile(
+                        icon: Icons.corporate_fare_outlined,
+                        title: 'Conference & Catering',
+                        subtitle: 'Open event bookings and hall usage.',
+                        onTap: () => onAction(ReceptionSection.conference),
+                      ),
+                      const SizedBox(height: 10),
+                      _ClassicQuickActionTile(
+                        icon: Icons.history_outlined,
+                        title: 'History',
+                        subtitle: 'Review reception activity and audit trail.',
+                        onTap: () => onAction(ReceptionSection.history),
+                      ),
+                      const SizedBox(height: 10),
+                      _ClassicQuickActionTile(
+                        icon: Icons.auto_fix_high_outlined,
+                        title: 'Email Automation',
+                        subtitle: 'Open templates and outgoing automations.',
+                        onTap: () => onAction(ReceptionSection.emailAutomation),
+                      ),
+                      const SizedBox(height: 10),
+                      _ClassicQuickActionTile(
+                        icon: Icons.add_circle_outline,
+                        title: 'New Booking',
+                        subtitle: 'Create a fresh booking from reception.',
+                        onTap: () =>
+                            _showNewBookingDialog(context, ref, onRefresh),
+                      ),
+                    ],
+                  ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          _ResponsivePair(
-            left: _CardPanel(
-              title: 'Conference & Catering',
-              action: TextButton(
-                onPressed: () => onAction(ReceptionSection.conference),
-                child: const Text('Events'),
-              ),
-              child: _KeyValueList(rows: [
-                {
-                  'label': 'Active conference bookings',
-                  'value': '${data.conferenceBookings.length}'
-                },
-                {
-                  'label': 'Available halls',
-                  'value': '${data.conferenceHalls.where((h) => _text(h, [
-                            'status'
-                          ]) == 'available').length}'
-                },
-                {
-                  'label': 'Catering bookings',
-                  'value': '${data.cateringBookings.length}'
-                },
-              ]),
-            ),
-            right: _CardPanel(
-              title: 'Cashier Snapshot',
-              action: TextButton(
-                onPressed: () => onAction(ReceptionSection.cashier),
-                child: const Text('Open cashier'),
-              ),
-              child: _KeyValueList(rows: [
-                {
-                  'label': "Today's revenue",
-                  'value': _money(_num(data.cashierStats,
-                      ['today_payments', 'todayRevenue', 'today_collections']))
-                },
-                {
-                  'label': 'Unconfirmed bills',
-                  'value': '${data.unpaidBills.length}'
-                },
-                {
-                  'label': 'Credit bills',
-                  'value': '${data.creditBills.length}'
-                },
-              ]),
             ),
           ),
         ],
@@ -3316,27 +3360,24 @@ class _CheckInOutSectionState extends ConsumerState<_CheckInOutSection> {
                             _SmallAction('Print bill', Icons.print_outlined,
                                 () => _downloadCheckoutBill(context, ref, b)),
                           if (_tab == 'checkout')
-                            _SmallAction(
-                                'Move Room',
-                                Icons.swap_horiz,
+                            _SmallAction('Move Room', Icons.swap_horiz,
                                 () async {
-                                  final ok = await Navigator.of(context)
-                                      .push<bool>(MaterialPageRoute(
-                                    builder: (_) => MoveRoomScreen(
-                                      bookingId: b.id,
-                                      currentRoom:
-                                          b.roomNumber ?? 'Current Room',
-                                      guestName: b.guestName ?? 'Guest',
-                                      checkIn: DateFormat('yyyy-MM-dd')
-                                          .format(b.checkIn),
-                                      checkOut: DateFormat('yyyy-MM-dd')
-                                          .format(b.checkOut),
-                                    ),
-                                  ));
-                                  if (ok == true && context.mounted) {
-                                    widget.onRefresh();
-                                  }
-                                }),
+                              final ok = await Navigator.of(context)
+                                  .push<bool>(MaterialPageRoute(
+                                builder: (_) => MoveRoomScreen(
+                                  bookingId: b.id,
+                                  currentRoom: b.roomNumber ?? 'Current Room',
+                                  guestName: b.guestName ?? 'Guest',
+                                  checkIn: DateFormat('yyyy-MM-dd')
+                                      .format(b.checkIn),
+                                  checkOut: DateFormat('yyyy-MM-dd')
+                                      .format(b.checkOut),
+                                ),
+                              ));
+                              if (ok == true && context.mounted) {
+                                widget.onRefresh();
+                              }
+                            }),
                           _SmallAction(
                               'Email',
                               Icons.email_outlined,
@@ -3481,8 +3522,9 @@ class _RoomsSectionState extends ConsumerState<_RoomsSection> {
         .compareTo(_roomTypeSortRank(_roomTypeLabel(b)));
     if (typeCompare != 0) return typeCompare;
 
-    final typeLabelCompare =
-        _roomTypeLabel(a).toLowerCase().compareTo(_roomTypeLabel(b).toLowerCase());
+    final typeLabelCompare = _roomTypeLabel(a)
+        .toLowerCase()
+        .compareTo(_roomTypeLabel(b).toLowerCase());
     if (typeLabelCompare != 0) return typeLabelCompare;
 
     final roomNumberCompare = _compareNaturalTokens(
@@ -3491,12 +3533,17 @@ class _RoomsSectionState extends ConsumerState<_RoomsSection> {
     );
     if (roomNumberCompare != 0) return roomNumberCompare;
 
-    return (a.guestName ?? '').toLowerCase().compareTo((b.guestName ?? '').toLowerCase());
+    return (a.guestName ?? '')
+        .toLowerCase()
+        .compareTo((b.guestName ?? '').toLowerCase());
   }
 
   @override
   Widget build(BuildContext context) {
-    final types = widget.data.rooms.map((r) => r.type ?? 'standard').toSet().toList()
+    final types = widget.data.rooms
+        .map((r) => r.type ?? 'standard')
+        .toSet()
+        .toList()
       ..sort();
     final rooms = widget.data.rooms.where((room) {
       final rawQuery = widget.searchController.text.trim().toLowerCase();
@@ -3510,19 +3557,26 @@ class _RoomsSectionState extends ConsumerState<_RoomsSection> {
       final guestName = (room.guestName ?? '').toLowerCase();
       final roomType = (room.type ?? '').toLowerCase();
       final roomStatus = room.status.toLowerCase();
-      final bookingNo = (room.raw['confirmation_number'] ?? room.raw['booking_code'] ?? '').toString().toLowerCase();
+      final bookingNo =
+          (room.raw['confirmation_number'] ?? room.raw['booking_code'] ?? '')
+              .toString()
+              .toLowerCase();
 
       final matchesQuery = rawQuery.isEmpty ||
           roomNo.contains(rawQuery) ||
           dispNo.contains(rawQuery) ||
-          (numQuery.isNotEmpty && (cleanRoomNo.contains(numQuery) || cleanDispNo.contains(numQuery))) ||
+          (numQuery.isNotEmpty &&
+              (cleanRoomNo.contains(numQuery) ||
+                  cleanDispNo.contains(numQuery))) ||
           guestName.contains(rawQuery) ||
           roomType.contains(rawQuery) ||
           roomStatus.contains(rawQuery) ||
           bookingNo.contains(rawQuery);
 
-      final matchesStatus = widget.statusFilter == 'all' || room.status == widget.statusFilter;
-      final matchesType = widget.typeFilter == 'all' || room.type == widget.typeFilter;
+      final matchesStatus =
+          widget.statusFilter == 'all' || room.status == widget.statusFilter;
+      final matchesType =
+          widget.typeFilter == 'all' || room.type == widget.typeFilter;
 
       return matchesQuery && matchesStatus && matchesType;
     }).toList();
@@ -3626,13 +3680,15 @@ class _RoomsSectionState extends ConsumerState<_RoomsSection> {
                         ? 6
                         : width > 900
                             ? 4
-                        : width > 600
+                            : width > 600
                                 ? 3
                                 : 2;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (var index = 0; index < orderedGroups.length; index++) ...[
+                        for (var index = 0;
+                            index < orderedGroups.length;
+                            index++) ...[
                           _RoomCategoryHeader(
                             label: orderedGroups[index].key,
                             total: orderedGroups[index].value.length,
@@ -3650,14 +3706,16 @@ class _RoomsSectionState extends ConsumerState<_RoomsSection> {
                             itemCount: orderedGroups[index].value.length,
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: crossAxisCount,
                               crossAxisSpacing: 12,
                               mainAxisSpacing: 12,
                               childAspectRatio: 0.95,
                             ),
                             itemBuilder: (context, roomIndex) {
-                              final room = orderedGroups[index].value[roomIndex];
+                              final room =
+                                  orderedGroups[index].value[roomIndex];
                               return _RoomCard(
                                 room: room,
                                 onQuickCheckIn: room.status == 'available'
@@ -4078,11 +4136,13 @@ class _ConferenceSection extends ConsumerWidget {
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('Refresh')),
         ElevatedButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const ConferenceBookingScreen(),
-            ),
-          ).then((_) => onRefresh()),
+          onPressed: () => Navigator.of(context)
+              .push(
+                MaterialPageRoute(
+                  builder: (_) => const ConferenceBookingScreen(),
+                ),
+              )
+              .then((_) => onRefresh()),
           icon: const Icon(Icons.meeting_room_outlined, size: 16),
           label: const Text('Manage Conference Halls'),
         ),
@@ -4131,8 +4191,7 @@ class _ConferenceSection extends ConsumerWidget {
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const EmptyState(
-                        message: 'No active conference bookings'),
+                    const EmptyState(message: 'No active conference bookings'),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
                       onPressed: () => showDialog<void>(
@@ -4166,12 +4225,14 @@ class _ConferenceSection extends ConsumerWidget {
                       _SmallAction(
                           'Details',
                           Icons.open_in_new,
-                          () => Navigator.of(context).push(
+                          () => Navigator.of(context)
+                              .push(
                                 MaterialPageRoute(
                                   builder: (_) =>
                                       const ConferenceBookingScreen(),
                                 ),
-                              ).then((_) => onRefresh())),
+                              )
+                              .then((_) => onRefresh())),
                       _SmallAction(
                           'Pay',
                           Icons.point_of_sale,
@@ -4874,7 +4935,11 @@ class _OperationsPulseSection extends StatelessWidget {
     final actionCues = [
       _ActionCueData(
         label: 'Cashier Station & POS',
-        value: 'KES ${_money(_num(data.cashierStats, ['today_payments', 'todayRevenue', 'today_collections']))}',
+        value: 'KES ${_money(_num(data.cashierStats, [
+              'today_payments',
+              'todayRevenue',
+              'today_collections'
+            ]))}',
         note: 'Point of sale billing, guest checkout folios & shift register',
         icon: Icons.point_of_sale_outlined,
         color: Colors.teal,
@@ -5086,6 +5151,86 @@ class _CardPanel extends StatelessWidget {
             const SizedBox(height: 12),
             child,
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassicQuickActionTile extends StatelessWidget {
+  const _ClassicQuickActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.kPrimary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.kPrimary.withValues(alpha: 0.12),
+                  ),
+                ),
+                child: Icon(icon, color: AppColors.kPrimary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.kTextPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.kTextSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.blueGrey.shade400,
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -5600,13 +5745,18 @@ class _RoomCard extends StatelessWidget {
               ],
             ),
             Text(
-              room.guestName ?? (room.status == 'occupied' ? 'Occupied Guest' : 'No guest'),
+              room.guestName ??
+                  (room.status == 'occupied' ? 'Occupied Guest' : 'No guest'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: room.status == 'occupied' ? FontWeight.bold : FontWeight.normal,
-                color: room.status == 'occupied' ? AppColors.kPrimary : AppColors.kTextSecondary,
+                fontWeight: room.status == 'occupied'
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: room.status == 'occupied'
+                    ? AppColors.kPrimary
+                    : AppColors.kTextSecondary,
               ),
             ),
             if (onQuickCheckIn != null || onCheckout != null)
@@ -6174,8 +6324,8 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                                   horizontal: 14, vertical: 12),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8)),
-                              prefixIcon: const Icon(Icons.calendar_today,
-                                  size: 18),
+                              prefixIcon:
+                                  const Icon(Icons.calendar_today, size: 18),
                               suffixIcon: const Icon(Icons.arrow_drop_down),
                             ),
                           ),
@@ -6207,8 +6357,8 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                                   horizontal: 14, vertical: 12),
                               border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8)),
-                              prefixIcon: const Icon(Icons.event_available,
-                                  size: 18),
+                              prefixIcon:
+                                  const Icon(Icons.event_available, size: 18),
                               suffixIcon: const Icon(Icons.arrow_drop_down),
                             ),
                           ),
@@ -6314,8 +6464,7 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                                     horizontal: 14, vertical: 12),
                                 border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8)),
-                                prefixIcon:
-                                    const Icon(Icons.search, size: 18),
+                                prefixIcon: const Icon(Icons.search, size: 18),
                               ),
                             ),
                           ],
@@ -6459,11 +6608,14 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                       'value': _selectedRoom == null
                           ? 'No room selected'
                           : 'Room ${_text(_selectedRoom!, [
-                                  'room_number',
-                                  'number'
-                                ]) ?? ''}'
+                                    'room_number',
+                                    'number'
+                                  ]) ?? ''}'
                     },
-                    {'label': 'Guest', 'value': _selectedGuest?.name ?? 'No guest selected'},
+                    {
+                      'label': 'Guest',
+                      'value': _selectedGuest?.name ?? 'No guest selected'
+                    },
                     {
                       'label': 'Nightly Rate',
                       'value': _money(_num(_selectedRoom ?? const {}, [
@@ -6809,8 +6961,8 @@ Future<void> _showNewBookingDialog(
   );
 }
 
-Future<void> _confirmBooking(
-    BuildContext context, WidgetRef ref, Booking booking, VoidCallback onSuccess) async {
+Future<void> _confirmBooking(BuildContext context, WidgetRef ref,
+    Booking booking, VoidCallback onSuccess) async {
   try {
     await ref.read(receptionRepositoryProvider).updateBooking(booking.id, {
       'status': 'confirmed',
@@ -6974,7 +7126,8 @@ Future<void> _showQuickCheckInDialog(BuildContext context, WidgetRef ref,
                       'status': 'confirmed',
                     });
                     final bookingId =
-                        (booking['id'] ?? booking['bookingId'] ?? '').toString();
+                        (booking['id'] ?? booking['bookingId'] ?? '')
+                            .toString();
                     if (bookingId.isEmpty) {
                       throw Exception(
                           'Quick check-in could not continue because the booking ID was not returned.');
@@ -6991,9 +7144,11 @@ Future<void> _showQuickCheckInDialog(BuildContext context, WidgetRef ref,
   );
 }
 
-Future<void> _showCheckoutDialog(BuildContext context, WidgetRef _,
-    Booking booking, VoidCallback onSuccess, {void Function(String)? onPayAtCashier}) async {
-  await _openCheckOutBooking(context, booking, onSuccess, onPayAtCashier: onPayAtCashier);
+Future<void> _showCheckoutDialog(
+    BuildContext context, WidgetRef _, Booking booking, VoidCallback onSuccess,
+    {void Function(String)? onPayAtCashier}) async {
+  await _openCheckOutBooking(context, booking, onSuccess,
+      onPayAtCashier: onPayAtCashier);
 }
 
 Future<void> _checkIn(BuildContext context, WidgetRef ref, Booking booking,
@@ -7076,8 +7231,10 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
     final guest = b.raw['guest'] is Map
         ? Map<String, dynamic>.from(b.raw['guest'] as Map)
         : const <String, dynamic>{};
-    final nameParts =
-        _str(b.guestName).split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final nameParts = _str(b.guestName)
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     final first = _str(guest['first_name']).isNotEmpty
         ? _str(guest['first_name'])
         : (nameParts.isNotEmpty ? nameParts.first : '');
@@ -7087,8 +7244,14 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
 
     _firstName = TextEditingController(text: first);
     _lastName = TextEditingController(text: last);
-    _phone = TextEditingController(text: _str(b.guestPhone).isNotEmpty ? _str(b.guestPhone) : _str(guest['phone']));
-    _email = TextEditingController(text: _str(b.guestEmail).isNotEmpty ? _str(b.guestEmail) : _str(guest['email']));
+    _phone = TextEditingController(
+        text: _str(b.guestPhone).isNotEmpty
+            ? _str(b.guestPhone)
+            : _str(guest['phone']));
+    _email = TextEditingController(
+        text: _str(b.guestEmail).isNotEmpty
+            ? _str(b.guestEmail)
+            : _str(guest['email']));
     _idType = TextEditingController(text: _str(guest['id_type']));
     _idNumber = TextEditingController(text: _str(guest['id_number']));
     _nationality = TextEditingController(text: _str(guest['nationality']));
@@ -7119,8 +7282,17 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
   @override
   void dispose() {
     for (final c in [
-      _firstName, _lastName, _phone, _email, _idType, _idNumber, _nationality,
-      _adults, _children, _mealPlan, _specialRequests,
+      _firstName,
+      _lastName,
+      _phone,
+      _email,
+      _idType,
+      _idNumber,
+      _nationality,
+      _adults,
+      _children,
+      _mealPlan,
+      _specialRequests,
     ]) {
       c.dispose();
     }
@@ -7151,7 +7323,8 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
   void _submit() {
     final guest = <String, dynamic>{};
     void g(String key, String value) {
-      if (value.trim() != (_initial[key] ?? '').trim()) guest[key] = value.trim();
+      if (value.trim() != (_initial[key] ?? '').trim())
+        guest[key] = value.trim();
     }
 
     g('firstName', _firstName.text);
@@ -7169,12 +7342,15 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
     final bk = <String, dynamic>{};
     final adults = int.tryParse(_adults.text.trim());
     final children = int.tryParse(_children.text.trim());
-    if (adults != null && '$adults' != (_initial['adults'] ?? '')) bk['adults'] = adults;
-    if (children != null && '$children' != (_initial['children'] ?? '')) bk['children'] = children;
+    if (adults != null && '$adults' != (_initial['adults'] ?? ''))
+      bk['adults'] = adults;
+    if (children != null && '$children' != (_initial['children'] ?? ''))
+      bk['children'] = children;
     if (_mealPlan.text.trim() != (_initial['mealPlan'] ?? '').trim()) {
       bk['mealPlan'] = _mealPlan.text.trim();
     }
-    if (_specialRequests.text.trim() != (_initial['specialRequests'] ?? '').trim()) {
+    if (_specialRequests.text.trim() !=
+        (_initial['specialRequests'] ?? '').trim()) {
       bk['specialRequests'] = _specialRequests.text.trim();
     }
     final fmt = DateFormat('yyyy-MM-dd');
@@ -7207,7 +7383,8 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
               Text('Review and edit the details before checking in.',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
               const SizedBox(height: 4),
-              Text('Room ${b.roomNumber ?? '-'} • ${b.confirmationNumber ?? '-'}',
+              Text(
+                  'Room ${b.roomNumber ?? '-'} • ${b.confirmationNumber ?? '-'}',
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 16),
               _sectionLabel('GUEST DETAILS'),
@@ -7218,13 +7395,19 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
               ]),
               const SizedBox(height: 10),
               Row(children: [
-                Expanded(child: _field(_phone, 'Phone', keyboard: TextInputType.phone)),
+                Expanded(
+                    child:
+                        _field(_phone, 'Phone', keyboard: TextInputType.phone)),
                 const SizedBox(width: 10),
-                Expanded(child: _field(_email, 'Email', keyboard: TextInputType.emailAddress)),
+                Expanded(
+                    child: _field(_email, 'Email',
+                        keyboard: TextInputType.emailAddress)),
               ]),
               const SizedBox(height: 10),
               Row(children: [
-                Expanded(child: _field(_idType, 'ID type (e.g. National ID, Passport)')),
+                Expanded(
+                    child: _field(
+                        _idType, 'ID type (e.g. National ID, Passport)')),
                 const SizedBox(width: 10),
                 Expanded(child: _field(_idNumber, 'ID number')),
               ]),
@@ -7233,15 +7416,23 @@ class _CheckInConfirmDialogState extends State<_CheckInConfirmDialog> {
               const SizedBox(height: 18),
               _sectionLabel('BOOKING DETAILS'),
               Row(children: [
-                Expanded(child: _dateField('Check-in', df.format(_checkInDate), () => _pickDate(isCheckIn: true))),
+                Expanded(
+                    child: _dateField('Check-in', df.format(_checkInDate),
+                        () => _pickDate(isCheckIn: true))),
                 const SizedBox(width: 10),
-                Expanded(child: _dateField('Check-out', df.format(_checkOutDate), () => _pickDate(isCheckIn: false))),
+                Expanded(
+                    child: _dateField('Check-out', df.format(_checkOutDate),
+                        () => _pickDate(isCheckIn: false))),
               ]),
               const SizedBox(height: 10),
               Row(children: [
-                Expanded(child: _field(_adults, 'Adults', keyboard: TextInputType.number)),
+                Expanded(
+                    child: _field(_adults, 'Adults',
+                        keyboard: TextInputType.number)),
                 const SizedBox(width: 10),
-                Expanded(child: _field(_children, 'Children', keyboard: TextInputType.number)),
+                Expanded(
+                    child: _field(_children, 'Children',
+                        keyboard: TextInputType.number)),
               ]),
               const SizedBox(height: 10),
               _field(_mealPlan, 'Meal plan (BB, HB, FB, Room Only)'),
@@ -7452,8 +7643,9 @@ Future<void> _deleteGuest(BuildContext context, WidgetRef ref, Guest guest,
   if (context.mounted) _snack(context, 'Guest deleted');
 }
 
-Future<void> _checkoutRoom(BuildContext context, WidgetRef ref, Room room,
-    VoidCallback onSuccess, {void Function(String)? onPayAtCashier}) async {
+Future<void> _checkoutRoom(
+    BuildContext context, WidgetRef ref, Room room, VoidCallback onSuccess,
+    {void Function(String)? onPayAtCashier}) async {
   final repo = ref.read(receptionRepositoryProvider);
   try {
     showDialog<void>(
@@ -7486,10 +7678,13 @@ Future<void> _checkoutRoom(BuildContext context, WidgetRef ref, Room room,
       booking = Booking.fromJson(activeMap);
     } else {
       final checkedInList = await repo.getBookings(status: 'checked_in');
-      booking = checkedInList.where((b) =>
-          b.roomId == room.id ||
-          (b.roomNumber != null &&
-              b.roomNumber!.toLowerCase() == room.displayNumber.toLowerCase())).firstOrNull;
+      booking = checkedInList
+          .where((b) =>
+              b.roomId == room.id ||
+              (b.roomNumber != null &&
+                  b.roomNumber!.toLowerCase() ==
+                      room.displayNumber.toLowerCase()))
+          .firstOrNull;
     }
 
     if (context.mounted) {
@@ -7511,7 +7706,8 @@ Future<void> _checkoutRoom(BuildContext context, WidgetRef ref, Room room,
     if (!context.mounted) return;
     final res = await Navigator.of(context).push<dynamic>(
       MaterialPageRoute(
-        builder: (_) => CheckOutScreen(booking: booking, onPayAtCashier: onPayAtCashier),
+        builder: (_) =>
+            CheckOutScreen(booking: booking, onPayAtCashier: onPayAtCashier),
       ),
     );
 
@@ -7528,12 +7724,13 @@ Future<void> _checkoutRoom(BuildContext context, WidgetRef ref, Room room,
   }
 }
 
-
 Future<void> _openCheckOutBooking(
-    BuildContext context, Booking booking, VoidCallback onSuccess, {void Function(String)? onPayAtCashier}) async {
+    BuildContext context, Booking booking, VoidCallback onSuccess,
+    {void Function(String)? onPayAtCashier}) async {
   final res = await Navigator.of(context).push<dynamic>(
     MaterialPageRoute(
-      builder: (_) => CheckOutScreen(booking: booking, onPayAtCashier: onPayAtCashier),
+      builder: (_) =>
+          CheckOutScreen(booking: booking, onPayAtCashier: onPayAtCashier),
     ),
   );
   if (res is String && onPayAtCashier != null) {
@@ -7564,14 +7761,15 @@ Future<void> printRoomsReportPDF({
   final occupiedRooms = occupiedRoomsList.length;
   final cleaningRooms =
       rooms.where((r) => r.status == 'cleaning' || r.status == 'dirty').length;
-  final maintenanceRooms =
-      rooms.where((r) => r.status == 'maintenance').length;
+  final maintenanceRooms = rooms.where((r) => r.status == 'maintenance').length;
   final occupancyRate = totalRooms > 0
       ? (occupiedRooms / totalRooms * 100).toStringAsFixed(1)
       : '0.0';
 
-  final totalAdultPax = occupiedRoomsList.fold<int>(0, (sum, r) => sum + r.adults);
-  final totalChildrenPax = occupiedRoomsList.fold<int>(0, (sum, r) => sum + r.children);
+  final totalAdultPax =
+      occupiedRoomsList.fold<int>(0, (sum, r) => sum + r.adults);
+  final totalChildrenPax =
+      occupiedRoomsList.fold<int>(0, (sum, r) => sum + r.children);
   final totalGuestPax = occupiedRoomsList.fold<int>(
       0, (sum, r) => sum + (r.totalPax ?? (r.adults + r.children)));
 
@@ -7593,8 +7791,10 @@ Future<void> printRoomsReportPDF({
       final bLower = b.toLowerCase();
       if (aLower.contains('vip') && !bLower.contains('vip')) return -1;
       if (bLower.contains('vip') && !aLower.contains('vip')) return 1;
-      if (aLower.contains('executive') && !bLower.contains('executive')) return -1;
-      if (bLower.contains('executive') && !aLower.contains('executive')) return 1;
+      if (aLower.contains('executive') && !bLower.contains('executive'))
+        return -1;
+      if (bLower.contains('executive') && !aLower.contains('executive'))
+        return 1;
       if (aLower.contains('deluxe') && !bLower.contains('deluxe')) return -1;
       if (bLower.contains('deluxe') && !aLower.contains('deluxe')) return 1;
       return aLower.compareTo(bLower);
@@ -7624,7 +7824,8 @@ Future<void> printRoomsReportPDF({
                     pw.Text('FamousGate Hotels',
                         style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                    pw.Text('Bomet, Kenya | Tel: 0706782828 | Email: famousgatesbmt@gmail.com',
+                    pw.Text(
+                        'Bomet, Kenya | Tel: 0706782828 | Email: famousgatesbmt@gmail.com',
                         style: const pw.TextStyle(
                             fontSize: 9, color: PdfColors.grey700)),
                     pw.Text('www.famousgatehotels.com',
@@ -7675,11 +7876,15 @@ Future<void> printRoomsReportPDF({
                 _pdfKpiItem('Occupied', '$occupiedRooms', PdfColors.blue800),
                 _pdfKpiItem('Available', '$availableRooms', PdfColors.green800),
                 _pdfKpiItem('Cleaning', '$cleaningRooms', PdfColors.orange800),
-                _pdfKpiItem('Maintenance', '$maintenanceRooms', PdfColors.red800),
+                _pdfKpiItem(
+                    'Maintenance', '$maintenanceRooms', PdfColors.red800),
                 _pdfKpiItem('Adult Pax', '$totalAdultPax', PdfColors.purple800),
-                _pdfKpiItem('Child Pax', '$totalChildrenPax', PdfColors.teal800),
-                _pdfKpiItem('Total Guest Pax', '$totalGuestPax', PdfColors.blue900),
-                _pdfKpiItem('Occupancy Rate', '$occupancyRate%', PdfColors.purple900),
+                _pdfKpiItem(
+                    'Child Pax', '$totalChildrenPax', PdfColors.teal800),
+                _pdfKpiItem(
+                    'Total Guest Pax', '$totalGuestPax', PdfColors.blue900),
+                _pdfKpiItem(
+                    'Occupancy Rate', '$occupancyRate%', PdfColors.purple900),
               ],
             ),
           ),
@@ -7692,8 +7897,10 @@ Future<void> printRoomsReportPDF({
             final catOccupiedList =
                 categoryRooms.where((r) => r.status == 'occupied').toList();
             final catOccupiedCount = catOccupiedList.length;
-            final catAdultPax = catOccupiedList.fold<int>(0, (sum, r) => sum + r.adults);
-            final catChildPax = catOccupiedList.fold<int>(0, (sum, r) => sum + r.children);
+            final catAdultPax =
+                catOccupiedList.fold<int>(0, (sum, r) => sum + r.adults);
+            final catChildPax =
+                catOccupiedList.fold<int>(0, (sum, r) => sum + r.children);
             final catTotalPax = catOccupiedList.fold<int>(
                 0, (sum, r) => sum + (r.totalPax ?? (r.adults + r.children)));
 
@@ -7703,7 +7910,8 @@ Future<void> printRoomsReportPDF({
                 // Category Banner
                 pw.Container(
                   width: double.infinity,
-                  padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  padding:
+                      const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                   decoration: const pw.BoxDecoration(
                     color: PdfColors.blue900,
                     borderRadius: pw.BorderRadius.only(
@@ -7736,7 +7944,8 @@ Future<void> printRoomsReportPDF({
 
                 // Category Data Table
                 pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+                  border:
+                      pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
                   columnWidths: const {
                     0: pw.FlexColumnWidth(1.0), // Room #
                     1: pw.FlexColumnWidth(2.8), // Guest Name
@@ -7751,7 +7960,8 @@ Future<void> printRoomsReportPDF({
                   children: [
                     // Table Header
                     pw.TableRow(
-                      decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                      decoration:
+                          const pw.BoxDecoration(color: PdfColors.grey300),
                       children: [
                         pdfHeaderCell('Room #'),
                         pdfHeaderCell('Guest Name'),
@@ -7771,9 +7981,8 @@ Future<void> printRoomsReportPDF({
                       final r = entry.value;
                       final isOccupied = r.status == 'occupied';
 
-                      final guestName = isOccupied
-                          ? (r.guestName ?? 'Occupied Guest')
-                          : '-';
+                      final guestName =
+                          isOccupied ? (r.guestName ?? 'Occupied Guest') : '-';
                       final mealPlanStr = isOccupied
                           ? r.effectiveMealPlan
                           : (r.effectiveMealPlan != 'Room Only'
@@ -7782,9 +7991,11 @@ Future<void> printRoomsReportPDF({
 
                       final checkInStr = isOccupied
                           ? (r.checkedInAt != null
-                              ? DateFormat('dd/MM/yyyy HH:mm').format(r.checkedInAt!)
+                              ? DateFormat('dd/MM/yyyy HH:mm')
+                                  .format(r.checkedInAt!)
                               : (r.checkInDate != null
-                                  ? DateFormat('dd/MM/yyyy').format(r.checkInDate!)
+                                  ? DateFormat('dd/MM/yyyy')
+                                      .format(r.checkInDate!)
                                   : '-'))
                           : '-';
 
@@ -7802,7 +8013,8 @@ Future<void> printRoomsReportPDF({
 
                       return pw.TableRow(
                         decoration: pw.BoxDecoration(
-                          color: idx.isOdd ? PdfColors.grey100 : PdfColors.white,
+                          color:
+                              idx.isOdd ? PdfColors.grey100 : PdfColors.white,
                         ),
                         children: [
                           _pdfRoomDataCell(r.displayNumber, isBold: true),
@@ -7810,8 +8022,10 @@ Future<void> printRoomsReportPDF({
                           _pdfRoomDataCell(mealPlanStr),
                           _pdfRoomDataCell(checkInStr),
                           _pdfRoomDataCell(checkOutStr),
-                          _pdfRoomDataCell(adultPaxStr, align: pw.TextAlign.center),
-                          _pdfRoomDataCell(childPaxStr, align: pw.TextAlign.center),
+                          _pdfRoomDataCell(adultPaxStr,
+                              align: pw.TextAlign.center),
+                          _pdfRoomDataCell(childPaxStr,
+                              align: pw.TextAlign.center),
                           _pdfRoomDataCell(totalPaxStr,
                               isBold: isOccupied, align: pw.TextAlign.center),
                           _pdfRoomDataCell(
@@ -7832,13 +8046,15 @@ Future<void> printRoomsReportPDF({
 
                     // Category Totals Summary Row
                     pw.TableRow(
-                      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                      decoration:
+                          const pw.BoxDecoration(color: PdfColors.grey200),
                       children: [
                         _pdfRoomDataCell('TOTALS', isBold: true),
                         _pdfRoomDataCell(
                             '${category.toUpperCase()} CATEGORY SUMMARY',
                             isBold: true),
-                        _pdfRoomDataCell('Occupied: $catOccupiedCount / $catTotalRooms',
+                        _pdfRoomDataCell(
+                            'Occupied: $catOccupiedCount / $catTotalRooms',
                             isBold: true),
                         _pdfRoomDataCell('-'),
                         _pdfRoomDataCell('-'),
@@ -7871,8 +8087,8 @@ Future<void> printRoomsReportPDF({
                 children: [
                   pw.Container(
                       width: 220,
-                      child: pw.Divider(
-                          color: PdfColors.grey400, thickness: 0.5)),
+                      child:
+                          pw.Divider(color: PdfColors.grey400, thickness: 0.5)),
                   pw.SizedBox(height: 2),
                   pw.Text('Reception Officer Signature & Stamp',
                       style: const pw.TextStyle(
@@ -7884,8 +8100,8 @@ Future<void> printRoomsReportPDF({
                 children: [
                   pw.Container(
                       width: 220,
-                      child: pw.Divider(
-                          color: PdfColors.grey400, thickness: 0.5)),
+                      child:
+                          pw.Divider(color: PdfColors.grey400, thickness: 0.5)),
                   pw.SizedBox(height: 2),
                   pw.Text('Front Office Manager Signature & Stamp',
                       style: const pw.TextStyle(
@@ -7978,8 +8194,7 @@ pw.Widget _pdfSummaryRow(String label, String value,
         pw.Text(value,
             style: pw.TextStyle(
                 fontSize: fontSize,
-                fontWeight:
-                    isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+                fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
                 color: color ?? PdfColors.black)),
       ],
     ),
@@ -8239,8 +8454,7 @@ Future<void> _showFolioDialog(
                                 final trans = folioTransactions[idx];
                                 final isReversed =
                                     trans['status'] == 'reversed';
-                                final desc =
-                                    trans['description'] ?? 'Charge';
+                                final desc = trans['description'] ?? 'Charge';
                                 final cat = trans['category'] ?? 'Outlet';
                                 final amt = _money(trans['amount'] ?? 0);
                                 final dateStr = trans['created_at'] != null
@@ -8305,8 +8519,7 @@ Future<void> _showFolioDialog(
                                           children: [
                                             const Text('Item Snapshot:',
                                                 style: TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.bold,
+                                                    fontWeight: FontWeight.bold,
                                                     fontSize: 12)),
                                             const SizedBox(height: 4),
                                             ...items.map((it) {

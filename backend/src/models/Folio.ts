@@ -152,6 +152,63 @@ export class Folio implements IFolio {
     }));
   }
 
+  async getTransactionById(transactionId: string): Promise<ITransaction | null> {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .eq('folio_id', this.id)
+      .single();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      folioId: data.folio_id,
+      type: data.type,
+      category: data.category,
+      amount: Number(data.amount || 0),
+      description: data.description,
+      referenceNumber: data.reference_number,
+      performedBy: data.performed_by,
+      createdAt: new Date(data.created_at)
+    };
+  }
+
+  private isAdditionalServiceCharge(
+    transaction: Pick<ITransaction, 'type' | 'category'>
+  ): boolean {
+    return String(transaction.type || '').toLowerCase() === 'charge' &&
+      String(transaction.category || '').trim().toLowerCase() === 'additional service';
+  }
+
+  private async applyAdditionalServiceDelta(amountDelta: number): Promise<void> {
+    if (!amountDelta) return;
+
+    await this.refresh();
+
+    const nextOtherCharges = Math.max(0, Number(this.otherCharges || 0) + amountDelta);
+    const nextTotalCharges = Math.max(0, Number(this.totalCharges || 0) + amountDelta);
+    const nextBalance = Math.max(0, nextTotalCharges - Number(this.totalPayments || 0));
+
+    const { error } = await supabase
+      .from('folios')
+      .update({
+        other_charges: nextOtherCharges,
+        total_charges: nextTotalCharges,
+        balance: nextBalance,
+        updated_at: new Date()
+      })
+      .eq('id', this.id);
+
+    if (error) throw error;
+
+    this.otherCharges = nextOtherCharges;
+    this.totalCharges = nextTotalCharges;
+    this.balance = nextBalance;
+    this.updatedAt = new Date();
+  }
+
   async addTransaction(transaction: Omit<ITransaction, 'id' | 'folioId' | 'createdAt'>): Promise<ITransaction> {
     const { data, error } = await supabase
       .from('transactions')
@@ -169,8 +226,14 @@ export class Folio implements IFolio {
 
     if (error) throw error;
 
-    // Update folio totals (trigger handles this in DB, but good to refresh)
-    await this.refresh();
+    if (this.isAdditionalServiceCharge({
+      type: transaction.type,
+      category: transaction.category
+    })) {
+      await this.applyAdditionalServiceDelta(Number(transaction.amount || 0));
+    } else {
+      await this.refresh();
+    }
 
     return {
       id: data.id,
@@ -183,6 +246,91 @@ export class Folio implements IFolio {
       performedBy: data.performed_by,
       createdAt: new Date(data.created_at)
     };
+  }
+
+  async updateTransaction(
+    transactionId: string,
+    patch: Partial<Pick<ITransaction, 'category' | 'amount' | 'description' | 'referenceNumber' | 'performedBy'>>
+  ): Promise<ITransaction> {
+    const existing = await this.getTransactionById(transactionId);
+    if (!existing) {
+      throw new Error('Transaction not found');
+    }
+
+    const nextCategory = patch.category ?? existing.category;
+    const nextAmount = Number(patch.amount ?? existing.amount);
+    const nextDescription = patch.description ?? existing.description;
+    const nextReference = patch.referenceNumber ?? existing.referenceNumber;
+    const nextPerformedBy = patch.performedBy ?? existing.performedBy;
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .update({
+        category: nextCategory,
+        amount: nextAmount,
+        description: nextDescription,
+        reference_number: nextReference,
+        performed_by: nextPerformedBy
+      })
+      .eq('id', transactionId)
+      .eq('folio_id', this.id)
+      .select('*')
+      .single();
+
+    if (error || !data) throw error;
+
+    const wasAdditionalService = this.isAdditionalServiceCharge(existing);
+    const isAdditionalService = this.isAdditionalServiceCharge({
+      type: existing.type,
+      category: nextCategory
+    });
+
+    if (wasAdditionalService || isAdditionalService) {
+      let delta = 0;
+      if (wasAdditionalService && isAdditionalService) {
+        delta = nextAmount - Number(existing.amount || 0);
+      } else if (!wasAdditionalService && isAdditionalService) {
+        delta = nextAmount;
+      } else if (wasAdditionalService && !isAdditionalService) {
+        delta = -Number(existing.amount || 0);
+      }
+      await this.applyAdditionalServiceDelta(delta);
+    } else {
+      await this.refresh();
+    }
+
+    return {
+      id: data.id,
+      folioId: data.folio_id,
+      type: data.type,
+      category: data.category,
+      amount: Number(data.amount || 0),
+      description: data.description,
+      referenceNumber: data.reference_number,
+      performedBy: data.performed_by,
+      createdAt: new Date(data.created_at)
+    };
+  }
+
+  async deleteTransaction(transactionId: string): Promise<void> {
+    const existing = await this.getTransactionById(transactionId);
+    if (!existing) {
+      throw new Error('Transaction not found');
+    }
+
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', transactionId)
+      .eq('folio_id', this.id);
+
+    if (error) throw error;
+
+    if (this.isAdditionalServiceCharge(existing)) {
+      await this.applyAdditionalServiceDelta(-Number(existing.amount || 0));
+    } else {
+      await this.refresh();
+    }
   }
 
   async refresh(): Promise<void> {

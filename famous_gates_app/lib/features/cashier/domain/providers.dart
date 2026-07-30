@@ -86,7 +86,8 @@ final cashierStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
 /// are enabled this updates in real-time without any manual refresh. Falls back
 /// to a polling REST fetch every 30 s so captain orders appear automatically.
 final cashierUnpaidBillsProvider = StreamProvider.autoDispose
-    .family<List<Map<String, dynamic>>, CashierBillFilters>((ref, filters) async* {
+    .family<List<Map<String, dynamic>>, CashierBillFilters>(
+        (ref, filters) async* {
   final powerSync = ref.watch(powerSyncServiceProvider);
   if (powerSync.hotReadsEnabled) {
     yield* powerSync.watchUnpaidOrders(
@@ -180,6 +181,17 @@ final cashierCurrentShiftProvider =
     }
   }
   return <String, dynamic>{};
+});
+
+/// Full active-shift detail including transaction history/lines used by the
+/// cashier close logbook. This lets the station screen show live shift
+/// transactions instead of only the numeric transaction count.
+final cashierCurrentShiftDetailProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final shift = await ref.watch(cashierCurrentShiftProvider.future);
+  final shiftId = '${shift['id'] ?? ''}';
+  if (shiftId.isEmpty) return <String, dynamic>{};
+  return ref.watch(cashierRepositoryProvider).getShift(shiftId);
 });
 
 /// Live aggregated tally for the active shift. Reads directly from the local
@@ -301,6 +313,7 @@ final cashierInsightsProvider =
       .watch(cashierRepositoryProvider)
       .getPosInsights(branchId: branchId);
 });
-final corporateCustomersCashierProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+final corporateCustomersCashierProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
   return ref.watch(cashierRepositoryProvider).getCorporateCustomers();
 });

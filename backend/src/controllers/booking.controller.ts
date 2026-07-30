@@ -16,6 +16,7 @@ import {
   performReceptionCheckIn,
   todayInNairobi,
 } from '../services/receptionStayState.service';
+import { automationService } from '../services/automation.service';
 
 async function getBreakfastPaxRecord(branchId: number, date: string) {
   const { data, error } = await supabase
@@ -57,6 +58,15 @@ export const getBookings = async (
     const isGlobal = isGlobalRole(req.user?.role);
     const requestedBranchId = branchIdSnake || branchIdCamel;
     const branchId = isGlobal ? requestedBranchId : req.user?.branch_id;
+
+    if (
+      branchId &&
+      (!status || String(status).trim().toLowerCase() === 'checked_in')
+    ) {
+      await automationService.syncOverdueInHouseStays({
+        branchId: Number(branchId),
+      });
+    }
 
     // Construct select string based on whether we need to filter by branch (which requires inner join on rooms)
     let selectString = '*, guest:guests!guest_id(*)';
@@ -120,7 +130,7 @@ export const getBookings = async (
         check_in: checkIn,
         check_out: checkOut,
         nights,
-        amount_paid: b.deposit_amount || 0,
+        amount_paid: b.amount_paid || 0,
         total: b.total_amount || b.total || 0,
         guest_name: b.guest ? `${b.guest.first_name} ${b.guest.last_name}` : 'Unknown',
         phone: b.guest ? b.guest.phone : null,
