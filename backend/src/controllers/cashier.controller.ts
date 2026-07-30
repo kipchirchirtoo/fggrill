@@ -3796,7 +3796,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
 
         let query = supabase
             .from('unpaid_bills')
-            .select('id, bill_number, bill_date, created_at, branch_id, bill_type, customer_id, customer_name, room_number, waiter_id, total_amount, paid_amount, balance_amount, status, due_date, remarks')
+            .select('id, bill_number, bill_date, created_at, branch_id, bill_type, customer_id, customer_name, guest_name, waiter_id, total_amount, amount_paid, balance_amount, balance_due, status, due_date, remarks')
             .order('bill_date', { ascending: false });
 
         if (effectiveBranchId) {
@@ -3820,7 +3820,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             query = query.or([
                 `bill_number.ilike.%${search}%`,
                 `customer_name.ilike.%${search}%`,
-                `room_number.ilike.%${search}%`,
+                `guest_name.ilike.%${search}%`,
                 `remarks.ilike.%${search}%`,
             ].join(','));
         }
@@ -3888,6 +3888,9 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                     : null;
                 return {
                     ...bill,
+                    paid_amount: Number(bill.paid_amount || bill.amount_paid || 0),
+                    balance_amount: Number(bill.balance_amount || bill.balance_due || (Number(bill.total_amount || 0) - Number(bill.amount_paid || 0))),
+                    room_number: null,
                     waiter_name: waiterName || null,
                     is_waiter_order: !!bill.waiter_id,
                 };
