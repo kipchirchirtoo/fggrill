@@ -28,46 +28,19 @@ function todayInNairobi(): string {
 }
 
 function isBreakfastEligible(
-  mealPlan: unknown,
+  mealPlan?: unknown,
   roomTypeName?: string,
   roomTypeCode?: string
 ): boolean {
-  const mpNormalized = String(mealPlan ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_');
-
-  const rtName = String(roomTypeName ?? '').trim().toLowerCase();
-  const rtCode = String(roomTypeCode ?? '').trim().toLowerCase();
-
-  const isDeluxeExecVIP =
-    rtName.includes('deluxe') ||
-    rtName.includes('executive') ||
-    rtName.includes('vip') ||
-    rtCode.includes('dlx') ||
-    rtCode.includes('dtw') ||
-    rtCode.includes('exe') ||
-    rtCode.includes('vip');
-
-  if (isDeluxeExecVIP) {
-    return true;
-  }
-
-  if (!mpNormalized || mpNormalized === 'room_only' || mpNormalized === 'ro') {
-    return false;
-  }
-
-  return BREAKFAST_ELIGIBLE_MEAL_PLANS.some((code) => mpNormalized.includes(code));
+  // All checked-in in-house guests are eligible for breakfast until checked out
+  return true;
 }
 
 function mealPlanIncludesBreakfast(value: unknown): boolean {
   return isBreakfastEligible(value);
 }
 
-// Nairobi calendar date (YYYY-MM-DD) of a stored timestamp. check_in_date /
-// check_out_date are stored at Nairobi-midnight (UTC+3), so comparing raw
-// timestamps to a date string drops check-out-day guests — convert to the
-// Nairobi date first.
+// Nairobi calendar date (YYYY-MM-DD) of a stored timestamp.
 function nairobiDateOf(value: unknown): string | null {
   if (!value) return null;
   const d = new Date(value as string);
@@ -76,11 +49,8 @@ function nairobiDateOf(value: unknown): string | null {
 }
 
 async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
-  // The correct source of truth is `reservations` (no fallback tables). Fetch
-  // EVERY currently checked-in guest for the branch, then keep the ones who are
-  // in-house on the breakfast morning: checked in on/before the breakfast date
-  // AND checking out on/after it (check-out day INCLUSIVE — a guest still gets
-  // breakfast the morning they leave).
+  // Fetch EVERY currently checked-in guest for the branch. Any guest with status = 'checked_in'
+  // is in-house until they officially check out.
   const { data: reservations, error } = await supabase
     .from('reservations')
     .select(`
@@ -106,15 +76,11 @@ async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
 
   const inHouse = (reservations || []).filter((row: any) => {
     const ci = nairobiDateOf(row.check_in_date);
-    const co = nairobiDateOf(row.check_out_date);
     if (ci && ci > date) return false; // arrives after the breakfast date
-    if (co && co < date) return false; // already left before the breakfast date
+    // Checked-in guests remain in-house until officially checked out.
     return true;
   });
 
-  // Show ALL in-house guests with their REAL meal plan (no room-type guessing /
-  // relabelling). `breakfast_eligible` is an informational flag only — reception
-  // reconciles paid-extra / complimentary / exclusions from the confirmation form.
   const eligibleBookings = inHouse.map((row: any) => ({
     reservation_id: row.id,
     confirmation_number: row.confirmation_number,
@@ -123,12 +89,8 @@ async function calculateBreakfastPaxSnapshot(branchId: number, date: string) {
       'Checked-in Guest',
     room_number: row.room?.room_number || 'N/A',
     room_type_name: row.room?.room_type?.name || 'Standard',
-    meal_plan: String(row.meal_plan || '').trim() || 'room_only',
-    breakfast_eligible: isBreakfastEligible(
-      row.meal_plan,
-      row.room?.room_type?.name,
-      row.room?.room_type?.code
-    ),
+    meal_plan: String(row.meal_plan || '').trim() || 'bb',
+    breakfast_eligible: true,
     adults: Number(row.adults || 0),
     children: Number(row.children || 0),
     pax: Number(row.adults || 0) + Number(row.children || 0),
@@ -582,15 +544,67 @@ export const checkOutBooking = async (
       );
     }
 
-    // 2. Update booking status and payment status
+    // 2. Fetch financial context (folios, actual payments, credit bills, complimentary status)
     const totalAmount = Number(booking.total_amount || 0);
+
+    const { data: folio } = await supabase
+      .from('folios')
+      .select('id, total_charges, total_payments, balance')
+      .eq('reservation_id', id)
+      .maybeSingle();
+
+    const actualCharges = Number(folio?.total_charges || totalAmount);
+    const actualPayments = Math.max(
+      Number(booking.amount_paid || 0),
+      Number(folio?.total_payments || 0)
+    );
+    // Preserve negative balance for guest credit/overpayment
+    const netBalance = Math.round((actualCharges - actualPayments) * 100) / 100;
+
+    // Check for approved credit bill
+    const { data: creditBill } = await supabase
+      .from('credit_bills')
+      .select('id, status')
+      .or(`source_document_id.eq.${id},reservation_id.eq.${id}`)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    // Check for write-off or complimentary status
+    const isComplimentary =
+      Boolean(booking.is_complimentary) ||
+      String(booking.booking_type || '').toLowerCase().includes('complimentary') ||
+      String(booking.guest_name || '').toLowerCase().includes('complimentary');
+    const isApprovedCredit = Boolean(creditBill);
+    const isWriteOff = Boolean((booking as any).is_written_off || (booking as any).write_off_approved);
+    const isFullyPaid = netBalance <= 0.01;
+
+    // ── STRICT CHECKOUT GUARD ───────────────────────────────────────────
+    // Checkout is BLOCKED if a positive balance exists without approved credit,
+    // complimentary approval, or approved write-off.
+    if (netBalance > 0.01 && !isApprovedCredit && !isComplimentary && !isWriteOff) {
+      logger.warn(`Checkout blocked for booking ${id} due to outstanding balance of KES ${netBalance}`);
+      throw new AppError(
+        `Cannot check out: Outstanding balance of KES ${netBalance.toLocaleString()} must be settled or authorized via approved credit/complimentary/write-off before checking out.`,
+        400
+      );
+    }
+    // ───────────────────────────────────────────────────────────────────
+
+    // Set payment_status to values permitted by database constraints ('paid' or 'partial')
+    let finalPaymentStatus = 'paid';
+    if (!isFullyPaid && actualPayments > 0) {
+      finalPaymentStatus = 'partial';
+    } else if (!isFullyPaid) {
+      finalPaymentStatus = 'pending';
+    }
+
     const { data: updatedBooking, error: updateError } = await supabase
       .from('reservations')
       .update({
         status: 'checked_out',
-        payment_status: 'paid',
-        amount_paid: totalAmount > 0 ? totalAmount : Number(booking.amount_paid || 0),
-        deposit_paid: true,
+        payment_status: finalPaymentStatus,
+        amount_paid: actualPayments,
+        deposit_paid: actualPayments > 0 || isFullyPaid || isApprovedCredit,
         checked_out_at: new Date().toISOString(),
         checked_out_by: userId,
         updated_at: new Date().toISOString()
@@ -604,25 +618,30 @@ export const checkOutBooking = async (
       throw updateError;
     }
 
-    logger.info(`Successfully checked out booking ${id}`);
+    logger.info(`Successfully checked out booking ${id} with payment_status=${finalPaymentStatus}, balance=${netBalance}`);
 
-    // Auto-settle folio for this reservation
-    try {
-      await supabase
-        .from('folios')
-        .update({
-          status: 'closed',
-          settled: true,
-          settled_at: new Date().toISOString(),
-          balance: 0,
-          balance_due: 0,
-          total_payments: totalAmount,
-          updated_at: new Date().toISOString()
-        })
-        .eq('reservation_id', id);
-    } catch (folioErr: any) {
-      logger.warn(`Could not close folio for booking ${id}:`, folioErr.message);
+    // Close folio with actual balance (preserving negative balance for guest credit/overpayment)
+    if (folio?.id) {
+      try {
+        await supabase
+          .from('folios')
+          .update({
+            status: 'closed',
+            settled: true,
+            settled_at: new Date().toISOString(),
+            total_charges: actualCharges,
+            total_payments: actualPayments,
+            balance: netBalance,
+            balance_due: netBalance,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', folio.id);
+      } catch (folioErr: any) {
+        logger.warn(`Could not close folio for booking ${id}:`, folioErr.message);
+      }
     }
+
+
 
     // 3. Update room status to available if room is assigned (by room_id or room_number)
     const roomIdToUpdate = booking.room_id;
@@ -941,7 +960,8 @@ export const getAvailableRooms = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { checkIn, checkOut } = req.query;
+    const checkIn = req.query.checkIn || req.query.check_in_date;
+    const checkOut = req.query.checkOut || req.query.check_out_date;
     if (!checkIn || !checkOut) throw new AppError('Dates required', 400);
 
     // Find booked room IDs from reservations table
@@ -1145,3 +1165,111 @@ export const getBookingByConfirmation = async (
     next(error);
   }
 };
+
+// @desc    Move guest to another room
+// @route   PUT /api/bookings/:id/move-room
+// @access  Private (receptionist, manager)
+export const moveRoom = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id: bookingId } = req.params;
+    const { newRoomId, reason } = req.body;
+    const performedBy = (req as any).user?.id;
+
+    if (!newRoomId) throw new AppError('newRoomId is required', 400);
+
+    // Fetch the current reservation for this booking
+    const { data: reservation, error: resError } = await supabase
+      .from('reservations')
+      .select('id, room_id, status, guest_id, branch_id, internal_notes')
+      .or(`id.eq.${bookingId},booking_id.eq.${bookingId}`)
+      .eq('status', 'checked_in')
+      .maybeSingle();
+
+    if (resError || !reservation) {
+      throw new AppError('No active (checked-in) reservation found for this booking', 404);
+    }
+
+    const oldRoomId = reservation.room_id;
+    if (String(oldRoomId) === String(newRoomId)) {
+      throw new AppError('Guest is already in that room', 400);
+    }
+
+    // Verify the new room exists, belongs to same branch, and is available
+    const { data: newRoom, error: roomError } = await supabase
+      .from('rooms')
+      .select('id, room_number, status, branch_id')
+      .eq('id', newRoomId)
+      .eq('branch_id', reservation.branch_id)
+      .single();
+
+    if (roomError || !newRoom) {
+      throw new AppError('Target room not found in this branch', 404);
+    }
+
+    const allowedStatuses = ['available', 'cleaning'];
+    if (!allowedStatuses.includes(newRoom.status)) {
+      throw new AppError(`Room ${newRoom.room_number} is not available (status: ${newRoom.status})`, 409);
+    }
+
+    // Update the reservation to the new room
+    const { error: updateResError } = await supabase
+      .from('reservations')
+      .update({
+        room_id: newRoomId,
+        updated_at: new Date().toISOString(),
+        internal_notes: reservation.internal_notes
+          ? `${reservation.internal_notes}\nRoom moved from ${oldRoomId} to ${newRoomId} by ${performedBy} - ${reason || 'No reason provided'}`
+          : `Room moved from ${oldRoomId} to ${newRoomId} by ${performedBy} - ${reason || 'No reason provided'}`
+      })
+      .eq('id', reservation.id);
+
+    if (updateResError) throw new AppError('Failed to update reservation', 500);
+
+    // Set old room status to 'cleaning'
+    await supabase
+      .from('rooms')
+      .update({ status: 'cleaning', updated_at: new Date().toISOString() })
+      .eq('id', oldRoomId);
+
+    // Set new room status to 'occupied'
+    await supabase
+      .from('rooms')
+      .update({ status: 'occupied', updated_at: new Date().toISOString() })
+      .eq('id', newRoomId);
+
+    // Log in audit_logs
+    await supabase.from('audit_logs').insert({
+      action: 'room_move',
+      entity_type: 'reservation',
+      entity_id: reservation.id,
+      performed_by: performedBy,
+      branch_id: reservation.branch_id,
+      metadata: {
+        booking_id: bookingId,
+        old_room_id: oldRoomId,
+        new_room_id: newRoomId,
+        reason: reason || null,
+      },
+    });
+
+    logger.info(`Room move: booking ${bookingId} moved from room ${oldRoomId} to ${newRoomId} by ${performedBy}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Guest successfully moved to room ${newRoom.room_number}`,
+      data: {
+        bookingId,
+        oldRoomId,
+        newRoomId,
+        newRoomNumber: newRoom.room_number,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

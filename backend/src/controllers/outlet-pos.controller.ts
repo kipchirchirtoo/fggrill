@@ -1567,9 +1567,15 @@ const loadActiveOutletItems = async (
   outlet: Record<string, any>,
   refreshFromSource = false
 ): Promise<Array<Record<string, any>>> => {
+  // NB: pos_outlet_items has NO category_id / category_sort_order / outlet_type
+  // columns (category is a plain text column). Selecting them made PostgREST
+  // reject the whole query ("column pos_outlet_items.category_id does not
+  // exist") and 400 the /pos/bootstrap call. Category id/sort_order are derived
+  // downstream by applySourceCategory (from the source menu tables), so they are
+  // not needed here.
   let query = supabase
     .from('pos_outlet_items')
-    .select('*')
+    .select('id,outlet_id,source_table,source_item_id,menu_item_id,sku,name,category,unit,cost_price,selling_price,opening_stock,current_stock,track_stock,is_active,is_available,status,branch_id,stock_pool_item_id,pool_fraction')
     .eq('outlet_id', outlet.id)
     .eq('is_active', true);
 
@@ -1866,6 +1872,43 @@ export const updateOutletItem = async (req: Request, res: Response, next: NextFu
     if (error || !data) throw error || new AppError('Failed to update outlet item', 500);
     await syncSourceMenuFromOutletItem(existing, data as Record<string, any>);
     res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Remove a single item from an outlet's menu. This deletes only the
+// pos_outlet_items row (the outlet's sellable copy) — it never touches the
+// source menu (restaurant_menu_items / bar_drinks), so the item simply stops
+// being sold at THIS outlet. Same management-role gate as create/update.
+export const deleteOutletItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const { outletId, itemId } = req.params;
+    const { data: outlet, error: outletError } = await supabase
+      .from('pos_outlets')
+      .select('*')
+      .eq('id', outletId)
+      .single();
+    if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
+    ensureOutletManagementAccess(req, outlet.branch_id);
+
+    const { data: existing } = await supabase
+      .from('pos_outlet_items')
+      .select('id')
+      .eq('id', itemId)
+      .eq('outlet_id', outletId)
+      .maybeSingle();
+    if (!existing) throw new AppError('Outlet item not found', 404);
+
+    const { error } = await supabase
+      .from('pos_outlet_items')
+      .delete()
+      .eq('id', itemId)
+      .eq('outlet_id', outletId);
+    if (error) throw error;
+
+    res.json({ success: true, data: { id: itemId } });
   } catch (error) {
     next(error);
   }

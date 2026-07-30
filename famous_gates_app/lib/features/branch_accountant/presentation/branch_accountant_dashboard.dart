@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:famous_gates_app/core/utils/api_error_message.dart';
 import 'package:famous_gates_app/core/utils/pos_pin_rules.dart';
 import 'package:famous_gates_app/core/widgets/app_notifier.dart';
@@ -40,10 +41,13 @@ import 'waiter_audit_screen.dart';
 import 'daily_controls_screen.dart';
 import 'event_orders_screen.dart';
 import 'food_control_standards_screen.dart';
+import 'sections/corporate_accounts_section.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../../../core/services/user_service.dart';
 import '../../menu_pricing/data/menu_pricing_repository.dart';
 import '../../menu_pricing/domain/menu_pricing_providers.dart';
+import '../../kitchen/domain/session_providers.dart';
+import '../../kitchen/data/repository.dart';
 
 enum BranchAccountantSection {
   overview,
@@ -57,6 +61,7 @@ enum BranchAccountantSection {
   discrepancies,
   profitLoss,
   soldItems,
+  corporateAccounts,
   staffAudit,
   waiterAudit,
   shiftOpenings,
@@ -88,6 +93,8 @@ enum BranchAccountantSection {
   foodControlStandards,
   eventOrders,
   menuPricingCosting,
+  kitchenShiftConfig,
+  posOutletItems,
 }
 
 class BranchAccountantDashboard extends ConsumerStatefulWidget {
@@ -274,6 +281,8 @@ class _BranchAccountantDashboardState
         return const _KitchenVarianceSection();
       case BranchAccountantSection.barStocktakeReview:
         return const BarStocktakeReviewScreen();
+      case BranchAccountantSection.corporateAccounts:
+        return const CorporateAccountsSection();
       case BranchAccountantSection.storeStocktakeReview:
         return const StoreStocktakeReviewScreen();
       case BranchAccountantSection.kitchenStocktakeReview:
@@ -302,6 +311,10 @@ class _BranchAccountantDashboardState
         return const EventOrdersScreen();
       case BranchAccountantSection.menuPricingCosting:
         return const _BranchMenuPricingSection();
+      case BranchAccountantSection.kitchenShiftConfig:
+        return const _KitchenShiftConfigSection();
+      case BranchAccountantSection.posOutletItems:
+        return const _BranchOutletItemsSection();
     }
   }
 
@@ -328,7 +341,9 @@ class _NavItem {
   final IconData icon;
 }
 
-const _navItems = [
+// `final` (not `const`) because one nav item uses a PhosphorIcons.* method icon,
+// which is not a compile-time constant. The list is built once at startup.
+final _navItems = [
   _NavItem(BranchAccountantSection.overview, 'Overview', Icons.dashboard),
   _NavItem(BranchAccountantSection.search, 'Branch Search', Icons.search),
   // ── Daily cashier, shift & bill operations (most accessed) ──
@@ -359,6 +374,11 @@ const _navItems = [
       Icons.swap_horiz),
   _NavItem(
       BranchAccountantSection.discrepancies, 'Discrepancies', Icons.warning),
+  _NavItem(
+    BranchAccountantSection.corporateAccounts,
+    'Corporate Accounts',
+    PhosphorIcons.buildings(PhosphorIconsStyle.regular),
+  ),
   // ── Finance & oversight ──
   _NavItem(
       BranchAccountantSection.financialClose, 'Daily Close', Icons.lock_clock),
@@ -380,6 +400,8 @@ const _navItems = [
       Icons.account_balance_wallet),
   _NavItem(BranchAccountantSection.kitchenVariance, 'Kitchen Variance',
       Icons.soup_kitchen),
+  _NavItem(BranchAccountantSection.kitchenShiftConfig, 'Kitchen Shift Config',
+      Icons.settings_suggest),
   _NavItem(BranchAccountantSection.dailyControls, 'Daily Controls',
       Icons.analytics_outlined),
   _NavItem(BranchAccountantSection.foodControlStandards,
@@ -400,6 +422,8 @@ const _navItems = [
   _NavItem(BranchAccountantSection.branchBarMenu, 'Bar Menu', Icons.local_bar),
   _NavItem(BranchAccountantSection.branchRestaurantMenu, 'Restaurant Menu',
       Icons.restaurant_menu),
+  _NavItem(BranchAccountantSection.posOutletItems,
+      'POS Outlet Items', Icons.storefront),
   _NavItem(BranchAccountantSection.menuPricingCosting, 'Menu Pricing & Costing',
       Icons.price_check),
   _NavItem(BranchAccountantSection.posStockLink, 'POS Stock Link', Icons.link),
@@ -24677,6 +24701,629 @@ class _RestaurantStockLinkSectionState
 // AND updates the base item price so POS picks up the change immediately)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Non-Consumables & Choma Zone menu manager. Add / edit the items sold on the
+// `non_consumables` and `choma_zone` POS outlets. Items are stored in the
+// `pos_outlet_items` table (one row per sellable item, keyed by outlet_id) and
+// managed via the existing POS endpoints:
+//   GET   /pos/outlets?branch_id=            → resolve the outlet ids by type
+//   GET   /pos/outlets/:outletId/items       → list pos_outlet_items
+//   POST  /pos/outlets/:outletId/items       → createOutletItem (upsert)
+//   PATCH /pos/outlets/:outletId/items/:id   → updateOutletItem
+// The branch accountant role is already in MANAGE_OUTLET_ROLES, so these writes
+// are authorised without any backend change.
+// ─────────────────────────────────────────────────────────────────────────────
+class _BranchOutletItemsSection extends ConsumerStatefulWidget {
+  const _BranchOutletItemsSection();
+
+  @override
+  ConsumerState<_BranchOutletItemsSection> createState() =>
+      _BranchOutletItemsSectionState();
+}
+
+class _BranchOutletItemsSectionState
+    extends ConsumerState<_BranchOutletItemsSection> {
+  static const _typeLabels = {
+    'non_consumables': 'Non-Consumables',
+    'choma_zone': 'Choma Zone',
+    'main_bar': 'Main Bar',
+    'executive_bar': 'Executive Bar',
+    'sports_bar': 'Sports Bar',
+  };
+
+  String? _branchId;
+  bool _loading = true;
+  String? _error;
+  final Map<String, Map<String, dynamic>> _outlets = {}; // type -> outlet row
+  String _selectedType = 'non_consumables';
+  List<Map<String, dynamic>> _items = const [];
+  bool _itemsLoading = false;
+
+  Dio get _dio => ref.read(dioProvider);
+  static final _money = NumberFormat('#,##0');
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final raw =
+          await ref.read(branchAccountantRepositoryProvider).getBranchId();
+      _branchId = raw;
+      final res = await _dio.get('/pos/outlets',
+          queryParameters: {if (raw.isNotEmpty) 'branch_id': raw});
+      final data = res.data;
+      final outlets = data is List
+          ? data
+          : (data is Map ? (data['data'] ?? data['outlets'] ?? []) : []);
+      _outlets.clear();
+      for (final o in (outlets as List)) {
+        if (o is! Map) continue;
+        final ot = '${o['outlet_type'] ?? ''}';
+        if (_typeLabels.containsKey(ot)) {
+          _outlets[ot] = Map<String, dynamic>.from(o);
+        }
+      }
+      if (!_outlets.containsKey(_selectedType)) {
+        _selectedType =
+            _outlets.keys.isNotEmpty ? _outlets.keys.first : 'non_consumables';
+      }
+      if (!mounted) return;
+      setState(() => _loading = false);
+      await _loadItems();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = apiErrorMessage(e, fallback: 'Failed to load outlets');
+      });
+    }
+  }
+
+  Map<String, dynamic>? get _currentOutlet => _outlets[_selectedType];
+  String? get _outletId => _currentOutlet?['id']?.toString();
+
+  Future<void> _loadItems() async {
+    final id = _outletId;
+    if (id == null) {
+      setState(() => _items = const []);
+      return;
+    }
+    setState(() {
+      _itemsLoading = true;
+      _error = null;
+    });
+    try {
+      final res = await _dio
+          .get('/pos/outlets/$id/items', queryParameters: {'sync': 'false'});
+      final data = res.data;
+      final list = data is List
+          ? data
+          : (data is Map ? (data['data'] ?? data['items'] ?? []) : []);
+      final items = (list as List)
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList()
+        ..sort((a, b) {
+          final c = '${a['category'] ?? ''}'
+              .toLowerCase()
+              .compareTo('${b['category'] ?? ''}'.toLowerCase());
+          return c != 0
+              ? c
+              : '${a['name'] ?? ''}'
+                  .toLowerCase()
+                  .compareTo('${b['name'] ?? ''}'.toLowerCase());
+        });
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _itemsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _itemsLoading = false;
+        _error = apiErrorMessage(e, fallback: 'Failed to load items');
+      });
+    }
+  }
+
+  double _price(Map<String, dynamic> it) =>
+      double.tryParse('${it['selling_price'] ?? it['price'] ?? 0}') ?? 0;
+
+  // Distinct categories already on this outlet — offered as a dropdown in the
+  // add/edit dialog (plus a "New category…" option).
+  List<String> get _categories {
+    final set = <String>{};
+    for (final it in _items) {
+      final c = (it['category'] ?? '').toString().trim();
+      if (c.isNotEmpty) set.add(c);
+    }
+    return set.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  }
+
+  Future<void> _addOrEdit({Map<String, dynamic>? existing}) async {
+    final id = _outletId;
+    if (id == null) return;
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _OutletItemDialog(
+        existing: existing,
+        categories: _categories,
+      ),
+    );
+    if (result == null) return;
+    try {
+      final payload = <String, dynamic>{
+        'name': result['name'],
+        'category': result['category'],
+        'price': result['price'],
+        'selling_price': result['price'],
+        'unit': result['unit'],
+        'is_active': result['is_active'],
+        'is_available': result['is_active'],
+        'track_stock': false,
+        if (_branchId != null && _branchId!.isNotEmpty)
+          'branch_id': int.tryParse(_branchId!),
+      };
+      if (existing == null) {
+        await _dio.post('/pos/outlets/$id/items', data: payload);
+      } else {
+        await _dio.patch('/pos/outlets/$id/items/${existing['id']}',
+            data: payload);
+      }
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text(existing == null ? 'Item added' : 'Item saved')),
+      );
+      await _loadItems();
+    } catch (e) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text(apiErrorMessage(e, fallback: 'Save failed'))),
+      );
+    }
+  }
+
+  Future<void> _toggleActive(Map<String, dynamic> item) async {
+    final id = _outletId;
+    if (id == null) return;
+    final newActive = !(item['is_active'] == true);
+    try {
+      await _dio.patch('/pos/outlets/$id/items/${item['id']}', data: {
+        'is_active': newActive,
+        'is_available': newActive,
+      });
+      await _loadItems();
+    } catch (e) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text(apiErrorMessage(e, fallback: 'Update failed'))),
+      );
+    }
+  }
+
+  Future<void> _deleteItem(Map<String, dynamic> item) async {
+    final id = _outletId;
+    if (id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete item?'),
+        content: Text(
+            'Remove "${item['name'] ?? 'this item'}" from this outlet\'s menu? '
+            'This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _dio.delete('/pos/outlets/$id/items/${item['id']}');
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        const SnackBar(content: Text('Item deleted')),
+      );
+      await _loadItems();
+    } catch (e) {
+      if (!mounted) return;
+      AppNotifier.showSnackBar(
+        context,
+        SnackBar(content: Text(apiErrorMessage(e, fallback: 'Delete failed'))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return RefreshIndicator(
+      onRefresh: _init,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('POS Outlet Items',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ),
+              IconButton(
+                tooltip: 'Reload',
+                icon: const Icon(Icons.refresh),
+                onPressed: _init,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Add, edit and remove the items sold on each POS outlet — '
+            'Non-Consumables, Choma Zone and the bars (stored in pos_outlet_items).',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            children: _typeLabels.entries.map((e) {
+              final available = _outlets.containsKey(e.key);
+              final outletName = _outlets[e.key]?['name']?.toString();
+              return ChoiceChip(
+                selected: _selectedType == e.key,
+                onSelected: available
+                    ? (_) {
+                        setState(() => _selectedType = e.key);
+                        _loadItems();
+                      }
+                    : null,
+                label: Text(available && outletName != null
+                    ? outletName
+                    : e.value),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(_error!,
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+            ),
+          if (_outletId == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                'No "${_typeLabels[_selectedType]}" POS outlet exists for this branch.',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Text('${_items.length} item(s)',
+                    style: TextStyle(color: Colors.grey.shade700)),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: () => _addOrEdit(),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Item'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.kPrimary,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_itemsLoading)
+              const Center(child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ))
+            else if (_items.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text('No items yet — tap "Add Item" to create one.',
+                    style: TextStyle(color: Colors.grey.shade600)),
+              )
+            else
+              ..._buildItemWidgets(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildItemWidgets() {
+    final widgets = <Widget>[];
+    String? lastCat;
+    for (final it in _items) {
+      final cat = '${it['category'] ?? 'Other'}';
+      if (cat != lastCat) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 4),
+          child: Text(cat.toUpperCase(),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.kPrimary,
+                letterSpacing: 0.5,
+              )),
+        ));
+        lastCat = cat;
+      }
+      final active = it['is_active'] == true;
+      widgets.add(Card(
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        child: ListTile(
+          title: Text('${it['name'] ?? '-'}',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: active ? null : Colors.grey,
+              )),
+          subtitle: Text('KES ${_money.format(_price(it))}'
+              '${(it['unit'] != null && '${it['unit']}'.isNotEmpty) ? ' • ${it['unit']}' : ''}'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Switch(
+                value: active,
+                onChanged: (_) => _toggleActive(it),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Actions',
+                onSelected: (v) {
+                  if (v == 'edit') _addOrEdit(existing: it);
+                  if (v == 'delete') _deleteItem(it);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ));
+    }
+    return widgets;
+  }
+}
+
+/// Add / edit dialog for a single pos_outlet_items row. Pops
+/// `{name, category, price, unit, is_active}` on save, or null on cancel.
+class _OutletItemDialog extends StatefulWidget {
+  const _OutletItemDialog({this.existing, this.categories = const []});
+
+  final Map<String, dynamic>? existing;
+  final List<String> categories;
+
+  @override
+  State<_OutletItemDialog> createState() => _OutletItemDialogState();
+}
+
+class _OutletItemDialogState extends State<_OutletItemDialog> {
+  static const _newCategorySentinel = '__new_category__';
+
+  late final TextEditingController _name;
+  late final TextEditingController _category; // holds a typed NEW category
+  late final TextEditingController _price;
+  late final TextEditingController _unit;
+  late List<String> _categoryOptions;
+  String? _selectedCategory;
+  bool _newCategory = false;
+  bool _isActive = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    String s(dynamic v) {
+      final t = (v ?? '').toString();
+      return t == 'null' ? '' : t;
+    }
+
+    _name = TextEditingController(text: s(e?['name']));
+    _category = TextEditingController();
+    final existingCat = s(e?['category']);
+    _categoryOptions = <String>{
+      ...widget.categories.where((c) => c.trim().isNotEmpty),
+      if (existingCat.isNotEmpty) existingCat,
+    }.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    _selectedCategory =
+        existingCat.isNotEmpty && _categoryOptions.contains(existingCat)
+            ? existingCat
+            : null;
+    final price = e?['selling_price'] ?? e?['price'];
+    _price = TextEditingController(
+        text: price == null ? '' : '${double.tryParse('$price')?.toStringAsFixed(0) ?? price}');
+    _unit = TextEditingController(text: s(e?['unit']).isEmpty ? 'service' : s(e?['unit']));
+    _isActive = e == null ? true : (e['is_active'] == true);
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _category.dispose();
+    _price.dispose();
+    _unit.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _name.text.trim();
+    final price = double.tryParse(_price.text.trim());
+    if (name.isEmpty) {
+      setState(() => _error = 'Item name is required');
+      return;
+    }
+    if (price == null || price < 0) {
+      setState(() => _error = 'Enter a valid price');
+      return;
+    }
+    final String category;
+    if (_newCategory) {
+      final typed = _category.text.trim();
+      if (typed.isEmpty) {
+        setState(() => _error = 'Enter the new category name');
+        return;
+      }
+      category = typed;
+    } else {
+      category = (_selectedCategory ?? '').trim();
+    }
+    Navigator.of(context).pop(<String, dynamic>{
+      'name': name,
+      'category': category.isEmpty ? 'Others' : category,
+      'price': price,
+      'unit': _unit.text.trim().isEmpty ? 'service' : _unit.text.trim(),
+      'is_active': _isActive,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add Item' : 'Edit Item'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                    labelText: 'Item name', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              InputDecorator(
+                decoration: const InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(),
+                    isDense: true),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value:
+                        _newCategory ? _newCategorySentinel : _selectedCategory,
+                    hint: const Text('Select a category'),
+                    items: [
+                      ..._categoryOptions.map((c) =>
+                          DropdownMenuItem(value: c, child: Text(c))),
+                      const DropdownMenuItem(
+                        value: _newCategorySentinel,
+                        child: Text('➕  New category…'),
+                      ),
+                    ],
+                    onChanged: (v) => setState(() {
+                      if (v == _newCategorySentinel) {
+                        _newCategory = true;
+                      } else {
+                        _newCategory = false;
+                        _selectedCategory = v;
+                      }
+                    }),
+                  ),
+                ),
+              ),
+              if (_newCategory) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _category,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                      labelText: 'New category name',
+                      hintText: 'e.g. Swimming Pool, Car Wash',
+                      border: OutlineInputBorder()),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _price,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: const InputDecoration(
+                          labelText: 'Price (KES)',
+                          border: OutlineInputBorder()),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _unit,
+                      decoration: const InputDecoration(
+                          labelText: 'Unit', border: OutlineInputBorder()),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Active (sellable at POS)'),
+                value: _isActive,
+                onChanged: (v) => setState(() => _isActive = v),
+              ),
+              if (_error != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(_error!,
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.kPrimary,
+            foregroundColor: Colors.white,
+          ),
+          child: Text(widget.existing == null ? 'Add' : 'Save'),
+        ),
+      ],
+    );
+  }
+}
+
 class _BranchMenuPricingSection extends ConsumerStatefulWidget {
   const _BranchMenuPricingSection();
 
@@ -25236,3 +25883,253 @@ class _EditablePricingRowState extends State<_EditablePricingRow> {
     );
   }
 }
+
+class _KitchenShiftConfigSection extends ConsumerStatefulWidget {
+  const _KitchenShiftConfigSection();
+
+  @override
+  ConsumerState<_KitchenShiftConfigSection> createState() =>
+      _KitchenShiftConfigSectionState();
+}
+
+class _KitchenShiftConfigSectionState
+    extends ConsumerState<_KitchenShiftConfigSection> {
+  bool _isSaving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final configAsync = ref.watch(shiftConfigProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Kitchen Shift Sessions Configuration'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.invalidate(shiftConfigProvider),
+          ),
+        ],
+      ),
+      body: configAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Error loading shift config: $err',
+                  style: const TextStyle(color: Colors.red)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.invalidate(shiftConfigProvider),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+        data: (config) {
+          final currentMode = config.shiftMode;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              config.enabled
+                                  ? Icons.check_circle
+                                  : Icons.warning_amber_rounded,
+                              color:
+                                  config.enabled ? Colors.green : Colors.orange,
+                              size: 28,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    config.enabled
+                                        ? 'Kitchen Sessions Active'
+                                        : 'Kitchen Sessions Disabled',
+                                    style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    config.enabled
+                                        ? 'Current Active Mode: ${currentMode == "SINGLE_SHIFT" ? "Single Shift (All Day)" : "Two Shifts (Shift A / Shift B)"}'
+                                        : 'Kitchen sessions shift mode has not been configured for this branch yet.',
+                                    style: TextStyle(color: Colors.grey[700]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 32),
+                        const Text(
+                          'Configure Kitchen Shift Session Mode',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Select the operating shift model for kitchen session management in this branch. Storekeepers can open sessions once configured.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _KitchenShiftOptionCard(
+                                title: 'Single Shift (All Day)',
+                                description:
+                                    'One shift session per business date covering all production.',
+                                icon: Icons.looks_one,
+                                isSelected: currentMode == 'SINGLE_SHIFT',
+                                isSaving: _isSaving,
+                                onSelect: () => _applyConfig('SINGLE_SHIFT'),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _KitchenShiftOptionCard(
+                                title: 'Two Shifts (Shift A & B)',
+                                description:
+                                    'Morning (Shift A) and Evening (Shift B) session split.',
+                                icon: Icons.looks_two,
+                                isSelected: currentMode == 'TWO_SHIFT',
+                                isSaving: _isSaving,
+                                onSelect: () => _applyConfig('TWO_SHIFT'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _applyConfig(String mode) async {
+    setState(() => _isSaving = true);
+    try {
+      await ref.read(kitchenRepositoryProvider).configureShiftMode(mode);
+      ref.invalidate(shiftConfigProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Kitchen shift mode updated to $mode successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to update shift mode: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+}
+
+class _KitchenShiftOptionCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final IconData icon;
+  final bool isSelected;
+  final bool isSaving;
+  final VoidCallback onSelect;
+
+  const _KitchenShiftOptionCard({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.isSelected,
+    required this.isSaving,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: isSaving ? null : onSelect,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isSelected ? theme.primaryColor : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? theme.primaryColor.withAlpha(15) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon,
+                    color: isSelected ? theme.primaryColor : Colors.grey[600],
+                    size: 32),
+                const Spacer(),
+                if (isSelected)
+                  Icon(Icons.check_circle, color: theme.primaryColor)
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 6),
+            Text(description,
+                style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: isSaving ? null : onSelect,
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    isSelected ? theme.primaryColor : Colors.grey.shade200,
+                foregroundColor: isSelected ? Colors.white : Colors.black87,
+              ),
+              child: isSaving && isSelected
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : Text(isSelected
+                      ? 'Currently Selected'
+                      : 'Activate This Mode'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

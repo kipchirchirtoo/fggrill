@@ -130,9 +130,10 @@ export const getMenuItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const limit = Math.min(Number(req.query.limit) || 500, 1000);
     let query = supabase
       .from('restaurant_menu_items')
-      .select('*, category:restaurant_menu_categories(*)');
+      .select('id, branch_id, category_id, name, description, price, selling_price, image_url, allergens, ingredients, sku, cost_price, unit, is_available, is_active, is_vegetarian, metadata, category:restaurant_menu_categories(id, name, sort_order)');
 
     // Add filters
     if (req.query.category) {
@@ -155,7 +156,13 @@ export const getMenuItems = async (
       query = query.eq('is_vegetarian', true);
     }
 
-    const { data: items, error } = await query.order('name');
+    const { data: items, error } = await query
+      .order('sort_order', {
+        ascending: true,
+        referencedTable: 'restaurant_menu_categories',
+      })
+      .order('name', { ascending: true })
+      .limit(limit);
 
     if (error) {
       throw error;

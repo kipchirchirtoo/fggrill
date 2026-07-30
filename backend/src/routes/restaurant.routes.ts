@@ -31,8 +31,10 @@ import {
   deleteWastageRecord
 } from '../controllers/restaurant/wastage.controller';
 import { protect, authorize } from '../middleware/auth';
+import { withCache } from '../middleware/cacheMiddleware';
 import { optionalIdempotency } from '../middleware/idempotency';
 import { UserRole } from '../models/User';
+import { CacheKeys, CACHE_TTL } from '../services/cacheService';
 import notificationService from '../services/notification.service';
 
 // Import new sub-routes
@@ -40,6 +42,32 @@ import tableRoutes from './restaurant.table.routes';
 import reservationRoutes from './restaurant.reservation.routes';
 
 const router = express.Router();
+
+const resolveMenuBranchId = (req: express.Request): number => {
+  const requested = Number(req.query.branch_id);
+  if (Number.isFinite(requested) && requested > 0) return requested;
+
+  const userBranch = Number((req.user as any)?.branch_id ?? (req.user as any)?.branchId);
+  if (Number.isFinite(userBranch) && userBranch > 0) return userBranch;
+
+  return 0;
+};
+
+const resolveMenuFilterSignature = (req: express.Request): string =>
+  [
+    `category=${String(req.query.category || 'all').trim().toLowerCase()}`,
+    `available=${String(req.query.available || 'all').trim().toLowerCase()}`,
+    `vegetarian=${String(req.query.vegetarian || 'all').trim().toLowerCase()}`,
+  ].join('|');
+
+const resolveKitchenScope = (req: express.Request): KitchenOutletScope =>
+  normalizeKitchenOutletScope(req.query.outlet_scope);
+
+const kitchenCacheBranchId = (req: express.Request): number =>
+  resolveKitchenBranchId(req) ?? 0;
+
+const kitchenCacheLimit = (req: express.Request): number =>
+  Math.min(parseInt(req.query.limit as string) || 100, 250);
 
 const normalizeKitchenStatus = (value: any): string => {
   const status = String(value || 'pending').toLowerCase();
@@ -267,8 +295,24 @@ const updatePosCaptainOrderKitchenStatus = async (rawOrderId: string, status: st
 };
 
 // Public routes
-router.get('/menu/categories', getMenuCategories);
-router.get('/menu/items', getMenuItems);
+router.get(
+  '/menu/categories',
+  withCache(
+    (req) => CacheKeys.menuCategory(resolveMenuBranchId(req), 'all-categories'),
+    CACHE_TTL.MENU,
+    { skipCache: (req) => resolveMenuBranchId(req) <= 0 }
+  ),
+  getMenuCategories
+);
+router.get(
+  '/menu/items',
+  withCache(
+    (req) => CacheKeys.menuFiltered(resolveMenuBranchId(req), resolveMenuFilterSignature(req)),
+    CACHE_TTL.MENU,
+    { skipCache: (req) => resolveMenuBranchId(req) <= 0 }
+  ),
+  getMenuItems
+);
 
 // Protected routes
 router.use(protect);
@@ -406,6 +450,13 @@ const KITCHEN_ORDER_ROLES = [
 
 // Kitchen Display - Get active orders (no join, avoids FK issues)
 router.get('/kitchen/orders',
+  withCache(
+    (req) => CacheKeys.kitchenOrders(
+      kitchenCacheBranchId(req),
+      resolveKitchenScope(req),
+    ),
+    CACHE_TTL.KDS_ACTIVE,
+  ),
   authorize(KITCHEN_ORDER_ROLES),
   async (req, res) => {
     try {
@@ -417,7 +468,7 @@ router.get('/kitchen/orders',
       if (shouldIncludeRestaurantOrders(outletScope)) {
         let ordersQuery = supabase
           .from('restaurant_orders')
-          .select('*')
+          .select('id, branch_id, order_number, short_code, order_type, table_number, room_number, waiter_name, customer_name, status, total_amount, created_at, captain_printed_at')
           .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'cancelled', 'voided'])
           .order('created_at', { ascending: true });
 
@@ -501,7 +552,7 @@ router.get('/kitchen/orders',
         if (restaurantShiftIds.length) {
           const { data: posOrders, error: posOrdersError } = await supabase
             .from('pos_shift_orders')
-            .select('*')
+            .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_name, order_type, table_number, room_number, status, payment_status, kitchen_status, void_request_status, void_reason, voided_at, voided_by, is_exchange, exchange_parent_order_id, created_at, total_amount, captain_printed_at, items')
             .in('shift_id', restaurantShiftIds)
             .gte('created_at', stopSignalSince)
             .or('status.eq.open,status.eq.voided,payment_status.eq.voided,void_request_status.in.(pending,approved),kitchen_status.in.(void_requested,cancelled,voided,pending,preparing,ready,recalled)')
@@ -616,6 +667,14 @@ router.get('/kitchen/orders',
 
 // Kitchen Display - Get completed restaurant order history (restaurant only)
 router.get('/kitchen/orders/history',
+  withCache(
+    (req) => CacheKeys.kitchenHistory(
+      kitchenCacheBranchId(req),
+      resolveKitchenScope(req),
+      kitchenCacheLimit(req),
+    ),
+    CACHE_TTL.KDS_ACTIVE,
+  ),
   authorize(KITCHEN_ORDER_ROLES),
   async (req, res) => {
     try {
@@ -631,7 +690,7 @@ router.get('/kitchen/orders/history',
       if (shouldIncludeRestaurantOrders(outletScope)) {
         let ordersQuery = supabase
           .from('restaurant_orders')
-          .select('*')
+          .select('id, branch_id, order_number, short_code, order_type, table_number, room_number, waiter_name, customer_name, status, total_amount, created_at, captain_printed_at, updated_at')
           .in('status', ['served', 'delivered', 'completed', 'paid', 'cancelled', 'voided'])
           .gte('created_at', historySince)
           .order('created_at', { ascending: false })
@@ -712,7 +771,7 @@ router.get('/kitchen/orders/history',
         if (restaurantShiftIds.length) {
           const { data: posOrders, error: posOrdersError } = await supabase
             .from('pos_shift_orders')
-            .select('*')
+            .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_name, order_type, table_number, room_number, status, payment_status, kitchen_status, void_request_status, void_reason, voided_at, voided_by, is_exchange, exchange_parent_order_id, created_at, updated_at, total_amount, captain_printed_at, items')
             .in('shift_id', restaurantShiftIds)
             .gte('created_at', historySince)
             .or('kitchen_status.in.(served,cancelled,voided),status.in.(paid,credit_bill,voided,cancelled),payment_status.in.(paid,credit_bill,voided)')

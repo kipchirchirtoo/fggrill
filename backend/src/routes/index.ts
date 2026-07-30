@@ -57,6 +57,7 @@ import communicationRoutes from './communication.routes';
 import channelManagerRoutes from './channelManager.routes';
 import employeePortalRoutes from './employee-portal.routes';
 import guestPortalRoutes from './guest-portal.routes';
+import corporateRoutes from './corporate.routes';
 import staffRoutes from './staff.routes';
 import staffPerformanceRoutes from './staff-performance.routes';
 import staffAuditRoutes from './staff-audit.routes';
@@ -113,6 +114,7 @@ import powerSyncRoutes from './powersync.routes';
 import branchHealthRoutes from './branch-health.routes';
 import branchFeaturesRoutes from './branch-features.routes';
 import roomChargeRoutes from './room-charge.routes';
+import paymentCollectionRoutes from './payment_collection.routes';
 import { maintenanceMode } from '../middleware/maintenanceMode';
 
 const router = express.Router();
@@ -189,6 +191,7 @@ router.use('/communication', communicationRoutes);
 router.use('/channel-manager', channelManagerRoutes);
 router.use('/employee-portal', employeePortalRoutes);
 router.use('/guest-portal', guestPortalRoutes);
+router.use('/corporate', corporateRoutes);
 router.use('/staff', staffRoutes);
 router.use('/staff-performance', staffPerformanceRoutes);
 router.use('/staff-audit', staffAuditRoutes);
@@ -253,6 +256,7 @@ router.use('/powersync', powerSyncRoutes);
 router.use('/branches', branchHealthRoutes);
 router.use('/branch-features', branchFeaturesRoutes);
 router.use('/room-charge', roomChargeRoutes);
+router.use('/payments-collection', paymentCollectionRoutes);
 
 // Email booking endpoints (public - no auth required)
 router.post('/email/send-booking/:bookingId', sendBookingEmail);

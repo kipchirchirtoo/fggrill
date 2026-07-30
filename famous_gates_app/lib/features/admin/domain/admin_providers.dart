@@ -196,6 +196,18 @@ final adminRoomsProvider =
   return repo.getRooms();
 });
 
+final adminRoomTypesProvider =
+    FutureProvider.autoDispose<List<AdminRoomType>>((ref) async {
+  final repo = ref.read(adminRepositoryProvider);
+  return repo.getRoomTypes();
+});
+
+final adminRatePlansProvider =
+    FutureProvider.autoDispose<List<AdminRatePlan>>((ref) async {
+  final repo = ref.read(adminRepositoryProvider);
+  return repo.getRatePlans();
+});
+
 final adminGuestsProvider =
     FutureProvider.autoDispose<List<AdminGuest>>((ref) async {
   final repo = ref.read(adminRepositoryProvider);

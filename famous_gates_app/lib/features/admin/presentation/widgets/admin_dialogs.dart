@@ -37,6 +37,22 @@ Future<T?> showRoomDialog<T>(BuildContext context, {AdminRoom? room}) {
   );
 }
 
+Future<T?> showRoomStandardDialog<T>(BuildContext context, {AdminRoomType? type}) {
+  return showDialog<T>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _RoomStandardDialog(type: type),
+  );
+}
+
+Future<T?> showRatePlanDialog<T>(BuildContext context, {AdminRatePlan? plan}) {
+  return showDialog<T>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _RatePlanDialog(plan: plan),
+  );
+}
+
 Future<T?> showGuestDialog<T>(BuildContext context, {AdminGuest? guest}) {
   return showDialog<T>(
     context: context,
@@ -1388,6 +1404,272 @@ class _VehicleDialogState extends ConsumerState<_VehicleDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+class _RoomStandardDialog extends ConsumerStatefulWidget {
+  final AdminRoomType? type;
+  const _RoomStandardDialog({this.type});
+
+  @override
+  ConsumerState<_RoomStandardDialog> createState() => _RoomStandardDialogState();
+}
+
+class _RoomStandardDialogState extends ConsumerState<_RoomStandardDialog> {
+  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _basePriceCtrl;
+  late final TextEditingController _capacityCtrl;
+  late final TextEditingController _descriptionCtrl;
+  bool _isActive = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.type;
+    _nameCtrl = TextEditingController(text: t?.name ?? '');
+    _basePriceCtrl = TextEditingController(text: t?.basePrice.toString() ?? '');
+    _capacityCtrl = TextEditingController(text: t?.capacity.toString() ?? '2');
+    _descriptionCtrl = TextEditingController(text: t?.description ?? '');
+    _isActive = t?.isActive ?? true;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _basePriceCtrl.dispose();
+    _capacityCtrl.dispose();
+    _descriptionCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      final data = {
+        'name': _nameCtrl.text.trim(),
+        'base_price': double.tryParse(_basePriceCtrl.text) ?? 0,
+        'capacity': int.tryParse(_capacityCtrl.text) ?? 2,
+        'description': _descriptionCtrl.text.trim(),
+        'is_active': _isActive,
+      };
+      final repo = ref.read(adminRepositoryProvider);
+      if (widget.type != null) {
+        await repo.updateRoomType(widget.type!.id, data);
+      } else {
+        await repo.createRoomType(data);
+      }
+      ref.invalidate(adminRoomTypesProvider);
+      if (mounted) {
+        AppNotifier.showSnackBar(context, const SnackBar(content: Text('Standard saved'), backgroundColor: AppColors.kSuccess));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.kError));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _DialogFormWrapper(
+      title: widget.type != null ? 'Edit Standard' : 'Add Standard',
+      formKey: _formKey,
+      isLoading: _isLoading,
+      onSubmit: _submit,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(labelText: 'Standard Name (e.g., Deluxe)'),
+            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _basePriceCtrl,
+                  decoration: const InputDecoration(labelText: 'Base Price (KES)'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _capacityCtrl,
+                  decoration: const InputDecoration(labelText: 'Capacity (Pax)'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _descriptionCtrl,
+            decoration: const InputDecoration(labelText: 'Description'),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            title: const Text('Is Active'),
+            value: _isActive,
+            onChanged: (v) => setState(() => _isActive = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RatePlanDialog extends ConsumerStatefulWidget {
+  final AdminRatePlan? plan;
+  const _RatePlanDialog({this.plan});
+
+  @override
+  ConsumerState<_RatePlanDialog> createState() => _RatePlanDialogState();
+}
+
+class _RatePlanDialogState extends ConsumerState<_RatePlanDialog> {
+  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _multiplierCtrl;
+  late final TextEditingController _fixedAmountCtrl;
+  late final TextEditingController _minNightsCtrl;
+  late final TextEditingController _descriptionCtrl;
+  String _rateType = 'FIXED';
+  bool _active = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.plan;
+    _nameCtrl = TextEditingController(text: p?.name ?? '');
+    _multiplierCtrl = TextEditingController(text: p?.multiplier.toString() ?? '1.0');
+    _fixedAmountCtrl = TextEditingController(text: p?.fixedAmount.toString() ?? '0');
+    _minNightsCtrl = TextEditingController(text: p?.minNights.toString() ?? '1');
+    _descriptionCtrl = TextEditingController(text: p?.description ?? '');
+    _rateType = p?.rateType ?? 'FIXED';
+    _active = p?.active ?? true;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _multiplierCtrl.dispose();
+    _fixedAmountCtrl.dispose();
+    _minNightsCtrl.dispose();
+    _descriptionCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      final data = {
+        'name': _nameCtrl.text.trim(),
+        'rate_type': _rateType,
+        'multiplier': double.tryParse(_multiplierCtrl.text) ?? 1.0,
+        'fixed_amount': double.tryParse(_fixedAmountCtrl.text) ?? 0,
+        'min_nights': int.tryParse(_minNightsCtrl.text) ?? 1,
+        'description': _descriptionCtrl.text.trim(),
+        'active': _active,
+      };
+      final repo = ref.read(adminRepositoryProvider);
+      if (widget.plan != null) {
+        await repo.updateRatePlan(widget.plan!.id, data);
+      } else {
+        await repo.createRatePlan(data);
+      }
+      ref.invalidate(adminRatePlansProvider);
+      if (mounted) {
+        AppNotifier.showSnackBar(context, const SnackBar(content: Text('Rate Plan saved'), backgroundColor: AppColors.kSuccess));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.kError));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _DialogFormWrapper(
+      title: widget.plan != null ? 'Edit Rate Plan' : 'Add Rate Plan',
+      formKey: _formKey,
+      isLoading: _isLoading,
+      onSubmit: _submit,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(labelText: 'Plan Name (e.g., Bed & Breakfast)'),
+            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            initialValue: _rateType,
+            decoration: const InputDecoration(labelText: 'Rate Calculation Type'),
+            items: const [
+              DropdownMenuItem(value: 'FIXED', child: Text('Fixed Price Addition')),
+              DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage Multiplier')),
+            ],
+            onChanged: (v) => setState(() => _rateType = v ?? 'FIXED'),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              if (_rateType == 'PERCENTAGE')
+                Expanded(
+                  child: TextFormField(
+                    controller: _multiplierCtrl,
+                    decoration: const InputDecoration(labelText: 'Multiplier (e.g., 1.2)'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              if (_rateType == 'FIXED')
+                Expanded(
+                  child: TextFormField(
+                    controller: _fixedAmountCtrl,
+                    decoration: const InputDecoration(labelText: 'Fixed Amount (KES)'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _minNightsCtrl,
+                  decoration: const InputDecoration(labelText: 'Minimum Nights'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _descriptionCtrl,
+            decoration: const InputDecoration(labelText: 'Description'),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            title: const Text('Is Active'),
+            value: _active,
+            onChanged: (v) => setState(() => _active = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ],
       ),
     );
   }

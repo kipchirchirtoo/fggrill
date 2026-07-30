@@ -3,14 +3,19 @@ import '../../domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/dashboard_shell.dart';
 import '../../../shared/presentation/guest_invoice_pdf.dart';
+import '../../../pos/domain/models.dart';
+import '../../../cashier/data/cashier_repository.dart';
+import '../../../templates/data/document_printer.dart';
 
 import '../../data/repository.dart';
 
 class CheckOutScreen extends ConsumerStatefulWidget {
   final Booking? booking;
+  final void Function(String lookupCode)? onPayAtCashier;
 
-  const CheckOutScreen({super.key, this.booking});
+  const CheckOutScreen({super.key, this.booking, this.onPayAtCashier});
 
   @override
   ConsumerState<CheckOutScreen> createState() => _CheckOutScreenState();
@@ -31,9 +36,19 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   double _totalPayments = 0;
   double _balance = 0;
   List<Map<String, dynamic>> _transactions = [];
+  // Itemised Charge-to-Room lines (outlet · item) from the folio (folio_items).
+  List<Map<String, dynamic>> _folioItems = [];
+  // Per-bill charge lines (outlet + bill) from folio_transactions — the
+  // detailed fallback when per-item folio_items isn't available.
+  List<Map<String, dynamic>> _chargeLines = [];
 
   // Payment
   final _notesController = TextEditingController();
+
+  // Additional Services
+  final _serviceNameController = TextEditingController();
+  final _servicePriceController = TextEditingController();
+  bool _isAddingService = false;
 
   @override
   void initState() {
@@ -49,6 +64,8 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   void dispose() {
     _searchController.dispose();
     _notesController.dispose();
+    _serviceNameController.dispose();
+    _servicePriceController.dispose();
     super.dispose();
   }
 
@@ -134,7 +151,11 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
           : raw;
 
       final bookingTotal = _selectedBooking?.totalAmount ?? 0.0;
-      final bookingPaid = _selectedBooking?.amountPaid ?? _selectedBooking?.depositAmount ?? 0.0;
+      final depositPaid = _selectedBooking?.raw['deposit_paid'] == true ||
+          _selectedBooking?.raw['depositPaid'] == true;
+      final bookingPaid = depositPaid
+          ? (_selectedBooking?.amountPaid ?? _selectedBooking?.depositAmount ?? 0.0)
+          : (_selectedBooking?.amountPaid ?? 0.0);
 
       final rawRoom = (folioMap['room_charges'] ?? folioMap['roomCharges']) as num?;
       final rawFood = (folioMap['food_charges'] ?? folioMap['foodCharges']) as num?;
@@ -142,7 +163,6 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
       final rawOther = (folioMap['other_charges'] ?? folioMap['otherCharges']) as num?;
       final rawTotal = (folioMap['total_charges'] ?? folioMap['totalCharges']) as num?;
       final rawPayments = (folioMap['total_payments'] ?? folioMap['totalPayments']) as num?;
-      final rawBal = (folioMap['balance'] ?? folioMap['balance_due']) as num?;
 
       final rCharges = (rawRoom != null && rawRoom.toDouble() > 0) ? rawRoom.toDouble() : bookingTotal;
       final fCharges = rawFood?.toDouble() ?? 0.0;
@@ -153,14 +173,30 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
           ? rawTotal.toDouble()
           : (rCharges + fCharges + bCharges + oCharges);
 
-      final calcPayments = rawPayments?.toDouble() ?? bookingPaid;
-      final calcBalance = rawBal?.toDouble() ?? (calcTotal - calcPayments);
+      final calcPayments = (rawPayments != null && rawPayments.toDouble() > 0)
+          ? rawPayments.toDouble()
+          : bookingPaid;
+      final calcBalance = (calcTotal - calcPayments) > 0 ? (calcTotal - calcPayments) : 0.0;
 
       final txList = raw['transactions'] is List
           ? List<Map<String, dynamic>>.from(raw['transactions'])
           : (folioMap['transactions'] is List
               ? List<Map<String, dynamic>>.from(folioMap['transactions'])
               : <Map<String, dynamic>>[]);
+
+      final itemList = raw['items'] is List
+          ? (raw['items'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : <Map<String, dynamic>>[];
+
+      final chargeList = raw['charge_lines'] is List
+          ? (raw['charge_lines'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : <Map<String, dynamic>>[];
 
       setState(() {
         _folio = {
@@ -173,6 +209,8 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
         _totalPayments = calcPayments;
         _balance = calcBalance > 0 ? calcBalance : 0.0;
         _transactions = txList;
+        _folioItems = itemList;
+        _chargeLines = chargeList;
         _loadingFolio = false;
       });
     } catch (e) {
@@ -185,63 +223,40 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
     }
   }
 
-  Future<void> _generateReceiptPDF() async {
+  // Safe date formatter for a folio transaction. getFolio returns the timestamp
+  // as `createdAt` (camelCase); it can also be absent — never crash on null.
+  String _formatTxDate(dynamic raw) {
+    final dt = raw == null ? null : DateTime.tryParse('$raw');
+    return dt == null ? '' : DateFormat('MMM dd, HH:mm').format(dt);
+  }
+
+  Future<void> _generateInvoicePDF() async {
     if (_selectedBooking == null) return;
+    // Always pull the latest folio first so the invoice reflects every POS
+    // Charge-to-Room bill posted since the screen loaded.
+    await _loadFolio();
+    if (!mounted) return;
     final booking = _selectedBooking!;
 
-    final foodCharges = (_folio?['food_charges'] as num?)?.toDouble() ?? 0.0;
-    final bevCharges = (_folio?['beverage_charges'] as num?)?.toDouble() ?? 0.0;
-    final foodBevTotal = foodCharges + bevCharges;
-    final roomCharges = (_folio?['room_charges'] as num?)?.toDouble() ?? 0.0;
-    final otherCharges = (_folio?['other_charges'] as num?)?.toDouble() ?? 0.0;
-
-    final items = <Map<String, dynamic>>[];
-    if (roomCharges > 0) {
-      items.add({
-        'description': 'Accommodation Services (${booking.roomType ?? 'Room'} ${booking.roomNumber ?? ''})',
-        'qty': 1,
-        'unitPrice': roomCharges,
-        'totalAmount': roomCharges,
-      });
-    }
-    if (foodBevTotal > 0) {
-      items.add({
-        'description': 'Food & Beverage (POS Charges)',
-        'qty': 1,
-        'unitPrice': foodBevTotal,
-        'totalAmount': foodBevTotal,
-      });
-    }
-    if (otherCharges > 0) {
-      items.add({
-        'description': 'Other Services / Incidentals',
-        'qty': 1,
-        'unitPrice': otherCharges,
-        'totalAmount': otherCharges,
-      });
-    }
-
-    for (final tx in _transactions) {
-      if (tx['type'] == 'charge') {
-        final desc = tx['description'] ?? tx['category'] ?? 'POS Charge';
-        final amt = (tx['amount'] as num?)?.toDouble() ?? 0.0;
-        if (amt > 0 && !items.any((i) => i['description'] == desc)) {
-          items.add({
-            'description': desc,
-            'qty': 1,
-            'unitPrice': amt,
-            'totalAmount': amt,
-          });
-        }
-      }
-    }
+    // Detailed lines: accommodation + one line per itemised POS Charge-to-Room
+    // item (outlet · item), from the folio's itemised entries. Falls back to the
+    // bucket lumps only when no itemised detail exists (never double-counts).
+    final items = buildFolioInvoiceItems(
+      folio: _folio ?? const {},
+      folioItems: _folioItems,
+      chargeLines: _chargeLines,
+      roomLabel: '${booking.roomType ?? 'Room'} ${booking.roomNumber ?? ''}'.trim(),
+      bookingTotal: booking.totalAmount ?? 0.0,
+    );
 
     if (items.isEmpty) {
+      final fallback =
+          _totalCharges > 0 ? _totalCharges : (booking.totalAmount ?? 0.0);
       items.add({
         'description': 'Hotel Accommodation & Guest Services',
         'qty': 1,
-        'unitPrice': _totalCharges > 0 ? _totalCharges : (booking.totalAmount ?? 0.0),
-        'totalAmount': _totalCharges > 0 ? _totalCharges : (booking.totalAmount ?? 0.0),
+        'unitPrice': fallback,
+        'totalAmount': fallback,
       });
     }
 
@@ -259,150 +274,62 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
       totalAmount: _totalCharges > 0 ? _totalCharges : (booking.totalAmount ?? 0.0),
       amountPaid: _totalPayments,
       balanceDue: _balance,
-      notes: 'Thank you for staying at FamousGate Hotels!',
+      notes: 'Final guest stay invoice generated from Reception checkout.',
     );
   }
 
-  Future<void> _showCashierPaymentDialog() async {
+  Future<void> _showCashierSettlementGuide() async {
     if (_selectedBooking == null || _balance <= 0) return;
 
-    final amountController = TextEditingController(text: _balance.toStringAsFixed(2));
-    final refController = TextEditingController();
-    String selectedMethod = 'Cash';
-    bool isProcessing = false;
-
-    await showDialog(
+    final booking = _selectedBooking!;
+    await showDialog<void>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Row(
-                children: const [
-                  Icon(Icons.point_of_sale, color: AppColors.kPrimary),
-                  SizedBox(width: 8),
-                  Text('Cashier Payment Station'),
-                ],
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.point_of_sale, color: AppColors.kPrimary),
+            SizedBox(width: 8),
+            Text('Settle at Cashier Station'),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Guest: ${booking.guestName ?? "Guest"}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Guest: ${_selectedBooking!.guestName ?? "Guest"}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Room ${_selectedBooking!.roomNumber ?? "-"} • Balance KES ${_balance.toStringAsFixed(2)}',
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                    ),
-                    const Divider(height: 24),
-                    const Text('Payment Method', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      value: selectedMethod,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      items: ['Cash', 'M-Pesa', 'Card', 'Bank Transfer'].map((m) {
-                        return DropdownMenuItem(value: m, child: Text(m));
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setDialogState(() => selectedMethod = val);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Amount (KES)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: amountController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        prefixText: 'KES ',
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Payment Ref / Code (Optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: refController,
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. M-Pesa Code / Receipt #',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 6),
+              Text('Room ${booking.roomNumber ?? "-"}'),
+              Text('Confirmation: ${booking.confirmationNumber ?? "-"}'),
+              Text(
+                'Outstanding balance: KES ${_balance.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.orange.shade900,
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: isProcessing ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: isProcessing
-                      ? null
-                      : () async {
-                          final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
-                          if (amount <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Please enter a valid payment amount')),
-                            );
-                            return;
-                          }
-                          setDialogState(() => isProcessing = true);
-                          try {
-                            await _repository.recordBillPayment(_selectedBooking!.id, {
-                              'payment_amount': amount,
-                              'payment_method': selectedMethod,
-                              'payment_reference': refController.text.trim(),
-                            });
-                            if (mounted) {
-                              Navigator.of(context).pop();
-                              await _loadFolio();
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Payment of KES ${amount.toStringAsFixed(2)} processed successfully at Cashier Station.'),
-                                  backgroundColor: Colors.green,
-                                  duration: const Duration(seconds: 8),
-                                  action: SnackBarAction(
-                                    label: 'PRINT RECEIPT',
-                                    textColor: Colors.yellow,
-                                    onPressed: () => _generateReceiptPDF(),
-                                  ),
-                                ),
-                              );
-                              await _generateReceiptPDF();
-                            }
-                          } catch (e) {
-                            setDialogState(() => isProcessing = false);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Payment processing failed: $e')),
-                              );
-                            }
-                          }
-                        },
-                  icon: isProcessing
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.check, size: 18),
-                  label: const Text('Process Payment'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+              const SizedBox(height: 14),
+              const Text(
+                'Use the Cashier Station to confirm payment. The official receipt is generated after cashier payment confirmation, not from the checkout screen.',
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'After the cashier settles the folio, return here, refresh the folio if needed, then complete guest checkout.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -410,24 +337,18 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
     if (_selectedBooking == null) return;
 
     if (_balance > 0) {
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Outstanding Balance'),
-          content: Text('Guest has an outstanding balance of KES ${_balance.toStringAsFixed(2)}. Continue with check-out?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Checkout is locked until Cashier Station confirms payment of KES ${_balance.toStringAsFixed(2)}.',
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      );
-      if (confirm != true) return;
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+      return;
     }
 
     setState(() => _isSubmitting = true);
@@ -459,6 +380,165 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
     }
   }
 
+  Future<void> _reprintPOSBill(Map<String, dynamic> tx) async {
+    final refCode = (tx['reference'] ?? tx['referenceNumber'] ?? tx['reference_number'])?.toString();
+    if (refCode == null || refCode.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No reference code found for this transaction.')),
+        );
+      }
+      return;
+    }
+
+    setState(() => _loadingFolio = true);
+    try {
+      final fetched = await ref.read(cashierRepositoryProvider).getBillDetails(refCode);
+      if (fetched['success'] == true) {
+        final data = fetched['data'];
+        if (data is Map) {
+          final billData = data['booking'] ?? data['order'] ?? data;
+          final bill = Map<String, dynamic>.from(billData);
+          final financials = bill['financials'] is Map ? Map<String, dynamic>.from(bill['financials']) : <String, dynamic>{};
+          var total = double.tryParse('${financials['total_amount'] ?? bill['total_amount'] ?? financials['balance'] ?? bill['balance_amount'] ?? bill['balance']}') ?? 0.0;
+          
+          List<CartItem> items = [];
+          final itemsRaw = bill['items'] ?? bill['line_items'] ?? [];
+          if (itemsRaw is List) {
+            for (final rawItem in itemsRaw) {
+              if (rawItem is Map) {
+                final qty = double.tryParse('${rawItem['active_qty'] ?? rawItem['qty'] ?? rawItem['quantity']}') ?? 1.0;
+                if (qty <= 0) continue;
+                final price = double.tryParse('${rawItem['unit_price'] ?? rawItem['price']}') ?? 0.0;
+                final name = '${rawItem['name'] ?? rawItem['description'] ?? rawItem['item_name']}';
+                items.add(CartItem(
+                  productId: '${rawItem['id'] ?? ''}',
+                  name: name,
+                  unitPrice: price,
+                  qty: qty.round() > 0 ? qty.round() : 1,
+                ));
+              }
+            }
+          }
+          if (total <= 0 && items.isNotEmpty) {
+            total = items.fold(0.0, (sum, item) => sum + (item.unitPrice * item.qty));
+          }
+          if (items.isEmpty) {
+            items.add(CartItem(
+              productId: '${bill['id'] ?? ''}',
+              name: 'POS Charge',
+              unitPrice: total,
+              qty: 1,
+            ));
+          }
+
+          final nav = ref.read(dashboardNavProvider);
+          await printCustomerDocument(
+            ref,
+            templateKey: 'customer_bill',
+            fallbackTitle: 'CUSTOMER BILL',
+            branchId: nav.user?.branchId,
+            outletId: '${bill['outlet_id'] ?? bill['outletId'] ?? nav.user?.outletId ?? ''}',
+            sale: SaleResult(
+              transactionId: refCode,
+              createdAt: DateTime.now(),
+              receiptNumber: refCode,
+              cashierName: nav.user?.name,
+              total: total,
+              paymentMethod: 'pending',
+            ),
+            items: items,
+            branchName: nav.branchName,
+            customerName: '${bill['customer_name'] ?? bill['customerName'] ?? ''}',
+            staffLabel: 'Waiter',
+            publicCode: refCode,
+            barcodeValue: refCode,
+            duplicateLabel: 'REPRINT',
+          );
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Customer bill reprinted')),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Bill details not found.')),
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to fetch bill details.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reprint failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingFolio = false);
+    }
+  }
+
+  Future<void> _addAdditionalService() async {
+    final name = _serviceNameController.text.trim();
+    final priceStr = _servicePriceController.text.trim();
+    final price = double.tryParse(priceStr);
+
+    if (name.isEmpty || price == null || price <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid service name and price')),
+        );
+      }
+      return;
+    }
+
+    if (_selectedBooking == null) return;
+
+    setState(() => _isAddingService = true);
+    try {
+      await _repository.addFolioTransaction(_selectedBooking!.id, {
+        'type': 'charge',
+        'category': 'Additional Service',
+        'description': name,
+        'amount': price,
+      });
+
+      _serviceNameController.clear();
+      _servicePriceController.clear();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Added $name successfully'), backgroundColor: Colors.green),
+        );
+      }
+      
+      await _loadFolio();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add service: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAddingService = false);
+      }
+    }
+  }
+
+  void _redirectToCashierStation() {
+    final conf = _selectedBooking?.confirmationNumber ?? _selectedBooking?.id ?? '';
+    Navigator.of(context).pop(conf);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -469,9 +549,9 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
         actions: [
           if (_selectedBooking != null)
             IconButton(
-              icon: const Icon(Icons.print),
+              icon: const Icon(Icons.receipt_long),
               tooltip: 'Generate & Print Invoice',
-              onPressed: _generateReceiptPDF,
+              onPressed: _generateInvoicePDF,
             ),
         ],
       ),
@@ -571,14 +651,20 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Folio Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      ElevatedButton.icon(
-                        onPressed: _generateReceiptPDF,
-                        icon: const Icon(Icons.receipt_long, size: 16),
-                        label: const Text('Generate Receipt'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.kPrimary,
-                          foregroundColor: Colors.white,
-                          visualDensity: VisualDensity.compact,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.blue.shade100),
+                        ),
+                        child: Text(
+                          'Receipt prints after cashier payment confirmation',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blue.shade800,
+                          ),
                         ),
                       ),
                     ],
@@ -618,30 +704,162 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                   children: [
                     const Text('Recent Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const Divider(),
-                    ..._transactions.take(5).map((tx) {
-                      final isCharge = tx['type'] == 'charge';
-                      return ListTile(
-                        leading: Icon(
-                          isCharge ? Icons.add_circle_outline : Icons.remove_circle_outline,
-                          color: isCharge ? Colors.red : Colors.green,
-                        ),
-                        title: Text(tx['description'] ?? tx['category'] ?? 'Transaction'),
-                        subtitle: Text(DateFormat('MMM dd, HH:mm').format(DateTime.parse(tx['created_at']))),
-                        trailing: Text(
-                          'KES ${(tx['amount'] ?? 0).toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                    ...(() {
+                      final printedRefs = <String>{};
+                      return _transactions.take(5).map((tx) {
+                        final isCharge = tx['type'] == 'charge';
+                        final referenceCode = (tx['reference'] ?? tx['referenceNumber'])?.toString() ?? '';
+                        final bool showPrint = isCharge && referenceCode.isNotEmpty && !printedRefs.contains(referenceCode);
+                        if (showPrint) printedRefs.add(referenceCode);
+                        
+                        return ExpansionTile(
+                          leading: Icon(
+                            isCharge ? Icons.add_circle_outline : Icons.remove_circle_outline,
                             color: isCharge ? Colors.red : Colors.green,
                           ),
-                        ),
-                      );
-                    }),
+                          title: Text(tx['description'] ?? tx['category'] ?? 'Transaction'),
+                          subtitle: Text(
+                              _formatTxDate(tx['created_at'] ?? tx['createdAt'])),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'KES ${(tx['amount'] ?? 0).toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isCharge ? Colors.red : Colors.green,
+                                ),
+                              ),
+                              if (showPrint)
+                                IconButton(
+                                  icon: const Icon(Icons.print, size: 20),
+                                  onPressed: () => _reprintPOSBill(tx),
+                                  tooltip: 'Reprint POS Bill',
+                                  color: Colors.blueGrey,
+                                ),
+                            ],
+                          ),
+                          children: [
+                            if (referenceCode.isNotEmpty)
+                              FutureBuilder(
+                                future: ref.read(cashierRepositoryProvider).getBillDetails(referenceCode),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState == ConnectionState.waiting) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: Center(child: CircularProgressIndicator()),
+                                    );
+                                  }
+                                  if (snapshot.hasError || !snapshot.hasData) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: Text('Could not load items'),
+                                    );
+                                  }
+                                  final fetched = snapshot.data as Map<String, dynamic>;
+                                  if (fetched['success'] != true) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: Text('Could not load items'),
+                                    );
+                                  }
+                                  final data = fetched['data'];
+                                  final billData = data is Map ? (data['booking'] ?? data['order'] ?? data) as Map : {};
+                                  final itemsRaw = billData['items'] ?? billData['line_items'] ?? [];
+                                  if (itemsRaw is! List || itemsRaw.isEmpty) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: Text('No item details available'),
+                                    );
+                                  }
+                                  return ListView.builder(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: itemsRaw.length,
+                                    itemBuilder: (context, index) {
+                                      final rawItem = itemsRaw[index];
+                                      if (rawItem is! Map) return const SizedBox.shrink();
+                                      final qty = double.tryParse('${rawItem['active_qty'] ?? rawItem['qty'] ?? rawItem['quantity']}') ?? 1.0;
+                                      final price = double.tryParse('${rawItem['unit_price'] ?? rawItem['price']}') ?? 0.0;
+                                      final name = '${rawItem['name'] ?? rawItem['description'] ?? rawItem['item_name']}';
+                                      return ListTile(
+                                        title: Text(name),
+                                        subtitle: Text('${qty.toStringAsFixed(0)} x KES ${price.toStringAsFixed(2)}'),
+                                        trailing: Text('KES ${(qty * price).toStringAsFixed(2)}'),
+                                      );
+                                    },
+                                  );
+                                },
+                              )
+                            else
+                              const Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: Text('No details available for this transaction'),
+                              )
+                          ],
+                        );
+                    }).toList();
+                    })(),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
           ],
+
+          // Additional Services
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Additional Services', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Divider(),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _serviceNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Service Name',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _servicePriceController,
+                          decoration: const InputDecoration(
+                            labelText: 'Price',
+                            border: OutlineInputBorder(),
+                            prefixText: 'KES ',
+                            isDense: true,
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _isAddingService ? null : _addAdditionalService,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: _isAddingService
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Text('Add'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // Cashier Station Payment Section (if balance > 0)
           if (_balance > 0) ...[
@@ -665,22 +883,38 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
                     const SizedBox(height: 4),
                     const Text(
-                      'Payments are processed through the Cashier Station. Collect payment via Cash, M-Pesa, or Card to settle balance before check-out.',
+                      'Payments are processed through the Cashier Station. Collect payment via Cash, M-Pesa, or Card there first. After cashier confirmation, the official receipt is generated and this checkout can be completed.',
                       style: TextStyle(fontSize: 13, color: Colors.black87),
                     ),
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _showCashierPaymentDialog,
-                        icon: const Icon(Icons.payment, size: 18),
-                        label: const Text('Collect Payment at Cashier Station'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange.shade800,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _redirectToCashierStation,
+                            icon: const Icon(Icons.point_of_sale, size: 20),
+                            label: const Text(
+                              'Pay at Cashier Station →',
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.kPrimary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        OutlinedButton(
+                          onPressed: _showCashierSettlementGuide,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 14, horizontal: 14),
+                          ),
+                          child: const Text('Guide'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -713,12 +947,12 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Action Buttons: Generate & Print Invoice + Check-Out
+          // Action Buttons: Invoice + Check-Out
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _generateReceiptPDF,
+                  onPressed: _generateInvoicePDF,
                   icon: const Icon(Icons.print, size: 18),
                   label: const Text('Generate & Print Invoice'),
                   style: OutlinedButton.styleFrom(
@@ -732,7 +966,8 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _performCheckOut,
+                  onPressed:
+                      _isSubmitting || _loadingFolio || _balance > 0 ? null : _performCheckOut,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _balance > 0 ? Colors.orange.shade700 : AppColors.kPrimary,
                     foregroundColor: Colors.white,
@@ -745,7 +980,9 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
                       : Text(
-                          _balance > 0 ? 'Check-Out (Pending Settlement)' : 'Complete Check-Out',
+                          _balance > 0
+                              ? 'Awaiting Cashier Payment Confirmation'
+                              : 'Complete Check-Out',
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),

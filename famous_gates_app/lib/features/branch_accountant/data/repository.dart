@@ -2189,4 +2189,32 @@ class BranchAccountantRepository {
     await file.writeAsBytes(bytes, flush: true);
     return file;
   }
+
+  // --- Corporate Accounts ---
+  Future<List<Map<String, dynamic>>> getCorporateCustomers() async {
+    return _asList(await _dio.get('/corporate/customers'));
+  }
+
+  Future<Map<String, dynamic>> updateCorporateCustomer(String id, Map<String, dynamic> data) async {
+    final res = await _dio.put('/corporate/customers/$id', data: data);
+    return _asMap(res.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingCorporateBills() async {
+    return _asList(await _dio.get('/corporate/bills/pending'));
+  }
+
+  Future<List<Map<String, dynamic>>> getCorporateInvoices() async {
+    return _asList(await _dio.get('/corporate/invoices'));
+  }
+
+  Future<Map<String, dynamic>> generateCorporateInvoice(Map<String, dynamic> data) async {
+    final res = await _dio.post('/corporate/invoices/generate', data: data);
+    return _asMap(res.data);
+  }
+
+  Future<Map<String, dynamic>> payCorporateInvoice(String id, Map<String, dynamic> data) async {
+    final res = await _dio.post('/corporate/invoices/$id/pay', data: data);
+    return _asMap(res.data);
+  }
 }

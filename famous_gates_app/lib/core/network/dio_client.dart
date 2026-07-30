@@ -40,8 +40,8 @@ final dioProvider = Provider<Dio>((ref) {
       LogInterceptor(
         requestHeader: false,
         responseHeader: false,
-        requestBody: true,
-        responseBody: true,
+        requestBody: false,
+        responseBody: false,
       ),
   ]);
 
@@ -68,8 +68,8 @@ final pythonDioProvider = Provider<Dio>((ref) {
       LogInterceptor(
         requestHeader: false,
         responseHeader: false,
-        requestBody: true,
-        responseBody: true,
+        requestBody: false,
+        responseBody: false,
       ),
   ]);
 

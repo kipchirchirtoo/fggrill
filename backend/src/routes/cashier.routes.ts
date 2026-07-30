@@ -26,6 +26,7 @@ import {
     startShift,
     closeShift,
     getCashierStats,
+    getHotelPaymentOrphansReport,
     getCashierLogbookToday,
     saveCashierLogbook,
     submitLogbookForAudit,
@@ -55,10 +56,32 @@ import {
 } from '../controllers/cashier-shifts.controller';
 import { protect as authenticate, authorize } from '../middleware/auth';
 import { optionalIdempotency } from '../middleware/idempotency';
+import { withCache } from '../middleware/cacheMiddleware';
 import { UserRole } from '../models/User';
+import { CacheKeys, CACHE_TTL } from '../services/cacheService';
 import { logger } from '../utils/logger';
 
 const router = Router();
+
+const resolveCashierStatsBranchId = (req: any): number => {
+    const requested = Number(req.query?.branch_id);
+    if (Number.isFinite(requested) && requested > 0) {
+        return requested;
+    }
+
+    const userBranch = Number(req.user?.branch_id ?? req.user?.branchId);
+    if (Number.isFinite(userBranch) && userBranch > 0) {
+        return userBranch;
+    }
+
+    return 0;
+};
+
+const resolveCashierPosItemsCacheKey = (req: any): string => {
+    const branchId = resolveCashierStatsBranchId(req);
+    const search = String(req.query?.search || '').trim().toLowerCase() || 'all';
+    return `${CacheKeys.menu(branchId)}:cashier-pos:${search}`;
+};
 
 // Protect all cashier routes
 router.use(authenticate);
@@ -133,7 +156,15 @@ router.post('/verify-payment/:paymentId', verifyPayment);
 // POS TRANSACTIONS ROUTES
 // ============================================
 
-router.get('/pos/items', getCashierPOSItems);
+router.get(
+    '/pos/items',
+    withCache(
+        resolveCashierPosItemsCacheKey,
+        CACHE_TTL.MENU,
+        { skipCache: (req) => resolveCashierStatsBranchId(req as any) <= 0 }
+    ),
+    getCashierPOSItems
+);
 
 router.route('/pos/transactions')
     .post(
@@ -181,9 +212,10 @@ router.route('/unpaid-bills/:id/payment')
     .post(recordBillPayment);
 
 // Bill more to a customer credit account/tab (grows the running balance).
+// Cashiers may also add charges (e.g. additional services) at settlement time.
 router.route('/unpaid-bills/:id/charge')
     .post(
-        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, 'branch_accountant'] as any),
+        authorize([UserRole.SUPER_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.CASHIER, 'branch_accountant'] as any),
         addChargeToUnpaidBill
     );
 
@@ -282,6 +314,30 @@ router.route('/shifts/:id/transactions')
 // ============================================
 
 router.route('/stats')
-    .get(getCashierStats);
+    .get(
+        withCache(
+            (req) => CacheKeys.cashierStats(resolveCashierStatsBranchId(req)),
+            CACHE_TTL.DASHBOARD_STATS,
+            {
+                skipCache: (req) => resolveCashierStatsBranchId(req as any) <= 0,
+            }
+        ),
+        getCashierStats
+    );
+
+router.get(
+    '/reception/hotel-payment-orphans',
+    authorize([
+        UserRole.SUPER_ADMIN,
+        UserRole.GENERAL_MANAGER,
+        UserRole.DIRECTOR,
+        UserRole.AUDITOR,
+        UserRole.ACCOUNTANT,
+        UserRole.BRANCH_ACCOUNTANT,
+        UserRole.BRANCH_MANAGER,
+        UserRole.RECEPTIONIST,
+    ] as any),
+    getHotelPaymentOrphansReport
+);
 
 export default router;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,8 +24,6 @@ import '../data/cashier_repository.dart';
 import '../domain/providers.dart';
 
 // Only these station roles handle Main Bar / Executive Bar captain orders;
-// every other cashier role (reception, restaurant, non-consumables, etc.)
-// must stay silent so the same bar ticket isn't auto-printed everywhere.
 const _kBarCaptainOrderCashierRoles = {
   'main_bar_cashier',
   'executive_bar_cashier',
@@ -290,7 +289,7 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
   }
 }
 
-class _EmbeddedCashierTabs extends StatelessWidget {
+class _EmbeddedCashierTabs extends StatefulWidget {
   const _EmbeddedCashierTabs({
     required this.tabs,
     required this.currentTab,
@@ -302,33 +301,124 @@ class _EmbeddedCashierTabs extends StatelessWidget {
   final ValueChanged<int> onTabChanged;
 
   @override
+  State<_EmbeddedCashierTabs> createState() => _EmbeddedCashierTabsState();
+}
+
+class _EmbeddedCashierTabsState extends State<_EmbeddedCashierTabs> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scroll(bool right) {
+    if (!_scrollController.hasClients) return;
+    final current = _scrollController.offset;
+    final target = right
+        ? (current + 280).clamp(0.0, _scrollController.position.maxScrollExtent)
+        : (current - 280).clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(
+      target.toDouble(),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.kSurface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.kDivider),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (var index = 0; index < tabs.length; index++)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: ChoiceChip(
-                  selected: index == currentTab,
-                  avatar: tabs[index].icon == null
-                      ? null
-                      : Icon(tabs[index].icon, size: 16),
-                  label: Text(tabs[index].label),
-                  onSelected: (_) => onTabChanged(index),
+      child: Row(
+        children: [
+          // Left scroll button
+          Tooltip(
+            message: 'Scroll left',
+            child: InkWell(
+              onTap: () => _scroll(false),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.kCardBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.kDivider),
+                ),
+                child: const Icon(Icons.chevron_left, size: 20, color: AppColors.kTextPrimary),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Scrollable tabs area
+          Expanded(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                },
+              ),
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: false,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      for (var index = 0; index < widget.tabs.length; index++)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            selected: index == widget.currentTab,
+                            avatar: widget.tabs[index].icon == null
+                                ? null
+                                : Icon(widget.tabs[index].icon, size: 16),
+                            label: Text(widget.tabs[index].label),
+                            onSelected: (_) => widget.onTabChanged(index),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-          ],
-        ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Right scroll button
+          Tooltip(
+            message: 'Scroll right',
+            child: InkWell(
+              onTap: () => _scroll(true),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.kCardBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.kDivider),
+                ),
+                child: const Icon(Icons.chevron_right, size: 20, color: AppColors.kTextPrimary),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -532,13 +622,40 @@ class _StationTabState extends ConsumerState<_StationTab> {
   Map<String, dynamic>? _bill;
   List<Map<String, dynamic>> _mpesaMatches = const [];
 
+  // Manually added extra service charges (ad-hoc lines added at the cashier
+  // station before payment, e.g. pool usage, car wash, service fee).
+  final List<({String name, num amount})> _extraCharges = [];
+  num get _totalExtraCharges =>
+      _extraCharges.fold<num>(0, (sum, e) => sum + e.amount);
+
   // Credit-bill staff selection (inline, searchable, branch-filtered).
   List<_ShiftStaffMember> _staffOptions = const [];
   _ShiftStaffMember? _selectedStaff;
   bool _staffLoading = false;
   List<Map<String, dynamic>> _eligibleRoomChargeGuests = const [];
   Map<String, dynamic>? _selectedRoomChargeGuest;
+  String? _selectedCorporateCustomerId;
+  List<Map<String, dynamic>> _corporateCustomers = const [];
+  bool _corporateCustomersLoading = false;
   bool _roomChargeGuestsLoading = false;
+
+  Future<void> _loadCorporateCustomers() async {
+    if (_corporateCustomers.isNotEmpty || _corporateCustomersLoading) return;
+    setState(() => _corporateCustomersLoading = true);
+    try {
+      final customers = await ref.read(cashierRepositoryProvider).getCorporateCustomers();
+      if (!mounted) return;
+      setState(() {
+        _corporateCustomers = customers
+            .where((c) => c['is_active'] == true || c['is_active'] == 1 || c['is_active'] == 'true' || c['is_active'] == 't')
+            .toList();
+      });
+    } catch (e) {
+      if (mounted) AppNotifier.showSnackBar(context, SnackBar(content: Text('Failed to load corporate accounts: ${apiErrorMessage(e)}'), backgroundColor: AppColors.kError));
+    } finally {
+      if (mounted) setState(() => _corporateCustomersLoading = false);
+    }
+  }
 
   Future<void> _loadStaff() async {
     if (_staffOptions.isNotEmpty || _staffLoading) return;
@@ -941,6 +1058,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
                       _referenceController.clear();
                       _tenderedController.clear();
                       _mpesaMatches = const [];
+                      _extraCharges.clear();
                     });
                   },
                   child: const Text('Clear'),
@@ -955,6 +1073,17 @@ class _StationTabState extends ConsumerState<_StationTab> {
             else
               _BillSummary(
                 bill: _bill!,
+                extraCharges: _extraCharges,
+                onAddCharge: _openAddServiceDialog,
+                onRemoveCharge: (index) {
+                  setState(() {
+                    _extraCharges.removeAt(index);
+                    // Recompute amount
+                    final balance = _balanceFromBill(_bill);
+                    final total = balance + _totalExtraCharges;
+                    _amountController.text = total.toStringAsFixed(0);
+                  });
+                },
                 onCopyReference: () {
                   Clipboard.setData(
                       ClipboardData(text: _lookupController.text));
@@ -1071,6 +1200,19 @@ class _StationTabState extends ConsumerState<_StationTab> {
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
                                         ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      IconButton(
+                                        tooltip: 'Reprint customer bill',
+                                        icon: const Icon(Icons.print_outlined,
+                                            size: 18),
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                            minWidth: 34, minHeight: 34),
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _reprintUnpaidBill(row),
                                       ),
                                     ],
                                   ),
@@ -1212,7 +1354,8 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 _methodChip('cash', 'Cash', Icons.money),
                 _methodChip('mpesa_manual', 'M-Pesa', Icons.phone_android),
                 _methodChip('card_manual', 'Card', Icons.credit_card),
-                _methodChip('credit_bill', 'Credit Bill', Icons.badge),
+                _methodChip('credit_bill', 'Staff Credit', Icons.badge),
+                _methodChip('corporate_credit', 'Corporate Credit', Icons.business),
                 _methodChip('room_charge', 'Charge to Room', Icons.bedroom_parent),
               ],
             ),
@@ -1438,6 +1581,29 @@ class _StationTabState extends ConsumerState<_StationTab> {
                   ]),
                 ),
             ],
+            if (_method == 'corporate_credit') ...[
+              const SizedBox(height: 12),
+              if (_corporateCustomersLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: LinearProgressIndicator(),
+                )
+              else if (_corporateCustomers.isEmpty)
+                const Text(
+                  'No corporate accounts loaded. Cannot charge to corporate.',
+                  style: TextStyle(color: AppColors.kError, fontSize: 12),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  value: _selectedCorporateCustomerId,
+                  decoration: const InputDecoration(labelText: 'Select Corporate Account'),
+                  items: _corporateCustomers.map((c) => DropdownMenuItem<String>(
+                    value: c['id'],
+                    child: Text(c['company_name'] ?? 'Unknown Company'),
+                  )).toList(),
+                  onChanged: (val) => setState(() => _selectedCorporateCustomerId = val),
+                ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _referenceController,
@@ -1510,9 +1676,137 @@ class _StationTabState extends ConsumerState<_StationTab> {
       onSelected: (_) {
         setState(() => _method = value);
         if (value == 'credit_bill') _loadStaff();
+        if (value == 'corporate_credit') _loadCorporateCustomers();
         if (value == 'room_charge') _loadEligibleRoomChargeGuests(force: true);
       },
     );
+  }
+
+  /// Opens a dialog that lets the cashier add an ad-hoc additional service
+  /// charge (e.g. "Pool Usage – KES 500").  The charge is appended to the
+  /// in-memory extras list and the payment amount is incremented accordingly.
+  Future<void> _openAddServiceDialog() async {
+    // Optimistically load the predefined services catalogue in the background.
+    final servicesFuture =
+        ref.read(cashierRepositoryProvider).getAdditionalServices();
+
+    final nameCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+
+    final result = await showDialog<({String name, num amount})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Add Additional Service'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- Predefined services picker ---
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: servicesFuture,
+                  builder: (ctx, snap) {
+                    final services = snap.data ?? [];
+                    if (services.isEmpty) return const SizedBox.shrink();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Quick-pick a predefined service:',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.kTextSecondary),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: services.map((svc) {
+                            final price = _num(svc['price'] ??
+                                svc['base_price'] ??
+                                svc['default_price']);
+                            final name = _text(svc,
+                                ['service_name', 'name', 'description']);
+                            return ActionChip(
+                              label: Text(
+                                price > 0
+                                    ? '$name (${_money(price)})'
+                                    : name,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              onPressed: () {
+                                setLocal(() {
+                                  nameCtrl.text = name;
+                                  if (price > 0) {
+                                    amountCtrl.text =
+                                        price.toStringAsFixed(0);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const Divider(height: 20),
+                      ],
+                    );
+                  },
+                ),
+                // --- Custom name ---
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Service / Item name',
+                    hintText: 'e.g. Pool usage, Car wash, Laundry',
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 10),
+                // --- Amount ---
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Amount (KES)',
+                    prefixText: 'KES ',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameCtrl.text.trim();
+                final amount = num.tryParse(amountCtrl.text.trim()) ?? 0;
+                if (name.isEmpty) return;
+                if (amount <= 0) return;
+                Navigator.pop(ctx, (name: name, amount: amount));
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    nameCtrl.dispose();
+    amountCtrl.dispose();
+
+    if (result == null || !mounted) return;
+    setState(() {
+      _extraCharges.add(result);
+      // Bump the payment amount by the charge.
+      final currentAmount =
+          num.tryParse(_amountController.text.trim()) ?? 0;
+      _amountController.text =
+          (currentAmount + result.amount).toStringAsFixed(0);
+    });
+    _snack('Added: ${result.name} (${_money(result.amount)})');
   }
 
   Future<Map<String, dynamic>?> _lookupBill({bool keepAmount = false}) async {
@@ -1528,9 +1822,11 @@ class _StationTabState extends ConsumerState<_StationTab> {
       setState(() {
         _bill = data;
         // Keep an explicitly pre-entered amount (e.g. reception checkout);
-        // otherwise default to the bill balance.
+        // otherwise default to the bill balance + any extra charges.
         if (!keepAmount || _amountController.text.trim().isEmpty) {
-          _amountController.text = _balanceFromBill(data).toStringAsFixed(0);
+          final balance = _balanceFromBill(data);
+          final total = balance + _totalExtraCharges;
+          _amountController.text = total.toStringAsFixed(0);
         }
       });
       return data;
@@ -1543,12 +1839,25 @@ class _StationTabState extends ConsumerState<_StationTab> {
   }
 
   Future<void> _loadUnpaidBill(Map<String, dynamic> row) async {
-    final reference = _billLookupReference(row);
-    if (reference.isEmpty) return _snack('This bill has no lookup reference');
+    final displayReference = _billLookupReference(row);
+    final directId = _billId(row);
+    final lookupReference = directId.isNotEmpty ? directId : displayReference;
+    if (lookupReference.isEmpty) {
+      return _snack('This bill has no lookup reference');
+    }
+    // Instant feedback: populate the payment panel straight from the already-
+    // loaded list row (balance / total / customer) so the cashier sees the bill
+    // and amount with zero wait. The full bill (line items + authoritative
+    // balance) is then confirmed from the server in the background below.
+    final rowBalance = _balanceFromBill(row);
     setState(() {
-      _selectedUnpaidRef = reference;
-      _lookupController.text = reference;
-      _amountController.clear();
+      _selectedUnpaidRef = displayReference.isNotEmpty
+          ? displayReference
+          : lookupReference;
+      _lookupController.text = lookupReference;
+      _bill = row;
+      _amountController.text =
+          rowBalance > 0 ? rowBalance.toStringAsFixed(0) : '';
       _referenceController.clear();
       _tenderedController.clear();
       _mpesaMatches = const [];
@@ -1556,14 +1865,29 @@ class _StationTabState extends ConsumerState<_StationTab> {
     final loaded = await _lookupBill();
     if (!mounted || loaded == null) return;
     final balance = _balanceFromBill(loaded);
-    // Always refresh the list so the card shows the current balance (not stale
-    // data from the last poll cycle).
-    ref.invalidate(cashierUnpaidBillsProvider);
     if (balance <= 0) {
       _snack('This bill is already cleared');
     } else {
       _snack('Bill loaded for clearance');
     }
+  }
+
+  void _applyOptimisticBillSettlement(num paidAmount) {
+    final currentBill = _bill;
+    if (currentBill == null) return;
+    final updatedBill = _optimisticBillAfterPayment(currentBill, paidAmount);
+    final remaining = _balanceFromBill(updatedBill);
+    setState(() {
+      _bill = remaining <= 0 ? null : updatedBill;
+      _amountController.text =
+          remaining > 0 ? remaining.toStringAsFixed(0) : '';
+      _referenceController.clear();
+      _mpesaMatches = const [];
+      if (remaining <= 0) {
+        _selectedUnpaidRef = null;
+        _lookupController.clear();
+      }
+    });
   }
 
   Future<void> _processPayment() async {
@@ -1590,6 +1914,22 @@ class _StationTabState extends ConsumerState<_StationTab> {
         amount: amount,
       );
       return;
+    } else if (_method == 'corporate_credit') {
+        if (_selectedCorporateCustomerId == null) {
+          return _snack('Select a corporate account to charge');
+        }
+        await ref.read(cashierRepositoryProvider).chargeCorporateCredit({
+          'pos_bill_id': bill['id'],
+          'corporate_customer_id': _selectedCorporateCustomerId,
+          'amount': amount,
+        });
+        ref.invalidate(cashierUnpaidBillsProvider);
+        if (mounted) {
+          AppNotifier.showSnackBar(context, const SnackBar(content: Text('Charged to Corporate Credit'), backgroundColor: AppColors.kSuccess));
+          _applyOptimisticBillSettlement(amount);
+          _amountController.clear();
+        }
+        return;
     }
 
     if (_method == 'mpesa_manual' && _referenceController.text.trim().isEmpty) {
@@ -1709,7 +2049,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       ref.invalidate(cashierCreditBillsProvider);
       ref.invalidate(cashierShiftsProvider);
       ref.invalidate(cashierCurrentShiftProvider);
-      await _lookupBill();
+      _applyOptimisticBillSettlement(amount);
     } catch (error) {
       _snack('Payment failed: ${apiErrorMessage(error)}');
     } finally {
@@ -2134,9 +2474,17 @@ class _StationTabState extends ConsumerState<_StationTab> {
       final outletName = _text(bill, ['outlet_name', 'outletName']).isEmpty
           ? 'Restaurant POS'
           : _text(bill, ['outlet_name', 'outletName']);
-      final billNo = _text(bill, ['bill_number', 'short_code', 'id']).isEmpty
-          ? 'BILL'
-          : _text(bill, ['bill_number', 'short_code', 'id']);
+      final shortCode = _billShortCode(bill);
+      final orderNo = _text(bill, ['order_number', 'orderNumber', 'bill_number', 'short_code', 'id']);
+      final realBillId = _billId(bill);
+      final displayBillNo = shortCode.isNotEmpty
+          ? shortCode
+          : (orderNo.isNotEmpty
+              ? orderNo
+              : (_text(bill, ['bill_number', 'billNumber', 'id']).isEmpty
+                  ? 'BILL'
+                  : _text(bill, ['bill_number', 'billNumber', 'id'])));
+
       final response = await ref.read(cashierRepositoryProvider).postRoomCharge({
         'branch_id': branchId,
         'source': _text(bill, ['source', 'source_type', 'bill_type']),
@@ -2146,11 +2494,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
         'outlet_type': _text(bill, ['outlet_type', 'source_type']).isEmpty
             ? 'POS'
             : _text(bill, ['outlet_type', 'source_type']),
-        'bill_id': _billId(bill),
-        'bill_number': billNo,
-        'order_number': _text(bill, ['order_number', 'bill_number', 'short_code', 'id']).isEmpty
-            ? billNo
-            : _text(bill, ['order_number', 'bill_number', 'short_code', 'id']),
+        'bill_id': realBillId,
+        'bill_number': displayBillNo,
+        'order_number': orderNo.isNotEmpty ? orderNo : displayBillNo,
+        'short_code': shortCode.isNotEmpty ? shortCode : displayBillNo,
         'booking_id': bookingId,
         'room_number': roomNumber,
         'guest_name': guestName,
@@ -2176,9 +2523,10 @@ class _StationTabState extends ConsumerState<_StationTab> {
                 ? _text(bill, ['outlet_id', 'outletId'])
                 : nav.user?.outletId,
             sale: SaleResult(
-              transactionId: '${response['folio_transaction_id'] ?? billNo}',
+              transactionId:
+                  '${response['folio_transaction_id'] ?? displayBillNo}',
               createdAt: DateTime.now(),
-              receiptNumber: billNo,
+              receiptNumber: displayBillNo,
               cashierName: nav.user?.name,
               total: amount.toDouble(),
               paymentMethod: 'CHARGE TO ROOM',
@@ -2189,13 +2537,14 @@ class _StationTabState extends ConsumerState<_StationTab> {
             customerName: guestName,
             publicCode: _billShortCode(bill).isNotEmpty
                 ? _billShortCode(bill)
-                : billNo,
+                : displayBillNo,
           );
         } catch (printError) {
           _snack('Charged to room, but slip print failed: '
               '${apiErrorMessage(printError)}');
         }
-        _snack('Bill $billNo charged to Room $roomNumber ($guestName) successfully!');
+        _snack(
+            'Bill $displayBillNo charged to Room $roomNumber ($guestName) successfully!');
         setState(() {
           _bill = null;
           _amountController.clear();
@@ -2323,7 +2672,7 @@ class _StationTabState extends ConsumerState<_StationTab> {
       ref.invalidate(cashierCurrentShiftProvider);
       ref.invalidate(cashierUnpaidBillsProvider);
       ref.invalidate(cashierCreditBillsProvider);
-      await _lookupBill();
+      _applyOptimisticBillSettlement(totalPaid);
     } catch (error) {
       _snack('Split payment failed: ${apiErrorMessage(error)}');
     } finally {
@@ -2407,6 +2756,74 @@ class _StationTabState extends ConsumerState<_StationTab> {
         response: response,
         fallbackReference: fallbackReference,
       );
+    }
+  }
+
+  // Cashier reprints the CUSTOMER BILL for an unpaid bill straight from the
+  // queue — a pre-payment copy stamped "REPRINT". Pulls the bill's line items,
+  // fetching the full bill when the list row doesn't already carry them.
+  Future<void> _reprintUnpaidBill(Map<String, dynamic> row) async {
+    setState(() => _loading = true);
+    try {
+      var bill = row;
+      if (_receiptItemsFromBill(row, 0).length <= 1) {
+        final lookupRef = _billId(row).isNotEmpty
+            ? _billId(row)
+            : _billLookupReference(row);
+        if (lookupRef.isNotEmpty) {
+          final fetched = await ref
+              .read(cashierRepositoryProvider)
+              .getBillDetails(lookupRef);
+          final data = _payload(fetched);
+          if (data.isNotEmpty) bill = data;
+        }
+      }
+      final nav = ref.read(dashboardNavProvider);
+      final financials = _asMap(bill['financials']);
+      var total = _num(financials['total_amount'] ??
+          bill['total_amount'] ??
+          financials['balance'] ??
+          bill['balance_amount'] ??
+          bill['balance']);
+      
+      final receiptItems = _receiptItemsFromBill(bill, total);
+      if (total <= 0 && receiptItems.isNotEmpty) {
+        total = receiptItems.fold<num>(
+            0, (sum, item) => sum + (item.unitPrice * item.qty));
+      }
+
+      final code = _billShortCode(bill).isNotEmpty
+          ? _billShortCode(bill)
+          : _billLookupReference(bill);
+      await printCustomerDocument(
+        ref,
+        templateKey: 'customer_bill',
+        fallbackTitle: 'CUSTOMER BILL',
+        branchId: nav.user?.branchId,
+        outletId: _text(bill, ['outlet_id', 'outletId']).isNotEmpty
+            ? _text(bill, ['outlet_id', 'outletId'])
+            : nav.user?.outletId,
+        sale: SaleResult(
+          transactionId: code.isEmpty ? DateTime.now().toString() : code,
+          createdAt: DateTime.now(),
+          receiptNumber: code.isEmpty ? null : code,
+          cashierName: nav.user?.name,
+          total: total.toDouble(),
+          paymentMethod: 'pending',
+        ),
+        items: receiptItems,
+        branchName: nav.branchName,
+        customerName: _customerName(bill),
+        staffLabel: 'Waiter',
+        publicCode: code,
+        barcodeValue: code,
+        duplicateLabel: 'REPRINT',
+      );
+      _snack('Customer bill reprinted');
+    } catch (error) {
+      _snack('Reprint failed: ${apiErrorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -6882,15 +7299,26 @@ class _BillList extends StatelessWidget {
 }
 
 class _BillSummary extends StatelessWidget {
-  const _BillSummary({required this.bill, required this.onCopyReference});
+  const _BillSummary({
+    required this.bill,
+    required this.onCopyReference,
+    this.extraCharges = const [],
+    this.onAddCharge,
+    this.onRemoveCharge,
+  });
 
   final Map<String, dynamic> bill;
   final VoidCallback? onCopyReference;
+  final List<({String name, num amount})> extraCharges;
+  final VoidCallback? onAddCharge;
+  final ValueChanged<int>? onRemoveCharge;
 
   @override
   Widget build(BuildContext context) {
     final financials = _asMap(bill['financials']);
     final items = _billItems(bill);
+    final extraTotal =
+        extraCharges.fold<num>(0, (sum, e) => sum + e.amount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -6970,10 +7398,110 @@ class _BillSummary extends StatelessWidget {
             },
           ),
         ],
+        // ── Additional / manual service charges section ────────────────────
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Additional Services',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (onAddCharge != null)
+              TextButton.icon(
+                onPressed: onAddCharge,
+                icon: const Icon(Icons.add_circle_outline, size: 16),
+                label: const Text('Add Service'),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+          ],
+        ),
+        if (extraCharges.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              'No additional services added.',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.kTextSecondary.withValues(alpha: 0.7),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          )
+        else ...[
+          const SizedBox(height: 4),
+          ...extraCharges.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final charge = entry.value;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.kPrimary.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.kPrimary.withValues(alpha: 0.18),
+                ),
+              ),
+              child: ListTile(
+                dense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                leading: const Icon(Icons.add_shopping_cart,
+                    size: 18, color: AppColors.kPrimary),
+                title: Text(charge.name,
+                    style: const TextStyle(fontWeight: FontWeight.w500)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _money(charge.amount),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.kPrimary),
+                    ),
+                    if (onRemoveCharge != null)
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline,
+                            size: 16, color: Colors.red),
+                        onPressed: () => onRemoveCharge!(idx),
+                        tooltip: 'Remove charge',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.kSuccess.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Extras subtotal',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  _money(extraTotal),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: AppColors.kSuccess),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
 }
+
 
 class _MpesaMatches extends StatelessWidget {
   const _MpesaMatches({required this.matches, required this.onUse});
@@ -8266,19 +8794,26 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
     super.dispose();
   }
 
-  String? _openShiftId() {
-    final shift = ref.read(cashierCurrentShiftProvider).valueOrNull;
-    if (shift == null) return null;
-    return _text(shift, ['id']);
+  Future<String?> _resolveOpenShiftId() async {
+    try {
+      final shift = await ref.read(cashierCurrentShiftProvider.future);
+      final shiftId = _text(shift, ['id']);
+      return shiftId.isEmpty ? null : shiftId;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final shiftId = _openShiftId();
+      final shiftId =
+          _filterCurrentShiftOnly ? await _resolveOpenShiftId() : null;
       final repo = ref.read(cashierRepositoryProvider);
       final results = await Future.wait([
-        repo.getExpenses(shiftId: _filterCurrentShiftOnly ? shiftId : null),
+        _filterCurrentShiftOnly && (shiftId == null || shiftId.isEmpty)
+            ? Future.value(<Map<String, dynamic>>[])
+            : repo.getExpenses(shiftId: shiftId),
         repo.getPendingPOs(),
       ]);
       if (!mounted) return;
@@ -8294,7 +8829,15 @@ class _ShiftExpensesTabState extends ConsumerState<_ShiftExpensesTab> {
   }
 
   Future<void> _recordExpense() async {
-    final shiftId = _openShiftId();
+    final shiftId = await _resolveOpenShiftId();
+    if (!mounted) return;
+    if (shiftId == null || shiftId.isEmpty) {
+      AppNotifier.show(
+        context,
+        'No active shift was found for this cashier. Open your shift first, then record the expense.',
+      );
+      return;
+    }
 
     final String description;
     final num amount;
@@ -8841,6 +9384,37 @@ double _balanceFromBill(Map<String, dynamic>? bill) {
   return _num(
           financials['balance'] ?? bill['balance'] ?? bill['balance_amount'])
       .toDouble();
+}
+
+Map<String, dynamic> _optimisticBillAfterPayment(
+  Map<String, dynamic> bill,
+  num paidAmount,
+) {
+  final updated = Map<String, dynamic>.from(bill);
+  final financials = Map<String, dynamic>.from(_asMap(bill['financials']));
+  final total =
+      _num(financials['total_amount'] ?? updated['total_amount']).toDouble();
+  final currentPaid =
+      _num(financials['amount_paid'] ?? updated['amount_paid']).toDouble();
+  final currentBalance =
+      _num(financials['balance'] ?? updated['balance'] ?? updated['balance_amount'])
+          .toDouble();
+  final applied = paidAmount > currentBalance ? currentBalance : paidAmount;
+  final nextPaid = currentPaid + applied;
+  final nextBalance = (total - nextPaid) > 0 ? (total - nextPaid) : 0.0;
+  final nextStatus = nextBalance <= 0 ? 'paid' : 'partial';
+
+  financials['total_amount'] = total;
+  financials['amount_paid'] = nextPaid;
+  financials['balance'] = nextBalance;
+  updated['financials'] = financials;
+  updated['amount_paid'] = nextPaid;
+  updated['paid_amount'] = nextPaid;
+  updated['balance'] = nextBalance;
+  updated['balance_amount'] = nextBalance;
+  updated['payment_status'] = nextStatus;
+  updated['status'] = nextStatus;
+  return updated;
 }
 
 List<Map<String, dynamic>> _billItems(Map<String, dynamic> bill) {

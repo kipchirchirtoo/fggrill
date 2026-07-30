@@ -62,6 +62,7 @@ export const getRooms = async (
       .from('reservations')
       .select(`
         id,
+        status,
         confirmation_number,
         room_id,
         guest_id,
@@ -73,7 +74,8 @@ export const getRooms = async (
         children,
         guest:guests!guest_id(id, first_name, last_name, phone, email)
       `)
-      .in('status', ['checked_in', 'confirmed']);
+      .in('status', ['checked_in', 'confirmed'])
+      .order('created_at', { ascending: false });
 
     resQuery = applyBranchFilter(resQuery, req);
     if (req.query.branch_id && isGlobal) {
@@ -82,39 +84,58 @@ export const getRooms = async (
 
     const { data: reservations } = await resQuery;
 
-    const resByRoomId = new Map<string, any>();
+    const checkedInByRoomId = new Map<string, any>();
+    const confirmedByRoomId = new Map<string, any>();
     (reservations || []).forEach((r: any) => {
-      if (r.room_id) {
-        resByRoomId.set(String(r.room_id), r);
+      if (!r.room_id) return;
+      const roomKey = String(r.room_id);
+      if (r.status === 'checked_in' && !checkedInByRoomId.has(roomKey)) {
+        checkedInByRoomId.set(roomKey, r);
+        return;
+      }
+      if (r.status === 'confirmed' && !confirmedByRoomId.has(roomKey)) {
+        confirmedByRoomId.set(roomKey, r);
       }
     });
 
     const enrichedRooms = (rooms || []).map((room: any) => {
-      const activeRes = resByRoomId.get(String(room.id));
-      let effectiveStatus = room.status;
+      const roomKey = String(room.id);
+      const checkedInRes = checkedInByRoomId.get(roomKey);
+      const confirmedRes = confirmedByRoomId.get(roomKey);
+      const activeRes = checkedInRes || confirmedRes || null;
+      let effectiveStatus = String(room.status || 'available').toLowerCase();
 
-      // If room is marked occupied in DB but has no active checked_in reservation, treat as available
-      if (effectiveStatus === 'occupied' && !activeRes) {
+      if (checkedInRes) {
+        effectiveStatus = 'occupied';
+      } else if (
+        confirmedRes &&
+        !['maintenance', 'cleaning', 'dirty'].includes(effectiveStatus)
+      ) {
+        effectiveStatus = 'reserved';
+      } else if (
+        ['occupied', 'reserved'].includes(effectiveStatus) &&
+        !activeRes
+      ) {
         effectiveStatus = 'available';
       }
 
-      let guestName = activeRes?.guest
+      const guestName = activeRes?.guest
         ? `${activeRes.guest.first_name || ''} ${activeRes.guest.last_name || ''}`.trim()
-        : (room.guest ? `${room.guest.first_name || ''} ${room.guest.last_name || ''}`.trim() : null);
+        : null;
 
-      let guestObj = activeRes?.guest || room.guest;
-      let checkInDate = activeRes?.check_in_date || room.check_in_date;
-      let checkOutDate = activeRes?.check_out_date || room.check_out_date;
-      let confNum = activeRes?.confirmation_number || room.confirmation_number;
-      let mealPlan = activeRes?.meal_plan || room.meal_plan;
-      let adults = activeRes?.adults ?? room.adults ?? 1;
-      let children = activeRes?.children ?? room.children ?? 0;
-      let checkedInAt = activeRes?.checked_in_at || room.checked_in_at;
+      const guestObj = activeRes?.guest || null;
+      const checkInDate = activeRes?.check_in_date || null;
+      const checkOutDate = activeRes?.check_out_date || null;
+      const confNum = activeRes?.confirmation_number || null;
+      const mealPlan = activeRes?.meal_plan || null;
+      const adults = activeRes?.adults ?? 0;
+      const children = activeRes?.children ?? 0;
+      const checkedInAt = activeRes?.checked_in_at || null;
 
       return {
         ...room,
         status: effectiveStatus,
-        guest_name: guestName || (effectiveStatus === 'occupied' ? 'Occupied Guest' : null),
+        guest_name: guestName || (checkedInRes ? 'Occupied Guest' : null),
         guest: guestObj,
         check_in_date: checkInDate,
         check_out_date: checkOutDate,
@@ -124,6 +145,7 @@ export const getRooms = async (
         adults: adults,
         children: children,
         total_pax: adults + children,
+        current_guest: activeRes?.guest_id || null,
       };
     });
 
@@ -475,6 +497,86 @@ export const getRoomTypes = async (
     res.status(200).json({
       success: true,
       data: types
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+// @desc    Create a room type
+// @route   POST /api/rooms/types
+// @access  Private/Admin
+export const createRoomType = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data: newType, error } = await supabase
+      .from('room_types')
+      .insert([req.body])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      success: true,
+      data: newType
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update a room type
+// @route   PUT /api/rooms/types/:id
+// @access  Private/Admin
+export const updateRoomType = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { data: updatedType, error } = await supabase
+      .from('room_types')
+      .update({
+        ...req.body,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data: updatedType
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete a room type
+// @route   DELETE /api/rooms/types/:id
+// @access  Private/Admin
+export const deleteRoomType = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { error } = await supabase
+      .from('room_types')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data: {}
     });
   } catch (error) {
     next(error);

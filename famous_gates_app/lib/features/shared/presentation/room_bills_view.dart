@@ -293,11 +293,15 @@ class _RoomBillsViewState extends ConsumerState<RoomBillsView> {
       raw: Map<String, dynamic>.from(bill),
     );
 
-    await Navigator.of(context).push<bool>(
+    final res = await Navigator.of(context).push<dynamic>(
       MaterialPageRoute(
-        builder: (_) => CheckOutScreen(booking: booking),
+        builder: (_) => CheckOutScreen(booking: booking, onPayAtCashier: widget.onPayAtCashier),
       ),
     );
+
+    if (res is String && widget.onPayAtCashier != null) {
+      widget.onPayAtCashier!(res);
+    }
 
     // Refresh after returning so list updates.
     if (mounted) await _load();

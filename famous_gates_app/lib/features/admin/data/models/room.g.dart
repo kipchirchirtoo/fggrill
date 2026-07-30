@@ -11,9 +11,11 @@ _$AdminRoomImpl _$$AdminRoomImplFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String? ?? '',
       roomNumber: json['roomNumber'] as String? ?? '',
       type: json['type'] as String? ?? '',
+      roomTypeId: json['roomTypeId'] as String? ?? '',
       branchId: json['branchId'] as String? ?? '',
       branchName: json['branchName'] as String? ?? '',
       floor: (json['floor'] as num?)?.toInt() ?? 0,
+      building: json['building'] as String? ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       status: json['status'] as String? ?? 'available',
       description: json['description'] as String? ?? '',
@@ -23,6 +25,8 @@ _$AdminRoomImpl _$$AdminRoomImplFromJson(Map<String, dynamic> json) =>
           const [],
       capacity: (json['capacity'] as num?)?.toInt() ?? 2,
       isSmoking: json['isSmoking'] as bool? ?? false,
+      isActive: json['isActive'] as bool? ?? true,
+      imageUrl: json['imageUrl'] as String? ?? '',
     );
 
 Map<String, dynamic> _$$AdminRoomImplToJson(_$AdminRoomImpl instance) =>
@@ -30,13 +34,17 @@ Map<String, dynamic> _$$AdminRoomImplToJson(_$AdminRoomImpl instance) =>
       'id': instance.id,
       'roomNumber': instance.roomNumber,
       'type': instance.type,
+      'roomTypeId': instance.roomTypeId,
       'branchId': instance.branchId,
       'branchName': instance.branchName,
       'floor': instance.floor,
+      'building': instance.building,
       'price': instance.price,
       'status': instance.status,
       'description': instance.description,
       'amenities': instance.amenities,
       'capacity': instance.capacity,
       'isSmoking': instance.isSmoking,
+      'isActive': instance.isActive,
+      'imageUrl': instance.imageUrl,
     };

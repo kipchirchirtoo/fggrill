@@ -20,10 +20,18 @@ import { logger } from '../utils/logger';
 export const CACHE_TTL = {
     /** 10 min — menu items rarely change mid-shift */
     MENU: 600,
+    /** 5 min — dashboard cards should feel instant but stay fresh */
+    DASHBOARD_STATS: 300,
+    /** 5 sec — KDS order boards poll frequently and need near-live freshness */
+    KDS_ACTIVE: 5,
     /** 2 min — inventory changes with each sale/requisition */
     INVENTORY: 120,
     /** 15 min — branch settings are very stable */
     BRANCH_SETTINGS: 900,
+    /** 15 min — permission matrices rarely change during active sessions */
+    PERMISSIONS: 900,
+    /** 10 sec — POS bootstrap is hot during screen load/remounts */
+    POS_BOOTSTRAP: 10,
     /** 30 sec — shift data must stay near real-time */
     SHIFT_DATA: 30,
     /** 1 hour — user sessions */
@@ -37,14 +45,21 @@ export const CACHE_TTL = {
 export const CacheKeys = {
     menu: (branchId: number) => `fg:menu:${branchId}`,
     menuCategory: (branchId: number, category: string) => `fg:menu:${branchId}:${category}`,
+    menuFiltered: (branchId: number, filters: string) => `fg:menu:${branchId}:filters:${filters}`,
+    kitchenOrders: (branchId: number, scope: string) => `fg:kds:${branchId}:${scope}:active`,
+    kitchenHistory: (branchId: number, scope: string, limit: number) => `fg:kds:${branchId}:${scope}:history:${limit}`,
     inventory: (branchId: number) => `fg:inventory:${branchId}`,
     inventoryItem: (branchId: number, itemId: string) => `fg:inventory:${branchId}:${itemId}`,
     branchSettings: (branchId: number) => `fg:branch:${branchId}`,
+    systemConfig: () => 'fg:system:config',
+    rolePermissions: (roleId: string) => `fg:system:role:${roleId}:permissions`,
+    cashierStats: (branchId: number) => `fg:cashier:stats:${branchId}`,
     activeShift: (branchId: number) => `fg:shift:active:${branchId}`,
     userSession: (userId: string) => `fg:session:${userId}`,
     reportData: (branchId: number, date: string) => `fg:report:${branchId}:${date}`,
     barStock: (branchId: number) => `fg:bar:stock:${branchId}`,
     posOutletItems: (branchId: number, outletId: string) => `fg:pos:items:${branchId}:${outletId}`,
+    posBootstrap: (userId: string, signature: string) => `fg:pos:bootstrap:${userId}:${signature}`,
 } as const;
 
 // ── CacheService Class ─────────────────────────────────────────────────────────

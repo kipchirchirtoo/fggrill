@@ -3,6 +3,8 @@ import db from '../db';
 import { supabase } from '../config/database';
 import { logger } from '../utils/logger';
 import { billCache } from '../utils/bill-cache';
+import { AppError } from '../middleware/errorHandler';
+import { recordHotelCashierPayment } from '../services/receptionCashierPayment.service';
 
 const IN_HOUSE_ROOM_CHARGE_STATUSES = ['checked_in', 'checked-in', 'in-house', 'active'] as const;
 
@@ -169,10 +171,9 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       // payments, tracked cumulatively in advance_payment/amount_paid) PLUS folio
       // settle payments. So a partial payment made at the cashier reduces the
       // balance and the remainder stays outstanding on the room bill.
-      const reservationPaid = Math.max(
-        Number(row?.amount_paid || 0),
-        Number(row?.deposit_amount || 0)
-      );
+      const reservationPaid = row?.deposit_paid
+        ? Math.max(Number(row?.amount_paid || 0), Number(row?.deposit_amount || 0))
+        : Number(row?.amount_paid || 0);
       const folioPayments = Number(folio?.total_payments || 0);
       const totalPaid = reservationPaid + folioPayments;
       const folioBalance = Math.max(0, roomGross + folioPosCharges - totalPaid);
@@ -338,7 +339,8 @@ async function settleRoomChargeSourceBill(input: {
       await supabase
         .from('unpaid_bills')
         .update({
-          paid_amount: totalAmount,
+          amount_paid: totalAmount,
+          balance_due: 0,
           balance_amount: 0,
           status: 'paid',
           remarks,
@@ -555,47 +557,44 @@ export const settleRoomBill = async (req: Request, res: Response): Promise<void>
     const amount = Number(req.body.amount);
     const method = String(req.body.method || req.body.payment_method || 'cash').trim().toLowerCase();
     const reference = String(req.body.reference || '').trim() || null;
+    const cashierUserId = String((req as any).user?.id || '').trim();
+    const cashierName = String(
+      (req as any).user?.name ||
+      `${(req as any).user?.first_name || ''} ${(req as any).user?.last_name || ''}`.trim()
+    ).trim();
     if (!reservationId) { res.status(400).json({ success: false, message: 'reservationId is required' }); return; }
     if (!(amount > 0)) { res.status(400).json({ success: false, message: 'A positive amount is required' }); return; }
+    if (!cashierUserId) {
+      throw new AppError('Authenticated cashier user is required', 403);
+    }
 
-    const { data: folio, error: folioErr } = await supabase
-      .from('folios')
-      .select('id, balance, total_payments, total_charges')
-      .eq('reservation_id', reservationId)
-      .maybeSingle();
-    if (folioErr) throw folioErr;
-    if (!folio) { res.status(404).json({ success: false, message: 'No room bill (folio) exists for this reservation yet.' }); return; }
-
-    const { error: txErr } = await supabase.from('transactions').insert({
-      folio_id: folio.id,
-      type: 'payment',
-      category: method,
+    const settlement = await recordHotelCashierPayment({
+      reservationId,
       amount,
-      description: `Room bill payment (${method}) at cashier`,
-      reference_number: reference,
-      performed_by: (req as any).user?.id || null,
+      paymentMethod: method,
+      reference,
+      cashierUserId,
+      cashierName,
+      amountTendered: Number(req.body.amount_tendered || 0),
+      changeGiven: Number(req.body.change_given || 0),
     });
-    if (txErr) throw txErr;
 
-    // The folio balance trigger recalculates on transaction insert; read back.
-    const { data: updated } = await supabase
-      .from('folios')
-      .select('id, balance, total_payments, total_charges, status')
-      .eq('id', folio.id)
-      .maybeSingle();
-
-    const newPayments = Number(updated?.total_payments ?? (Number(folio.total_payments || 0) + amount));
-    const newBalance = Number(updated?.balance ?? (Number(folio.total_charges || 0) - newPayments));
     res.json({
       success: true,
       data: {
         reservation_id: reservationId,
-        folio_id: folio.id,
+        payment_id: settlement.paymentId,
+        folio_id: settlement.folioId,
+        cashier_transaction_id: settlement.cashierTransactionId,
+        cashier_shift_log_id: settlement.cashierShiftLogId,
         amount,
-        method,
-        total_payments: newPayments,
-        balance: newBalance,
-        status: updated?.status || null,
+        method: settlement.method,
+        total_payments: settlement.totalPaid,
+        balance: settlement.balance,
+        status: settlement.folioStatus,
+        payment_status: settlement.paymentStatus,
+        room_number: settlement.roomNumber,
+        guest_name: settlement.guestName,
       },
     });
   } catch (error: any) {
@@ -834,33 +833,118 @@ export const postRoomCharge = async (req: Request, res: Response): Promise<void>
       throw folioUpdateRes.error;
     }
 
-    // folio_transactions audit row — only real columns: folio_id, branch_id,
-    // transaction_type (NOT NULL), category, description, amount, tax_amount,
-    // total_amount, reference, posted_by, status (CHECK: posted|voided|reversed).
-    // Outlet/waiter/pos detail is folded into the description + reference.
-    const auditDescription = [
-      descriptionText,
-      outlet_name ? `@ ${outlet_name}` : null,
-      waiter_name ? `by ${waiter_name}` : null,
-    ].filter(Boolean).join(' ');
-    const roomChargeAuditRes = await supabase
-      .from('folio_transactions')
-      .insert({
+    // ── Itemised folio invoice ───────────────────────────────────────────────
+    // Break the POS bill into ONE folio_transactions charge row PER ITEM so the
+    // guest folio / checkout invoice lists the OUTLET + every item + amount, not
+    // a single lump sum. Both invoice surfaces (the cashier hotel-bill lookup and
+    // the folio sheet) render one line per folio_transactions charge row.
+    // folio_transactions real cols: folio_id, branch_id, transaction_type
+    // (NOT NULL), category, description, amount, tax_amount, total_amount,
+    // reference, posted_by, status (CHECK posted|voided|reversed).
+    const outletLabel = String(outlet_name || 'POS Outlet').trim();
+    const billReference = bill_number || order_number || billRef;
+
+    const normalizedItems = (Array.isArray(items) ? items : [])
+      .map((raw: any) => {
+        const name = String(
+          raw?.name ?? raw?.item_name ?? raw?.description ?? raw?.drink_name ?? ''
+        ).trim();
+        const qtyRaw = Number(raw?.active_qty ?? raw?.quantity ?? raw?.qty ?? 1);
+        const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? qtyRaw : 1;
+        const unitPriceRaw = Number(raw?.unit_price ?? raw?.price ?? 0) || 0;
+        const lineTotal = Number(
+          raw?.active_total ?? raw?.line_total ?? raw?.total ?? raw?.total_price ??
+          (unitPriceRaw * qty)
+        ) || 0;
+        return {
+          name,
+          qty,
+          unitPrice: unitPriceRaw || (qty > 0 ? lineTotal / qty : lineTotal),
+          lineTotal,
+        };
+      })
+      .filter((it) => it.name && it.lineTotal > 0);
+
+    const itemsSum = normalizedItems.reduce((sum, it) => sum + it.lineTotal, 0);
+    // Only itemise when the lines don't OVER-state the charged total; a small
+    // shortfall (inclusive taxes / service charge) is topped up with a single
+    // reconciling line so the itemised sum always equals grossAmount and never
+    // inflates the folio balance.
+    const canItemize = normalizedItems.length > 0 && itemsSum <= grossAmount + 0.5;
+
+    let auditRows: Array<Record<string, any>>;
+    let folioItemRows: Array<Record<string, any>> = [];
+    if (canItemize) {
+      auditRows = normalizedItems.map((it) => ({
         folio_id: folio.id,
         branch_id: branchId,
         transaction_type: 'charge',
         category: chargeBucket.category,
-        description: auditDescription,
+        description: `${outletLabel} · ${it.qty}x ${it.name}`,
+        amount: it.lineTotal,
+        tax_amount: 0,
+        total_amount: it.lineTotal,
+        reference: billReference,
+        posted_by: userId,
+        status: 'posted',
+      }));
+      const shortfall = Math.round((grossAmount - itemsSum) * 100) / 100;
+      if (shortfall > 0.5) {
+        auditRows.push({
+          folio_id: folio.id,
+          branch_id: branchId,
+          transaction_type: 'charge',
+          category: chargeBucket.category,
+          description: `${outletLabel} · Taxes & service charge`,
+          amount: shortfall,
+          tax_amount: taxAmt,
+          total_amount: shortfall,
+          reference: billReference,
+          posted_by: userId,
+          status: 'posted',
+        });
+      }
+      folioItemRows = normalizedItems.map((it) => ({
+        folio_id: folio.id,
+        description: `${outletLabel} · ${it.name}`,
+        department: outletLabel,
+        quantity: it.qty,
+        unit_price: it.unitPrice,
+        amount: it.lineTotal,
+        charge_date: today,
+        created_by: userId,
+      }));
+    } else {
+      // No usable item breakdown — fall back to a single summary line.
+      auditRows = [{
+        folio_id: folio.id,
+        branch_id: branchId,
+        transaction_type: 'charge',
+        category: chargeBucket.category,
+        description: [
+          descriptionText,
+          outlet_name ? `@ ${outlet_name}` : null,
+          waiter_name ? `by ${waiter_name}` : null,
+        ].filter(Boolean).join(' '),
         amount: grossAmount,
         tax_amount: taxAmt,
         total_amount: grossAmount,
-        reference: bill_number || order_number || billRef,
+        reference: billReference,
         posted_by: userId,
         status: 'posted',
-      });
+      }];
+    }
 
+    const roomChargeAuditRes = await supabase.from('folio_transactions').insert(auditRows);
     if (roomChargeAuditRes.error) {
       logger.warn(`Room charge audit insert skipped: ${roomChargeAuditRes.error.message}`);
+    }
+
+    if (folioItemRows.length > 0) {
+      const folioItemsRes = await supabase.from('folio_items').insert(folioItemRows);
+      if (folioItemsRes.error) {
+        logger.warn(`Folio item insert skipped: ${folioItemsRes.error.message}`);
+      }
     }
 
     await settleRoomChargeSourceBill({

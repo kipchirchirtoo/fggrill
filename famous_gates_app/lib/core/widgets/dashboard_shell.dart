@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -374,7 +376,7 @@ class _UserAvatar extends StatelessWidget {
 
 // ─── Tab bar ─────────────────────────────────────────────────────────────────
 
-class _TabBar extends StatelessWidget {
+class _TabBar extends StatefulWidget {
   const _TabBar({
     required this.tabs,
     required this.currentTab,
@@ -386,8 +388,34 @@ class _TabBar extends StatelessWidget {
   final ValueChanged<int>? onTabChanged;
 
   @override
+  State<_TabBar> createState() => _TabBarState();
+}
+
+class _TabBarState extends State<_TabBar> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scroll(bool right) {
+    if (!_scrollController.hasClients) return;
+    final current = _scrollController.offset;
+    final target = right
+        ? (current + 260).clamp(0.0, _scrollController.position.maxScrollExtent)
+        : (current - 260).clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(
+      target.toDouble(),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final selected = currentTab ?? 0;
+    final selected = widget.currentTab ?? 0;
     final mobile = ScreenSize.isMobile(context);
     final compact = ScreenSize.isCompact(context);
 
@@ -398,70 +426,106 @@ class _TabBar extends StatelessWidget {
     // Tab label font: 10 phone, 11 tablet, 13 desktop
     final labelSize = mobile ? 10.0 : (compact ? 11.0 : 13.0);
     // On phone with > 5 tabs, hide label and show icon only
-    final iconOnly = mobile && tabs.length > 5;
+    final iconOnly = mobile && widget.tabs.length > 5;
 
     return Container(
       height: barHeight,
       color: Colors.white,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(
-          horizontal: mobile ? 4 : 8,
-          vertical: mobile ? 4 : 6,
-        ),
-        itemCount: tabs.length,
-        itemBuilder: (context, index) {
-          final isSelected = index == selected;
-          final tab = tabs[index];
-          return Padding(
-            padding: EdgeInsets.only(right: mobile ? 3 : 4),
-            child: InkWell(
-              onTap: onTabChanged != null ? () => onTabChanged!(index) : null,
-              borderRadius: BorderRadius.circular(mobile ? 6 : 8),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: tabPadH),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.kPrimary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(mobile ? 6 : 8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (tab.icon != null) ...[
-                      Icon(
-                        tab.icon,
-                        size: mobile ? 13 : 16,
-                        color: isSelected
-                            ? Colors.white
-                            : AppColors.kTextSecondary,
-                      ),
-                      if (!iconOnly) SizedBox(width: mobile ? 4 : 6),
-                    ],
-                    if (!iconOnly)
-                      Text(
-                        tab.label,
-                        style: TextStyle(
-                          fontSize: labelSize,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected
-                              ? Colors.white
-                              : AppColors.kTextSecondary,
-                        ),
-                      ),
-                    if (tab.badgeCount > 0) ...[
-                      SizedBox(width: mobile ? 3 : 6),
-                      _Badge(
-                        count: tab.badgeCount,
-                        onSelected: isSelected,
-                        mobile: mobile,
-                      ),
-                    ],
-                  ],
-                ),
+      padding: EdgeInsets.symmetric(horizontal: mobile ? 2 : 4),
+      child: Row(
+        children: [
+          if (widget.tabs.length > 4)
+            InkWell(
+              onTap: () => _scroll(false),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Icon(Icons.chevron_left, size: mobile ? 18 : 22, color: AppColors.kTextPrimary),
               ),
             ),
-          );
-        },
+          Expanded(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                },
+              ),
+              child: ListView.builder(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(
+                  horizontal: mobile ? 4 : 8,
+                  vertical: mobile ? 4 : 6,
+                ),
+                itemCount: widget.tabs.length,
+                itemBuilder: (context, index) {
+                  final isSelected = index == selected;
+                  final tab = widget.tabs[index];
+                  return Padding(
+                    padding: EdgeInsets.only(right: mobile ? 3 : 4),
+                    child: InkWell(
+                      onTap: widget.onTabChanged != null ? () => widget.onTabChanged!(index) : null,
+                      borderRadius: BorderRadius.circular(mobile ? 6 : 8),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: tabPadH),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppColors.kPrimary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(mobile ? 6 : 8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (tab.icon != null) ...[
+                              Icon(
+                                tab.icon,
+                                size: mobile ? 13 : 16,
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppColors.kTextSecondary,
+                              ),
+                              if (!iconOnly) SizedBox(width: mobile ? 4 : 6),
+                            ],
+                            if (!iconOnly)
+                              Text(
+                                tab.label,
+                                style: TextStyle(
+                                  fontSize: labelSize,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppColors.kTextSecondary,
+                                ),
+                              ),
+                            if (tab.badgeCount > 0) ...[
+                              SizedBox(width: mobile ? 3 : 6),
+                              _Badge(
+                                count: tab.badgeCount,
+                                onSelected: isSelected,
+                                mobile: mobile,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          if (widget.tabs.length > 4)
+            InkWell(
+              onTap: () => _scroll(true),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Icon(Icons.chevron_right, size: mobile ? 18 : 22, color: AppColors.kTextPrimary),
+              ),
+            ),
+        ],
       ),
     );
   }

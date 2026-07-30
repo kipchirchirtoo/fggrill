@@ -3,6 +3,7 @@ import { supabase } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import axios from 'axios';
+import { recordConferenceCashierPayment } from '../services/receptionEventCashierPayment.service';
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'https://services.hirall.com';
 
@@ -610,99 +611,33 @@ export const addConferencePayment = async (
 ): Promise<void> => {
     try {
         const { id } = req.params;
-        const { amount, payment_method, reference, remarks } = req.body;
+        const { amount, payment_method, paymentMethod, reference } = req.body;
+        const method = payment_method || paymentMethod;
 
-        if (!amount || amount <= 0 || !payment_method) {
+        if (!amount || amount <= 0 || !method) {
             throw new AppError('Amount and payment method are required', 400);
         }
-
-        // 1. Fetch booking to calculate new balance
-        const { data: booking, error: fetchError } = await supabase
-            .from('conference_hall_bookings')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (fetchError || !booking) {
-            throw new AppError('Booking not found', 404);
-        }
-
-        const newPaidAmount = (booking.amount_paid || 0) + amount;
-        const totalAmount = booking.total_amount;
-
-        let paymentStatus = 'partial';
-        if (newPaidAmount >= totalAmount) {
-            paymentStatus = 'paid';
-        }
-
-        // 2. Update booking
-        const { error: updateError } = await supabase
-            .from('conference_hall_bookings')
-            .update({
-                amount_paid: newPaidAmount,
-                payment_status: paymentStatus,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id);
-
-        if (updateError) throw updateError;
-
-        // 3. Record in payments table
-        const { data: payment, error: paymentError } = await supabase
-            .from('payments')
-            .insert({
-                conference_booking_id: id,
-                amount: amount,
-                payment_method: payment_method,
-                status: 'completed', // Manual payments are usually completed immediately
-                reference: reference || `CNF-PAY-${Date.now()}`,
-                metadata: {
-                    remarks,
-                    processed_by: req.user?.id,
-                    invoice_number: booking.invoice_number
-                }
-            })
-            .select()
-            .single();
-
-        if (paymentError) {
-            logger.error(`Error recording conference payment: ${paymentError.message}`);
-        }
-
-        // 4. Record in cashier_transactions for logbook visibility
-        try {
-            const { error } = await supabase.from('cashier_transactions').insert({
-                transaction_number: reference || `CNF-PAY-${Date.now()}`,
-                branch_id: req.user?.branch_id || booking.branch_id,
-                cashier_id: req.user?.id,
-                transaction_type: 'payment',
-                revenue_type: 'CONFERENCE',
-                reference_type: 'conference_booking',
-                reference_id: id,
-                payment_method: payment_method,
-                amount: amount,
-                payment_reference: reference || 'CASH',
-                customer_name: booking.company_name || booking.customer_name
-            });
-
-            if (error) {
-
-              console.error('Database error:', error);
-
-              throw error;
-
-            }
-        } catch (txnError: any) {
-            logger.error(`Error recording cashier transaction: ${txnError.message}`);
-        }
+        const settlement = await recordConferenceCashierPayment({
+            bookingId: id,
+            amount: Number(amount),
+            paymentMethod: method,
+            reference,
+            cashierUserId: req.user?.id,
+            cashierName: `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim() || null,
+        });
 
         res.status(200).json({
             success: true,
             message: 'Payment recorded successfully',
             data: {
-                new_paid_amount: newPaidAmount,
-                payment_status: paymentStatus,
-                payment
+                booking_id: settlement.bookingId,
+                payment_id: settlement.paymentId,
+                payment_reference: settlement.paymentReference,
+                new_paid_amount: settlement.paidAmount,
+                balance: settlement.balance,
+                payment_status: settlement.paymentStatus,
+                cashier_transaction_id: settlement.cashierTransactionId,
+                cashier_shift_log_id: settlement.cashierShiftLogId,
             }
         });
 

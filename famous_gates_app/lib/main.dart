@@ -191,8 +191,9 @@ class FamousGatesApp extends ConsumerWidget {
           bindings: <ShortcutActivator, VoidCallback>{
             const SingleActivator(LogicalKeyboardKey.keyR, control: true): () =>
                 triggerGlobalRefresh(ref),
-            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): () =>
-                triggerGlobalRefresh(ref),
+            if (!kIsWeb && Platform.isMacOS)
+              const SingleActivator(LogicalKeyboardKey.keyR, meta: true): () =>
+                  triggerGlobalRefresh(ref),
             const SingleActivator(LogicalKeyboardKey.f5): () =>
                 triggerGlobalRefresh(ref),
             // Esc leaves full screen. Dialogs and menus handle Esc closer to

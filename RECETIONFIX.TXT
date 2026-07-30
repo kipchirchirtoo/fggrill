@@ -1,0 +1,362 @@
+## Current DB and Codebase Analysis — Kyogong Shared Reception Drawer
+
+I reviewed the uploaded backend, Flutter and live-database analyses. The main conclusion is:
+
+> **Your current architecture can support one receptionist handling both Reception and Restaurant using one cash drawer, but the hotel-payment flow is currently split into two settlement paths. One path enters the cashier shift correctly; the other can collect money without entering shift reconciliation.**
+
+That is likely the main reason figures such as **Today Revenue**, **Shift Collections** and **Expected Drawer Cash** can disagree.
+
+## 1. What is already correct
+
+### Reception already embeds the Cashier module
+
+The Reception shell contains:
+
+* Reception operations
+* Room Bills
+* Embedded Cashier Station
+* POS Terminal
+* Petty Cash
+* Shift management
+
+Reception’s normal Room Bills screen is read-only. Selecting **Pay at Cashier** passes the hotel confirmation number to the embedded Cashier Station, which then resolves the guest and folio. 
+
+This means you do **not** need:
+
+* A separate Reception Cashier application
+* A separate Reception cash drawer
+* Another cashier shift table
+* Another payment architecture
+
+The same employee can operate the two functions from one login.
+
+---
+
+## 2. Correct cashier source of truth
+
+The live database confirms:
+
+* `cashier_shifts` has **0 rows** and is legacy.
+* `cashier_shift_logs` has **173 rows** and is the real cashier shift lifecycle.
+* `cashier_transactions` has **18,493 rows**.
+* `shift_transactions` has **18,168 rows**.
+* `cashier_logbooks` and `cashier_logbook_lines` feed reconciliation and auditing. 
+
+Therefore, Kyogong’s shared drawer must use:
+
+```text
+cashier_shift_logs
+        │
+        ├── Reception room payments
+        ├── Restaurant payments
+        ├── Booking deposits
+        ├── Conference collections
+        ├── Petty-cash payouts
+        ├── Cash refunds
+        └── Other cashier-controlled money
+```
+
+Do not revive or rebuild around `cashier_shifts`.
+
+The master record should remain:
+
+> **One active `cashier_shift_logs` row for Mercy’s physical drawer.**
+
+Restaurant orders can remain connected to their existing `pos_outlet_shifts`; those outlet shifts represent operational sales and stock accountability, not separate physical drawers.
+
+---
+
+## 3. The critical problem: two hotel-payment paths
+
+### Path A: Cashier Station using the HTL reference
+
+This is the safer path.
+
+When the cashier searches an `HTL…` confirmation number:
+
+1. `getBillDetails` finds the reservation and folio.
+2. It calculates accommodation and charge-to-room items.
+3. `processPayment` inserts a row into `payments`.
+4. The payment is linked to the active cashier shift.
+5. The reservation payment status is updated.
+6. The folio is also settled.
+
+This route correctly understands that the receptionist physically received money during an active cashier shift. 
+
+### Path B: Direct Room Bills settlement
+
+The Cashier version of `RoomBillsView` can call:
+
+```http
+POST /room-charge/folio/:reservationId/settle
+```
+
+The endpoint inserts only a folio `transactions` payment row. The folio balance falls, but the uploaded codebase audit identifies that this payment is **not yet posted into the cashier’s shift collection and reconciliation ledger**. 
+
+Therefore, the current system can produce this situation:
+
+```text
+Guest pays KES 10,000 cash
+        │
+        ├── Folio balance reduces by KES 10,000       ✓
+        ├── Guest appears settled                     ✓
+        ├── Physical drawer contains KES 10,000       ✓
+        ├── Shift Collections increases               ✗
+        └── Expected Drawer Cash increases            ✗
+```
+
+This is the most important defect for the Kyogong setup.
+
+---
+
+## 4. Why your screenshot can show conflicting figures
+
+Your dashboard showed revenue while the Cashier Station showed:
+
+* Shift Collections: KES 0
+* Expected Drawer Cash: KES 0
+
+The documents do not prove which exact transaction produced that screenshot, but the direct Room Bills settlement gap is a strong possible cause:
+
+* Payment may have settled the guest folio.
+* Revenue may therefore appear on Reception.
+* No matching `cashier_transactions` or shift collection line may have been generated.
+
+Other possible causes are that the payment was recorded outside Mercy’s currently active shift or under a different cashier shift. The database should be checked for the underlying transaction before correcting historical values.
+
+---
+
+## 5. Existing tables already support the solution
+
+`cashier_transactions` already contains the fields needed to differentiate money without creating additional tables:
+
+* `cashier_shift_log_id`
+* `cashier_id`
+* `source_module`
+* `source_document_type`
+* `source_document_id`
+* `source_document_number`
+* `revenue_type`
+* `confirmation_number`
+* `payment_method`
+* `amount`
+* `amount_tendered`
+* `change_given`
+* `payment_reference`
+* `customer_name`
+
+The table was designed to record one physical cashier’s transactions while retaining the original source and revenue category. 
+
+A room payment should therefore look conceptually like:
+
+```text
+cashier_shift_log_id = Mercy's open shift
+source_module        = RECEPTION
+source_document_type = ROOM_FOLIO
+source_document_id   = reservation/folio ID
+revenue_type         = ROOM_BOOKING
+payment_method       = CASH
+amount               = KES 10,000
+confirmation_number  = HTL...
+```
+
+A restaurant payment made into the same drawer should look like:
+
+```text
+cashier_shift_log_id = Mercy's same open shift
+source_module        = POS_RESTAURANT
+source_document_type = POS_ORDER
+source_document_id   = pos_shift_orders.id
+revenue_type         = RESTAURANT
+payment_method       = CASH
+amount               = KES 2,500
+```
+
+The physical drawer is combined, but the revenue remains separately attributable.
+
+---
+
+## 6. Required code correction
+
+Both hotel-payment buttons must use one common backend payment service.
+
+Recommended internal service:
+
+```text
+recordCashierControlledPayment()
+```
+
+It should be called by:
+
+* Cashier Station `processPayment`
+* Room Bills `settleRoomBill`
+* Check-in deposit collection
+* Reservation advance deposit
+* Checkout payment
+* Conference or catering payment received by the receptionist
+
+The complete operation should happen in one database transaction:
+
+1. Confirm the employee has an active `cashier_shift_logs` shift.
+2. Lock or validate the active shift.
+3. Insert the official `payments` record.
+4. Insert the `cashier_transactions` record.
+5. Insert the appropriate `shift_transactions` or logbook line.
+6. Insert the folio payment into `transactions`.
+7. Update `reservations.amount_paid` and `payment_status`.
+8. Recalculate the folio.
+9. Update the cashier shift payment-method totals.
+10. Commit everything together.
+
+If any step fails, the entire payment should roll back.
+
+Do not let the folio settle successfully while the cashier ledger fails.
+
+---
+
+## 7. Shared-drawer calculation
+
+For Mercy’s one drawer:
+
+```text
+Expected physical cash
+=
+Opening float
++ Reception cash received
++ Restaurant cash received
++ Booking deposits received in cash
++ Conference/catering cash received
++ Other cash received
+− Petty cash issued
+− Cash refunds
+− Cash drops/deposits
+```
+
+M-Pesa, card, credit bills and room charges must be shown in reconciliation but excluded from physical expected cash.
+
+The existing `cashier_shift_logs` table already has fields for opening float, cash sales, M-Pesa, card, room booking revenue, restaurant revenue, expenses, actual counted cash and variance. 
+
+---
+
+## 8. Charge-to-room must remain non-cash
+
+The current Charge-to-Room flow is conceptually correct:
+
+1. Confirm the branch and outlet feature flags.
+2. Validate an active checked-in guest.
+3. Post the restaurant bill into the folio.
+4. Categorize it as food, beverage or other.
+5. Mark the originating POS order as paid using `ROOM_CHARGE`.
+6. Do not receive physical money at that point. 
+
+Therefore:
+
+```text
+Restaurant revenue attribution     = Yes
+Guest folio charge                 = Yes
+Cashier physical cash              = No
+M-Pesa/card collection             = No
+Expected drawer cash movement      = No
+```
+
+The restaurant sale remains attributed to Restaurant, while Reception eventually collects the guest’s combined balance.
+
+---
+
+## 9. Another major risk: current checkout behaviour
+
+One backend reference reports that the current check-out code can:
+
+* Set the reservation to `checked_out`
+* Set `payment_status = paid`
+* Set `amount_paid = total`
+* Set the folio balance to zero
+* Mark the folio settled
+
+This appears to happen automatically as part of checkout rather than only after proving that payment or approved credit exists. 
+
+That is dangerous because a receptionist could check out an unpaid guest and the system could erase the visible outstanding balance.
+
+Checkout should instead be blocked when:
+
+```text
+folio balance > 0
+```
+
+unless the remaining balance has been formally converted to:
+
+* Approved credit
+* Approved complimentary stay
+* Authorised write-off
+
+The system must never treat “checkout completed” as proof that money was received.
+
+---
+
+## 10. Folio consistency problem
+
+The folio system currently has:
+
+* `transactions` as the financial ledger
+* `folio_transactions` as the detailed audit ledger
+* `room_charges` stored directly on the folio
+* `balance_due` and `balance` as mirrored columns
+
+The database trigger calculates charges from `transactions`, but accommodation charges are not stored there as normal charge rows. Application code then has to rewrite totals after the trigger runs. A raw payment or charge insert can therefore temporarily or permanently calculate the wrong balance unless the application-level recomputation also runs. 
+
+For the immediate Kyogong drawer issue, do not redesign the entire folio system. Ensure the common payment service uses the same existing folio recomputation logic after every payment.
+
+A future clean-up should make one ledger authoritative for all accommodation, food, beverage, other charges and payments.
+
+---
+
+## 11. Exact target architecture
+
+```text
+MERCY'S MASTER CASHIER SHIFT
+cashier_shift_logs
+│
+├── Restaurant payment
+│   ├── pos_shift_orders / pos_master_bills
+│   ├── cashier_transactions
+│   ├── shift_transactions
+│   └── revenue_type = RESTAURANT
+│
+├── Room payment
+│   ├── reservations / folios
+│   ├── payments
+│   ├── transactions
+│   ├── cashier_transactions
+│   ├── shift_transactions
+│   └── revenue_type = ROOM_BOOKING
+│
+├── Charge to room
+│   ├── POS bill marked ROOM_CHARGE
+│   ├── folio charge
+│   ├── restaurant revenue retained
+│   └── no drawer movement
+│
+└── Petty cash
+    ├── cashier-controlled cash-out
+    ├── shift expense line
+    └── reduces expected physical cash
+```
+
+## Final conclusion
+
+The correct solution is **not to combine Reception and Restaurant accounting into one revenue ledger**.
+
+It is:
+
+> **One `cashier_shift_logs` master shift for the one physical drawer, with every payment linked to that shift and tagged by its original source and revenue type.**
+
+The immediate code priorities are:
+
+1. Route `settleRoomBill` through the same shift-aware payment service as `processPayment`.
+2. Block all money collection when there is no active master cashier shift.
+3. Prevent checkout from automatically marking unpaid balances as paid.
+4. Keep Charge-to-Room as a non-cash folio posting.
+5. Derive shift totals from the detailed cashier ledger instead of trusting separately updated summary figures.
+6. Reconcile historical folio payments that have no matching cashier-shift transaction.
+
+Until the direct Room Bills route is corrected, Kyogong should settle accommodation bills through the **Cashier Station using the HTL lookup**, because that is the documented path that links the payment to the active cashier shift.

@@ -115,13 +115,45 @@ class _ConferenceBookingScreenState
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final halls = await _repo.getConferenceHalls();
-      final bookings = await _repo.getConferenceBookings();
-      if (mounted) setState(() {
-        _halls = halls;
-        _bookings = bookings;
-        _loading = false;
+      final results = await Future.wait([
+        _repo.getConferenceHalls(),
+        _repo.getConferenceBookings(),
+        _repo.getCateringBookings(),
+      ]);
+      final halls = results[0];
+      final confBookings = results[1];
+      final cateringBookings = results[2];
+
+      final allBookings = <Map<String, dynamic>>[];
+      for (final b in confBookings) {
+        final row = Map<String, dynamic>.from(b);
+        row['event_type_label'] = 'Conference';
+        allBookings.add(row);
+      }
+      for (final b in cateringBookings) {
+        final row = Map<String, dynamic>.from(b);
+        row['event_type_label'] = 'Outside Catering';
+        if (row['hall_name'] == null && row['venue'] != null) {
+          row['hall_name'] = row['venue'];
+        }
+        if (row['company_name'] == null && row['client_name'] != null) {
+          row['company_name'] = row['client_name'];
+        }
+        allBookings.add(row);
+      }
+      allBookings.sort((a, b) {
+        final dtA = DateTime.tryParse(_t(a, ['created_at', 'start_date', 'event_date']) ?? '') ?? DateTime(2000);
+        final dtB = DateTime.tryParse(_t(b, ['created_at', 'start_date', 'event_date']) ?? '') ?? DateTime(2000);
+        return dtB.compareTo(dtA);
       });
+
+      if (mounted) {
+        setState(() {
+          _halls = halls;
+          _bookings = allBookings;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
@@ -158,7 +190,7 @@ class _ConferenceBookingScreenState
         repo: _repo,
         onSuccess: () {
           _load();
-          _snack('Conference hall booked successfully!');
+          _snack('Event / catering booked successfully!');
         },
       ),
     );
@@ -179,7 +211,7 @@ class _ConferenceBookingScreenState
           });
           if (mounted) {
             _load();
-            _snack('Payment recorded');
+            _snack('Payment recorded!');
           }
         },
       ),
@@ -188,22 +220,22 @@ class _ConferenceBookingScreenState
 
   Future<void> _cancelBooking(Map<String, dynamic> booking) async {
     final id = _t(booking, ['id']);
-    final company = _t(booking, ['company_name']) ?? 'this booking';
     if (id == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Cancel Booking'),
-        content: Text('Cancel the booking for $company?'),
+        content: Text(
+            'Are you sure you want to cancel the event booking for "${_t(booking, ['company_name', 'client_name']) ?? 'this client'}"?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('No')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.kError),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes, Cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No, keep'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.kError),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, cancel'),
           ),
         ],
       ),
@@ -212,9 +244,9 @@ class _ConferenceBookingScreenState
     try {
       await _repo.updateConferenceBookingStatus(id, 'cancelled');
       _load();
-      _snack('Booking cancelled');
+      _snack('Booking cancelled.');
     } catch (e) {
-      _snack(apiErrorMessage(e, fallback: 'Failed to cancel'), error: true);
+      _snack(apiErrorMessage(e, fallback: 'Cancel failed'), error: true);
     }
   }
 
@@ -241,10 +273,10 @@ class _ConferenceBookingScreenState
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Conference Halls',
+            Text('Conference & Catering Bookings',
                 style: theme.textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold)),
-            Text('Book, manage and track hall reservations',
+            Text('Manage conference hall reservations, outside catering events, packages, and billing',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: AppColors.kTextSecondary)),
           ],
@@ -257,9 +289,9 @@ class _ConferenceBookingScreenState
           ),
           const SizedBox(width: 4),
           FilledButton.icon(
-            onPressed: _halls.isEmpty ? null : _openBookingDialog,
+            onPressed: _openBookingDialog,
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('New Booking'),
+            label: const Text('Book Event / Catering'),
           ),
           const SizedBox(width: 16),
         ],
@@ -267,12 +299,12 @@ class _ConferenceBookingScreenState
           controller: _tabs,
           tabs: [
             Tab(
-              icon: const Icon(Icons.meeting_room_outlined, size: 18),
-              text: 'Halls (${_halls.length})',
+              icon: const Icon(Icons.event_note_outlined, size: 18),
+              text: 'Event & Catering Bookings (${_bookings.length})',
             ),
             Tab(
-              icon: const Icon(Icons.event_note_outlined, size: 18),
-              text: 'Bookings (${_bookings.length})',
+              icon: const Icon(Icons.meeting_room_outlined, size: 18),
+              text: 'Conference Halls (${_halls.length})',
             ),
           ],
         ),
@@ -282,11 +314,6 @@ class _ConferenceBookingScreenState
           : TabBarView(
               controller: _tabs,
               children: [
-                _HallsTab(
-                  halls: _halls,
-                  onStatusChange: _updateHallStatus,
-                  onBook: _openBookingDialog,
-                ),
                 _BookingsTab(
                   bookings: _filteredBookings,
                   allBookings: _bookings,
@@ -298,6 +325,11 @@ class _ConferenceBookingScreenState
                     await _repo.updateConferenceBookingStatus(id, status);
                     _load();
                   },
+                ),
+                _HallsTab(
+                  halls: _halls,
+                  onStatusChange: _updateHallStatus,
+                  onBook: _openBookingDialog,
                 ),
               ],
             ),
@@ -784,6 +816,55 @@ class _BookingCard extends StatelessWidget {
                           visualDensity: VisualDensity.compact),
                     ),
                   OutlinedButton.icon(
+                    onPressed: () {
+                      final days = (startDt != null && endDt != null && endDt.difference(startDt).inDays > 0)
+                          ? endDt.difference(startDt).inDays
+                          : 1;
+                      final pkgRate = _n(booking, ['amount_per_pax']);
+                      final pkgTitle = _t(booking, ['menu_package']) ?? 'Conference Package';
+                      printConferenceBookingInvoice(
+                        bookingRef: invoice.isNotEmpty
+                            ? invoice
+                            : 'CB-${id.toString().substring(0, math.min(6, id.toString().length))}',
+                        branchName: 'Current',
+                        bookingDate: startDt ?? DateTime.now(),
+                        clientName: company,
+                        customerPhone: phone,
+                        organization: company,
+                        hallName: hallName,
+                        hallCapacity: participants,
+                        packageTitle: pkgTitle,
+                        packageRate: pkgRate > 0
+                            ? pkgRate
+                            : (participants > 0 ? total / (participants * days) : 0),
+                        pax: participants > 0 ? participants : 1,
+                        days: days,
+                        packageTotal: total,
+                        hallRate: 0,
+                        hallTotal: 0,
+                        addProjector: false,
+                        addPaSystem: false,
+                        chargeGarden: false,
+                        chargeVideoShoot: false,
+                        chargePartySpace: false,
+                        grandTotal: total,
+                        depositPaid: paid,
+                        paymentMethod: 'Cash',
+                        bookingStatus: status,
+                        notes: _t(booking, ['notes']) ?? '',
+                      );
+                    },
+                    icon: const Icon(Icons.print_outlined, size: 15),
+                    label: const Text('Print Invoice',
+                        style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.kPrimary,
+                        side: BorderSide(color: AppColors.kPrimary),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        visualDensity: VisualDensity.compact),
+                  ),
+                  OutlinedButton.icon(
                     onPressed: onCancel,
                     icon: const Icon(Icons.cancel_outlined, size: 15),
                     label: const Text('Cancel',
@@ -871,8 +952,8 @@ class _ConferenceBookingDialogState
   final _phoneCtrl = TextEditingController();
   final _orgCtrl = TextEditingController();
 
-  // Package
-  String _selectedPackage = 'half_day'; // half_day | full_day | half_board | full_board | none
+  // Package & Custom Pricing
+  String _selectedPackage = 'half_day'; // half_day | full_day | half_board | full_board | none | custom
   final Map<String, Map<String, dynamic>> _packages = {
     'half_day': {
       'title': 'Half day',
@@ -899,11 +980,42 @@ class _ConferenceBookingDialogState
       'rate': 0,
       'desc': 'Hall rental only, no catering package',
     },
+    'catering_buffet': {
+      'title': 'Buffet Catering',
+      'rate': 2000,
+      'desc': 'Buffet lunch + soft drink + water & mints',
+    },
+    'catering_tea': {
+      'title': 'Tea Break Catering',
+      'rate': 800,
+      'desc': 'Tea & snacks + bottled water',
+    },
+    'catering_full': {
+      'title': 'Full Day Catering',
+      'rate': 2800,
+      'desc': 'Morning tea, buffet lunch, afternoon tea',
+    },
+    'custom': {
+      'title': 'Custom Package',
+      'rate': 0,
+      'desc': 'Custom negotiated rate per pax and inclusions',
+    },
   };
 
-  // Pax & Days
+  String _eventType = 'conference'; // 'conference' | 'catering'
+  final _venueCtrl = TextEditingController(text: 'Outside Catering Venue');
+
+  // Pax, Rate, Days & Inclusions
   final _paxCtrl = TextEditingController(text: '1');
   final _daysCtrl = TextEditingController(text: '1');
+  final _rateCtrl = TextEditingController(text: '1800');
+  final _inclusionsCtrl = TextEditingController();
+  final _hallFeeCtrl = TextEditingController(text: '0');
+  final Set<String> _selectedInclusions = {
+    '10am Tea & Snacks',
+    'Buffet Lunch + Soft Drink',
+    'Bottled Water & Mints',
+  };
 
   // Hall Selection
   Map<String, dynamic>? _selectedHall;
@@ -948,9 +1060,93 @@ class _ConferenceBookingDialogState
     _orgCtrl.dispose();
     _paxCtrl.dispose();
     _daysCtrl.dispose();
+    _rateCtrl.dispose();
+    _inclusionsCtrl.dispose();
+    _hallFeeCtrl.dispose();
     _notesCtrl.dispose();
     _depositCtrl.dispose();
+    _venueCtrl.dispose();
     super.dispose();
+  }
+
+  void _selectPreset(String key) {
+    setState(() {
+      _selectedPackage = key;
+      if (key == 'half_day') {
+        _rateCtrl.text = '1800';
+        _hallFeeCtrl.text = '0';
+        _selectedInclusions.clear();
+        _selectedInclusions.addAll({
+          '10am Tea & Snacks',
+          'Buffet Lunch + Soft Drink',
+          'Bottled Water & Mints',
+        });
+      } else if (key == 'full_day') {
+        _rateCtrl.text = '2500';
+        _hallFeeCtrl.text = '0';
+        _selectedInclusions.clear();
+        _selectedInclusions.addAll({
+          '10am Tea & Snacks',
+          'Buffet Lunch + Soft Drink',
+          '4pm Tea & Snacks',
+          'Bottled Water & Mints',
+        });
+      } else if (key == 'half_board') {
+        _rateCtrl.text = '6500';
+        _hallFeeCtrl.text = '0';
+        _selectedInclusions.clear();
+        _selectedInclusions.addAll({
+          'Accommodation',
+          'Breakfast',
+          '10am Tea & Snacks',
+          'Buffet Lunch + Soft Drink',
+        });
+      } else if (key == 'full_board') {
+        _rateCtrl.text = '7500';
+        _hallFeeCtrl.text = '0';
+        _selectedInclusions.clear();
+        _selectedInclusions.addAll({
+          'Accommodation',
+          'Breakfast',
+          '10am Tea & Snacks',
+          'Buffet Lunch + Soft Drink',
+          '4pm Tea & Snacks',
+          'Dinner',
+        });
+      } else if (key == 'catering_buffet') {
+        _rateCtrl.text = '2000';
+        _hallFeeCtrl.text = '0';
+        _selectedInclusions.clear();
+        _selectedInclusions.addAll({
+          'Buffet Lunch + Soft Drink',
+          'Bottled Water & Mints',
+        });
+      } else if (key == 'catering_tea') {
+        _rateCtrl.text = '800';
+        _hallFeeCtrl.text = '0';
+        _selectedInclusions.clear();
+        _selectedInclusions.addAll({
+          '10am Tea & Snacks',
+          'Bottled Water & Mints',
+        });
+      } else if (key == 'catering_full') {
+        _rateCtrl.text = '2800';
+        _hallFeeCtrl.text = '0';
+        _selectedInclusions.clear();
+        _selectedInclusions.addAll({
+          '10am Tea & Snacks',
+          'Buffet Lunch + Soft Drink',
+          '4pm Tea & Snacks',
+          'Bottled Water & Mints',
+        });
+      } else if (key == 'none') {
+        _rateCtrl.text = '0';
+        _hallFeeCtrl.text = '$_defaultHallBaseRate';
+        _selectedInclusions.clear();
+      } else if (key == 'custom') {
+        // Leave existing values for custom editing
+      }
+    });
   }
 
   // ── Calculation Logic ──────────────────────────────────────────────────────
@@ -959,16 +1155,17 @@ class _ConferenceBookingDialogState
   int get _days => math.max(1, int.tryParse(_daysCtrl.text.trim()) ?? 1);
 
   num get _packageRate =>
-      (_packages[_selectedPackage]?['rate'] as num?) ?? 0;
+      num.tryParse(_rateCtrl.text.replaceAll(',', '').trim()) ?? 0;
   num get _packageTotal => _packageRate * _pax * _days;
 
-  num get _hallRate {
+  num get _defaultHallBaseRate {
     if (_selectedHall == null) return 0;
     final rateInDb = _n(_selectedHall!, ['base_price_per_day', 'rate']);
     if (rateInDb > 0) return rateInDb;
-    // Default preset rates by hall name if 0 in DB
     final name = (_t(_selectedHall!, ['name']) ?? '').toLowerCase();
-    if (name.contains('sinai') || name.contains('boardroom') || name.contains('rooftop')) {
+    if (name.contains('sinai') ||
+        name.contains('boardroom') ||
+        name.contains('rooftop')) {
       return 10000;
     }
     if (name.contains('olive')) return 7000;
@@ -976,6 +1173,9 @@ class _ConferenceBookingDialogState
     if (name.contains('garden')) return 15000;
     return 5000;
   }
+
+  num get _hallRate =>
+      num.tryParse(_hallFeeCtrl.text.replaceAll(',', '').trim()) ?? 0;
   num get _hallTotal => _hallRate * _days;
 
   num get _addOnsTotal =>
@@ -990,6 +1190,29 @@ class _ConferenceBookingDialogState
 
   num get _grandTotal =>
       _packageTotal + _hallTotal + _addOnsTotal + _otherChargesTotal;
+
+  String get _selectedPackageTitle {
+    if (_selectedPackage == 'custom' || _selectedPackage == 'none') {
+      return 'Custom Package';
+    }
+    return _packages[_selectedPackage]?['title'] ?? 'Custom Package';
+  }
+
+  String get _selectedInclusionsText {
+    final list = <String>[];
+    list.addAll(_selectedInclusions);
+    final custom = _inclusionsCtrl.text.trim();
+    if (custom.isNotEmpty && !list.contains(custom)) {
+      list.add(custom);
+    }
+    if (list.isEmpty) return 'No catering package specified';
+    return list.join(', ');
+  }
+
+  String get _packageTitleForDb {
+    if (_packageRate <= 0) return 'Hall Only (No Package)';
+    return '$_selectedPackageTitle (${_selectedInclusionsText})';
+  }
 
   bool get _isVideoShootWeekdayWarning {
     if (!_chargeVideoShoot) return false;
@@ -1021,8 +1244,12 @@ class _ConferenceBookingDialogState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedHall == null) {
+    if (_selectedHall == null && _eventType == 'conference') {
       _showError('Please select a conference hall');
+      return;
+    }
+    if (_eventType == 'catering' && _venueCtrl.text.trim().isEmpty) {
+      _showError('Please enter an event venue or location');
       return;
     }
     if (_pax <= 0) {
@@ -1036,14 +1263,24 @@ class _ConferenceBookingDialogState
 
     setState(() => _submitting = true);
     try {
-      final hallId = _t(_selectedHall!, ['id']);
+      final hallId = _selectedHall != null ? _t(_selectedHall!, ['id']) : 'CATERING';
+      final hallName = _eventType == 'catering'
+          ? (_venueCtrl.text.trim().isNotEmpty ? _venueCtrl.text.trim() : 'Outside Catering Venue')
+          : (_selectedHall != null ? (_t(_selectedHall!, ['name']) ?? 'Conference Hall') : 'Conference Hall');
       final endDate = _bookingDate.add(Duration(days: _days));
       final deposit = double.tryParse(_depositCtrl.text.trim()) ?? 0;
 
       // Compile line items into notes
       final detailsList = <String>[];
-      if (_selectedPackage != 'none') {
-        detailsList.add('Package: ${_packages[_selectedPackage]?['title']} @ KES ${_packageRate}/pp');
+      if (_eventType == 'catering') {
+        detailsList.add('[OUTSIDE CATERING EVENT]');
+      }
+      if (_packageRate > 0) {
+        detailsList.add('Package: $_selectedPackageTitle @ KES $_packageRate/pp');
+        detailsList.add('Inclusions: $_selectedInclusionsText');
+      }
+      if (_hallRate > 0) {
+        detailsList.add('Venue/Hall Fee: KES $_hallRate/day');
       }
       if (_addProjector) detailsList.add('Projector @ KES $_projectorRate/day');
       if (_addPaSystem) detailsList.add('PA System @ KES $_paSystemRate/day');
@@ -1054,7 +1291,7 @@ class _ConferenceBookingDialogState
         detailsList.add('Notes: ${_notesCtrl.text.trim()}');
       }
 
-      await widget.repo.createConferenceBooking({
+      final payload = {
         'conference_hall_id': hallId,
         'hall_id': hallId,
         'company_name': _clientCtrl.text.trim().isNotEmpty
@@ -1062,22 +1299,43 @@ class _ConferenceBookingDialogState
             : (_orgCtrl.text.trim().isNotEmpty
                 ? _orgCtrl.text.trim()
                 : 'Individual Client'),
+        'client_name': _clientCtrl.text.trim().isNotEmpty
+            ? _clientCtrl.text.trim()
+            : (_orgCtrl.text.trim().isNotEmpty
+                ? _orgCtrl.text.trim()
+                : 'Individual Client'),
         'contact_person': _clientCtrl.text.trim(),
         'customer_phone': _phoneCtrl.text.trim(),
-        'menu_package': _packages[_selectedPackage]?['title'] ?? 'Half day',
+        'phone': _phoneCtrl.text.trim(),
+        'menu_package': _packageTitleForDb,
         'amount_per_pax': _packageRate,
         'start_date': _bookingDate.toIso8601String(),
         'end_date': endDate.toIso8601String(),
+        'event_date': _bookingDate.toIso8601String(),
         'num_participants': _pax,
+        'participants': _pax,
         'total_amount': _grandTotal,
+        'amount': _grandTotal,
         'deposit_amount': deposit,
         'payment_method': _paymentMethod,
         'booking_status': _bookingStatus,
+        'status': _bookingStatus,
         'payment_status': deposit >= _grandTotal && _grandTotal > 0
             ? 'paid'
             : (deposit > 0 ? 'partial' : 'unpaid'),
         'notes': detailsList.join(' | '),
-      });
+        'venue': hallName,
+      };
+
+      if (_eventType == 'catering') {
+        try {
+          await widget.repo.createCateringBooking(payload);
+        } catch (_) {
+          await widget.repo.createConferenceBooking(payload);
+        }
+      } else {
+        await widget.repo.createConferenceBooking(payload);
+      }
 
       if (mounted) {
         Navigator.pop(context);
@@ -1091,9 +1349,10 @@ class _ConferenceBookingDialogState
           clientName: _clientCtrl.text.trim(),
           customerPhone: _phoneCtrl.text.trim(),
           organization: _orgCtrl.text.trim(),
-          hallName: _t(_selectedHall!, ['name']) ?? 'Conference Hall',
-          hallCapacity: _n(_selectedHall!, ['capacity']).toInt(),
-          packageTitle: _packages[_selectedPackage]?['title'] ?? 'Custom',
+          hallName: hallName,
+          hallCapacity: _selectedHall != null ? _n(_selectedHall!, ['capacity']).toInt() : _pax,
+          packageTitle: _selectedPackageTitle,
+          packageInclusions: _selectedInclusionsText,
           packageRate: _packageRate,
           pax: _pax,
           days: _days,
@@ -1285,95 +1544,77 @@ class _ConferenceBookingDialogState
                       ),
                       const SizedBox(height: 20),
 
-                      // ── 2. Conference Package Cards ──────────────────────
-                      _SectionHeader('Conference package'),
-                      GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 2,
-                        childAspectRatio: 3.0,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        children: _packages.entries.map((entry) {
-                          final key = entry.key;
-                          final pkg = entry.value;
-                          final isSelected = _selectedPackage == key;
-                          return InkWell(
-                            onTap: () =>
-                                setState(() => _selectedPackage = key),
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppColors.kPrimary.withOpacity(0.08)
-                                    : (isDark
-                                        ? const Color(0xFF0F172A)
-                                        : Colors.white),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? AppColors.kPrimary
-                                      : Colors.grey.shade300,
-                                  width: isSelected ? 2 : 1,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Radio<String>(
-                                        value: key,
-                                        groupValue: _selectedPackage,
-                                        onChanged: (v) => setState(
-                                            () => _selectedPackage = v!),
-                                        visualDensity: VisualDensity.compact,
-                                        activeColor: AppColors.kPrimary,
-                                      ),
-                                      Expanded(
-                                        child: Text(
-                                          pkg['title'],
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13),
-                                        ),
-                                      ),
-                                      Text(
-                                        pkg['rate'] > 0
-                                            ? '${_money(pkg['rate'])} pp'
-                                            : 'Free',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: isSelected
-                                                ? AppColors.kPrimary
-                                                : Colors.grey.shade700),
-                                      ),
-                                    ],
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 32),
-                                    child: Text(
-                                      pkg['desc'],
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          color: AppColors.kTextSecondary),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                      // ── 0. Event Category / Type ─────────────────────────
+                      _SectionHeader('Booking Category'),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _EventTypeButton(
+                              icon: Icons.corporate_fare,
+                              label: 'Conference / Hall Booking',
+                              isSelected: _eventType == 'conference',
+                              onTap: () => setState(() {
+                                _eventType = 'conference';
+                                if (_selectedHall == null && widget.halls.isNotEmpty) {
+                                  _selectedHall = widget.halls.first;
+                                }
+                              }),
                             ),
-                          );
-                        }).toList(),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _EventTypeButton(
+                              icon: Icons.room_service_outlined,
+                              label: 'Outside Catering / Event',
+                              isSelected: _eventType == 'catering',
+                              onTap: () => setState(() {
+                                _eventType = 'catering';
+                                _selectedHall = null;
+                                if (_selectedPackage == 'half_day') {
+                                  _selectPreset('catering_buffet');
+                                }
+                              }),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ── 2. Conference Package Presets & Custom Rate ─────
+                      _SectionHeader(_eventType == 'catering'
+                          ? 'Catering package & rate (KES)'
+                          : 'Conference package & rate (KES)'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Select a preset to quick-fill or enter a custom negotiated amount per pax and menu inclusions:',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.kTextSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _eventType == 'catering'
+                            ? [
+                                _packagePresetChip('catering_buffet', 'Buffet Catering (KES 2,000)'),
+                                _packagePresetChip('catering_tea', 'Tea Break Catering (KES 800)'),
+                                _packagePresetChip('catering_full', 'Full Day Catering (KES 2,800)'),
+                                _packagePresetChip('custom', 'Custom Rate'),
+                              ]
+                            : [
+                                _packagePresetChip('half_day', 'Half Day (KES 1,800)'),
+                                _packagePresetChip('full_day', 'Full Day (KES 2,500)'),
+                                _packagePresetChip('half_board', 'Half Board (KES 6,500)'),
+                                _packagePresetChip('full_board', 'Full Board (KES 7,500)'),
+                                _packagePresetChip('custom', 'Custom Rate'),
+                                _packagePresetChip('none', 'Hall Only (No Catering)'),
+                              ],
                       ),
                       const SizedBox(height: 16),
 
-                      // ── 3. Pax & Days Inputs ─────────────────────────────
+                      // ── 3. Pax, Rate & Days Inputs ───────────────────────
                       Row(
                         children: [
                           Expanded(
@@ -1385,7 +1626,27 @@ class _ConferenceBookingDialogState
                               validator: (v) {
                                 final val = int.tryParse(v ?? '');
                                 if (val == null || val < 1) {
-                                  return 'Must be at least 1';
+                                  return 'Must be >= 1';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _rateCtrl,
+                              decoration: _inputDec('Amount per pax (KES) *'),
+                              keyboardType: TextInputType.number,
+                              onChanged: (_) => setState(() {
+                                if (_selectedPackage != 'custom') {
+                                  _selectedPackage = 'custom';
+                                }
+                              }),
+                              validator: (v) {
+                                final val = num.tryParse((v ?? '').replaceAll(',', ''));
+                                if (val == null || val < 0) {
+                                  return 'Invalid rate';
                                 }
                                 return null;
                               },
@@ -1395,19 +1656,82 @@ class _ConferenceBookingDialogState
                           Expanded(
                             child: TextFormField(
                               controller: _daysCtrl,
-                              decoration: _inputDec('Number of days (hall) *'),
+                              decoration: _inputDec('Number of days *'),
                               keyboardType: TextInputType.number,
                               onChanged: (_) => setState(() {}),
                               validator: (v) {
                                 final val = int.tryParse(v ?? '');
                                 if (val == null || val < 1) {
-                                  return 'Must be at least 1';
+                                  return 'Must be >= 1';
                                 }
                                 return null;
                               },
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // ── 4. What it includes (Inclusions) ─────────────────
+                      _SectionHeader('What it includes (Breakfast, Lunch, Tea etc.) *'),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          '10am Tea & Snacks',
+                          'Buffet Lunch + Soft Drink',
+                          '4pm Tea & Snacks',
+                          'Breakfast',
+                          'Dinner',
+                          'Bottled Water & Mints',
+                          'PA System & Mics',
+                          'Projector & Screen',
+                          'Notepads & Pens',
+                          'High-Speed Wi-Fi',
+                          'Accommodation',
+                        ].map((inc) {
+                          final checked = _selectedInclusions.contains(inc);
+                          return FilterChip(
+                            label: Text(
+                              inc,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: checked ? FontWeight.bold : FontWeight.normal,
+                                color: checked ? AppColors.kPrimary : null,
+                              ),
+                            ),
+                            selected: checked,
+                            selectedColor: AppColors.kPrimary.withOpacity(0.12),
+                            checkmarkColor: AppColors.kPrimary,
+                            onSelected: (val) {
+                              setState(() {
+                                if (val) {
+                                  _selectedInclusions.add(inc);
+                                } else {
+                                  _selectedInclusions.remove(inc);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _inclusionsCtrl,
+                        decoration: _inputDec('Custom inclusions / menu details (optional)'),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // ── 5. Venue / Hall Rental Fee ───────────────────────
+                      TextFormField(
+                        controller: _hallFeeCtrl,
+                        decoration: _inputDec('Hall rental fee (KES per day) *').copyWith(
+                          helperText: 'Set to 0 if venue rental is included in per-pax package rate',
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
                       ),
 
                       // Capacity Warning Banner
@@ -1442,11 +1766,19 @@ class _ConferenceBookingDialogState
 
                       const SizedBox(height: 20),
 
-                      // ── 4. Hall Selection Cards ──────────────────────────
-                      _SectionHeader('Select Hall'),
-                      if (availableHalls.isEmpty)
-                        const Text('No conference halls found for this branch.')
-                      else
+                      // ── 4. Venue / Hall Selection ──────────────────────────
+                      if (_eventType == 'catering') ...[
+                        _SectionHeader('Event Venue / Offsite Location'),
+                        TextFormField(
+                          controller: _venueCtrl,
+                          decoration: _inputDec('Event venue or client address * (e.g. Client Premises, Garden Venue)'),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
+                      ] else ...[
+                        _SectionHeader('Select Hall'),
+                        if (availableHalls.isEmpty)
+                          const Text('No conference halls found for this branch.')
+                        else
                         GridView.count(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -1528,6 +1860,7 @@ class _ConferenceBookingDialogState
                             );
                           }).toList(),
                         ),
+                      ],
 
                       const SizedBox(height: 20),
 
@@ -1622,51 +1955,7 @@ class _ConferenceBookingDialogState
                         ),
                       ],
 
-                      const SizedBox(height: 20),
-
-                      // ── 7. Static Inclusions Notice ──────────────────────
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.kPrimary.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: AppColors.kPrimary.withOpacity(0.2)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.info_outline,
-                                color: AppColors.kPrimary, size: 20),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Standard Inclusions',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.kPrimary),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'All packages include 500ml mineral water pp/session, high-speed Wi-Fi, flip chart paper & markers, biros & note pads. No outside food or drinks permitted.',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark
-                                            ? Colors.grey.shade300
-                                            : Colors.grey.shade800),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 10),
 
                       // ── 8. Live Dynamic Breakdown Panel ──────────────────
                       _SectionHeader('Price Calculation Summary'),
@@ -1681,15 +1970,16 @@ class _ConferenceBookingDialogState
                         ),
                         child: Column(
                           children: [
-                            if (_selectedPackage != 'none')
+                            if (_packageRate > 0)
                               _SummaryLine(
-                                'Package (${_packages[_selectedPackage]?['title']} × $_pax pax × $_days d)',
+                                'Package ($_selectedPackageTitle × $_pax pax × $_days d)',
                                 '${_money(_packageRate)} × $_pax × $_days = ${_money(_packageTotal)}',
                               ),
-                            _SummaryLine(
-                              'Hall (${_t(_selectedHall ?? {}, ['name']) ?? 'Hall'} × $_days d)',
-                              '${_money(_hallRate)} × $_days d = ${_money(_hallTotal)}',
-                            ),
+                            if (_hallRate > 0)
+                              _SummaryLine(
+                                'Hall (${_t(_selectedHall ?? {}, ['name']) ?? 'Hall'} × $_days d)',
+                                '${_money(_hallRate)} × $_days d = ${_money(_hallTotal)}',
+                              ),
                             if (_addOnsTotal > 0)
                               _SummaryLine('Add-ons (equipment × days)',
                                   _money(_addOnsTotal)),
@@ -1820,8 +2110,8 @@ class _ConferenceBookingDialogState
                                 height: 16,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.check, size: 18),
-                        label: Text(_submitting ? 'Saving…' : 'Save Booking'),
+                            : const Icon(Icons.receipt_long, size: 18),
+                        label: Text(_submitting ? 'Saving & Printing…' : 'Save Booking & Invoice'),
                       ),
                     ],
                   ),
@@ -1831,6 +2121,26 @@ class _ConferenceBookingDialogState
           ],
         ),
       ),
+    );
+  }
+
+  Widget _packagePresetChip(String key, String label) {
+    final isSelected = _selectedPackage == key;
+    return ActionChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? AppColors.kPrimary : null,
+        ),
+      ),
+      backgroundColor: isSelected ? AppColors.kPrimary.withOpacity(0.12) : null,
+      side: BorderSide(
+        color: isSelected ? AppColors.kPrimary : Colors.grey.shade300,
+        width: isSelected ? 1.5 : 1.0,
+      ),
+      onPressed: () => _selectPreset(key),
     );
   }
 }
@@ -2107,6 +2417,7 @@ Future<void> printConferenceBookingInvoice({
   required String hallName,
   required int hallCapacity,
   required String packageTitle,
+  String packageInclusions = '',
   required num packageRate,
   required int pax,
   required int days,
@@ -2285,8 +2596,18 @@ Future<void> printConferenceBookingInvoice({
                     children: [
                       pw.Padding(
                           padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('Conference Package: $packageTitle',
-                              style: const pw.TextStyle(fontSize: 9))),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('Conference Package: $packageTitle',
+                                  style: const pw.TextStyle(fontSize: 9)),
+                              if (packageInclusions.isNotEmpty)
+                                pw.Text('Inclusions: $packageInclusions',
+                                    style: const pw.TextStyle(
+                                        fontSize: 8,
+                                        color: PdfColors.grey700)),
+                            ],
+                          )),
                       pw.Padding(
                           padding: const pw.EdgeInsets.all(6),
                           child: pw.Text(
@@ -2516,4 +2837,57 @@ Future<void> printConferenceBookingInvoice({
     onLayout: (PdfPageFormat format) async => pdf.save(),
     name: 'Invoice_${bookingRef}.pdf',
   );
+}
+
+class _EventTypeButton extends StatelessWidget {
+  const _EventTypeButton({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.kPrimary.withOpacity(0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? AppColors.kPrimary : Colors.grey.shade300,
+            width: isSelected ? 2.0 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 18,
+                color: isSelected ? AppColors.kPrimary : AppColors.kTextSecondary),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? AppColors.kPrimary : AppColors.kTextSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

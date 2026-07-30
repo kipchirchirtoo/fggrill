@@ -297,32 +297,11 @@ type OpeningStocktakeReadiness = {
 };
 
 function isBreakfastEligible(
-    mealPlan: unknown,
+    mealPlan?: unknown,
     roomTypeName?: string,
     roomTypeCode?: string
 ): boolean {
-    const mpNormalized = String(mealPlan ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-    const rtName = String(roomTypeName ?? '').trim().toLowerCase();
-    const rtCode = String(roomTypeCode ?? '').trim().toLowerCase();
-
-    const isDeluxeExecVIP =
-        rtName.includes('deluxe') ||
-        rtName.includes('executive') ||
-        rtName.includes('vip') ||
-        rtCode.includes('dlx') ||
-        rtCode.includes('dtw') ||
-        rtCode.includes('exe') ||
-        rtCode.includes('vip');
-
-    if (isDeluxeExecVIP) {
-        return true;
-    }
-
-    if (!mpNormalized || mpNormalized === 'room_only' || mpNormalized === 'ro') {
-        return false;
-    }
-
-    return BREAKFAST_ELIGIBLE_MEAL_PLANS.some((code) => mpNormalized.includes(code));
+    return true;
 }
 
 function mealPlanIncludesBreakfast(value: unknown): boolean {
@@ -340,7 +319,7 @@ async function getBreakfastPaxControl(branchId: number, date: string) {
         supabase
             .from('reservations')
             .select(`
-                adults,children,meal_plan,
+                adults,children,meal_plan,check_in_date,
                 room:rooms!room_id(
                     id, room_number, room_type_id,
                     room_type:room_types!room_type_id(id, name, code)
@@ -348,8 +327,6 @@ async function getBreakfastPaxControl(branchId: number, date: string) {
             `)
             .eq('branch_id', branchId)
             .eq('status', 'checked_in')
-            .lte('check_in_date', date)
-            .gt('check_out_date', date)
     ]);
 
     if (controlError) throw new AppError(controlError.message, 500);
@@ -357,9 +334,7 @@ async function getBreakfastPaxControl(branchId: number, date: string) {
 
     let calculatedPax = 0;
     (reservations || []).forEach((row: any) => {
-        if (isBreakfastEligible(row.meal_plan, row.room?.room_type?.name, row.room?.room_type?.code)) {
-            calculatedPax += Number(row.adults || 0) + Number(row.children || 0);
-        }
+        calculatedPax += Number(row.adults || 0) + Number(row.children || 0);
     });
 
     return {
@@ -3508,7 +3483,7 @@ export const configureShiftModeHandler = asyncWrap(async (req: AuthenticatedRequ
     }
     
     const userRole = req.user?.role || '';
-    if (!['super_admin', 'director', 'general_manager', 'hr_manager', 'branch_manager', 'branch_accountant'].includes(userRole)) {
+    if (!['super_admin', 'director', 'general_manager', 'hr_manager', 'branch_manager', 'branch_accountant', 'branch_storekeeper', 'storekeeper', 'central_storekeeper', 'kitchen_operations'].includes(userRole)) {
         throw new AppError('Not authorized to configure shift mode', 403);
     }
 

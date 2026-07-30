@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database';
+import db from '../db';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { applyBranchFilter, isGlobalRole } from '../utils/branchIsolation';
 import notificationService from '../services/notification.service';
 import { loadCashierVoidAudit, compileShiftVoidAudit } from '../services/cashier-void-audit.service';
+import { calculateCashierShiftLedgerTotals } from '../services/cashier-ledger.service';
 import {
     loadAssignedPosOutlets,
     canAccessPosOutlet,
@@ -1455,9 +1457,54 @@ export const getShiftLog = async (
             logger.warn(`Petty-cash expense enrichment failed for shift ${shift.id}:`, expErr);
         }
 
+        let live_ledger_totals = null;
+        let ledger_discrepancies = null;
+        let snapshot = null;
+
+        if (shift.status === 'closed') {
+            try {
+                const client = await db.getClient();
+                try {
+                    const ledger = await calculateCashierShiftLedgerTotals(id, Number(shift.branch_id), client);
+                    live_ledger_totals = ledger;
+                    
+                    const discrepancies = [];
+                    if (Math.abs(ledger.total_cash - toNumber(shift.total_cash_sales)) > 0.01) discrepancies.push('total_cash_sales');
+                    if (Math.abs(ledger.total_mpesa - toNumber(shift.total_mpesa_sales)) > 0.01) discrepancies.push('total_mpesa_sales');
+                    if (Math.abs(ledger.total_card - toNumber(shift.total_card_sales)) > 0.01) discrepancies.push('total_card_sales');
+                    if (Math.abs(ledger.rooms_revenue - toNumber(shift.room_booking_revenue)) > 0.01) discrepancies.push('room_booking_revenue');
+                    if (Math.abs(ledger.restaurant_revenue - toNumber(shift.restaurant_revenue)) > 0.01) discrepancies.push('restaurant_revenue');
+                    if (Math.abs(ledger.bar_revenue - toNumber(shift.bar_revenue)) > 0.01) discrepancies.push('bar_revenue');
+                    if (Math.abs(ledger.conference_revenue - toNumber(shift.conference_revenue)) > 0.01) discrepancies.push('conference_revenue');
+                    if (Math.abs(ledger.pool_revenue - (toNumber(shift.swimming_pool_revenue) + toNumber(shift.pool_token_revenue))) > 0.01) discrepancies.push('pool_revenue');
+                    if (Math.abs(ledger.total_credit_bill - toNumber(shift.unpaid_bills_value)) > 0.01) discrepancies.push('unpaid_bills_value');
+                    
+                    ledger_discrepancies = {
+                        has_discrepancy: discrepancies.length > 0,
+                        mismatched_fields: discrepancies
+                    };
+
+                    snapshot = {
+                        snapshot_calculated_at: shift.snapshot_calculated_at,
+                        snapshot_calculation_version: shift.snapshot_calculation_version,
+                        snapshot_transaction_count: shift.snapshot_transaction_count
+                    };
+                } finally {
+                    client.release();
+                }
+            } catch (err) {
+                logger.warn(`Failed to calculate live ledger for shift ${id}`, err);
+            }
+        }
+
         res.status(200).json({
             success: true,
-            data: enrichedShift
+            data: {
+                ...enrichedShift,
+                live_ledger_totals,
+                ledger_discrepancies,
+                snapshot
+            }
         });
     } catch (error) {
         next(error);
@@ -2109,204 +2156,183 @@ export const closeShift = async (
         }
         // ==========================================
 
-        const { data: shiftTransactionRows, error: shiftTransactionsError } = await supabase
-            .from('cashier_shift_transactions')
-            .select('amount, payment_method, is_voided, status')
-            .eq('shift_id', id)
-            .or('is_voided.is.null,is_voided.eq.false');
+        // New Server-Side Aggregation Logic using Ledger
+        const client = await db.getClient();
+        let updatedShift: any;
+        
+        let expectedClosingFloat = 0;
+        let actualCashCounted = 0;
+        let expectedMpesaSales = 0;
+        let actualMpesaLogged = 0;
+        let expectedCardSales = 0;
+        let actualCardLogged = 0;
+        let cashVarianceBlind = 0;
+        let mpesaVarianceBlind = 0;
+        let cardVarianceBlind = 0;
+        
+        let total_sales_net = 0;
+        let gross_sales = 0;
+        let voidAudit: any = { summary: { total_void_amount: 0, total_void_count: 0 }, lines: [] };
 
-        if (shiftTransactionsError) {
-            logger.warn('Unable to load cashier shift transaction evidence for close calculation', {
-                shiftId: id,
-                error: shiftTransactionsError.message
+        try {
+            await client.query('BEGIN');
+
+            const { rows: shiftRows } = await client.query(
+                'SELECT * FROM cashier_shift_logs WHERE id = $1 FOR UPDATE NOWAIT',
+                [id]
+            );
+
+            if (shiftRows.length === 0) {
+                throw new AppError('Shift not found', 404);
+            }
+            if (shiftRows[0].status !== 'open') {
+                throw new AppError('Shift is already closed', 400);
+            }
+
+            const ledger = await calculateCashierShiftLedgerTotals(id, Number(shift.branch_id), client);
+
+            const payouts = toNumber(req.body.payouts ?? req.body.paid_outs ?? req.body.expense_total);
+
+            // Correct formula: Expected = Opening Float + Gross Cash Sales - Cash Refunds - Cash Expenses.
+            expectedClosingFloat = toNumber(shift.opening_float) + ledger.cash_collections - ledger.cash_refunds - payouts;
+            const hasDeclaredClosingFloat = closing_float !== undefined && closing_float !== null && `${closing_float}`.trim() !== '';
+            const hasDeclaredCashAtHand = cash_at_hand !== undefined && cash_at_hand !== null && `${cash_at_hand}`.trim() !== '';
+            const hasDeclaredActualCashCounted = actual_cash_counted !== undefined && actual_cash_counted !== null && `${actual_cash_counted}`.trim() !== '';
+            const hasDeclaredActualMpesaLogged = actual_mpesa_logged !== undefined && actual_mpesa_logged !== null && `${actual_mpesa_logged}`.trim() !== '';
+            const hasDeclaredActualCardLogged = actual_card_logged !== undefined && actual_card_logged !== null && `${actual_card_logged}`.trim() !== '';
+
+            const actualClosingFloat = hasDeclaredClosingFloat ? toNumber(closing_float) : hasDeclaredCashAtHand ? toNumber(cash_at_hand) : expectedClosingFloat;
+            actualCashCounted = hasDeclaredActualCashCounted ? toNumber(actual_cash_counted) : actualClosingFloat;
+            
+            expectedMpesaSales = ledger.total_mpesa;
+            expectedCardSales = ledger.total_card;
+            
+            actualMpesaLogged = hasDeclaredActualMpesaLogged ? toNumber(actual_mpesa_logged) : expectedMpesaSales;
+            actualCardLogged = hasDeclaredActualCardLogged ? toNumber(actual_card_logged) : expectedCardSales;
+            
+            const variance = actualClosingFloat - expectedClosingFloat;
+            cashVarianceBlind = actualCashCounted - expectedClosingFloat;
+            mpesaVarianceBlind = actualMpesaLogged - expectedMpesaSales;
+            cardVarianceBlind = actualCardLogged - expectedCardSales;
+
+            total_sales_net = ledger.gross_collections;
+
+            voidAudit = await loadCashierVoidAudit({
+                branchId: Number(shift.branch_id),
+                cashierId: shift.cashier_id,
+                cashierShiftId: shift.id,
+                shiftStart: shift.shift_start,
+                shiftEnd: new Date().toISOString()
             });
+            gross_sales = total_sales_net + toNumber(voidAudit.summary.total_void_amount);
+
+            // Compute unpaid_bills server-side from credit issued only
+            const computedUnpaidBills = Math.max(0, ledger.total_credit_bill);
+
+            const updateResult = await client.query(`
+                UPDATE cashier_shift_logs SET
+                    shift_end = $1,
+                    closing_float = $2,
+                    expected_closing_float = $3,
+                    variance = $4,
+                    total_cash_sales = $5,
+                    total_mpesa_sales = $6,
+                    total_card_sales = $7,
+                    total_sales = $8,
+                    transaction_count = $9,
+                    expense_total = $10,
+                    expense_details = $11,
+                    swimming_pool_revenue = $12,
+                    pool_token_revenue = $13,
+                    conference_revenue = $14,
+                    room_booking_revenue = $15,
+                    restaurant_revenue = $16,
+                    bar_revenue = $17,
+                    other_revenue = $18,
+                    credit_bills_taken = $19,
+                    credit_bills_count = $20,
+                    credit_bills_details = $21,
+                    unpaid_bills_value = $22,
+                    unpaid_bills_count = $23,
+                    paid_bills_value = $24,
+                    paid_bills_count = $25,
+                    paid_bills_details = $26,
+                    cash_at_hand = $27,
+                    actual_cash_counted = $28,
+                    actual_mpesa_logged = $29,
+                    actual_card_logged = $30,
+                    cash_deposited = $31,
+                    bank_deposit_ref = $32,
+                    mpesa_summary_ref = $33,
+                    card_batch_ref = $34,
+                    pool_na = $35,
+                    conference_na = $36,
+                    rooms_na = $37,
+                    status = $38,
+                    reconciliation_status = $39,
+                    notes = $40,
+                    updated_at = $41,
+                    snapshot_calculated_at = $42,
+                    snapshot_calculation_version = $43,
+                    snapshot_transaction_count = $44
+                WHERE id = $45
+                RETURNING *
+            `, [
+                new Date().toISOString(), // 1
+                actualClosingFloat, // 2
+                expectedClosingFloat, // 3
+                variance, // 4
+                ledger.total_cash, // 5
+                ledger.total_mpesa, // 6
+                ledger.total_card, // 7
+                ledger.gross_collections, // 8
+                ledger.transaction_count, // 9
+                payouts, // 10
+                JSON.stringify(Array.isArray(expense_details) ? expense_details : []), // 11
+                ledger.pool_revenue, // 12
+                0, // 13
+                ledger.conference_revenue, // 14
+                ledger.rooms_revenue, // 15
+                ledger.restaurant_revenue, // 16
+                ledger.bar_revenue, // 17
+                ledger.other_revenue, // 18
+                ledger.total_credit_bill, // 19
+                credit_bills_count || 0, // 20
+                JSON.stringify(credit_bills_details || []), // 21
+                computedUnpaidBills, // 22
+                unpaid_bills_count || 0, // 23
+                paid_bills_value || 0, // 24
+                paid_bills_count || 0, // 25
+                JSON.stringify(paid_bills_details || []), // 26
+                toNumber(cash_at_hand ?? actualClosingFloat), // 27
+                actualCashCounted, // 28
+                actualMpesaLogged, // 29
+                actualCardLogged, // 30
+                0, // 31 (cash_deposited)
+                bank_deposit_ref || null, // 32
+                mpesa_summary_ref || null, // 33
+                card_batch_ref || null, // 34
+                pool_na || false, // 35
+                conference_na || false, // 36
+                rooms_na || false, // 37
+                'closed', // 38
+                'pending_reconciliation', // 39
+                notes || shift.notes, // 40
+                new Date().toISOString(), // 41
+                new Date().toISOString(), // 42 snapshot_calculated_at
+                '1.0', // 43 snapshot_calculation_version
+                ledger.transaction_count, // 44 snapshot_transaction_count
+                id // 45 WHERE id =
+            ]);
+
+            updatedShift = updateResult.rows[0];
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
         }
-
-        const transactionSummary = summarizeShiftTransactions(shiftTransactionRows || []);
-
-        // Calculate summary from the RPC as a fallback only. The transaction
-        // rows are the source of truth because they are what the logbook displays.
-        const { data: summary } = await supabase
-            .rpc('calculate_shift_summary', { p_shift_id: id });
-
-        const hasTransactionEvidence = transactionSummary.transaction_count > 0;
-        const cash_sales = hasTransactionEvidence ? transactionSummary.total_cash : toNumber(summary?.total_cash);
-        const mpesa_sales = hasTransactionEvidence ? transactionSummary.total_mpesa : toNumber(summary?.total_mpesa);
-        const card_sales = hasTransactionEvidence ? transactionSummary.total_card : toNumber(summary?.total_card);
-        const credit_bill_sales = hasTransactionEvidence ? transactionSummary.total_credit_bill : 0;
-        const other_sales = hasTransactionEvidence ? transactionSummary.total_other : toNumber(other_revenue);
-        const total_sales = hasTransactionEvidence ? transactionSummary.total_sales : toNumber(summary?.total_sales);
-        const transaction_count = hasTransactionEvidence ? transactionSummary.transaction_count : toNumber(summary?.transaction_count);
-        // cash_deposited is not part of the drawer reconciliation formula —
-        // it was set historically by interim cash-at-hand snapshots, not by
-        // cashier declaration. Keeping it at 0 prevents ECF from being
-        // deflated by a phantom "deposit" that never happened.
-        const cashDrops = 0;
-        const payouts = toNumber(req.body.payouts ?? req.body.paid_outs ?? req.body.expense_total);
-
-        // Paid credits recorded this shift (a customer settling an OLD credit
-        // bill) are real cash/mpesa/card landing in the cashier's hands this
-        // shift, so they correctly affect the CASH-DRAWER reconciliation
-        // below (total_cash_sales_final / expectedClosingFloat). They must
-        // NOT inflate reported "sales"/"revenue" figures though — that
-        // revenue was already recognised in the shift the credit was
-        // originally issued; counting it again here would double-count it
-        // company-wide. total_cash_sales / total_mpesa_sales / total_card_sales /
-        // total_sales (persisted below) therefore stay on the un-folded
-        // cash_sales/mpesa_sales/card_sales/total_sales values; only the
-        // *_final variants (drawer-reconciliation only) include paid credits.
-        const paidBillsList: any[] = Array.isArray(paid_bills_details) ? paid_bills_details : [];
-        const paidCreditsByMethod = (method: string) => paidBillsList
-            .filter((b: any) => normalizePaymentMethod(b.payment_method) === method)
-            .reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
-        const cashPaidCredits = paidCreditsByMethod('cash');
-        const mpesaPaidCredits = paidCreditsByMethod('mpesa');
-        const cardPaidCredits = paidCreditsByMethod('card');
-
-        // Expense entries the cashier logs during the shift (fuel, petty
-        // purchases, etc.) — each is tagged with how it was paid out, and
-        // reduces that same method's reported sales, per ops requirement.
-        // A cash expense also reduces the cash-drawer reconciliation, since
-        // that cash physically left the drawer.
-        const expensesList: any[] = Array.isArray(expense_details) ? expense_details : [];
-        const expensesByMethod = (method: string) => expensesList
-            .filter((e: any) => normalizePaymentMethod(e.payment_method) === method)
-            .reduce((s: number, e: any) => s + (parseFloat(e.amount) || 0), 0);
-        const cashExpenses = expensesByMethod('cash');
-        const mpesaExpenses = expensesByMethod('mpesa');
-        const cardExpenses = expensesByMethod('card');
-        const expenseTotal = expensesList.reduce((s: number, e: any) => s + (parseFloat(e.amount) || 0), 0);
-
-        const cash_sales_net = Math.max(0, cash_sales - cashExpenses);
-        const mpesa_sales_net = Math.max(0, mpesa_sales - mpesaExpenses);
-        const card_sales_net = Math.max(0, card_sales - cardExpenses);
-        const total_sales_net = Math.max(0, total_sales - expenseTotal);
-
-        const total_cash_sales_final = cash_sales_net + cashPaidCredits;
-        const voidAudit = await loadCashierVoidAudit({
-            branchId: Number(shift.branch_id),
-            cashierId: shift.cashier_id,
-            cashierShiftId: shift.id,
-            shiftStart: shift.shift_start,
-            shiftEnd: new Date().toISOString()
-        });
-        const gross_sales = total_sales_net + toNumber(voidAudit.summary.total_void_amount);
-
-        // Correct formula: Expected = Opening Float + Gross Cash Sales + Cash Paid Credits - Cash Expenses.
-        // cash_deposited is NOT subtracted — it is not a cashier-declared deposit but a computed snapshot
-        // that was historically misused in the formula, causing inflated/deflated variance.
-        const expectedClosingFloat = toNumber(shift.opening_float) + cash_sales + cashPaidCredits - cashExpenses;
-        const hasDeclaredClosingFloat = closing_float !== undefined
-            && closing_float !== null
-            && `${closing_float}`.trim() !== '';
-        const hasDeclaredCashAtHand = cash_at_hand !== undefined
-            && cash_at_hand !== null
-            && `${cash_at_hand}`.trim() !== '';
-        const hasDeclaredActualCashCounted = actual_cash_counted !== undefined
-            && actual_cash_counted !== null
-            && `${actual_cash_counted}`.trim() !== '';
-        const hasDeclaredActualMpesaLogged = actual_mpesa_logged !== undefined
-            && actual_mpesa_logged !== null
-            && `${actual_mpesa_logged}`.trim() !== '';
-        const hasDeclaredActualCardLogged = actual_card_logged !== undefined
-            && actual_card_logged !== null
-            && `${actual_card_logged}`.trim() !== '';
-        const actualClosingFloat = hasDeclaredClosingFloat
-            ? toNumber(closing_float)
-            : hasDeclaredCashAtHand
-                ? toNumber(cash_at_hand)
-                : expectedClosingFloat;
-        const actualCashCounted = hasDeclaredActualCashCounted
-            ? toNumber(actual_cash_counted)
-            : actualClosingFloat;
-        const expectedMpesaSales = mpesa_sales_net + mpesaPaidCredits;
-        const expectedCardSales = card_sales_net + cardPaidCredits;
-        const actualMpesaLogged = hasDeclaredActualMpesaLogged
-            ? toNumber(actual_mpesa_logged)
-            : expectedMpesaSales;
-        const actualCardLogged = hasDeclaredActualCardLogged
-            ? toNumber(actual_card_logged)
-            : expectedCardSales;
-        const variance = actualClosingFloat - expectedClosingFloat;
-        const cashVarianceBlind = actualCashCounted - expectedClosingFloat;
-        const mpesaVarianceBlind = actualMpesaLogged - expectedMpesaSales;
-        const cardVarianceBlind = actualCardLogged - expectedCardSales;
-
-        // Compute unpaid_bills server-side from credit issued only. Paid
-        // credits are separate cashier-collected evidence for the branch
-        // accountant to apply later; they must not reduce staff credit balances
-        // or same-shift credit issued automatically.
-        const creditTaken = (credit_bills_details || []).reduce((s: number, b: any) => s + (parseFloat(b.amount) || 0), 0);
-        const computedUnpaidBills = Math.max(0, creditTaken);
-
-        // Reconciliation warning: payment method sum should equal total_sales
-        const methodSum = cash_sales + mpesa_sales + card_sales + credit_bill_sales + other_sales;
-        if (total_sales > 0 && Math.abs(methodSum - total_sales) > 0.01) {
-            logger.warn(`Shift ${id} reconciliation warning: method sum ${methodSum} ≠ total_sales ${total_sales}`);
-        }
-
-        // Update shift with all revenue breakdown
-        const { data: updatedShift, error: updateError } = await supabase
-            .from('cashier_shift_logs')
-            .update({
-                shift_end: new Date().toISOString(),
-                closing_float: actualClosingFloat,
-                expected_closing_float: expectedClosingFloat,
-                variance,
-                // Payment method totals — true sales, net of expenses paid
-                // out this shift. Paid credits are NOT folded in here (see
-                // comment above); they're still captured separately via
-                // paid_bills_value/paid_bills_details below, and via
-                // cash-drawer reconciliation (closing_float/
-                // expected_closing_float/variance above).
-                total_cash_sales: cash_sales_net,
-                total_mpesa_sales: mpesa_sales_net,
-                total_card_sales: card_sales_net,
-                total_sales: total_sales_net,
-                transaction_count,
-                expense_total: expenseTotal,
-                expense_details: expensesList,
-                // Revenue by source
-                swimming_pool_revenue: swimming_pool_revenue || 0,
-                pool_token_revenue: pool_token_revenue || 0,
-                conference_revenue: conference_revenue || 0,
-                room_booking_revenue: room_booking_revenue || 0,
-                restaurant_revenue: restaurant_revenue || 0,
-                bar_revenue: bar_revenue || 0,
-                other_revenue: other_sales,
-                // Credit & bills
-                credit_bills_taken: credit_bills_taken || 0,
-                credit_bills_count: credit_bills_count || 0,
-                credit_bills_details: credit_bills_details || [],
-                unpaid_bills_value: computedUnpaidBills,
-                unpaid_bills_count: unpaid_bills_count || 0,
-                paid_bills_value: paid_bills_value || 0,
-                paid_bills_count: paid_bills_count || 0,
-                paid_bills_details: paid_bills_details || [],
-                // Cash management
-                cash_at_hand: toNumber(cash_at_hand ?? actualClosingFloat),
-                actual_cash_counted: actualCashCounted,
-                actual_mpesa_logged: actualMpesaLogged,
-                actual_card_logged: actualCardLogged,
-                cash_deposited: 0,
-                bank_deposit_ref,
-                mpesa_summary_ref: mpesa_summary_ref || null,
-                card_batch_ref: card_batch_ref || null,
-                // N/A flags
-                pool_na: pool_na || false,
-                conference_na: conference_na || false,
-                rooms_na: rooms_na || false,
-                // Status
-                status: 'closed',
-                reconciliation_status: 'pending_reconciliation',
-                notes: notes || shift.notes,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (updateError) throw updateError;
 
         // The shift row above is already closed — from here on every step must
         // degrade to a warning. An unguarded throw here previously 500'd the

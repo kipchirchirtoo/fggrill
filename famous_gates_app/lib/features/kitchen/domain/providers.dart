@@ -30,9 +30,11 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
   // Polling timer — always active, parallel to Realtime, so cards appear
   // within 5 s even while Realtime is still connecting/authenticating.
   Timer? _fallbackTimer;
+  Future<void>? _inFlightFetch;
+  DateTime? _lastFetchAt;
 
   Future<void> start() async {
-    await _fetch();
+    await _fetch(force: true);
     // Start fallback polling immediately — parallel to Realtime, not only
     // when Realtime fails. This guarantees cards appear within 5 s even
     // during the Realtime auth/connect window. Realtime events still
@@ -80,7 +82,25 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
         Timer.periodic(const Duration(seconds: 5), (_) => _fetch());
   }
 
-  Future<void> _fetch() async {
+  Future<void> _fetch({bool force = false}) {
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+    if (!force &&
+        _lastFetchAt != null &&
+        DateTime.now().difference(_lastFetchAt!) <
+            const Duration(milliseconds: 800)) {
+      return Future.value();
+    }
+    final future = _performFetch();
+    _inFlightFetch = future;
+    return future.whenComplete(() {
+      _lastFetchAt = DateTime.now();
+      _inFlightFetch = null;
+    });
+  }
+
+  Future<void> _performFetch() async {
     // Skip network request when unauthenticated — avoids a 401 spam loop
     // where the fallback timer keeps polling after session expiry. The
     // auth interceptor handles the first 401, but because this provider is
@@ -105,7 +125,7 @@ class KdsNotifier extends StateNotifier<AsyncValue<List<KitchenOrder>>> {
   /// acknowledgement) — without this, those only ever touched the separate
   /// History/Analytics FutureBuilder and never actually reloaded this
   /// provider's order grid.
-  Future<void> refresh() => _fetch();
+  Future<void> refresh() => _fetch(force: true);
 
   Future<void> markItemReady(String orderId, String itemId) async {
     try {

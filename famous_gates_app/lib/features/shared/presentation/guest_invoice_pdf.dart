@@ -316,3 +316,93 @@ pw.Widget _pdfSummaryRow(String label, String value,
         {bool isBold = false, double fontSize = 9, PdfColor? color}) =>
     pdfSummaryRow(label, value,
         isBold: isBold, fontSize: fontSize, color: color);
+
+/// Builds detailed guest-invoice line items from a folio:
+///  • one Accommodation line (from the room_charges bucket / booking total), then
+///  • one line per itemised Charge-to-Room POS item (outlet · item + amount),
+///    taken from the folio's `items` (folio_items) when available.
+/// Falls back to the food/beverage/other bucket lumps only when there is no
+/// itemised detail, so the lines never double-count the POS charges.
+List<Map<String, dynamic>> buildFolioInvoiceItems({
+  required Map<String, dynamic> folio,
+  required List<Map<String, dynamic>> folioItems,
+  List<Map<String, dynamic>> chargeLines = const [],
+  String? roomLabel,
+  double bookingTotal = 0,
+}) {
+  double n(dynamic v) =>
+      (v is num) ? v.toDouble() : (double.tryParse('${v ?? ''}') ?? 0.0);
+
+  final room = n(folio['room_charges'] ?? folio['roomCharges']);
+  final food = n(folio['food_charges'] ?? folio['foodCharges']);
+  final bev = n(folio['beverage_charges'] ?? folio['beverageCharges']);
+  final other = n(folio['other_charges'] ?? folio['otherCharges']);
+
+  final items = <Map<String, dynamic>>[];
+
+  final roomLine = room > 0 ? room : bookingTotal;
+  if (roomLine > 0) {
+    final label = (roomLabel != null && roomLabel.trim().isNotEmpty)
+        ? ' (${roomLabel.trim()})'
+        : '';
+    items.add({
+      'description': 'Accommodation$label',
+      'qty': 1,
+      'unitPrice': roomLine,
+      'totalAmount': roomLine,
+    });
+  }
+
+  // Tier 1 — per-ITEM detail (outlet · item) from folio_items (newest posts).
+  final detailed = folioItems.where((it) => n(it['amount']) > 0).toList();
+  // Tier 2 — per-BILL detail (outlet + bill) from folio_transactions charge
+  // lines, for charges posted before per-item capture existed.
+  final lines = chargeLines.where((it) => n(it['amount']) > 0).toList();
+
+  if (detailed.isNotEmpty) {
+    for (final it in detailed) {
+      final amt = n(it['amount']);
+      final qty = (it['quantity'] as num?)?.toInt() ?? 1;
+      items.add({
+        'description':
+            (it['description'] ?? it['department'] ?? 'POS Charge').toString(),
+        'qty': qty <= 0 ? 1 : qty,
+        'unitPrice': it['unit_price'] != null
+            ? n(it['unit_price'])
+            : (qty > 0 ? amt / qty : amt),
+        'totalAmount': amt,
+      });
+    }
+  } else if (lines.isNotEmpty) {
+    for (final it in lines) {
+      final amt = n(it['amount']);
+      items.add({
+        'description': (it['description'] ?? 'POS Charge').toString(),
+        'qty': 1,
+        'unitPrice': amt,
+        'totalAmount': amt,
+      });
+    }
+  } else {
+    // Tier 3 — bucket lumps (oldest folios with no line detail at all).
+    final foodBev = food + bev;
+    if (foodBev > 0) {
+      items.add({
+        'description': 'Food & Beverage (POS Charges)',
+        'qty': 1,
+        'unitPrice': foodBev,
+        'totalAmount': foodBev,
+      });
+    }
+    if (other > 0) {
+      items.add({
+        'description': 'Other Services / Incidentals',
+        'qty': 1,
+        'unitPrice': other,
+        'totalAmount': other,
+      });
+    }
+  }
+
+  return items;
+}

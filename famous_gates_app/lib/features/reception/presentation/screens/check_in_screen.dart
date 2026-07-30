@@ -4,6 +4,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../domain/models.dart';
 import '../../data/repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'move_room_screen.dart';
 
 class CheckInScreen extends ConsumerStatefulWidget {
   final Booking? booking;
@@ -255,6 +256,35 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                     const Text('Special Requests:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Text(booking.specialRequests!, style: const TextStyle(fontStyle: FontStyle.italic)),
+                  ],
+                  // Move Room button — only show for checked-in bookings
+                  if (booking.status == 'checked_in') ...[
+                    const Divider(),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.deepOrange,
+                        side: const BorderSide(color: Colors.deepOrange),
+                        minimumSize: const Size.fromHeight(42),
+                      ),
+                      icon: const Icon(Icons.swap_horiz),
+                      label: const Text('Move to Another Room'),
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) => MoveRoomScreen(
+                              bookingId: booking.id,
+                              currentRoom: booking.roomNumber ?? 'Current Room',
+                              guestName: booking.guestName ?? 'Guest',
+                              checkIn: DateFormat('yyyy-MM-dd').format(booking.checkIn),
+                              checkOut: DateFormat('yyyy-MM-dd').format(booking.checkOut),
+                            ),
+                          ),
+                        );
+                        if (result == true && mounted) {
+                          setState(() => _selectedBooking = null);
+                        }
+                      },
+                    ),
                   ],
                 ],
               ),

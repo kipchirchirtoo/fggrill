@@ -121,9 +121,15 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
         user?.roles.any(writeRoles.contains) == true;
     const accountantRoles = {
       'branch_accountant',
+      'accountant',
       'super_admin',
       'director',
-      'general_manager'
+      'general_manager',
+      'branch_manager',
+      'branch_storekeeper',
+      'storekeeper',
+      'central_storekeeper',
+      'kitchen_operations',
     };
     final isAccountant = accountantRoles.contains(userRole) ||
         user?.roles.any(accountantRoles.contains) == true;
@@ -166,59 +172,96 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      isAccountant
-                          ? 'Kitchen Sessions has not been configured for this branch yet. Set the branch shift mode below to enable storekeeper operations.\nReason: ${config.reason ?? "KITCHEN_SESSIONS_NOT_CONFIGURED"}'
-                          : 'Kitchen Sessions has not been configured for this branch yet. Branch Accountant must configure the kitchen session shift mode before the storekeeper can open a session.\nReason: ${config.reason ?? "KITCHEN_SESSIONS_NOT_CONFIGURED"}',
+                      'Kitchen Sessions has not been configured for this branch yet. Select a shift operating model below to activate kitchen sessions.\nReason: ${config.reason ?? "KITCHEN_SESSIONS_NOT_CONFIGURED"}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey),
                     ),
-                    if (isAccountant) ...[
-                      const SizedBox(height: 48),
-                      const Text(
-                        'Branch Accountant Setup',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.looks_one),
-                            label: const Text('Single Shift (All Day)'),
-                            onPressed: () async {
-                              try {
-                                await ref
-                                    .read(kitchenRepositoryProvider)
-                                    .configureShiftMode('SINGLE_SHIFT');
-                                ref.invalidate(shiftConfigProvider);
-                              } catch (e) {
-                                if (context.mounted)
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Error: $e')));
-                              }
-                            },
+                    const SizedBox(height: 32),
+                    const Text(
+                      'Activate Kitchen Shift Session Mode',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.looks_one),
+                          label: const Text('Single Shift (All Day)'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 16),
+                            backgroundColor: Theme.of(context).primaryColor,
+                            foregroundColor: Colors.white,
                           ),
-                          const SizedBox(width: 16),
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.looks_two),
-                            label: const Text('Two Shifts (Shift A / Shift B)'),
-                            onPressed: () async {
-                              try {
-                                await ref
-                                    .read(kitchenRepositoryProvider)
-                                    .configureShiftMode('TWO_SHIFT');
-                                ref.invalidate(shiftConfigProvider);
-                              } catch (e) {
-                                if (context.mounted)
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Error: $e')));
+                          onPressed: () async {
+                            try {
+                              await ref
+                                  .read(kitchenRepositoryProvider)
+                                  .configureShiftMode('SINGLE_SHIFT');
+                              ref.invalidate(shiftConfigProvider);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Single Shift mode activated successfully!'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
                               }
-                            },
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.looks_two),
+                          label: const Text('Two Shifts (Shift A / Shift B)'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 16),
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
                           ),
-                        ],
-                      ),
-                    ],
+                          onPressed: () async {
+                            try {
+                              await ref
+                                  .read(kitchenRepositoryProvider)
+                                  .configureShiftMode('TWO_SHIFT');
+                              ref.invalidate(shiftConfigProvider);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Two Shifts mode activated successfully!'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

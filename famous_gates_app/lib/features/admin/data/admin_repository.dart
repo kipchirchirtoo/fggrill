@@ -448,6 +448,7 @@ class AdminRepository {
   }
 
   Map<String, dynamic> _normalizeRoom(Map<String, dynamic> json) {
+    // ── Type name: prefer nested room_type join, then fallback to text columns
     String typeName = '';
     final typeData = json['type'];
     if (typeData is Map) {
@@ -456,25 +457,81 @@ class AdminRepository {
       typeName = typeData;
     }
     if (typeName.isEmpty) {
-      typeName = _asString(json['type_name'] ?? json['room_type']);
+      typeName = _asString(json['type_name'] ?? json['room_type'] ?? json['room_type_name']);
     }
-    final priceRaw = json['price_override'] ?? json['price'] ?? 0;
+
+    // ── Price: price_override > room_type.base_rate/rate > rooms.rate
+    //   DB numeric columns serialize as String in JSON — must use tryParse
+    double safeNum(dynamic v) {
+      if (v == null) return 0.0;
+      if (v is num) return v.toDouble();
+      return double.tryParse(v.toString()) ?? 0.0;
+    }
+
+    double price = 0.0;
+    final priceOverride = json['price_override'];
+    if (priceOverride != null && safeNum(priceOverride) > 0) {
+      price = safeNum(priceOverride);
+    } else if (typeData is Map) {
+      price = safeNum(typeData['base_rate'] ?? typeData['rate'] ?? typeData['price_per_night']);
+    }
+    if (price == 0.0) {
+      price = safeNum(json['rate'] ?? json['price'] ?? 0);
+    }
+
+    // ── Floor: DB column is TEXT, not integer
+    final floorRaw = json['floor'];
+    final floorInt = floorRaw is num
+        ? floorRaw.toInt()
+        : int.tryParse(floorRaw?.toString() ?? '') ?? 0;
+
+    // ── Capacity: max_occupancy wins, then room_type join, default 2
+    int capacity = 0;
+    final capRaw = json['max_occupancy'] ?? json['capacity'];
+    if (capRaw is num) {
+      capacity = capRaw.toInt();
+    } else if (capRaw != null) {
+      capacity = int.tryParse(capRaw.toString()) ?? 0;
+    }
+    if (capacity == 0 && typeData is Map) {
+      final tc = typeData['max_occupancy'] ?? typeData['capacity'];
+      if (tc is num) capacity = tc.toInt();
+    }
+    if (capacity == 0) capacity = 2;
+
+    // ── Amenities: JSONB can be List or null
+    List<String> amenities;
+    final rawAmenities = json['amenities'];
+    if (rawAmenities is List) {
+      amenities = rawAmenities.map((e) => '$e').toList();
+    } else {
+      amenities = <String>[];
+    }
+
     return {
       'id': _asString(json['id']),
       'roomNumber': _asString(json['room_number'] ?? json['roomNumber']),
       'type': typeName,
       'branchId': _asString(json['branch_id'] ?? json['branchId']),
-      'branchName': _asString(json['branch_name'] ?? json['branchName']),
-      'floor': (json['floor'] as num?)?.toInt() ?? 0,
-      'price': (priceRaw as num).toDouble(),
+      'branchName': _asString(json['branch_name'] ?? json['branchName']
+          ?? (json['branch'] is Map ? json['branch']['name'] : null)),
+      'floor': floorInt,
+      'building': _asString(json['building']),
+      'price': price,
       'status': _asString(json['status'] ?? 'available'),
-      'description': _asString(json['description']),
-      'amenities':
-          (json['amenities'] as List?)?.map((e) => '$e').toList() ?? <String>[],
-      'capacity': (json['capacity'] as num?)?.toInt() ?? 2,
+      'description': _asString(json['notes'] ?? json['description']),
+      'amenities': amenities,
+      'capacity': capacity,
       'isSmoking': json['is_smoking'] == true || json['isSmoking'] == true,
+      'isActive': json['is_active'] != false,
+      'imageUrl': _asString(json['image_url'] ?? json['imageUrl']),
+      'roomTypeId': _asString(
+        json['room_type_id'] ?? json['type_id'] ??
+        (typeData is Map ? typeData['id'] : null),
+      ),
     };
   }
+
 
   Future<List<AdminRoom>> getRooms(
       {String? branchId, String? type, String? status}) async {
@@ -502,6 +559,45 @@ class AdminRepository {
   Future<void> deleteRoom(String id) async {
     await _dio.delete('/rooms/$id');
   }
+
+  Future<List<AdminRoomType>> getRoomTypes() async {
+    final response = await _dio.get('/rooms/types');
+    return _parseList(response.data, AdminRoomType.fromJson);
+  }
+
+  Future<AdminRoomType> createRoomType(Map<String, dynamic> data) async {
+    final response = await _dio.post('/rooms/types', data: data);
+    return AdminRoomType.fromJson(_unwrap(response.data));
+  }
+
+  Future<AdminRoomType> updateRoomType(String id, Map<String, dynamic> data) async {
+    final response = await _dio.put('/rooms/types/$id', data: data);
+    return AdminRoomType.fromJson(_unwrap(response.data));
+  }
+
+  Future<void> deleteRoomType(String id) async {
+    await _dio.delete('/rooms/types/$id');
+  }
+
+  Future<List<AdminRatePlan>> getRatePlans() async {
+    final response = await _dio.get('/rate-plans');
+    return _parseList(response.data, AdminRatePlan.fromJson);
+  }
+
+  Future<AdminRatePlan> createRatePlan(Map<String, dynamic> data) async {
+    final response = await _dio.post('/rate-plans', data: data);
+    return AdminRatePlan.fromJson(_unwrap(response.data));
+  }
+
+  Future<AdminRatePlan> updateRatePlan(String id, Map<String, dynamic> data) async {
+    final response = await _dio.put('/rate-plans/$id', data: data);
+    return AdminRatePlan.fromJson(_unwrap(response.data));
+  }
+
+  Future<void> deleteRatePlan(String id) async {
+    await _dio.delete('/rate-plans/$id');
+  }
+
 
   Future<List<AdminGuest>> getGuests({String? search}) async {
     final params = <String, dynamic>{};

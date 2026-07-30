@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/database';
+import { recordCateringCashierPayment } from '../services/receptionEventCashierPayment.service';
 
 const cateringBranchId = (req: Request) => req.headers['x-branch-id'] || req.query.branch_id;
 
@@ -242,49 +243,31 @@ export const deleteCateringBooking = async (req: Request, res: Response) => {
 export const recordCateringPayment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { amount } = req.body;
+    const { amount, payment_method, paymentMethod, reference } = req.body;
+    const method = payment_method || paymentMethod || 'cash';
 
-    // Get current booking
-    const { data: booking, error: fetchError } = await supabase
-      .from('catering_bookings')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (fetchError) throw fetchError;
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Catering booking not found'
-      });
-    }
-
-    const newAmountPaid = (booking.amount_paid || 0) + parseFloat(amount);
-    const totalAmount = booking.total_amount || 0;
-
-    let paymentStatus = 'pending';
-    if (newAmountPaid >= totalAmount) {
-      paymentStatus = 'paid';
-    } else if (newAmountPaid > 0) {
-      paymentStatus = 'partial';
-    }
-
-    const { data, error } = await supabase
-      .from('catering_bookings')
-      .update({
-        amount_paid: newAmountPaid,
-        payment_status: paymentStatus
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const settlement = await recordCateringCashierPayment({
+      bookingId: id,
+      amount: Number(amount),
+      paymentMethod: method,
+      reference,
+      cashierUserId: (req as any).user?.id,
+      cashierName:
+        `${(req as any).user?.first_name || ''} ${(req as any).user?.last_name || ''}`.trim() || null,
+    });
 
     res.status(200).json({
       success: true,
-      data,
+      data: {
+        booking_id: settlement.bookingId,
+        payment_id: settlement.paymentId,
+        payment_reference: settlement.paymentReference,
+        paid_amount: settlement.paidAmount,
+        balance: settlement.balance,
+        payment_status: settlement.paymentStatus,
+        cashier_transaction_id: settlement.cashierTransactionId,
+        cashier_shift_log_id: settlement.cashierShiftLogId,
+      },
       message: 'Payment recorded successfully'
     });
   } catch (error: any) {

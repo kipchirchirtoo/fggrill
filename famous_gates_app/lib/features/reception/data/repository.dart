@@ -211,6 +211,14 @@ class ReceptionRepository {
     required int confirmedPax,
     required String status,
     String? adjustmentReason,
+    int? confirmedAdults,
+    int? confirmedChildren,
+    List<Map<String, dynamic>>? paidEntries,
+    List<Map<String, dynamic>>? complimentaryEntries,
+    List<String>? excludedBookingIds,
+    List<String>? earlyBreakfastIds,
+    List<String>? packedBreakfastIds,
+    Map<String, String>? dietaryNotes,
   }) async {
     final response = await _dio.put(
       '/bookings/breakfast-pax/daily',
@@ -218,6 +226,18 @@ class ReceptionRepository {
         'date': date,
         'confirmed_pax': confirmedPax,
         'status': status,
+        if (confirmedAdults != null) 'confirmed_adults': confirmedAdults,
+        if (confirmedChildren != null) 'confirmed_children': confirmedChildren,
+        if (paidEntries != null) 'paid_entries': paidEntries,
+        if (complimentaryEntries != null)
+          'complimentary_entries': complimentaryEntries,
+        if (excludedBookingIds != null)
+          'excluded_booking_ids': excludedBookingIds,
+        if (earlyBreakfastIds != null)
+          'early_breakfast_ids': earlyBreakfastIds,
+        if (packedBreakfastIds != null)
+          'packed_breakfast_ids': packedBreakfastIds,
+        if (dietaryNotes != null) 'dietary_notes': dietaryNotes,
         if (adjustmentReason != null && adjustmentReason.trim().isNotEmpty)
           'adjustment_reason': adjustmentReason.trim(),
       }),
@@ -236,6 +256,25 @@ class ReceptionRepository {
     final response =
         await _dio.post('/bookings/quote', data: await _withBranch(data));
     return _payload(response.data);
+  }
+
+  Future<Map<String, dynamic>> moveRoom({
+    required String bookingId,
+    required String newRoomId,
+    String? reason,
+  }) async {
+    final response = await _dio.put(
+      '/bookings/$bookingId/move-room',
+      data: {
+        'newRoomId': newRoomId,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    final body = response.data;
+    if (body is Map && body['success'] == true) {
+      return Map<String, dynamic>.from(body);
+    }
+    throw Exception((body is Map ? body['message'] : null) ?? 'Move failed');
   }
 
   Future<List<Room>> getRooms({Map<String, dynamic>? params}) async {
@@ -551,7 +590,11 @@ class ReceptionRepository {
 
   Future<Map<String, dynamic>> getFolio(String bookingId) async {
     final response = await _dio.get('/folios/reservation/$bookingId');
-    return _payload(response.data, entityKeys: ['folio']);
+    return _payload(response.data);
+  }
+
+  Future<void> addFolioTransaction(String bookingId, Map<String, dynamic> data) async {
+    await _dio.post('/folios/reservation/$bookingId/transaction', data: data);
   }
 
   Future<List<Map<String, dynamic>>> getHousekeepingRooms() async {

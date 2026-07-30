@@ -4,7 +4,6 @@ import { Folio } from '../models/Folio';
 import { emailService } from './email.service';
 import { barcodeGeneratorService } from './barcodeGenerator.service';
 import { supabase } from '../config/database';
-import db from '../db';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 
@@ -516,29 +515,45 @@ class BookingService {
   ): Promise<void> {
     try {
       // Get current status for history logging
-      const { data: room } = await supabase
+      const { data: room, error: fetchError } = await supabase
         .from('rooms')
         .select('status')
         .eq('id', roomId)
         .single();
+      if (fetchError) {
+        throw fetchError;
+      }
 
       const previousStatus = room?.status;
 
-      // Update room status using raw SQL to be consistent with routes
-      const updateQuery = `
-        UPDATE rooms
-        SET status = $1, updated_at = NOW()
-        WHERE id = $2
-      `;
-      await db.query(updateQuery, [status, roomId]);
+      const updatePayload: Record<string, any> = {
+        status,
+        updated_at: new Date().toISOString(),
+      };
+      if (status === RoomStatus.AVAILABLE) {
+        updatePayload.current_guest = null;
+      }
+
+      const { error: updateError } = await supabase
+        .from('rooms')
+        .update(updatePayload)
+        .eq('id', roomId);
+      if (updateError) {
+        throw updateError;
+      }
 
       // Log status change in history (non-blocking and safe)
       if (previousStatus && previousStatus !== status) {
         try {
-          await db.query(`
-            INSERT INTO room_status_history(room_id, old_status, new_status, changed_by, reason)
-            VALUES($1, $2, $3, $4, $5)
-          `, [roomId, previousStatus, status, userId, notes]);
+          await supabase
+            .from('room_status_history')
+            .insert({
+              room_id: roomId,
+              old_status: previousStatus,
+              new_status: status,
+              changed_by: userId,
+              reason: notes,
+            });
         } catch (historyError) {
           logger.warn('Could not log room status history:', historyError instanceof Error ? historyError.message : 'Unknown error');
         }
@@ -547,10 +562,7 @@ class BookingService {
       logger.error('Error updating room status:', error);
       logger.error('Room ID:', roomId);
       logger.error('Status:', status);
-      // We don't throw here to avoid failing the whole booking if just status update/logging fails
-      // But actually, room status update IS important.
-      // If it's a real error (not history), we might want to know.
-      // For now, let's keep it non-blocking for history but blocking for the room update itself.
+      throw error;
     }
   }
 

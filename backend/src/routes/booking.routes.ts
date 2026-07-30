@@ -13,9 +13,10 @@ import {
   modifyBooking,
   getBookingByConfirmation,
   getDailyBreakfastPax,
-  upsertDailyBreakfastPax
+  upsertDailyBreakfastPax,
+  moveRoom,
 } from '../controllers/booking.controller';
-import { protect, authorize } from '../middleware/auth';
+import { protect, optionalProtect, authorize } from '../middleware/auth';
 import { UserRole } from '../models/User';
 
 const router = express.Router();
@@ -25,7 +26,7 @@ router.get('/available', getAvailableRooms);
 router.get('/check-availability', checkAvailability);
 router.post('/quote', getPricingQuote);
 router.get('/confirmation/:confirmationNumber', getBookingByConfirmation);
-router.post('/', createBooking);
+router.post('/', optionalProtect, createBooking);
 
 // Protected routes
 router.use(protect);
@@ -74,6 +75,11 @@ router.put('/:id/cancel',
 router.put('/:id/modify',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
   modifyBooking
+);
+
+router.put('/:id/move-room',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
+  moveRoom
 );
 
 export default router;

@@ -1,20 +1,11 @@
 class AppConfig {
-  static const bool powerSyncEnabled = bool.fromEnvironment(
-    'POWERSYNC_ENABLED',
-    defaultValue: false,
-  );
-  static const bool powerSyncHotReadsEnabled = bool.fromEnvironment(
-    'POWERSYNC_HOT_READS_ENABLED',
-    defaultValue: false,
-  );
-  static const String powerSyncUrl = String.fromEnvironment(
-    'POWERSYNC_URL',
-    defaultValue: 'https://6a3baa5435ca576ca0df47ea.powersync.journeyapps.com',
-  );
-  static const String powerSyncToken = String.fromEnvironment(
-    'POWERSYNC_TOKEN',
-    defaultValue: '',
-  );
+  // PowerSync is intentionally hard-disabled for this app build path.
+  // The app now uses the faster direct API / direct Supabase read path instead
+  // of any local sync replica hot-read path.
+  static const bool powerSyncEnabled = false;
+  static const bool powerSyncHotReadsEnabled = false;
+  static const String powerSyncUrl = '';
+  static const String powerSyncToken = '';
   static const String mainApiBaseUrl = String.fromEnvironment(
     'MAIN_API_URL',
     defaultValue: 'https://api.hirall.com/api',

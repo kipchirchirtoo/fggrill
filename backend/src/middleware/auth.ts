@@ -363,6 +363,32 @@ export const protect = async (
   }
 };
 
+export const optionalProtect = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  let token: string | undefined;
+
+  if (req.headers.authorization) {
+    const authHeader = req.headers.authorization;
+    if (authHeader.toLowerCase().startsWith('bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+  }
+
+  if (!token && req.query.token) {
+    token = String(req.query.token);
+  }
+
+  if (!token) {
+    next();
+    return;
+  }
+
+  await protect(req, res, next);
+};
+
 // Alias for compatibility
 export const authenticateToken = protect;
 

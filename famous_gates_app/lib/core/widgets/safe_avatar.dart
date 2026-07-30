@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../theme/app_theme.dart';
 
@@ -43,13 +44,15 @@ class SafeAvatar extends StatelessWidget {
     }
 
     return ClipOval(
-      child: Image.network(
-        url,
+      child: CachedNetworkImage(
+        imageUrl: url,
         width: radius * 2,
         height: radius * 2,
         fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => fallback,
+        fadeInDuration: Duration.zero,
+        fadeOutDuration: Duration.zero,
+        placeholder: (_, __) => fallback,
+        errorWidget: (_, __, ___) => fallback,
       ),
     );
   }

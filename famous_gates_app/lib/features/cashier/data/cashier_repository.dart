@@ -13,6 +13,15 @@ final cashierRepositoryProvider = Provider<CashierRepository>((ref) {
   );
 });
 
+class _CacheEntry<T> {
+  const _CacheEntry(this.value, this.expiresAt);
+
+  final T value;
+  final DateTime expiresAt;
+
+  bool get isFresh => DateTime.now().isBefore(expiresAt);
+}
+
 Map<String, dynamic> _withoutEmptyOptionalUuids(Map<String, dynamic> body) {
   final cleaned = Map<String, dynamic>.from(body);
   for (final key in const [
@@ -32,8 +41,82 @@ class CashierRepository {
 
   final Dio _dio;
   final Dio _pythonDio;
+  final Map<String, _CacheEntry<Map<String, dynamic>>> _mapCache = {};
+  final Map<String, _CacheEntry<List<Map<String, dynamic>>>> _listCache = {};
+  final Map<String, Future<Map<String, dynamic>>> _pendingMapRequests = {};
+  final Map<String, Future<List<Map<String, dynamic>>>> _pendingListRequests =
+      {};
 
-  Future<Map<String, dynamic>> getStats() => _getMap('/cashier/stats');
+  Map<String, dynamic> _cloneMap(Map<String, dynamic> value) {
+    return Map<String, dynamic>.from(value);
+  }
+
+  List<Map<String, dynamic>> _cloneRows(List<Map<String, dynamic>> rows) {
+    return rows.map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
+  Map<String, dynamic>? _readMapCache(String key) {
+    final entry = _mapCache[key];
+    if (entry == null || !entry.isFresh) {
+      _mapCache.remove(key);
+      return null;
+    }
+    return Map<String, dynamic>.from(entry.value);
+  }
+
+  List<Map<String, dynamic>>? _readListCache(String key) {
+    final entry = _listCache[key];
+    if (entry == null || !entry.isFresh) {
+      _listCache.remove(key);
+      return null;
+    }
+    return entry.value.map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
+  void _writeMapCache(
+    String key,
+    Map<String, dynamic> value,
+    Duration ttl,
+  ) {
+    _mapCache[key] = _CacheEntry(
+      Map<String, dynamic>.from(value),
+      DateTime.now().add(ttl),
+    );
+  }
+
+  void _writeListCache(
+    String key,
+    List<Map<String, dynamic>> value,
+    Duration ttl,
+  ) {
+    _listCache[key] = _CacheEntry(
+      value.map((item) => Map<String, dynamic>.from(item)).toList(),
+      DateTime.now().add(ttl),
+    );
+  }
+
+  Future<Map<String, dynamic>> getStats() async {
+    const cacheKey = 'cashier:stats';
+    final cached = _readMapCache(cacheKey);
+    if (cached != null) return cached;
+    final inFlight = _pendingMapRequests[cacheKey];
+    if (inFlight != null) {
+      final data = await inFlight;
+      return _cloneMap(data);
+    }
+    final request = () async {
+      final data = await _getMap('/cashier/stats');
+      _writeMapCache(cacheKey, data, const Duration(seconds: 20));
+      return data;
+    }();
+    _pendingMapRequests[cacheKey] = request;
+    try {
+      final data = await request;
+      return _cloneMap(data);
+    } finally {
+      _pendingMapRequests.remove(cacheKey);
+    }
+  }
 
   /// Main Bar / Executive Bar captain orders (new + recalled) for this
   /// branch, so the cashier station can auto-print a copy alongside the
@@ -59,8 +142,32 @@ class CashierRepository {
     }
   }
 
-  Future<Map<String, dynamic>> getBillDetails(String id) =>
-      _getMap('/cashier/bill/${Uri.encodeComponent(id)}');
+  Future<Map<String, dynamic>> getBillDetails(String id) async {
+    final cacheKey = 'cashier:bill:${id.trim().toLowerCase()}';
+    final cached = _readMapCache(cacheKey);
+    if (cached != null) return cached;
+    final inFlight = _pendingMapRequests[cacheKey];
+    if (inFlight != null) {
+      final data = await inFlight;
+      return _cloneMap(data);
+    }
+    final request = () async {
+      try {
+        final data = await _getMap('/cashier/bill/${Uri.encodeComponent(id)}');
+        _writeMapCache(cacheKey, data, const Duration(seconds: 20));
+        return data;
+      } catch (e) {
+        return {'success': false, 'message': e.toString()};
+      }
+    }();
+    _pendingMapRequests[cacheKey] = request;
+    try {
+      final data = await request;
+      return _cloneMap(data);
+    } finally {
+      _pendingMapRequests.remove(cacheKey);
+    }
+  }
 
   Future<Map<String, dynamic>> processPayment({
     required String bookingId,
@@ -71,15 +178,19 @@ class CashierRepository {
     num? tendered,
     num? change,
   }) {
-    return _postMap('/cashier/pay', {
-      'bookingId': bookingId,
-      'amount': amount,
-      'method': method,
-      if (reference != null && reference.isNotEmpty) 'reference': reference,
-      if (creditBill != null) 'credit_bill': creditBill,
-      if (tendered != null && tendered > 0) 'amount_tendered': tendered,
-      if (change != null && change > 0) 'change_given': change,
-    });
+    return _postMap(
+      '/cashier/pay',
+      {
+        'bookingId': bookingId,
+        'amount': amount,
+        'method': method,
+        if (reference != null && reference.isNotEmpty) 'reference': reference,
+        if (creditBill != null) 'credit_bill': creditBill,
+        if (tendered != null && tendered > 0) 'amount_tendered': tendered,
+        if (change != null && change > 0) 'change_given': change,
+      },
+      bustCashierCaches: true,
+    );
   }
 
   Future<Map<String, dynamic>> verifyPayment(String paymentId) =>
@@ -122,6 +233,20 @@ class CashierRepository {
     int page = 1,
     int limit = 25,
   }) async {
+    final normalizedStatus = status ?? 'all';
+    final normalizedBillType = billType ?? 'all';
+    final normalizedSearch = search?.trim().toLowerCase() ?? '';
+    final normalizedDate = date?.trim() ?? '';
+    final cacheKey =
+        'cashier:unpaid-bills:$normalizedStatus:$normalizedBillType:$normalizedSearch:$normalizedDate:$page:$limit';
+    final cached = _readListCache(cacheKey);
+    if (cached != null) return cached;
+    final inFlight = _pendingListRequests[cacheKey];
+    if (inFlight != null) {
+      final rows = await inFlight;
+      return _cloneRows(rows);
+    }
+
     final query = {
       if (status != null && status != 'all') 'status': status,
       if (billType != null && billType != 'all') 'bill_type': billType,
@@ -131,21 +256,80 @@ class CashierRepository {
       'limit': limit,
     };
 
-    final unpaidOrders = await _getList('/cashier/unpaid-orders', query: query);
-    final unpaidBills = await _getList('/cashier/unpaid-bills', query: query)
-        .catchError((_) => <Map<String, dynamic>>[]);
+    final request = () async {
+      final results = await Future.wait<List<Map<String, dynamic>>>([
+        _getList('/cashier/unpaid-orders', query: query),
+        _getList('/cashier/unpaid-bills', query: query)
+            .catchError((_) => <Map<String, dynamic>>[]),
+      ]);
 
-    final rows = [...unpaidOrders, ...unpaidBills];
-    rows.sort((a, b) {
-      final aDate = DateTime.tryParse(
-              '${a['bill_date'] ?? a['created_at'] ?? a['created_at']}') ??
-          DateTime.fromMillisecondsSinceEpoch(0);
-      final bDate = DateTime.tryParse(
-              '${b['bill_date'] ?? b['created_at'] ?? b['created_at']}') ??
-          DateTime.fromMillisecondsSinceEpoch(0);
-      return bDate.compareTo(aDate);
-    });
-    return rows;
+      final unpaidOrders = results[0];
+      final unpaidBills = results[1];
+
+      final rows = [...unpaidOrders, ...unpaidBills];
+      rows.sort((a, b) {
+        final aDate = DateTime.tryParse(
+                '${a['bill_date'] ?? a['created_at'] ?? a['created_at']}') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = DateTime.tryParse(
+                '${b['bill_date'] ?? b['created_at'] ?? b['created_at']}') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+      _writeListCache(cacheKey, rows, const Duration(seconds: 8));
+      return rows;
+    }();
+
+    _pendingListRequests[cacheKey] = request;
+    try {
+      final rows = await request;
+      return _cloneRows(rows);
+    } finally {
+      _pendingListRequests.remove(cacheKey);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getUnpaidOrdersOnly({
+    String? status,
+    String? search,
+    String? date,
+    int page = 1,
+    int limit = 25,
+  }) async {
+    final normalizedStatus = status ?? 'all';
+    final normalizedSearch = search?.trim().toLowerCase() ?? '';
+    final normalizedDate = date?.trim() ?? '';
+    final cacheKey =
+        'cashier:unpaid-orders-only:$normalizedStatus:$normalizedSearch:$normalizedDate:$page:$limit';
+    final cached = _readListCache(cacheKey);
+    if (cached != null) return cached;
+    final inFlight = _pendingListRequests[cacheKey];
+    if (inFlight != null) {
+      final rows = await inFlight;
+      return _cloneRows(rows);
+    }
+
+    final query = {
+      if (status != null && status != 'all') 'status': status,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+      'page': page,
+      'limit': limit,
+    };
+
+    final request = () async {
+      final rows = await _getList('/cashier/unpaid-orders', query: query);
+      _writeListCache(cacheKey, rows, const Duration(seconds: 8));
+      return rows;
+    }();
+
+    _pendingListRequests[cacheKey] = request;
+    try {
+      final rows = await request;
+      return _cloneRows(rows);
+    } finally {
+      _pendingListRequests.remove(cacheKey);
+    }
   }
 
   Future<List<Map<String, dynamic>>> getVoidedOrders({
@@ -162,20 +346,32 @@ class CashierRepository {
   }
 
   Future<Map<String, dynamic>> createUnpaidBill(Map<String, dynamic> body) =>
-      _postMap('/cashier/unpaid-bills', _withoutEmptyOptionalUuids(body));
+      _postMap(
+        '/cashier/unpaid-bills',
+        _withoutEmptyOptionalUuids(body),
+        bustCashierCaches: true,
+      );
 
   Future<Map<String, dynamic>> recordUnpaidBillPayment(
     String id,
     Map<String, dynamic> body,
   ) =>
-      _postMap('/cashier/unpaid-bills/$id/payment', body);
+      _postMap(
+        '/cashier/unpaid-bills/$id/payment',
+        body,
+        bustCashierCaches: true,
+      );
 
   Future<Map<String, dynamic>> clearWaiterOrder(
     String source,
     String id,
     Map<String, dynamic> body,
   ) =>
-      _patchMap('/cashier/unpaid-orders/$source/$id/pay', body);
+      _patchMap(
+        '/cashier/unpaid-orders/$source/$id/pay',
+        body,
+        bustCashierCaches: true,
+      );
 
   Future<Map<String, dynamic>> confirmUnpaidBill(String id, String role) =>
       _patchMap('/cashier/unpaid-bills/$id/confirm', {'role': role});
@@ -296,6 +492,9 @@ class CashierRepository {
       _postMap('/cashier/pos/transactions', body);
 
   Future<List<Map<String, dynamic>>> getPOSItems({String? search}) async {
+    final cacheKey = 'cashier:pos-items:${search?.trim().toLowerCase() ?? 'all'}';
+    final cached = _readListCache(cacheKey);
+    if (cached != null) return cached;
     final res = await _dio.get(
       '/cashier/pos/items',
       queryParameters: {
@@ -307,7 +506,9 @@ class CashierRepository {
       ),
     );
     if (res.statusCode == 404) return [];
-    return _asList(res.data);
+    final rows = _asList(res.data);
+    _writeListCache(cacheKey, rows, const Duration(minutes: 2));
+    return rows;
   }
 
   Future<Map<String, dynamic>> payPOSTransaction(
@@ -337,7 +538,7 @@ class CashierRepository {
   }
 
   Future<Map<String, dynamic>> postRoomCharge(Map<String, dynamic> body) =>
-      _postMap('/room-charge/post', body);
+      _postMap('/room-charge/post', body, bustCashierCaches: true);
 
   Future<Map<String, dynamic>> scanPOSBarcode(String barcode) =>
       getBillDetails(barcode);
@@ -468,18 +669,38 @@ class CashierRepository {
     }
   }
 
-  Future<Map<String, dynamic>> _postMap(String path, Object? body) async {
+  void _invalidateCashierCaches() {
+    _pendingMapRequests.clear();
+    _pendingListRequests.clear();
+    _mapCache.removeWhere((key, _) =>
+        key == 'cashier:stats' || key.startsWith('cashier:bill:'));
+    _listCache.removeWhere((key, _) =>
+        key.startsWith('cashier:unpaid-bills:') ||
+        key.startsWith('cashier:unpaid-orders-only:'));
+  }
+
+  Future<Map<String, dynamic>> _postMap(
+    String path,
+    Object? body, {
+    bool bustCashierCaches = false,
+  }) async {
     try {
       final res = await _dio.post(path, data: body);
+      if (bustCashierCaches) _invalidateCashierCaches();
       return _asMap(res.data);
     } on DioException catch (error) {
       throw Exception(apiErrorMessage(error));
     }
   }
 
-  Future<Map<String, dynamic>> _patchMap(String path, Object? body) async {
+  Future<Map<String, dynamic>> _patchMap(
+    String path,
+    Object? body, {
+    bool bustCashierCaches = false,
+  }) async {
     try {
       final res = await _dio.patch(path, data: body);
+      if (bustCashierCaches) _invalidateCashierCaches();
       return _asMap(res.data);
     } on DioException catch (error) {
       throw Exception(apiErrorMessage(error));
@@ -516,5 +737,48 @@ class CashierRepository {
           .toList();
     }
     return [];
+  }
+
+  // --- Additional / Manual Service Charges ---
+
+  /// Fetch predefined additional services (pool, conference, car wash, etc.)
+  /// for the current branch. Falls back to empty list on 403/404 so the
+  /// cashier can still type a custom service name even if the endpoint is
+  /// unavailable.
+  Future<List<Map<String, dynamic>>> getAdditionalServices({
+    int? branchId,
+  }) async {
+    try {
+      return await _getList('/additional-services/services', query: {
+        'is_active': true,
+        if (branchId != null) 'branch_id': branchId,
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Post an ad-hoc charge to an `unpaid_bills` row (BILL-* / CON-* etc.).
+  /// For hotel folios / POS orders the charge is tracked locally instead.
+  Future<Map<String, dynamic>> addChargeToUnpaidBill(
+    String id, {
+    required num amount,
+    required String description,
+  }) =>
+      _postMap(
+        '/cashier/unpaid-bills/$id/charge',
+        {'amount': amount, 'description': description},
+        bustCashierCaches: true,
+      );
+
+  // --- Corporate Accounts ---
+  Future<List<Map<String, dynamic>>> getCorporateCustomers() async {
+    final res = await _dio.get('/corporate/customers');
+    return _asList(res.data);
+  }
+
+  Future<Map<String, dynamic>> chargeCorporateCredit(Map<String, dynamic> data) async {
+    final res = await _dio.post('/corporate/charge', data: data);
+    return _asMap(res.data);
   }
 }

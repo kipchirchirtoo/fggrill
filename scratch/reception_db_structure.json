@@ -1,0 +1,5455 @@
+{
+  "bookings": {
+    "rowCount": 82,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "room_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'room'::text"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'confirmed'::text"
+      },
+      {
+        "column_name": "check_in_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "check_out_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "pax",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": "1"
+      },
+      {
+        "column_name": "subtotal",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "tax_amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "service_charge",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "discount_amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "payment_status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "NO",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "deposit_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "deposit_paid",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "room_rate",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "meal_plan",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'room_only'::text"
+      },
+      {
+        "column_name": "booking_source",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'walk_in'::text"
+      },
+      {
+        "column_name": "special_requests",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "adults",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "1"
+      },
+      {
+        "column_name": "children",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "infants",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "internal_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'cash'::text"
+      },
+      {
+        "column_name": "check_in_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "check_out_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "confirmation_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "room_id",
+        "foreign_table_name": "rooms",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "reservations": {
+    "rowCount": 84,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reservation_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "room_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'confirmed'::text"
+      },
+      {
+        "column_name": "reserved_from",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "reserved_to",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "check_in_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "check_out_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "confirmation_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "payment_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'cash'::text"
+      },
+      {
+        "column_name": "special_requests",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "adults",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "1"
+      },
+      {
+        "column_name": "children",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "checked_in_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "checked_in_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "checked_out_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "checked_out_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cancelled_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cancelled_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cancellation_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "room_type_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "rate_plan_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "room_rate",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "subtotal",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "tax_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "service_charge",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "discount_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "deposit_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "deposit_paid",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "deposit_paid_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_source",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'WALK_IN'::text"
+      },
+      {
+        "column_name": "channel_manager_ref",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "meal_plan",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "purpose",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "internal_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "short_code",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "infants",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "booking_id",
+        "foreign_table_name": "bookings",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cancelled_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "checked_in_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "checked_out_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "rate_plan_id",
+        "foreign_table_name": "rate_plans",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "room_id",
+        "foreign_table_name": "rooms",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "room_type_id",
+        "foreign_table_name": "room_types",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "rooms": {
+    "rowCount": 64,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "room_type_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "room_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "floor",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "building",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'available'::text"
+      },
+      {
+        "column_name": "housekeeping_status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'clean'::text"
+      },
+      {
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "amenities",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'[]'::jsonb"
+      },
+      {
+        "column_name": "image_url",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "price_override",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "max_occupancy",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "2"
+      },
+      {
+        "column_name": "type_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "is_clean",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "true"
+      },
+      {
+        "column_name": "room_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "last_cleaned",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "current_guest",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "hk_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'clean'::text"
+      },
+      {
+        "column_name": "cleaning_priority",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'normal'::text"
+      },
+      {
+        "column_name": "is_vip",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "assigned_attendant_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "last_cleaned_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "expected_checkout",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "dnd_start_time",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "rate",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "assigned_attendant_id",
+        "foreign_table_name": "hk_staff_profiles",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "current_guest",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "room_type_id",
+        "foreign_table_name": "room_types",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "type_id",
+        "foreign_table_name": "room_types",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "room_types": {
+    "rowCount": 6,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "code",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "base_rate",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "max_occupancy",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": "1"
+      },
+      {
+        "column_name": "amenities",
+        "data_type": "jsonb",
+        "is_nullable": "NO",
+        "column_default": "'[]'::jsonb"
+      },
+      {
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": "true"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "price_per_night",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "rate",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "type_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "room_status_history": {
+    "rowCount": 409,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "room_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "old_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "new_status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "changed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "changed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "room_id",
+        "foreign_table_name": "rooms",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "guests": {
+    "rowCount": 61,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "first_name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "last_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "phone",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "email",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "id_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "id_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'national_id'::text"
+      },
+      {
+        "column_name": "car_plate",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "loyalty_tier",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'bronze'::text"
+      },
+      {
+        "column_name": "loyalty_points",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "NO",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "is_vip",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "blacklist_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'none'::text"
+      },
+      {
+        "column_name": "blacklist_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "nationality",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'Kenyan'::text"
+      },
+      {
+        "column_name": "date_of_birth",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "total_visits",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "address",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "preferences",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "car_number_plate",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "vip_tier",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "city",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "country",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "blacklist_status_bool",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "guest_profiles": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "loyalty_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "vip_since",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "preferred_room_type",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "preferred_floor",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "allergies",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'[]'::jsonb"
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "preferred_room_type",
+        "foreign_table_name": "room_types",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "guest_documents": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "reservation_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "document_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "file_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "file_url",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "file_size",
+        "data_type": "bigint",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "mime_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "uploaded_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "reservation_id",
+        "foreign_table_name": "reservations",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "uploaded_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "guest_messages": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "channel",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'sms'::text"
+      },
+      {
+        "column_name": "subject",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "body",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'sent'::text"
+      },
+      {
+        "column_name": "sent_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "sent_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "guest_preferences": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "category",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "preference",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "folios": {
+    "rowCount": 84,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "folio_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "total_charges",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_payments",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "balance_due",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "room_charges",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "food_charges",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "beverage_charges",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "other_charges",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "settled",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "settled_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reservation_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "balance",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "booking_id",
+        "foreign_table_name": "bookings",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "reservation_id",
+        "foreign_table_name": "reservations",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "folio_items": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "folio_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "charge_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": "CURRENT_DATE"
+      },
+      {
+        "column_name": "department",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "quantity",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "1"
+      },
+      {
+        "column_name": "unit_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "voided",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "voided_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "folio_id",
+        "foreign_table_name": "folios",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "voided_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "folio_payments": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "folio_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "reference",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "received_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "received_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "folio_id",
+        "foreign_table_name": "folios",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "received_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "folio_transactions": {
+    "rowCount": 7,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "folio_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "transaction_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "category",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "tax_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "reference",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "posted_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "posted_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'posted'::text"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "folio_id",
+        "foreign_table_name": "folios",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "posted_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "payments": {
+    "rowCount": 2,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "restaurant_order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bar_order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "pos_transaction_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'cash'::text"
+      },
+      {
+        "column_name": "reference_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reference",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "recorded_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'completed'::text"
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "recorded_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "reservation_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "invoice_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_date",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "recorded_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "reservation_id",
+        "foreign_table_name": "reservations",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "branch_payments": {
+    "rowCount": 1,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "category",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "payee_name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "payee_account",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "po_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "grn_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "invoice_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "released_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "released_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "NO",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "payment_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": "CURRENT_DATE"
+      },
+      {
+        "column_name": "reference_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'KES'::text"
+      },
+      {
+        "column_name": "requires_director",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "created_by_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "manager_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "manager_approved_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "director_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "director_approved_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "receipt_url",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "rejected_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "rejected_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "rejection_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "payment_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reference",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cash_flow_category",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "settlement_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "purchase_order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "director_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "grn_id",
+        "foreign_table_name": "goods_receipts",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "invoice_id",
+        "foreign_table_name": "supplier_invoices",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "manager_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "po_id",
+        "foreign_table_name": "purchase_orders",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "purchase_order_id",
+        "foreign_table_name": "purchase_orders",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "rejected_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "released_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "branch_payment_receipts": {
+    "rowCount": 6,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "payment_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "receipt_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "supplier_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'KES'::text"
+      },
+      {
+        "column_name": "receipt_url",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "generated_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "document_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'generated'::text"
+      },
+      {
+        "column_name": "generated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "archived_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "auditor_notified_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "director_notified_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "generated_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "payment_id",
+        "foreign_table_name": "branch_payments",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "cashier_shifts": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "shift_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "opening_float",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "closing_float",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "opened_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "closed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "start_time",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "end_time",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approved_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approved_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approval_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "flagged_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "flagged_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "flag_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "flag_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "expected_cash",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "actual_cash",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_sales",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "discrepancy_amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "shift_start",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "shift_end",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "cashier_shift_logs": {
+    "rowCount": 173,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "action",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "actor_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "shift_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "shift_start",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "shift_end",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_float",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "closing_float",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "expected_closing_float",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "variance",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_cash_sales",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_mpesa_sales",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_card_sales",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_sales",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "transaction_count",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "reconciled_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reconciled_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reconciliation_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "verified_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "verified_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "verification_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "submitted_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "submitted_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approved_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approved_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "swimming_pool_revenue",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "pool_token_revenue",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "conference_revenue",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "room_booking_revenue",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "restaurant_revenue",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "bar_revenue",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "other_revenue",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "credit_bills_taken",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "credit_bills_count",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "unpaid_bills_value",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "unpaid_bills_count",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "paid_bills_value",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "paid_bills_count",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "credit_bills_details",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'[]'::jsonb"
+      },
+      {
+        "column_name": "paid_bills_details",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'[]'::jsonb"
+      },
+      {
+        "column_name": "unpaid_bills_details",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'[]'::jsonb"
+      },
+      {
+        "column_name": "cash_at_hand",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "cash_deposited",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "bank_deposit_ref",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "pool_na",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "conference_na",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "rooms_na",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "requested_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_requested_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_approved_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_approved_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_rejected_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_rejected_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_review_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "expense_total",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "expense_details",
+        "data_type": "jsonb",
+        "is_nullable": "NO",
+        "column_default": "'[]'::jsonb"
+      },
+      {
+        "column_name": "actual_cash_counted",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "actual_mpesa_logged",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "actual_card_logged",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "mpesa_summary_ref",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "card_batch_ref",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reconciliation_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'not_started'::text"
+      },
+      {
+        "column_name": "hard_closed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "hard_closed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "variance_reason_code",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "variance_comment",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "actor_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "approved_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "hard_closed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "opening_approved_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "opening_rejected_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "opening_requested_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "reconciled_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "shift_id",
+        "foreign_table_name": "cashier_shifts",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "submitted_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "verified_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "cashier_transactions": {
+    "rowCount": 18493,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "transaction_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "((('CT'::text || to_char(now(), 'YYMMDD'::text)) || '-'::text) || lpad(((floor((random() * (1000000)::double precision)))::integer)::text, 6, '0'::text))"
+      },
+      {
+        "column_name": "transaction_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'payment'::text"
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "source_module",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_document_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_document_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_document_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'completed'::text"
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "cashier_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_shift_log_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "revenue_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reference_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reference_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_phone",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_reference",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reference_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "credit_bill_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_tendered",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "change_given",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "invoice_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "order_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "confirmation_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "transaction_date",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "recorded_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "booking_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approval_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_shift_id",
+        "foreign_table_name": "cashier_shifts",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_shift_log_id",
+        "foreign_table_name": "cashier_shift_logs",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "cashier_bills": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "short_code",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'general'::text"
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_phone",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_email",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "room_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reservation_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "waiter_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "subtotal",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "tax_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "service_charge",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "discount_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "balance_due",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "payment_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'unpaid'::text"
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "closed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "closed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "closed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "reservation_id",
+        "foreign_table_name": "reservations",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "waiter_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "cashier_logbooks": {
+    "rowCount": 162,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "logbook_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "generate_cashier_logbook_number()"
+      },
+      {
+        "column_name": "period_start",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "period_end",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_float",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "closing_float",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_sales",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "outlet_shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "outlet_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "total_cash",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_mpesa",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_card",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_credit_bill",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'cashier'::text"
+      },
+      {
+        "column_name": "log_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": "CURRENT_DATE"
+      },
+      {
+        "column_name": "total_swipe",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "sales_breakdown",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "automation_run_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "submitted_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approved_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approved_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "auditor_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "audited_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "audit_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cashier_shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "accountant_reviewed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "accountant_reviewed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "accountant_notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "accountant_reviewed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "approved_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "auditor_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "cashier_shift_id",
+        "foreign_table_name": "cashier_shift_logs",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "outlet_id",
+        "foreign_table_name": "pos_outlets",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "outlet_shift_id",
+        "foreign_table_name": "pos_outlet_shifts",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "shift_id",
+        "foreign_table_name": "cashier_shifts",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "cashier_logbook_lines": {
+    "rowCount": 19753,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "logbook_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "line_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "reference",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "section",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "staff_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_table",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "outlet_shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "automation_run_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "logbook_id",
+        "foreign_table_name": "cashier_logbooks",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "order_id",
+        "foreign_table_name": "pos_shift_orders",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "credit_bills": {
+    "rowCount": 1228,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_phone",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_module",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "source_document_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_document_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "balance_due",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "credit_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "staff_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "staff_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "paid_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "balance",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "bill_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": "CURRENT_DATE"
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "approval_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "source_pos_shift_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_pos_order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_pos_payment_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source_logbook_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_by_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "paid_via_payroll_run_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "paid_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "paid_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_reference",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "credit_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "paid_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "unpaid_bills": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "source_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "balance_due",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "due_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "waiter_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "auditor_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "auditor_confirmed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "remarks",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "balance_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_date",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "auditor_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "void_bills": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_ref",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "voided_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "voided_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'voided'::text"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "voided_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "void_requests": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_ref",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "requested_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "approved_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "pos_order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "source",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'restaurant'::text"
+      },
+      {
+        "column_name": "reviewed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reviewed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "rejection_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "void_items",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'[]'::jsonb"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "approved_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "order_id",
+        "foreign_table_name": "restaurant_orders",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "pos_order_id",
+        "foreign_table_name": "pos_shift_orders",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "requested_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "reviewed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "additional_services": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "service_code",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "service_name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "service_type",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "pricing_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'fixed'::text"
+      },
+      {
+        "column_name": "base_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "currency",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'KES'::text"
+      },
+      {
+        "column_name": "capacity",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "duration_minutes",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "true"
+      },
+      {
+        "column_name": "is_branch_specific",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "true"
+      },
+      {
+        "column_name": "requires_booking",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "true"
+      },
+      {
+        "column_name": "advance_booking_hours",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "terms_and_conditions",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "service_bookings": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "booking_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "service_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'walk_in'::text"
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_phone",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_email",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "booking_date",
+        "data_type": "date",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "start_time",
+        "data_type": "time without time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "end_time",
+        "data_type": "time without time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "duration_hours",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "number_of_people",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "1"
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "deposit_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "balance_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "payment_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "booking_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'pending'::text"
+      },
+      {
+        "column_name": "special_requests",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "notes",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "booked_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "confirmed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "confirmed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cancelled_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "cancellation_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "booked_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "confirmed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "service_id",
+        "foreign_table_name": "additional_services",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "booking_status_history": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "booking_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "old_status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "new_status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "changed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "booking_id",
+        "foreign_table_name": "bookings",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "changed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "reservation_guests": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "reservation_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "is_primary",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "reservation_id",
+        "foreign_table_name": "reservations",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "rate_plans": {
+    "rowCount": 5,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "room_type_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "code",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "rate_per_night",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "meal_plan",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'room_only'::text"
+      },
+      {
+        "column_name": "min_stay",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": "1"
+      },
+      {
+        "column_name": "max_stay",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "is_active",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "true"
+      },
+      {
+        "column_name": "valid_from",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "valid_to",
+        "data_type": "date",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "metadata",
+        "data_type": "jsonb",
+        "is_nullable": "YES",
+        "column_default": "'{}'::jsonb"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "room_type_id",
+        "foreign_table_name": "room_types",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "restaurant_bills": {
+    "rowCount": 0,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "order_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "bill_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "subtotal",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "tax_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "balance_due",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "table_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "room_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "guest_phone",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "waiter_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "short_code",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "balance",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "vat_rate",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "16.00"
+      },
+      {
+        "column_name": "service_charge_rate",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": "0"
+      },
+      {
+        "column_name": "parent_bill_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "split_type",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "is_split",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "is_merged",
+        "data_type": "boolean",
+        "is_nullable": "YES",
+        "column_default": "false"
+      },
+      {
+        "column_name": "merged_into",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "closed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "closed_by",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": [
+      {
+        "column_name": "branch_id",
+        "foreign_table_name": "branches",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "closed_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "created_by",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "guest_id",
+        "foreign_table_name": "guests",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "merged_into",
+        "foreign_table_name": "restaurant_bills",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "order_id",
+        "foreign_table_name": "restaurant_orders",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "parent_bill_id",
+        "foreign_table_name": "restaurant_bills",
+        "foreign_column_name": "id"
+      },
+      {
+        "column_name": "waiter_id",
+        "foreign_table_name": "users",
+        "foreign_column_name": "id"
+      }
+    ]
+  },
+  "pos_master_bills": {
+    "rowCount": 1,
+    "columns": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": "gen_random_uuid()"
+      },
+      {
+        "column_name": "master_bill_number",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "branch_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "column_name": "origin_outlet_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "origin_outlet_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "table_number",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "customer_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_waiter_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "opening_waiter_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "settlement_cashier_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "settlement_cashier_name",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "payment_method",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "status",
+        "data_type": "text",
+        "is_nullable": "NO",
+        "column_default": "'open'::text"
+      },
+      {
+        "column_name": "total_amount",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "amount_paid",
+        "data_type": "numeric",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "column_name": "bill_requested_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "paid_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "column_name": "closed_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      }
+    ],
+    "foreignKeys": []
+  }
+}

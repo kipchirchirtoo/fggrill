@@ -9,7 +9,10 @@ import {
   updateRoom,
   deleteRoom,
   updateRoomStatus,
-  getRoomTypes
+  getRoomTypes,
+  createRoomType,
+  updateRoomType,
+  deleteRoomType
 } from '../controllers/room.controller';
 
 const router = express.Router();
@@ -19,6 +22,11 @@ router.get('/types', getRoomTypes);
 
 // Protected routes
 router.use(protect);
+
+// Room Type CRUD
+router.post('/types', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), createRoomType);
+router.put('/types/:id', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER]), updateRoomType);
+router.delete('/types/:id', authorize([UserRole.SUPER_ADMIN]), deleteRoomType);
 
 router.get('/', getRooms);
 router.get('/:id/bookings', getRoomBookings);

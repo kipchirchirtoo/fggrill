@@ -153,3 +153,14 @@ final inventoryUnitsProvider =
     ..sort();
   return units;
 });
+final corporateCustomersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(branchAccountantRepositoryProvider).getCorporateCustomers();
+});
+
+final pendingCorporateBillsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(branchAccountantRepositoryProvider).getPendingCorporateBills();
+});
+
+final corporateInvoicesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(branchAccountantRepositoryProvider).getCorporateInvoices();
+});

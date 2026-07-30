@@ -6,3 +6,4 @@ export 'guest_management_screen.dart';
 export 'room_management_screen.dart';
 export 'housekeeping_screen.dart';
 export 'conference_booking_screen.dart';
+export 'move_room_screen.dart';

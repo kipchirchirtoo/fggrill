@@ -26,6 +26,11 @@ import { PYTHON_SERVICE_URL } from '../config/pythonService';
 import PDFDocument from 'pdfkit';
 import { loadCashierVoidAudit } from '../services/cashier-void-audit.service';
 import { settleMasterBillCore, resolveMasterBillByCode } from './outlet-pos.controller';
+import { recordHotelCashierPayment } from '../services/receptionCashierPayment.service';
+import {
+    recordConferenceCashierPayment,
+    findHotelPaymentOrphans,
+} from '../services/receptionEventCashierPayment.service';
 
 function isImmediateCashierPaymentMethod(method?: string): boolean {
     const normalized = (method || '').toLowerCase();
@@ -425,7 +430,7 @@ async function resolveCashierScannedCode(
     try {
         let unpaidQuery = supabase
             .from('unpaid_bills')
-            .select('bill_number, scan_reference, short_code, branch_id')
+            .select('bill_number, scan_reference, branch_id')
             .eq('scan_reference', normalized);
         unpaidQuery = applyBranchFilter(unpaidQuery, req);
 
@@ -562,6 +567,17 @@ async function resolveCashierShortCode(
         select: string;
         map: (row: any) => string | undefined;
     }> = [
+        // pos_shift_orders is the live POS sales table and the overwhelmingly
+        // common cashier lookup — probe it FIRST so a typical bill resolves on the
+        // first query instead of the 4th (saves ~3 round-trips per lookup).
+        // master_bill_id is selected so getBillDetails can skip the master-bill
+        // probe for standalone orders.
+        {
+            table: 'pos_shift_orders',
+            source: 'pos_shift_order',
+            select: 'id, order_number, short_code, shift_id, master_bill_id',
+            map: (row) => row.order_number
+        },
         {
             table: 'restaurant_orders',
             source: 'restaurant',
@@ -581,12 +597,6 @@ async function resolveCashierShortCode(
             map: (row) => row.transaction_ref || row.transaction_number
         },
         {
-            table: 'pos_shift_orders',
-            source: 'pos_shift_order',
-            select: 'id, order_number, short_code, shift_id',
-            map: (row) => row.order_number
-        },
-        {
             table: 'shift_transactions',
             source: 'kyogong',
             select: 'transaction_number, short_code, branch_id',
@@ -595,7 +605,7 @@ async function resolveCashierShortCode(
         {
             table: 'unpaid_bills',
             source: 'unpaid_bill',
-            select: 'bill_number, short_code, branch_id',
+            select: 'bill_number, branch_id',
             map: (row) => row.bill_number
         },
         {
@@ -999,8 +1009,13 @@ export const getBillDetails = async (
         // Quick prefix-based routing to avoid unnecessary lookups
         let lookupStrategy = determineLookupStrategy(searchId);
         
-        // Handle scanned codes and short codes first
-        const scannedCodeResolution = await resolveCashierScannedCode(searchId, req);
+        // Handle scanned codes and short codes first. A 4/6-char public short
+        // code (or short numeric) is never a scanned barcode / scan_reference, so
+        // skip the barcode + scan_reference probes (2 round-trips) for it — the
+        // short-code resolver below matches it directly on the short_code columns.
+        const scannedCodeResolution = isPublicShortCode(searchId)
+            ? null
+            : await resolveCashierScannedCode(searchId, req);
         if (scannedCodeResolution) {
             searchId = scannedCodeResolution.lookupId;
         }
@@ -1046,7 +1061,16 @@ export const getBillDetails = async (
         // last-3+ suffix) resolves to the WHOLE consolidated bill, so the cashier
         // settles every outlet's share in one tender. Runs before the single POS
         // order lookup so a combined order returns the master bill, not one leg.
-        {
+        // Skip the master-bill probe when we've already resolved a STANDALONE
+        // pos_shift_order (no master_bill_id) — it can't be part of a consolidated
+        // bill, so the probe would only ever return null. Still runs for master
+        // bill numbers (e.g. KYO-000245) and member-order codes (which carry a
+        // master_bill_id), so combined bills still resolve to the whole bill.
+        const resolvedStandalonePosOrder =
+            shortCodeResolution?.source === 'pos_shift_order' &&
+            !!shortCodeResolution.row &&
+            !shortCodeResolution.row.master_bill_id;
+        if (!resolvedStandalonePosOrder) {
             const masterBill = await resolveMasterBillByCode(
                 searchId, branchId ? Number(branchId) : null
             );
@@ -1218,10 +1242,9 @@ export const getBillDetails = async (
                 Number(folio?.food_charges || 0) +
                 Number(folio?.beverage_charges || 0) +
                 Number(folio?.other_charges || 0);
-            const reservationPaid = Math.max(
-                Number(reservation.amount_paid || 0),
-                Number(reservation.deposit_amount || 0)
-            );
+            const reservationPaid = reservation.deposit_paid
+                ? Math.max(Number(reservation.amount_paid || 0), Number(reservation.deposit_amount || 0))
+                : Number(reservation.amount_paid || 0);
             const folioPayments = Number(folio?.total_payments || 0);
 
             const totalAmount = roomTotal + posCharges;
@@ -2119,7 +2142,7 @@ async function fetchHotelBillResponse(booking: any, res: Response): Promise<void
     // Fetch payments
     const { data: payments, error: paymentsError } = await supabase
         .from('payments')
-        .select('*')
+        .select('id, amount, payment_method, reference, status, created_at')
         .eq('booking_id', booking.id);
 
     if (paymentsError) {
@@ -2130,22 +2153,6 @@ async function fetchHotelBillResponse(booking: any, res: Response): Promise<void
     const totalAmount = booking.total_amount;
     const amountPaid = payments?.reduce((sum, p) => sum + (p.status === 'completed' ? Number(p.amount) : 0), 0) || 0;
     const balance = totalAmount - amountPaid;
-
-    // Perform strict verification on all completed payments
-    const verifications = [];
-    if (payments) {
-        for (const payment of payments) {
-            if (payment.status === 'completed') {
-                const result = await paymentVerificationService.verifyTransaction(payment.reference, Number(payment.amount));
-                verifications.push({
-                    reference: payment.reference,
-                    amount: payment.amount,
-                    verified: result.isValid,
-                    message: result.message
-                });
-            }
-        }
-    }
 
     res.json({
         success: true,
@@ -2169,7 +2176,10 @@ async function fetchHotelBillResponse(booking: any, res: Response): Promise<void
                 currency: 'KES'
             },
             payments: payments,
-            verifications: verifications
+            // Live cashier/reception bill lookup must stay fast. Strict
+            // gateway verification belongs to payment processing/audit flows,
+            // not the interactive bill-open path.
+            verifications: []
         }
     });
 }
@@ -2621,94 +2631,39 @@ export const processCashierPayment = async (
 
         // Check if it's a conference booking (starts with CNF)
         if (bookingId.startsWith('CNF')) {
-            // 1. Fetch the conference booking by invoice_number
             const { data: booking, error: bookingError } = await supabase
                 .from('conference_hall_bookings')
-                .select('id, total_amount, amount_paid, branch_id, customer_name')
+                .select('id')
                 .eq('invoice_number', bookingId)
                 .single();
 
             if (bookingError || !booking) {
                 throw new AppError('Conference booking not found', 404);
             }
-
-            // 2. Record Payment in Database
-            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
-            const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
-
-            const { data: payment, error: paymentError } = await supabase
-                .from('payments')
-                .insert({
-                    conference_booking_id: booking.id,
-                    amount: amount,
-                    payment_method: method,
-                    status: initialStatus,
-                    reference: paymentRef,
-                    metadata: {
-                        processed_by: 'cashier',
-                        cashier_id: req.user?.id,
-                        processed_at: new Date().toISOString(),
-                        invoice_number: bookingId,
-                        verification_required: !isVerifiedMethod
-                    }
-                })
-                .select()
-                .single();
-
-            if (paymentError) {
-                throw new AppError(`Payment recording failed: ${paymentError.message}`, 500);
-            }
-
-            // 3. Update Conference Booking Status (Only if payment is completed)
-            if (initialStatus === 'completed') {
-                const currentPaid = Number(booking.amount_paid || 0);
-                const paymentAmount = Number(amount);
-                const totalAmount = Number(booking.total_amount);
-
-                const newPaidAmount = currentPaid + paymentAmount;
-                const newBalance = Math.max(0, totalAmount - newPaidAmount);
-                const isPaid = newBalance <= 0;
-                const newStatus = isPaid ? 'paid' : (newPaidAmount > 0 ? 'partial' : 'pending');
-
-                const { error: updateError } = await supabase
-                    .from('conference_hall_bookings')
-                    .update({
-                        amount_paid: newPaidAmount,
-                        payment_status: newStatus,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', booking.id);
-
-                if (updateError) throw new AppError(`Failed to update conference booking status: ${updateError.message}`, 500);
-
-                // Record cashier transaction
-                const { error } = await supabase.from('cashier_transactions').insert({ change_given: changeGiven, amount_tendered: amountTendered,
-                    transaction_number: `CNF-${bookingId}`,
-                    branch_id: booking.branch_id || req.user?.branch_id,
-                    cashier_id: req.user?.id,
-                    transaction_type: 'payment',
-                    revenue_type: 'CONFERENCE',
-                    reference_type: 'conference_booking',
-                    reference_id: booking.id,
-                    payment_method: method,
-                    amount: amount,
-                    customer_name: booking.customer_name || 'Conference Client'
-                });
-
-                if (error) {
-
-                  console.error('Database error:', error);
-
-                  throw error;
-
-                }
-            }
-
-            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
+            const settlement = await recordConferenceCashierPayment({
+                bookingId: booking.id,
+                amount: Number(amount),
+                paymentMethod: method,
+                reference: paymentRef,
+                cashierUserId: req.user?.id!,
+                cashierName: `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim() || null,
+                amountTendered,
+                changeGiven,
+            });
             res.json({
                 success: true,
                 message: 'Conference payment processed successfully',
-                data: payment
+                data: {
+                    id: settlement.paymentId,
+                    booking_id: settlement.bookingId,
+                    amount: settlement.amount,
+                    payment_method: method,
+                    reference: settlement.paymentReference,
+                    balance: settlement.balance,
+                    payment_status: settlement.paymentStatus,
+                    cashier_transaction_id: settlement.cashierTransactionId,
+                    cashier_shift_log_id: settlement.cashierShiftLogId,
+                }
             });
             return;
         }
@@ -3436,65 +3391,43 @@ export const processCashierPayment = async (
             throw new AppError('Bill or booking not found', 404);
         }
 
-        // 1. Record Payment in Database
         const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
-        const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
-
-        const { data: payment, error: paymentError } = await supabase
-            .from('payments')
-            .insert({
-                booking_id: resolvedBookingId,
-                amount: amount,
-                payment_method: method,
-                status: initialStatus,
-                reference: paymentRef,
-                metadata: {
-                    processed_by: 'cashier',
-                    cashier_id: req.user?.id,
-                    processed_at: new Date().toISOString(),
-                    verification_required: !isVerifiedMethod,
-                    original_id: bookingId
-                }
-            })
-            .select()
-            .single();
-
-        if (paymentError) {
-            throw new AppError(`Payment recording failed: ${paymentError.message}`, 500);
+        if (!isVerifiedMethod) {
+            throw new AppError(
+                'Unsupported hotel payment method. Use Cash, M-Pesa, Card, or Credit Bill.',
+                400
+            );
         }
 
-        // 2. Update Booking Status (if fully paid and payment is completed)
-        if (initialStatus === 'completed') {
-            const { data: booking } = await supabase
-                .from('reservations')
-                .select('total_amount')
-                .eq('id', resolvedBookingId)
-                .single();
-
-            const { data: allPayments } = await supabase
-                .from('payments')
-                .select('amount')
-                .eq('booking_id', resolvedBookingId)
-                .eq('status', 'completed');
-
-            const totalPaid = allPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
-
-            if (booking && totalPaid >= booking.total_amount) {
-                await supabase
-                    .from('reservations')
-                    .update({
-                        payment_status: 'paid',
-                        deposit_paid: true
-                    })
-                    .eq('id', resolvedBookingId);
-            }
-        }
-
-        await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
+        const result = await recordHotelCashierPayment({
+            reservationId: String(resolvedBookingId),
+            amount: Number(amount),
+            paymentMethod: String(method),
+            reference: paymentRef,
+            cashierUserId: String(req.user?.id || ''),
+            cashierName: `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim(),
+            amountTendered,
+            changeGiven,
+        });
+        billCache.clear();
         res.json({
             success: true,
             message: 'Hotel payment processed successfully',
-            data: payment
+            data: {
+                id: result.paymentId,
+                reservation_id: result.reservationId,
+                booking_id: result.reservationId,
+                folio_id: result.folioId,
+                cashier_transaction_id: result.cashierTransactionId,
+                cashier_shift_log_id: result.cashierShiftLogId,
+                amount: result.amount,
+                payment_method: result.method,
+                reference: paymentRef,
+                balance: result.balance,
+                payment_status: result.paymentStatus,
+                room_number: result.roomNumber,
+                guest_name: result.guestName
+            }
         });
 
     } catch (error) {
@@ -3810,6 +3743,23 @@ export const verifyPayment = async (
 export const getUnpaidBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { branch_id, status, customer_type, bill_type } = req.query;
+        const search = String(req.query.search || '').trim().toLowerCase();
+        const requestedDate = String(req.query.date || '').trim();
+        const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '25'), 10) || 25));
+        const offset = (page - 1) * limit;
+        const hasDateFilter = !!(requestedDate || req.query.from_date || req.query.to_date);
+        let from: Date | null = null;
+        let to: Date | null = null;
+        if (hasDateFilter) {
+            const date = requestedDate || new Date().toISOString().slice(0, 10);
+            from = req.query.from_date
+                ? new Date(String(req.query.from_date))
+                : new Date(`${date}T00:00:00.000Z`);
+            to = req.query.to_date
+                ? new Date(String(req.query.to_date))
+                : new Date(`${date}T23:59:59.999Z`);
+        }
 
         const userRole = (req.user as any)?.role?.toLowerCase() || '';
         const isGlobal = isGlobalRole(userRole);
@@ -3830,7 +3780,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
         // Prepare queries for parallel execution
         let shiftQuery = supabase
             .from('shift_transactions')
-            .select('id, transaction_number, created_at, customer_name, total_amount, service_category, branch:branches(name)')
+            .select('id, transaction_number, created_at, transaction_ref, notes, total_amount, service_category, branch:branches(name)')
             .eq('payment_method', 'BILL')
             .eq('is_voided', false)
             .order('created_at', { ascending: false });
@@ -3838,10 +3788,15 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
         if (effectiveBranchId) {
             shiftQuery = shiftQuery.eq('branch_id', effectiveBranchId);
         }
+        if (from && to) {
+            shiftQuery = shiftQuery
+                .gte('created_at', from.toISOString())
+                .lte('created_at', to.toISOString());
+        }
 
         let query = supabase
             .from('unpaid_bills')
-            .select('*')
+            .select('id, bill_number, bill_date, created_at, branch_id, bill_type, customer_id, customer_name, room_number, waiter_id, total_amount, paid_amount, balance_amount, status, due_date, remarks')
             .order('bill_date', { ascending: false });
 
         if (effectiveBranchId) {
@@ -3854,12 +3809,25 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             query = query.neq('status', 'paid');
         }
 
-        if (customer_type) {
-            query = query.eq('customer_type', customer_type as string);
-        }
+        // if (customer_type) {
+        //     query = query.eq('customer_type', customer_type as string);
+        // }
 
         if (bill_type) {
             query = query.eq('bill_type', bill_type as string);
+        }
+        if (search) {
+            query = query.or([
+                `bill_number.ilike.%${search}%`,
+                `customer_name.ilike.%${search}%`,
+                `room_number.ilike.%${search}%`,
+                `remarks.ilike.%${search}%`,
+            ].join(','));
+        }
+        if (from && to) {
+            query = query
+                .gte('bill_date', from.toISOString().slice(0, 10))
+                .lte('bill_date', to.toISOString().slice(0, 10));
         }
 
         // Execute queries concurrently for maximum speed
@@ -3880,7 +3848,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             bill_number: tx.transaction_number,
             bill_date: tx.created_at,
             source_type: 'KYOGONG',
-            customer_name: tx.customer_name || 'Guest',
+            customer_name: (tx as any).customer_name || 'Guest',
             total_amount: tx.total_amount,
             paid_amount: 0,
             balance_amount: tx.total_amount,
@@ -3890,6 +3858,10 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             is_kyogong: true
         }));
 
+        const requestedBillType = String(bill_type || '').toLowerCase();
+        const includeHotel = requestedBillType === 'hotel';
+        const includeFinance = !requestedBillType || requestedBillType === 'finance_invoice';
+        const includeAR = !requestedBillType || requestedBillType === 'ar_invoice';
         let combinedData: any[] = [...mappedKyogong];
 
         if (hasFullAccess) {
@@ -3921,56 +3893,104 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 };
             });
 
-            // Fetch Unpaid Hotel Reservations
-            // Hotel reservations might have `branch_id = null`, but the attached room has the real branch.
-            // We must query the rooms table to filter correctly.
-            let hotelQuery = supabase
-                .from('reservations')
-                .select(`
-                    *,
-                    room:rooms!inner(branch_id)
-                `)
-                .in('status', ['confirmed', 'checked_in'])
-                .order('created_at', { ascending: false });
+            const hotelReservationsPromise = includeHotel
+                ? (() => {
+                    let hotelQuery = supabase
+                        .from('reservations')
+                        .select(`
+                            id,
+                            confirmation_number,
+                            guest_name,
+                            total_amount,
+                            amount_paid,
+                            deposit_amount,
+                            created_at,
+                            status,
+                            room:rooms!inner(branch_id)
+                        `)
+                        .in('status', ['confirmed', 'checked_in'])
+                        .order('created_at', { ascending: false });
 
-            if (effectiveBranchId) {
-                // Filter by the joined room's branch_id
-                hotelQuery = hotelQuery.eq('room.branch_id', effectiveBranchId);
-            }
+                    if (effectiveBranchId) {
+                        hotelQuery = hotelQuery.eq('room.branch_id', effectiveBranchId);
+                    }
+                    if (from && to) {
+                        hotelQuery = hotelQuery
+                            .gte('created_at', from.toISOString())
+                            .lte('created_at', to.toISOString());
+                    }
+                    return hotelQuery;
+                })()
+                : Promise.resolve({ data: [], error: null } as any);
 
-            const { data: hotelReservations, error: hotelError } = await hotelQuery;
-            if (hotelError) throw hotelError;
+            const financeInvoicesPromise = includeFinance
+                ? (() => {
+                    let financeInvoiceQuery = supabase
+                        .from('finance_invoices')
+                        .select('id, invoice_number, branch_id, customer_name, total_amount, paid_amount, created_at, status')
+                        .neq('status', 'paid')
+                        .order('created_at', { ascending: false });
 
-            // Map Hotel Reservations to unpaid_bills format
-            const mappedHotel = (hotelReservations || []).map(resv => ({
+                    if (effectiveBranchId) {
+                        financeInvoiceQuery = financeInvoiceQuery.eq('branch_id', effectiveBranchId);
+                    }
+                    if (from && to) {
+                        financeInvoiceQuery = financeInvoiceQuery
+                            .gte('created_at', from.toISOString())
+                            .lte('created_at', to.toISOString());
+                    }
+                    return financeInvoiceQuery;
+                })()
+                : Promise.resolve({ data: [], error: null } as any);
+
+            const arInvoicesPromise = includeAR
+                ? (() => {
+                    let arInvoiceQuery = supabase
+                        .from('accounting_ar_invoices')
+                        .select('id, invoice_number, branch_id, notes, total_amount, balance, created_at, status')
+                        .neq('status', 'paid')
+                        .order('created_at', { ascending: false });
+
+                    if (effectiveBranchId) {
+                        arInvoiceQuery = arInvoiceQuery.eq('branch_id', effectiveBranchId);
+                    }
+                    if (from && to) {
+                        arInvoiceQuery = arInvoiceQuery
+                            .gte('created_at', from.toISOString())
+                            .lte('created_at', to.toISOString());
+                    }
+                    return arInvoiceQuery;
+                })()
+                : Promise.resolve({ data: [], error: null } as any);
+
+            const [
+                hotelReservationsRes,
+                financeInvoicesRes,
+                arInvoicesRes,
+            ] = await Promise.all([
+                hotelReservationsPromise,
+                financeInvoicesPromise,
+                arInvoicesPromise,
+            ]);
+
+            if (hotelReservationsRes.error) throw hotelReservationsRes.error;
+            if (financeInvoicesRes.error) throw financeInvoicesRes.error;
+            if (arInvoicesRes.error) throw arInvoicesRes.error;
+
+            const mappedHotel = (hotelReservationsRes.data || []).map((resv: any) => ({
                 id: resv.id,
                 bill_number: resv.confirmation_number,
                 branch_id: resv.room?.branch_id,
                 bill_type: 'hotel',
                 customer_name: resv.guest_name,
-                total_amount: resv.total_amount,
-                paid_amount: resv.amount_paid || resv.deposit_amount || 0,
-                balance_amount: Number(resv.total_amount) - Number(resv.amount_paid || resv.deposit_amount || 0),
+                paid_amount: resv.deposit_paid ? (resv.amount_paid || resv.deposit_amount || 0) : (resv.amount_paid || 0),
+                balance_amount: Number(resv.total_amount) - Number(resv.deposit_paid ? (resv.amount_paid || resv.deposit_amount || 0) : (resv.amount_paid || 0)),
                 bill_date: resv.created_at,
                 status: resv.status,
                 is_hotel: true
-            })).filter(h => h.balance_amount > 0);
+            })).filter((hotelBill: any) => hotelBill.balance_amount > 0);
 
-            // Fetch Unpaid Finance Invoices
-            let financeInvoiceQuery = supabase
-                .from('finance_invoices')
-                .select('*')
-                .neq('status', 'paid')
-                .order('created_at', { ascending: false });
-
-            if (effectiveBranchId) {
-                financeInvoiceQuery = financeInvoiceQuery.eq('branch_id', effectiveBranchId);
-            }
-
-            const { data: financeInvoices } = await financeInvoiceQuery;
-
-            // Map Finance Invoices
-            const mappedFinance = (financeInvoices || []).map(inv => ({
+            const mappedFinance = (financeInvoicesRes.data || []).map((inv: any) => ({
                 id: inv.id,
                 bill_number: inv.invoice_number,
                 branch_id: inv.branch_id,
@@ -3984,18 +4004,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 is_invoice: true
             }));
 
-            // Fetch Unpaid Accounting AR Invoices
-            let arInvoiceQuery = supabase
-                .from('accounting_ar_invoices')
-                .select('*')
-                .neq('status', 'paid')
-                .order('created_at', { ascending: false });
-
-            const { data: arInvoices, error: arInvoiceError } = await arInvoiceQuery;
-            if (arInvoiceError) throw arInvoiceError;
-
-            // Map AR Invoices
-            const mappedAR = (arInvoices || []).map(inv => ({
+            const mappedAR = (arInvoicesRes.data || []).map((inv: any) => ({
                 id: inv.id,
                 bill_number: inv.invoice_number,
                 branch_id: inv.branch_id,
@@ -4015,7 +4024,6 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             // Reception "Room Bills" section (guest folios) and are cleared via
             // the cashier's dedicated Room Bills tab, not mixed in here. An
             // explicit bill_type=hotel query still returns them (reporting).
-            const includeHotel = String(bill_type || '').toLowerCase() === 'hotel';
             combinedData = [
                 ...combinedData,
                 ...mappedUnpaidBills,
@@ -4025,14 +4033,38 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             ];
         }
 
+        if (search) {
+            combinedData = combinedData.filter((row) =>
+                [
+                    row.bill_number,
+                    row.customer_name,
+                    row.room_number,
+                    row.description,
+                    row.waiter_name,
+                    row.remarks,
+                ]
+                    .join(' ')
+                    .toLowerCase()
+                    .includes(search)
+            );
+        }
+
         // Sort final combined data
         combinedData.sort((a, b) => new Date(b.bill_date).getTime() - new Date(a.bill_date).getTime());
+        const total = combinedData.length;
+        const pagedData = combinedData.slice(offset, offset + limit);
 
 
         res.json({
             success: true,
             message: 'Unpaid bills retrieved successfully',
-            data: combinedData
+            data: pagedData,
+            pagination: {
+                page,
+                limit,
+                total,
+                has_more: offset + limit < total,
+            }
         });
     } catch (error) {
         next(error);
@@ -4159,6 +4191,7 @@ export const addChargeToUnpaidBill = async (req: Request, res: Response, next: N
             .single();
         if (error) throw error;
 
+        billCache.clear();
         res.json({ success: true, message: 'Charge billed to customer account', data });
     } catch (error) {
         next(error);
@@ -4173,9 +4206,9 @@ export const addChargeToUnpaidBill = async (req: Request, res: Response, next: N
  */
 async function settleNonManualBill(
     id: string,
-    opts: { paymentAmount: number; payment_method?: string; payment_reference?: string; cashierId?: string },
+    opts: { paymentAmount: number; payment_method?: string; payment_reference?: string; cashierId?: string; cashierName?: string },
 ): Promise<any | null> {
-    const { paymentAmount, payment_method, payment_reference, cashierId } = opts;
+    const { paymentAmount, payment_method, payment_reference, cashierId, cashierName } = opts;
 
     // ── 1. Hotel reservation ────────────────────────────────────────────────
     const { data: reservation } = await supabase
@@ -4185,48 +4218,27 @@ async function settleNonManualBill(
         .maybeSingle();
 
     if (reservation) {
-        const branchId = reservation.branch_id || reservation.room?.branch_id || null;
-        const total = Number(reservation.total_amount || 0);
-        const alreadyPaid = Number(reservation.amount_paid || reservation.deposit_amount || 0);
-        const newPaid = alreadyPaid + paymentAmount;
-        const fullyPaid = total > 0 && newPaid >= total;
-
-        const { data: updated, error: updErr } = await supabase
-            .from('reservations')
-            .update({
-                amount_paid: newPaid,
-                payment_status: fullyPaid ? 'paid' : 'partial',
-            })
-            .eq('id', id)
-            .select()
-            .maybeSingle();
-        if (updErr) throw updErr;
-
-        if (fullyPaid) {
-            try {
-                await supabase
-                    .from('folios')
-                    .update({
-                        status: 'closed',
-                        settled: true,
-                        settled_at: new Date().toISOString(),
-                        balance: 0,
-                        balance_due: 0,
-                        total_payments: newPaid,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('reservation_id', id);
-            } catch (folErr: any) {
-                logger.warn('Could not settle folio on cashier payment:', folErr?.message);
-            }
+        if (!cashierId) {
+            throw new AppError('Cashier user is required to settle hotel bills', 403);
         }
 
-        await recordCashierTransactionSafe({
-            branchId, cashierId, paymentAmount, payment_method, payment_reference,
-            revenueType: 'hotel', referenceType: 'reservation', referenceId: id,
-            customerName: reservation.guest_name,
+        const result = await recordHotelCashierPayment({
+            reservationId: id,
+            amount: paymentAmount,
+            paymentMethod: payment_method || 'cash',
+            reference: payment_reference,
+            cashierUserId: cashierId,
+            cashierName,
         });
-        return updated || { id, paid_amount: newPaid, balance_amount: Math.max(0, total - newPaid), status: fullyPaid ? 'paid' : 'partial' };
+
+        return {
+            id,
+            paid_amount: result.totalPaid,
+            balance_amount: result.balance,
+            status: result.paymentStatus,
+            payment_id: result.paymentId,
+            folio_id: result.folioId,
+        };
     }
 
     // ── 2. Kyogong POS shift transaction ────────────────────────────────────
@@ -4334,8 +4346,10 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
                 payment_method,
                 payment_reference,
                 cashierId: req.user?.id,
+                cashierName: `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim(),
             });
             if (settled) {
+                billCache.clear();
                 res.json({ success: true, message: 'Payment recorded successfully', data: settled });
                 return;
             }
@@ -4403,6 +4417,7 @@ export const recordBillPayment = async (req: Request, res: Response, next: NextF
             amount: paymentAmount
         });
 
+        billCache.clear();
         res.json({
             success: true,
             message: 'Payment recorded successfully',
@@ -6392,37 +6407,42 @@ export const getCashierStats = async (req: Request, res: Response, next: NextFun
         const isGlobal = isGlobalRole(req.user?.role);
         const effectiveBranchId = isGlobal && branch_id ? parseInt(branch_id as string) : req.user?.branch_id;
 
-        // Get today's transactions
         let txQuery = supabase
             .from('cashier_transactions')
-            .select('*')
+            .select('amount,revenue_type')
             .gte('transaction_date', today);
         if (effectiveBranchId) txQuery = txQuery.eq('branch_id', effectiveBranchId);
-        const { data: transactions } = await txQuery;
 
-        // Get unpaid bills
         let unpaidQuery = supabase
             .from('unpaid_bills')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('status', 'unpaid');
         if (effectiveBranchId) unpaidQuery = unpaidQuery.eq('branch_id', effectiveBranchId);
-        const { count: unpaidCount } = await unpaidQuery;
 
-        // Get pending credit bills
         let creditQuery = supabase
             .from('credit_bills')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('approval_status', 'pending');
         if (effectiveBranchId) creditQuery = creditQuery.eq('branch_id', effectiveBranchId);
-        const { count: pendingCreditsCount } = await creditQuery;
 
-        // Get active shift
-        const { data: activeShift } = await supabase
+        const activeShiftQuery = supabase
             .from('cashier_shifts')
-            .select('*')
+            .select('id,branch_id,cashier_id,status,shift_start,opening_float,expected_cash,expense_total,total_sales,updated_at')
             .eq('cashier_id', req.user?.id)
             .eq('status', 'open')
-            .single();
+            .maybeSingle();
+
+        const [
+            { data: transactions },
+            { count: unpaidCount },
+            { count: pendingCreditsCount },
+            { data: activeShift },
+        ] = await Promise.all([
+            txQuery,
+            unpaidQuery,
+            creditQuery,
+            activeShiftQuery,
+        ]);
 
         const todayRevenue = transactions?.reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
 
@@ -6444,6 +6464,40 @@ export const getCashierStats = async (req: Request, res: Response, next: NextFun
                 pendingCreditApprovals: pendingCreditsCount || 0,
                 activeShift
             }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getHotelPaymentOrphansReport = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const isGlobal = isGlobalRole(req.user?.role);
+        const branchId = isGlobal
+            ? Number(req.query.branch_id || req.query.branchId || 0) || null
+            : Number(req.user?.branch_id || 0) || null;
+        const limit = Number(req.query.limit || 100);
+        const offset = Number(req.query.offset || 0);
+        const report = await findHotelPaymentOrphans({
+            branchId,
+            limit,
+            offset,
+        });
+
+        res.json({
+            success: true,
+            message: 'Hotel payment orphan report generated successfully',
+            data: report.rows,
+            meta: {
+                total: report.total,
+                limit: Math.max(1, Math.min(500, limit || 100)),
+                offset: Math.max(0, offset || 0),
+                branch_id: branchId,
+            },
         });
     } catch (error) {
         next(error);
@@ -8795,6 +8849,9 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
         const status = String(req.query.status || 'all').toLowerCase();
         const wantsVoidedOrders = ['voided', 'void'].includes(status);
         const search = String(req.query.search || '').trim().toLowerCase();
+        const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '25'), 10) || 25));
+        const offset = (page - 1) * limit;
         const requestedDate = String(req.query.date || '').trim();
         const hasDateFilter = !!(requestedDate || req.query.from_date || req.query.to_date);
         let from: Date | null = null;
@@ -8847,11 +8904,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     id, order_number, short_code, status, payment_status,
                     table_number, room_number, guest_name,
                     total_amount, amount_paid, balance_amount, created_at, branch_id, created_by,
-                    outlet_id,
-                    items:restaurant_order_items(
-                        id, quantity, unit_price, total_price,
-                        menu_item:restaurant_menu_items(name)
-                    )
+                    outlet_id
                 `)
                 .not('payment_status', 'in', '("paid","room_charge","charged_to_room","settled")')
                 .neq('status', 'cancelled')
@@ -8889,8 +8942,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     id, order_number, short_code, status, payment_status,
                     seat_number, room_number, guest_name,
                     total, amount_paid, balance_amount, created_at, branch_id, created_by,
-                    outlet_id,
-                    items:bar_order_items(id, drink_name, quantity, unit_price, total_price)
+                    outlet_id
                 `)
                 .neq('payment_status', 'paid')
                 .neq('status', 'cancelled')
@@ -8959,7 +9011,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                 const allowedStatuses = status === 'all' ? ['unpaid', 'partial'] : [status];
                 let posOrdersQuery = supabase
                     .from('pos_shift_orders')
-                    .select('*')
+                    .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_id, waiter_name, created_by, total_amount, amount_paid, balance_amount, payment_status, status, created_at, captain_printed_at, original_bill_printed_at, last_bill_printed_at, bill_reprint_count, void_request_status, void_reason, voided_at, voided_by')
                     .in('shift_id', posShiftIds)
                     .order('created_at', { ascending: false });
                 if (wantsVoidedOrders) {
@@ -9075,13 +9127,6 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     const waiter = waiterMap.get(String(o.created_by || ''));
                     return waiter ? `${waiter.first_name || ''} ${waiter.last_name || ''}`.trim() : '';
                 })(),
-                items: (o.items || []).map((item: any) => ({
-                    id: item.id,
-                    item_name: item.menu_item?.name || 'Menu item',
-                    quantity: item.quantity,
-                    unit_price: item.unit_price,
-                    total_price: item.total_price
-                })),
                 is_waiter_order: true
             })),
             ...(barOrders || []).map((o: any) => ({
@@ -9109,13 +9154,11 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                     const waiter = waiterMap.get(String(o.created_by || ''));
                     return waiter ? `${waiter.first_name || ''} ${waiter.last_name || ''}`.trim() : '';
                 })(),
-                items: o.items || [],
                 is_waiter_order: true
             })),
             ...posOrders
             .filter((o: any) => wantsVoidedOrders || !isNullifiedZeroPosOrder(o))
             .map((o: any) => {
-                const items = Array.isArray(o.items) ? o.items : [];
                 const shift = shiftLookup[o.shift_id];
                 const outlet = Array.isArray(shift?.outlet) ? shift.outlet[0] : shift?.outlet;
                 const stationName = outlet?.name || stationDisplayName(outlet?.outlet_type);
@@ -9186,13 +9229,7 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
                             unit_price: Number(v.unit_price || 0),
                             total_price: Number(v.qty_to_void || 0) * Number(v.unit_price || 0)
                         }))
-                        : items.map((item: any, index: number) => ({
-                            id: item.outlet_item_id || `${o.id}-${index}`,
-                            item_name: item.name || item.item_name || 'POS item',
-                            quantity: Number(item.quantity || item.qty || 1),
-                            unit_price: Number(item.unit_price || item.price || 0),
-                            total_price: Number(item.line_total || 0)
-                        })),
+                        : undefined,
                     is_waiter_order: true,
                     is_captain_order: true,
                     is_voided: isVoided || isItemLevelVoid
@@ -9209,7 +9246,19 @@ export const getUnpaidWaiterOrders = async (req: Request, res: Response, next: N
             ].join(' ').toLowerCase().includes(search);
         }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        res.json({ success: true, data: mapped });
+        const total = mapped.length;
+        const paged = mapped.slice(offset, offset + limit);
+
+        res.json({
+            success: true,
+            data: paged,
+            pagination: {
+                page,
+                limit,
+                total,
+                has_more: offset + limit < total,
+            }
+        });
     } catch (error) {
         next(error);
     }

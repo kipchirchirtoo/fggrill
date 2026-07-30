@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { protect } from '../middleware/auth';
+import { withCache } from '../middleware/cacheMiddleware';
+import { CacheKeys, CACHE_TTL } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import {
   approveItemExchange,
@@ -13,6 +15,7 @@ import {
   closeShift,
   createOutlet,
   createOutletItem,
+  deleteOutletItem,
   getActiveShift,
   getBarCaptainOrders,
   getWaiterOpenBills,
@@ -132,6 +135,28 @@ const allowedRoles = new Set([
   'guest_services'
 ]);
 
+const resolveBootstrapCacheKey = (req: any): string => {
+  const userId = String(req.user?.id || 'anonymous');
+  const signature = [
+    `branch=${String(req.query.branch_id || req.user?.branch_id || 0)}`,
+    `outlet=${String(req.query.outlet_id || req.query.outletId || 'auto').trim().toLowerCase()}`,
+    `type=${String(req.query.outlet_type || 'all').trim().toLowerCase()}`,
+    `selected=${String(req.query.selected_outlet_type || 'auto').trim().toLowerCase()}`,
+    `all=${String(req.query.all_outlets || 'false').trim().toLowerCase()}`,
+  ].join('|');
+  return CacheKeys.posBootstrap(userId, signature);
+};
+
+const resolveOutletItemsCacheKey = (req: any): string => {
+  const userId = String(req.user?.id || 'anonymous');
+  const outletId = String(req.params?.outletId || '').trim().toLowerCase();
+  const includeRelated = String(req.query?.include_related ?? req.query?.unified ?? 'false')
+    .trim()
+    .toLowerCase();
+  const sync = String(req.query?.sync || 'false').trim().toLowerCase();
+  return `${CacheKeys.posBootstrap(userId, `outlet-items|${outletId}|related=${includeRelated}|sync=${sync}`)}`;
+};
+
 router.use(protect);
 router.use((req, res, next) => {
   const role = String(req.user?.role || '').toLowerCase();
@@ -143,7 +168,13 @@ router.use((req, res, next) => {
 
 router.get('/printer/status', getPrinterStatus);
 router.get('/captain-orders', getBarCaptainOrders);
-router.get('/bootstrap', getPosBootstrap);
+router.get(
+  '/bootstrap',
+  withCache(resolveBootstrapCacheKey, CACHE_TTL.POS_BOOTSTRAP, {
+    skipCache: (req) => String(req.query.sync || '').toLowerCase() === 'true',
+  }),
+  getPosBootstrap,
+);
 
 // Master bills across outlets (waiter recalls their own orders from any outlet
 // and combines them into ONE master bill for the customer; the origin cashier
@@ -166,9 +197,16 @@ router.post('/settlements/:settlementId/resolve', resolveDisputedSettlement);
 router.get('/outlets', getOutlets);
 router.post('/outlets', createOutlet);
 router.get('/staff', getOutletStaff);
-router.get('/outlets/:outletId/items', getOutletItems);
+router.get(
+  '/outlets/:outletId/items',
+  withCache(resolveOutletItemsCacheKey, CACHE_TTL.MENU, {
+    skipCache: (req) => String(req.query.sync || '').toLowerCase() === 'true',
+  }),
+  getOutletItems
+);
 router.post('/outlets/:outletId/items', createOutletItem);
 router.patch('/outlets/:outletId/items/:itemId', updateOutletItem);
+router.delete('/outlets/:outletId/items/:itemId', deleteOutletItem);
 router.post('/outlets/:outletId/sync-items', syncOutletItems);
 router.patch('/outlets/:outletId', updateOutlet);
 router.get('/outlets/:outletId/shifts/active', getActiveShift);

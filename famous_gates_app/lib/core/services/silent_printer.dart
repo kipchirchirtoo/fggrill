@@ -17,6 +17,13 @@ class SilentPrinter {
   static const _urlKey = 'printer_default_url';
   static const _nameKey = 'printer_default_name';
 
+  // Memoised resolved printer. Resolving a printer on every print is expensive:
+  // it reads secure storage and, with no saved printer, calls
+  // Printing.listPrinters() which enumerates the OS (slow with network/offline
+  // printers) — adding hundreds of ms to every receipt. We resolve once and
+  // reuse it; save/clear reset the cache so a re-pick takes effect immediately.
+  static Printer? _cachedPrinter;
+
   static Future<Printer?> getSavedPrinter() async {
     final url = await _storage.read(key: _urlKey);
     if (url == null || url.isEmpty) return null;
@@ -27,24 +34,33 @@ class SilentPrinter {
   static Future<void> savePrinter(Printer printer) async {
     await _storage.write(key: _urlKey, value: printer.url);
     await _storage.write(key: _nameKey, value: printer.name);
+    _cachedPrinter = printer; // use the freshly-picked printer right away
   }
 
   static Future<void> clearSavedPrinter() async {
     await _storage.delete(key: _urlKey);
     await _storage.delete(key: _nameKey);
+    _cachedPrinter = null; // force a fresh resolve on the next print
   }
 
   static Future<List<Printer>> listAvailable() => Printing.listPrinters();
 
   static Future<Printer?> _resolvePrinter() async {
+    // Fast path: reuse the printer resolved on a previous print this session.
+    if (_cachedPrinter != null) return _cachedPrinter;
     final saved = await getSavedPrinter();
-    if (saved != null) return saved;
+    if (saved != null) {
+      _cachedPrinter = saved;
+      return saved;
+    }
     final printers = await Printing.listPrinters();
-    if (printers.isEmpty) return null;
-    return printers.firstWhere(
+    if (printers.isEmpty) return null; // don't cache: retry when one appears
+    final resolved = printers.firstWhere(
       (p) => p.isDefault,
       orElse: () => printers.first,
     );
+    _cachedPrinter = resolved;
+    return resolved;
   }
 
   /// Drop-in replacement for `Printing.layoutPdf` that prints straight to a

@@ -4,6 +4,93 @@ import { logger } from '../utils/logger';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import { PYTHON_SERVICE_URL } from '../config/pythonService';
+import db from '../db';
+
+const NAIROBI_TIMEZONE = 'Africa/Nairobi';
+const DEFAULT_CHECKOUT_HOUR = 11;
+const DEFAULT_CHECKOUT_MINUTE = 0;
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function getNairobiDateParts(value: Date | string): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} | null {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: NAIROBI_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const map = new Map(parts.map((part) => [part.type, part.value]));
+  const year = Number(map.get('year'));
+  const month = Number(map.get('month'));
+  const day = Number(map.get('day'));
+  const hour = Number(map.get('hour'));
+  const minute = Number(map.get('minute'));
+
+  if ([year, month, day, hour, minute].some((item) => !Number.isFinite(item))) {
+    return null;
+  }
+
+  return { year, month, day, hour, minute };
+}
+
+function formatDateKey(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function nairobiDateString(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const parts = getNairobiDateParts(value);
+  if (!parts) return null;
+  return formatDateKey(parts.year, parts.month, parts.day);
+}
+
+function nairobiNowContext(now = new Date()) {
+  const parts = getNairobiDateParts(now);
+  if (!parts) {
+    throw new Error('Unable to resolve Nairobi time context');
+  }
+  return {
+    date: formatDateKey(parts.year, parts.month, parts.day),
+    minutes: parts.hour * 60 + parts.minute,
+  };
+}
+
+function compareDateKeys(left: string, right: string): number {
+  return left.localeCompare(right);
+}
+
+function diffDays(startDate: string, endDate: string): number {
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  const startUtc = Date.UTC(startYear, startMonth - 1, startDay);
+  const endUtc = Date.UTC(endYear, endMonth - 1, endDay);
+  return Math.round((endUtc - startUtc) / (24 * 60 * 60 * 1000));
+}
+
+function addDays(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day + days));
+  return utc.toISOString().slice(0, 10);
+}
+
+function dateKeyToMidnightUtc(dateKey: string): string {
+  return `${dateKey}T00:00:00.000Z`;
+}
 
 class AutomationService {
   private emailTransporter: nodemailer.Transporter;
@@ -53,7 +140,7 @@ class AutomationService {
       this.generateMonthlyPayroll();
     });
 
-    // Auto-checkout overdue bookings (every 2 hours)
+    // Extend overdue in-house stays after checkout cutoff (every 2 hours)
     cron.schedule('0 */2 * * *', () => {
       this.autoCheckoutOverdue();
     });
@@ -302,39 +389,392 @@ class AutomationService {
     }
   }
 
-  // Auto-checkout overdue bookings
+  // Auto-extend overdue in-house stays instead of force-checking them out.
   private async autoCheckoutOverdue() {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const nairobiNow = nairobiNowContext(now);
+      const cutoffMinutes = DEFAULT_CHECKOUT_HOUR * 60 + DEFAULT_CHECKOUT_MINUTE;
+      const client = await db.getClient();
 
-      const { data: overdueBookings, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .lt('check_out_date', today)
-        .eq('status', 'checked_in');
+      try {
+        const result = await client.query(
+          `
+            SELECT
+              r.id,
+              r.branch_id,
+              r.guest_id,
+              r.room_id,
+              r.confirmation_number,
+              r.status,
+              r.check_in_date,
+              r.check_out_date,
+              r.original_check_out_date,
+              r.auto_extended_nights,
+              r.last_auto_extension_at,
+              r.room_rate,
+              r.subtotal,
+              r.tax_amount,
+              r.service_charge,
+              r.discount_amount,
+              r.total_amount,
+              r.amount_paid,
+              r.deposit_amount,
+              rm.room_number,
+              rm.expected_checkout
+            FROM reservations r
+            LEFT JOIN rooms rm ON rm.id = r.room_id
+            WHERE LOWER(TRIM(COALESCE(r.status, ''))) = 'checked_in'
+              AND r.check_out_date IS NOT NULL
+            ORDER BY r.check_out_date ASC, r.updated_at ASC NULLS LAST
+          `
+        );
 
-      if (error) throw error;
+        let extendedReservations = 0;
+        let postedExtraNights = 0;
 
-      for (const booking of overdueBookings || []) {
-        await supabase
-          .from('bookings')
-          .update({
-            status: 'checked_out',
-            actual_check_out: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', booking.id);
+        for (const reservation of result.rows) {
+          const effectiveCheckoutDate = nairobiDateString(reservation.check_out_date);
+          const checkInDate = nairobiDateString(reservation.check_in_date);
+          if (!effectiveCheckoutDate || !checkInDate) {
+            continue;
+          }
 
-        // Update room status
-        await supabase
-          .from('rooms')
-          .update({ status: 'dirty' })
-          .eq('id', booking.room_id);
+          const daysBehind = Math.max(0, diffDays(effectiveCheckoutDate, nairobiNow.date));
+          const todayReachedCutoff =
+            compareDateKeys(nairobiNow.date, effectiveCheckoutDate) >= 0 &&
+            nairobiNow.minutes >= cutoffMinutes;
+          const extensionNights = daysBehind + (todayReachedCutoff ? 1 : 0);
+
+          if (extensionNights <= 0) {
+            continue;
+          }
+
+          const bookedNights = Math.max(1, diffDays(checkInDate, reservation.original_check_out_date || effectiveCheckoutDate));
+          const currentTotalAmount = Number(reservation.total_amount || 0);
+          const currentSubtotal = Number(reservation.subtotal || 0);
+          const currentTaxAmount = Number(reservation.tax_amount || 0);
+          const currentServiceCharge = Number(reservation.service_charge || 0);
+          const currentDiscountAmount = Number(reservation.discount_amount || 0);
+          const fallbackNightlyRate = Number(reservation.room_rate || 0);
+
+          // Locked nightly rate snapshot: use room_rate if set, else calculate initial rate from bookedNights
+          const nightlyTotal =
+            fallbackNightlyRate > 0
+              ? roundMoney(fallbackNightlyRate)
+              : currentTotalAmount > 0
+              ? roundMoney(currentTotalAmount / bookedNights)
+              : 0;
+
+          if (!(nightlyTotal > 0)) {
+            logger.warn('Skipping overdue stay auto-extension because nightly rate could not be derived', {
+              reservationId: reservation.id,
+              confirmationNumber: reservation.confirmation_number,
+            });
+            continue;
+          }
+
+          const nightlySubtotal =
+            currentSubtotal > 0
+              ? roundMoney(currentSubtotal / bookedNights)
+              : roundMoney(nightlyTotal / 1.26);
+          const nightlyTax =
+            currentTaxAmount > 0
+              ? roundMoney(currentTaxAmount / bookedNights)
+              : roundMoney(nightlySubtotal * 0.16);
+          const nightlyService =
+            currentServiceCharge > 0
+              ? roundMoney(currentServiceCharge / bookedNights)
+              : roundMoney(nightlySubtotal * 0.10);
+          const nightlyDiscount =
+            currentDiscountAmount > 0
+              ? roundMoney(currentDiscountAmount / bookedNights)
+              : 0;
+
+          const extraRoomCharge = roundMoney(nightlyTotal * extensionNights);
+          const extraSubtotal = roundMoney(nightlySubtotal * extensionNights);
+          const extraTaxAmount = roundMoney(nightlyTax * extensionNights);
+          const extraServiceCharge = roundMoney(nightlyService * extensionNights);
+          const extraDiscountAmount = roundMoney(nightlyDiscount * extensionNights);
+          const nextCheckoutDate = addDays(effectiveCheckoutDate, extensionNights);
+          const reservationBasePaid = Math.max(
+            Number(reservation.amount_paid || 0),
+            Number(reservation.deposit_amount || 0)
+          );
+
+          const idempotencyRef = `AUTO-OVERSTAY-${reservation.confirmation_number || reservation.id}-${effectiveCheckoutDate}`;
+
+          // Database-level idempotency check: skip if charge for this overstay date key already exists
+          const duplicateCheck = await client.query(
+            `SELECT id FROM folio_transactions WHERE reference = $1 AND status = 'posted' LIMIT 1`,
+            [idempotencyRef]
+          );
+          if (duplicateCheck.rows.length > 0) {
+            logger.info('Skipping duplicate overstay charge insertion', {
+              reservationId: reservation.id,
+              reference: idempotencyRef,
+            });
+            continue;
+          }
+
+          await client.query('BEGIN');
+          try {
+            const folioRes = await client.query(
+              `
+                SELECT
+                  id,
+                  status,
+                  room_charges,
+                  food_charges,
+                  beverage_charges,
+                  other_charges,
+                  total_charges,
+                  total_payments,
+                  balance,
+                  balance_due
+                FROM folios
+                WHERE reservation_id = $1
+                ORDER BY created_at DESC
+                LIMIT 1
+                FOR UPDATE
+              `,
+              [reservation.id]
+            );
+
+            let folio = folioRes.rows[0];
+            if (!folio) {
+              const createdFolio = await client.query(
+                `
+                  INSERT INTO folios (
+                    branch_id,
+                    reservation_id,
+                    guest_id,
+                    folio_number,
+                    status,
+                    room_charges,
+                    food_charges,
+                    beverage_charges,
+                    other_charges,
+                    total_charges,
+                    total_payments,
+                    balance,
+                    balance_due,
+                    settled,
+                    created_at,
+                    updated_at
+                  )
+                  VALUES (
+                    $1, $2, $3, $4, 'open',
+                    $5, 0, 0, 0, $5, 0, $5, $5, false, NOW(), NOW()
+                  )
+                  RETURNING
+                    id,
+                    status,
+                    room_charges,
+                    food_charges,
+                    beverage_charges,
+                    other_charges,
+                    total_charges,
+                    total_payments,
+                    balance,
+                    balance_due
+                `,
+                [
+                  reservation.branch_id,
+                  reservation.id,
+                  reservation.guest_id,
+                  reservation.confirmation_number || `FOL-${Date.now()}`,
+                  currentTotalAmount,
+                ]
+              );
+              folio = createdFolio.rows[0];
+            }
+
+            const currentRoomCharges = Math.max(
+              Number(folio.room_charges || 0),
+              currentTotalAmount
+            );
+            const nextRoomCharges = roundMoney(currentRoomCharges + extraRoomCharge);
+            const foodCharges = Number(folio.food_charges || 0);
+            const beverageCharges = Number(folio.beverage_charges || 0);
+            const otherCharges = Number(folio.other_charges || 0);
+            const trackedPayments = Math.max(
+              Number(folio.total_payments || 0),
+              reservationBasePaid
+            );
+            const nextTotalCharges = roundMoney(
+              nextRoomCharges + foodCharges + beverageCharges + otherCharges
+            );
+            // Preserve negative balance for guest credit / overpayment
+            const nextBalance = roundMoney(nextTotalCharges - trackedPayments);
+            const nextReservationTotal = roundMoney(currentTotalAmount + extraRoomCharge);
+            const nextReservationSubtotal = roundMoney(
+              currentSubtotal + extraSubtotal
+            );
+            const nextReservationTax = roundMoney(
+              currentTaxAmount + extraTaxAmount
+            );
+            const nextReservationService = roundMoney(
+              currentServiceCharge + extraServiceCharge
+            );
+            const nextReservationDiscount = roundMoney(
+              currentDiscountAmount + extraDiscountAmount
+            );
+            // Constraint-compliant payment status values for reservations/bookings
+            const nextPaymentStatus =
+              nextBalance <= 0
+                ? 'paid'
+                : trackedPayments > 0
+                ? 'partial'
+                : 'pending';
+
+            await client.query(
+              `
+                UPDATE reservations
+                SET
+                  check_out_date = $2,
+                  original_check_out_date = COALESCE(original_check_out_date, $3),
+                  auto_extended_nights = COALESCE(auto_extended_nights, 0) + $4,
+                  last_auto_extension_at = NOW(),
+                  subtotal = $5,
+                  tax_amount = $6,
+                  service_charge = $7,
+                  discount_amount = $8,
+                  total_amount = $9,
+                  payment_status = $10,
+                  updated_at = NOW()
+                WHERE id = $1
+              `,
+              [
+                reservation.id,
+                nextCheckoutDate,
+                effectiveCheckoutDate,
+                extensionNights,
+                nextReservationSubtotal,
+                nextReservationTax,
+                nextReservationService,
+                nextReservationDiscount,
+                nextReservationTotal,
+                nextPaymentStatus,
+              ]
+            );
+
+            // Synchronize parent booking if linked
+            if ((reservation as any).booking_id) {
+              await client.query(
+                `
+                  UPDATE bookings
+                  SET
+                    check_out_date = $2,
+                    total_amount = $3,
+                    payment_status = $4,
+                    updated_at = NOW()
+                  WHERE id = $1
+                `,
+                [(reservation as any).booking_id, nextCheckoutDate, nextReservationTotal, nextPaymentStatus]
+              );
+            }
+
+            await client.query(
+              `
+                UPDATE folios
+                SET
+                  status = 'open',
+                  settled = false,
+                  room_charges = $2,
+                  total_charges = $3,
+                  total_payments = $4,
+                  balance = $5,
+                  balance_due = $5,
+                  updated_at = NOW()
+                WHERE id = $1
+              `,
+              [folio.id, nextRoomCharges, nextTotalCharges, trackedPayments, nextBalance]
+            );
+
+            await client.query(
+              `
+                INSERT INTO folio_transactions (
+                  folio_id,
+                  branch_id,
+                  transaction_type,
+                  category,
+                  description,
+                  amount,
+                  tax_amount,
+                  total_amount,
+                  reference,
+                  posted_by,
+                  posted_at,
+                  status,
+                  created_at
+                )
+                VALUES (
+                  $1, $2, 'charge', 'Room Charge', $3, $4, $5, $4, $6, NULL, NOW(), 'posted', NOW()
+                )
+              `,
+              [
+                folio.id,
+                reservation.branch_id,
+                extensionNights === 1
+                  ? `Automatic overdue room-night extension for ${reservation.room_number || reservation.confirmation_number || reservation.id}`
+                  : `Automatic overdue extension (${extensionNights} room nights) for ${reservation.room_number || reservation.confirmation_number || reservation.id}`,
+                extraRoomCharge,
+                extraTaxAmount,
+                idempotencyRef,
+              ]
+            );
+
+            if (reservation.room_id) {
+              await client.query(
+                `
+                  UPDATE rooms
+                  SET
+                    status = 'occupied',
+                    current_guest = COALESCE($2, current_guest),
+                    expected_checkout = $3,
+                    updated_at = NOW()
+                  WHERE id = $1
+                `,
+                [
+                  reservation.room_id,
+                  reservation.guest_id,
+                  dateKeyToMidnightUtc(nextCheckoutDate),
+                ]
+              );
+            }
+
+
+            await client.query('COMMIT');
+            extendedReservations += 1;
+            postedExtraNights += extensionNights;
+
+            logger.info('Auto-extended overdue in-house stay', {
+              reservationId: reservation.id,
+              confirmationNumber: reservation.confirmation_number,
+              previousCheckoutDate: effectiveCheckoutDate,
+              nextCheckoutDate,
+              extensionNights,
+              extraRoomCharge,
+            });
+          } catch (reservationError) {
+            await client.query('ROLLBACK');
+            logger.error('Failed to auto-extend overdue stay; transaction rolled back', {
+              reservationId: reservation.id,
+              confirmationNumber: reservation.confirmation_number,
+              error: reservationError,
+            });
+          }
+        }
+
+        logger.info(
+          `Auto-extended ${extendedReservations} overdue in-house reservation(s) and posted ${postedExtraNights} extra room night(s)`
+        );
+      } finally {
+        client.release();
       }
-
-      logger.info(`Auto-checked out ${overdueBookings?.length || 0} overdue bookings`);
     } catch (error) {
-      logger.error('Error auto-checking out overdue bookings:', error);
+      logger.error('Error auto-extending overdue in-house stays:', error);
     }
   }
 

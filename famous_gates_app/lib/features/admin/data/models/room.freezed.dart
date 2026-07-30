@@ -23,15 +23,19 @@ mixin _$AdminRoom {
   String get id => throw _privateConstructorUsedError;
   String get roomNumber => throw _privateConstructorUsedError;
   String get type => throw _privateConstructorUsedError;
+  String get roomTypeId => throw _privateConstructorUsedError;
   String get branchId => throw _privateConstructorUsedError;
   String get branchName => throw _privateConstructorUsedError;
   int get floor => throw _privateConstructorUsedError;
+  String get building => throw _privateConstructorUsedError;
   double get price => throw _privateConstructorUsedError;
   String get status => throw _privateConstructorUsedError;
   String get description => throw _privateConstructorUsedError;
   List<String> get amenities => throw _privateConstructorUsedError;
   int get capacity => throw _privateConstructorUsedError;
   bool get isSmoking => throw _privateConstructorUsedError;
+  bool get isActive => throw _privateConstructorUsedError;
+  String get imageUrl => throw _privateConstructorUsedError;
 
   /// Serializes this AdminRoom to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -52,15 +56,19 @@ abstract class $AdminRoomCopyWith<$Res> {
       {String id,
       String roomNumber,
       String type,
+      String roomTypeId,
       String branchId,
       String branchName,
       int floor,
+      String building,
       double price,
       String status,
       String description,
       List<String> amenities,
       int capacity,
-      bool isSmoking});
+      bool isSmoking,
+      bool isActive,
+      String imageUrl});
 }
 
 /// @nodoc
@@ -81,15 +89,19 @@ class _$AdminRoomCopyWithImpl<$Res, $Val extends AdminRoom>
     Object? id = null,
     Object? roomNumber = null,
     Object? type = null,
+    Object? roomTypeId = null,
     Object? branchId = null,
     Object? branchName = null,
     Object? floor = null,
+    Object? building = null,
     Object? price = null,
     Object? status = null,
     Object? description = null,
     Object? amenities = null,
     Object? capacity = null,
     Object? isSmoking = null,
+    Object? isActive = null,
+    Object? imageUrl = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -104,6 +116,10 @@ class _$AdminRoomCopyWithImpl<$Res, $Val extends AdminRoom>
           ? _value.type
           : type // ignore: cast_nullable_to_non_nullable
               as String,
+      roomTypeId: null == roomTypeId
+          ? _value.roomTypeId
+          : roomTypeId // ignore: cast_nullable_to_non_nullable
+              as String,
       branchId: null == branchId
           ? _value.branchId
           : branchId // ignore: cast_nullable_to_non_nullable
@@ -116,6 +132,10 @@ class _$AdminRoomCopyWithImpl<$Res, $Val extends AdminRoom>
           ? _value.floor
           : floor // ignore: cast_nullable_to_non_nullable
               as int,
+      building: null == building
+          ? _value.building
+          : building // ignore: cast_nullable_to_non_nullable
+              as String,
       price: null == price
           ? _value.price
           : price // ignore: cast_nullable_to_non_nullable
@@ -140,6 +160,14 @@ class _$AdminRoomCopyWithImpl<$Res, $Val extends AdminRoom>
           ? _value.isSmoking
           : isSmoking // ignore: cast_nullable_to_non_nullable
               as bool,
+      isActive: null == isActive
+          ? _value.isActive
+          : isActive // ignore: cast_nullable_to_non_nullable
+              as bool,
+      imageUrl: null == imageUrl
+          ? _value.imageUrl
+          : imageUrl // ignore: cast_nullable_to_non_nullable
+              as String,
     ) as $Val);
   }
 }
@@ -156,15 +184,19 @@ abstract class _$$AdminRoomImplCopyWith<$Res>
       {String id,
       String roomNumber,
       String type,
+      String roomTypeId,
       String branchId,
       String branchName,
       int floor,
+      String building,
       double price,
       String status,
       String description,
       List<String> amenities,
       int capacity,
-      bool isSmoking});
+      bool isSmoking,
+      bool isActive,
+      String imageUrl});
 }
 
 /// @nodoc
@@ -183,15 +215,19 @@ class __$$AdminRoomImplCopyWithImpl<$Res>
     Object? id = null,
     Object? roomNumber = null,
     Object? type = null,
+    Object? roomTypeId = null,
     Object? branchId = null,
     Object? branchName = null,
     Object? floor = null,
+    Object? building = null,
     Object? price = null,
     Object? status = null,
     Object? description = null,
     Object? amenities = null,
     Object? capacity = null,
     Object? isSmoking = null,
+    Object? isActive = null,
+    Object? imageUrl = null,
   }) {
     return _then(_$AdminRoomImpl(
       id: null == id
@@ -206,6 +242,10 @@ class __$$AdminRoomImplCopyWithImpl<$Res>
           ? _value.type
           : type // ignore: cast_nullable_to_non_nullable
               as String,
+      roomTypeId: null == roomTypeId
+          ? _value.roomTypeId
+          : roomTypeId // ignore: cast_nullable_to_non_nullable
+              as String,
       branchId: null == branchId
           ? _value.branchId
           : branchId // ignore: cast_nullable_to_non_nullable
@@ -218,6 +258,10 @@ class __$$AdminRoomImplCopyWithImpl<$Res>
           ? _value.floor
           : floor // ignore: cast_nullable_to_non_nullable
               as int,
+      building: null == building
+          ? _value.building
+          : building // ignore: cast_nullable_to_non_nullable
+              as String,
       price: null == price
           ? _value.price
           : price // ignore: cast_nullable_to_non_nullable
@@ -242,6 +286,14 @@ class __$$AdminRoomImplCopyWithImpl<$Res>
           ? _value.isSmoking
           : isSmoking // ignore: cast_nullable_to_non_nullable
               as bool,
+      isActive: null == isActive
+          ? _value.isActive
+          : isActive // ignore: cast_nullable_to_non_nullable
+              as bool,
+      imageUrl: null == imageUrl
+          ? _value.imageUrl
+          : imageUrl // ignore: cast_nullable_to_non_nullable
+              as String,
     ));
   }
 }
@@ -253,15 +305,19 @@ class _$AdminRoomImpl implements _AdminRoom {
       {this.id = '',
       this.roomNumber = '',
       this.type = '',
+      this.roomTypeId = '',
       this.branchId = '',
       this.branchName = '',
       this.floor = 0,
+      this.building = '',
       this.price = 0.0,
       this.status = 'available',
       this.description = '',
       final List<String> amenities = const [],
       this.capacity = 2,
-      this.isSmoking = false})
+      this.isSmoking = false,
+      this.isActive = true,
+      this.imageUrl = ''})
       : _amenities = amenities;
 
   factory _$AdminRoomImpl.fromJson(Map<String, dynamic> json) =>
@@ -278,6 +334,9 @@ class _$AdminRoomImpl implements _AdminRoom {
   final String type;
   @override
   @JsonKey()
+  final String roomTypeId;
+  @override
+  @JsonKey()
   final String branchId;
   @override
   @JsonKey()
@@ -285,6 +344,9 @@ class _$AdminRoomImpl implements _AdminRoom {
   @override
   @JsonKey()
   final int floor;
+  @override
+  @JsonKey()
+  final String building;
   @override
   @JsonKey()
   final double price;
@@ -309,10 +371,16 @@ class _$AdminRoomImpl implements _AdminRoom {
   @override
   @JsonKey()
   final bool isSmoking;
+  @override
+  @JsonKey()
+  final bool isActive;
+  @override
+  @JsonKey()
+  final String imageUrl;
 
   @override
   String toString() {
-    return 'AdminRoom(id: $id, roomNumber: $roomNumber, type: $type, branchId: $branchId, branchName: $branchName, floor: $floor, price: $price, status: $status, description: $description, amenities: $amenities, capacity: $capacity, isSmoking: $isSmoking)';
+    return 'AdminRoom(id: $id, roomNumber: $roomNumber, type: $type, roomTypeId: $roomTypeId, branchId: $branchId, branchName: $branchName, floor: $floor, building: $building, price: $price, status: $status, description: $description, amenities: $amenities, capacity: $capacity, isSmoking: $isSmoking, isActive: $isActive, imageUrl: $imageUrl)';
   }
 
   @override
@@ -324,11 +392,15 @@ class _$AdminRoomImpl implements _AdminRoom {
             (identical(other.roomNumber, roomNumber) ||
                 other.roomNumber == roomNumber) &&
             (identical(other.type, type) || other.type == type) &&
+            (identical(other.roomTypeId, roomTypeId) ||
+                other.roomTypeId == roomTypeId) &&
             (identical(other.branchId, branchId) ||
                 other.branchId == branchId) &&
             (identical(other.branchName, branchName) ||
                 other.branchName == branchName) &&
             (identical(other.floor, floor) || other.floor == floor) &&
+            (identical(other.building, building) ||
+                other.building == building) &&
             (identical(other.price, price) || other.price == price) &&
             (identical(other.status, status) || other.status == status) &&
             (identical(other.description, description) ||
@@ -338,7 +410,11 @@ class _$AdminRoomImpl implements _AdminRoom {
             (identical(other.capacity, capacity) ||
                 other.capacity == capacity) &&
             (identical(other.isSmoking, isSmoking) ||
-                other.isSmoking == isSmoking));
+                other.isSmoking == isSmoking) &&
+            (identical(other.isActive, isActive) ||
+                other.isActive == isActive) &&
+            (identical(other.imageUrl, imageUrl) ||
+                other.imageUrl == imageUrl));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -348,15 +424,19 @@ class _$AdminRoomImpl implements _AdminRoom {
       id,
       roomNumber,
       type,
+      roomTypeId,
       branchId,
       branchName,
       floor,
+      building,
       price,
       status,
       description,
       const DeepCollectionEquality().hash(_amenities),
       capacity,
-      isSmoking);
+      isSmoking,
+      isActive,
+      imageUrl);
 
   /// Create a copy of AdminRoom
   /// with the given fields replaced by the non-null parameter values.
@@ -379,15 +459,19 @@ abstract class _AdminRoom implements AdminRoom {
       {final String id,
       final String roomNumber,
       final String type,
+      final String roomTypeId,
       final String branchId,
       final String branchName,
       final int floor,
+      final String building,
       final double price,
       final String status,
       final String description,
       final List<String> amenities,
       final int capacity,
-      final bool isSmoking}) = _$AdminRoomImpl;
+      final bool isSmoking,
+      final bool isActive,
+      final String imageUrl}) = _$AdminRoomImpl;
 
   factory _AdminRoom.fromJson(Map<String, dynamic> json) =
       _$AdminRoomImpl.fromJson;
@@ -399,11 +483,15 @@ abstract class _AdminRoom implements AdminRoom {
   @override
   String get type;
   @override
+  String get roomTypeId;
+  @override
   String get branchId;
   @override
   String get branchName;
   @override
   int get floor;
+  @override
+  String get building;
   @override
   double get price;
   @override
@@ -416,6 +504,10 @@ abstract class _AdminRoom implements AdminRoom {
   int get capacity;
   @override
   bool get isSmoking;
+  @override
+  bool get isActive;
+  @override
+  String get imageUrl;
 
   /// Create a copy of AdminRoom
   /// with the given fields replaced by the non-null parameter values.

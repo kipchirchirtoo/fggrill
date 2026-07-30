@@ -92,6 +92,7 @@ import dns from 'dns';
 // ──────────────────────────────────────────────────────────────────────────────
 
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -135,6 +136,14 @@ initializeApp().then(({ app, httpServer }) => {
   app.set('trust proxy', 1);
 
   // Middleware
+  app.use(compression({
+    level: 6,
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    }
+  }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -270,6 +279,8 @@ initializeApp().then(({ app, httpServer }) => {
 
   // Start server
   const PORT = process.env.PORT || 5000;
+  httpServer.keepAliveTimeout = 65000;
+  httpServer.headersTimeout = 66000;
   httpServer.on('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {
       logger.error(`Port ${PORT} is already in use. Stop the existing backend process or set a different PORT.`);

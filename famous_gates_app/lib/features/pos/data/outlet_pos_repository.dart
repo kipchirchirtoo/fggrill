@@ -7,19 +7,55 @@ final outletPosRepositoryProvider = Provider<OutletPosRepository>((ref) {
   return OutletPosRepository(ref);
 });
 
+class _RepoCacheEntry<T> {
+  const _RepoCacheEntry(this.value, this.expiresAt);
+
+  final T value;
+  final DateTime expiresAt;
+
+  bool get isFresh => DateTime.now().isBefore(expiresAt);
+}
+
 class OutletPosRepository {
   OutletPosRepository(this._ref) : _dio = _ref.read(dioProvider);
 
   final Ref _ref;
   final Dio _dio;
+  final Map<String, _RepoCacheEntry<PosBootstrapSnapshot>> _bootstrapCache = {};
+  final Map<String, _RepoCacheEntry<List<OutletPosItem>>> _itemsCache = {};
 
   PowerSyncService get _powerSync => _ref.read(powerSyncServiceProvider);
+
+  PosBootstrapSnapshot? _readBootstrapCache(String key) {
+    final entry = _bootstrapCache[key];
+    if (entry == null || !entry.isFresh) {
+      _bootstrapCache.remove(key);
+      return null;
+    }
+    return entry.value;
+  }
+
+  List<OutletPosItem>? _readItemsCache(String key) {
+    final entry = _itemsCache[key];
+    if (entry == null || !entry.isFresh) {
+      _itemsCache.remove(key);
+      return null;
+    }
+    return List<OutletPosItem>.from(entry.value);
+  }
 
   Future<PosBootstrapSnapshot> getBootstrap({
     String? outletType,
     String? outletId,
     bool allOutlets = false,
   }) async {
+    final cacheKey = [
+      outletType?.trim().toLowerCase() ?? 'all',
+      outletId?.trim().toLowerCase() ?? 'auto',
+      allOutlets ? 'all-outlets' : 'selected',
+    ].join('|');
+    final cached = _readBootstrapCache(cacheKey);
+    if (cached != null) return cached;
     final response = await _dio.get('/pos/bootstrap', queryParameters: {
       if (outletId != null && outletId.trim().isNotEmpty)
         'outlet_id': outletId.trim(),
@@ -57,13 +93,18 @@ class OutletPosRepository {
               Map<String, dynamic>.from(item),
             ))
         .toList();
-    return PosBootstrapSnapshot(
+    final snapshot = PosBootstrapSnapshot(
       outlets: outlets,
       outlet: outlet,
       shift: shift,
       items: items,
       orders: orders,
     );
+    _bootstrapCache[cacheKey] = _RepoCacheEntry(
+      snapshot,
+      DateTime.now().add(const Duration(seconds: 10)),
+    );
+    return snapshot;
   }
 
   Future<List<PosOutlet>> getOutlets(
@@ -93,6 +134,12 @@ class OutletPosRepository {
     bool includeRelated = false,
     PosOutlet? fallbackOutlet,
   }) async {
+    final cacheKey = [
+      outletId.trim().toLowerCase(),
+      includeRelated ? 'related' : 'direct',
+    ].join('|');
+    final cached = _readItemsCache(cacheKey);
+    if (cached != null) return cached;
     if (_powerSync.hotReadsEnabled && !includeRelated) {
       final local = await _powerSync.getPosOutletItems(outletId);
       if (local.isNotEmpty) {
@@ -108,12 +155,17 @@ class OutletPosRepository {
         await _dio.get('/pos/outlets/$outletId/items', queryParameters: {
       if (includeRelated) 'include_related': true,
     });
-    return _list(response.data)
+    final rows = _list(response.data)
         .map((item) => OutletPosItem.fromJson(
               Map<String, dynamic>.from(item),
               fallbackOutlet: fallbackOutlet,
             ))
         .toList();
+    _itemsCache[cacheKey] = _RepoCacheEntry(
+      List<OutletPosItem>.from(rows),
+      DateTime.now().add(const Duration(minutes: 2)),
+    );
+    return rows;
   }
 
   Future<List<OutletPosItem>> getUnifiedFoodAndBarItems(

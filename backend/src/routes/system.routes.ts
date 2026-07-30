@@ -19,7 +19,9 @@ import {
   updateSystemConfig
 } from '../controllers/system.controller';
 import { protect, authorize } from '../middleware/auth';
+import { withCache } from '../middleware/cacheMiddleware';
 import { UserRole } from '../models/User';
+import { CacheKeys, CACHE_TTL } from '../services/cacheService';
 
 const router = express.Router();
 
@@ -44,7 +46,11 @@ router.get('/stats',
 );
 
 router.route('/config')
-  .get(authorize([UserRole.SUPER_ADMIN]), getSystemConfig)
+  .get(
+    authorize([UserRole.SUPER_ADMIN]),
+    withCache(CacheKeys.systemConfig(), CACHE_TTL.BRANCH_SETTINGS),
+    getSystemConfig
+  )
   .put(authorize([UserRole.SUPER_ADMIN]), updateSystemConfig);
 
 // =====================================================
@@ -87,11 +93,13 @@ router.route('/departments/:id')
 
 router.get('/roles',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.AUDITOR]),
+  withCache('fg:system:roles', CACHE_TTL.PERMISSIONS),
   getRoles
 );
 
 router.get('/roles/:id/permissions',
   authorize([UserRole.SUPER_ADMIN]),
+  withCache((req) => CacheKeys.rolePermissions(String(req.params.id || '').trim().toLowerCase()), CACHE_TTL.PERMISSIONS),
   getRolePermissions
 );
 

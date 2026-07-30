@@ -61,6 +61,23 @@ class TemplatePrintRenderer {
 
   final _money = NumberFormat('#,##0.00', 'en_KE');
 
+  // The receipt logo never changes at runtime — decode it once and reuse the
+  // same MemoryImage for every print instead of re-reading the asset each time.
+  static pw.MemoryImage? _cachedLogo;
+  static bool _logoResolved = false;
+
+  static Future<pw.MemoryImage?> _resolveLogo() async {
+    if (_logoResolved) return _cachedLogo;
+    try {
+      final bytes = await rootBundle.load('assets/frontend_public/fglogo.png');
+      _cachedLogo = pw.MemoryImage(bytes.buffer.asUint8List());
+    } catch (_) {
+      _cachedLogo = null;
+    }
+    _logoResolved = true;
+    return _cachedLogo;
+  }
+
   String _subst(String? text, Map<String, String> values) {
     if (text == null) return '';
     var out = text;
@@ -87,11 +104,7 @@ class TemplatePrintRenderer {
       List<TemplateSection> sections, TemplatePrintData data) async {
     final doc = pw.Document();
 
-    pw.MemoryImage? logo;
-    try {
-      final bytes = await rootBundle.load('assets/frontend_public/fglogo.png');
-      logo = pw.MemoryImage(bytes.buffer.asUint8List());
-    } catch (_) {}
+    final logo = await _resolveLogo();
 
     const fmt = PdfPageFormat(
       _paperWidthMm * PdfPageFormat.mm,

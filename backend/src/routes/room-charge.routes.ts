@@ -6,8 +6,11 @@ import {
   getRoomChargeReports,
   settleRoomBill,
 } from '../controllers/room-charge.controller';
+import { protect as authenticate } from '../middleware/auth';
 
 const router = Router();
+
+router.use(authenticate);
 
 router.get('/eligible-guests', getEligibleGuests);
 router.post('/post', postRoomCharge);

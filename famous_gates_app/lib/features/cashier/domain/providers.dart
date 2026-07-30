@@ -4,6 +4,29 @@ import '../../../core/powersync/powersync_service.dart';
 import '../../pos/data/outlet_pos_repository.dart';
 import '../data/cashier_repository.dart';
 
+bool _sameCashierRows(
+  List<Map<String, dynamic>> a,
+  List<Map<String, dynamic>> b,
+) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    final left = a[i];
+    final right = b[i];
+    if ('${left['id']}' != '${right['id']}') return false;
+    if ('${left['source']}' != '${right['source']}') return false;
+    if ('${left['status'] ?? left['payment_status']}' !=
+        '${right['status'] ?? right['payment_status']}') {
+      return false;
+    }
+    if ('${left['balance_amount'] ?? left['balance']}' !=
+        '${right['balance_amount'] ?? right['balance']}') {
+      return false;
+    }
+  }
+  return true;
+}
+
 class CashierBillFilters {
   const CashierBillFilters({
     this.status = 'all',
@@ -79,13 +102,26 @@ final cashierUnpaidBillsProvider = StreamProvider.autoDispose
   ref.onDispose(() => cancelled = true);
   while (!cancelled) {
     try {
-      final rows = await repo.getUnpaidBills(
-        status: filters.status,
-        billType: filters.billType,
-        search: filters.search,
-        date: filters.date,
-      );
-      yield rows;
+      final results = await Future.wait([
+        repo.getUnpaidOrdersOnly(
+          status: filters.status,
+          search: filters.search,
+          date: filters.date,
+        ),
+        repo.getUnpaidBills(
+          status: filters.status,
+          billType: filters.billType,
+          search: filters.search,
+          date: filters.date,
+        ),
+      ]);
+      final quickRows = results[0];
+      final rows = results[1];
+      if (_sameCashierRows(quickRows, rows)) {
+        yield rows;
+      } else {
+        yield rows.isNotEmpty ? rows : quickRows;
+      }
     } catch (_) {}
     if (!cancelled) await Future.delayed(const Duration(seconds: 30));
   }
@@ -135,9 +171,15 @@ final cashierPOSItemsProvider =
 /// The cashier's own currently open shift (with live payment breakdown).
 final cashierCurrentShiftProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final shifts =
-      await ref.watch(cashierRepositoryProvider).getShifts(status: 'open');
-  return shifts.isNotEmpty ? shifts.first : <String, dynamic>{};
+  final stats = await ref.watch(cashierRepositoryProvider).getStats();
+  final data = stats['data'];
+  if (data is Map) {
+    final activeShift = data['activeShift'];
+    if (activeShift is Map) {
+      return Map<String, dynamic>.from(activeShift);
+    }
+  }
+  return <String, dynamic>{};
 });
 
 /// Live aggregated tally for the active shift. Reads directly from the local
@@ -258,4 +300,7 @@ final cashierInsightsProvider =
   return ref
       .watch(cashierRepositoryProvider)
       .getPosInsights(branchId: branchId);
+});
+final corporateCustomersCashierProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(cashierRepositoryProvider).getCorporateCustomers();
 });

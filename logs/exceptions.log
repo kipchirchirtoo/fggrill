@@ -284,3 +284,146 @@ Error: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
     at Module._load (node:internal/modules/cjs/loader:1379:12)
     at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
     at Module.require (node:internal/modules/cjs/loader:1600:12)
+2026-07-29T05:36:34.817Z [ERROR]: uncaughtException: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
+C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\lib\helpers.js:53
+        throw new Error('Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.');
+        ^
+
+Error: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
+    at validateSupabaseUrl (C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\lib\helpers.js:53:15)
+    at new SupabaseClient (C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\SupabaseClient.js:41:59)
+    at createClient (C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\index.js:46:12)
+    at Object.<anonymous> (C:\Users\user\OneDrive\Desktop\fggrill\backend\dist\config\database.js:20:49)
+    at Module._compile (node:internal/modules/cjs/loader:1854:14)
+    at Object..js (node:internal/modules/cjs/loader:1985:10)
+    at Module.load (node:internal/modules/cjs/loader:1577:32)
+    at Module._load (node:internal/modules/cjs/loader:1379:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1600:12) {
+  "error": {},
+  "exception": true,
+  "date": "Wed Jul 29 2026 08:36:34 GMT+0300 (East Africa Time)",
+  "process": {
+    "pid": 19096,
+    "uid": null,
+    "gid": null,
+    "cwd": "C:\\Users\\user\\OneDrive\\Desktop\\fggrill",
+    "execPath": "C:\\Program Files\\nodejs\\node.exe",
+    "version": "v24.17.0",
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe"
+    ],
+    "memoryUsage": {
+      "rss": 59285504,
+      "heapTotal": 16855040,
+      "heapUsed": 9167816,
+      "external": 1842325,
+      "arrayBuffers": 24831
+    }
+  },
+  "os": {
+    "loadavg": [
+      0,
+      0,
+      0
+    ],
+    "uptime": 600054.281
+  },
+  "trace": [
+    {
+      "column": 15,
+      "file": "C:\\Users\\user\\OneDrive\\Desktop\\fggrill\\backend\\node_modules\\@supabase\\supabase-js\\dist\\main\\lib\\helpers.js",
+      "function": "validateSupabaseUrl",
+      "line": 53,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 59,
+      "file": "C:\\Users\\user\\OneDrive\\Desktop\\fggrill\\backend\\node_modules\\@supabase\\supabase-js\\dist\\main\\SupabaseClient.js",
+      "function": "new SupabaseClient",
+      "line": 41,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "C:\\Users\\user\\OneDrive\\Desktop\\fggrill\\backend\\node_modules\\@supabase\\supabase-js\\dist\\main\\index.js",
+      "function": "createClient",
+      "line": 46,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 49,
+      "file": "C:\\Users\\user\\OneDrive\\Desktop\\fggrill\\backend\\dist\\config\\database.js",
+      "function": null,
+      "line": 20,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 14,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module._compile",
+      "line": 1854,
+      "method": "_compile",
+      "native": false
+    },
+    {
+      "column": 10,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Object..js",
+      "line": 1985,
+      "method": ".js",
+      "native": false
+    },
+    {
+      "column": 32,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module.load",
+      "line": 1577,
+      "method": "load",
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module._load",
+      "line": 1379,
+      "method": "_load",
+      "native": false
+    },
+    {
+      "column": 19,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "wrapModuleLoad",
+      "line": 255,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "node:internal/modules/cjs/loader",
+      "function": "Module.require",
+      "line": 1600,
+      "method": "require",
+      "native": false
+    }
+  ]
+}
+C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\lib\helpers.js:53
+        throw new Error('Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.');
+        ^
+
+Error: Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.
+    at validateSupabaseUrl (C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\lib\helpers.js:53:15)
+    at new SupabaseClient (C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\SupabaseClient.js:41:59)
+    at createClient (C:\Users\user\OneDrive\Desktop\fggrill\backend\node_modules\@supabase\supabase-js\dist\main\index.js:46:12)
+    at Object.<anonymous> (C:\Users\user\OneDrive\Desktop\fggrill\backend\dist\config\database.js:20:49)
+    at Module._compile (node:internal/modules/cjs/loader:1854:14)
+    at Object..js (node:internal/modules/cjs/loader:1985:10)
+    at Module.load (node:internal/modules/cjs/loader:1577:32)
+    at Module._load (node:internal/modules/cjs/loader:1379:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1600:12)
