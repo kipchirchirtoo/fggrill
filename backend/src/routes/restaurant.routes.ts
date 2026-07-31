@@ -761,6 +761,74 @@ router.get('/kitchen/orders/history',
         if (shiftError) throw shiftError;
 
         const restaurantShiftIds = (outletShifts || [])
+          .limit(limit);
+
+        if (branchId) {
+          ordersQuery = ordersQuery.eq('branch_id', branchId);
+        }
+
+        const { data: restaurantOrders, error: ordersError } = await ordersQuery;
+        if (ordersError) throw ordersError;
+        orders = restaurantOrders || [];
+      }
+
+      const orderIds = orders.map((o: any) => o.id);
+      let allItems: any[] = [];
+      if (orderIds.length) {
+        const itemsResult = await supabase
+          .from('restaurant_order_items')
+          .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name, kitchen_status, kitchen_ready_at')
+          .in('order_id', orderIds);
+        allItems = itemsResult.data || [];
+        if (itemsResult.error) {
+          console.warn('Failed to fetch kitchen order history items:', itemsResult.error.message);
+        }
+      }
+
+      const itemsByOrder: Record<string, any[]> = {};
+      for (const item of (allItems || [])) {
+        if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
+        itemsByOrder[item.order_id].push(item);
+      }
+
+      const history = orders.map((order: any) => {
+        const items = itemsByOrder[order.id] || [];
+        return {
+          ...order,
+          elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
+          items_count: items.length,
+          total: order.total_amount,
+          items: items.map((item: any) => ({
+            id: item.id,
+            name: item.item_name || `Item #${item.menu_item_id}`,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            notes: item.special_instructions,
+            status: item.kitchen_status || 'ready',
+            is_ready: (item.kitchen_status || 'ready') === 'ready',
+            kitchen_ready_at: item.kitchen_ready_at
+          }))
+        };
+      });
+
+      let posHistory: any[] = [];
+      try {
+        const stopSignalSince = new Date(Date.now() - KITCHEN_STOP_SIGNAL_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+        let shiftQuery = supabase
+          .from('pos_outlet_shifts')
+          .select('id, branch_id, outlet_id, status, opened_at, outlet:pos_outlets(name, outlet_type)')
+          .or(`status.eq.open,opened_at.gte.${stopSignalSince}`)
+          .order('opened_at', { ascending: false })
+          .limit(250);
+
+        if (branchId) {
+          shiftQuery = shiftQuery.eq('branch_id', branchId);
+        }
+
+        const { data: outletShifts, error: shiftError } = await shiftQuery;
+        if (shiftError) throw shiftError;
+
+        const restaurantShiftIds = (outletShifts || [])
           .filter((shift: any) => {
             const outlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             return matchesKitchenOutletScope(outlet?.outlet_type, outletScope);
@@ -773,15 +841,8 @@ router.get('/kitchen/orders/history',
             .from('pos_shift_orders')
             .select('id, shift_id, outlet_id, order_number, short_code, customer_name, waiter_name, order_type, table_number, room_number, status, payment_status, kitchen_status, void_request_status, void_reason, voided_at, voided_by, is_exchange, exchange_parent_order_id, created_at, updated_at, total_amount, captain_printed_at, items')
             .in('shift_id', restaurantShiftIds)
-            .gte('created_at', historySince)
+            .or(`created_at.gte.${historySince},updated_at.gte.${historySince}`)
             .or('kitchen_status.in.(served,cancelled,voided),status.in.(paid,credit_bill,voided,cancelled),payment_status.in.(paid,credit_bill,voided)')
-            .order('updated_at', { ascending: false })
-            .limit(limit);
-
-          if (posOrdersError) throw posOrdersError;
-
-          posHistory = (posOrders || []).map((order: any) => {
-            const shift = shiftsById.get(order.shift_id) || {};
             const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             const orderItems = Array.isArray(order.items) ? order.items : [];
             return {

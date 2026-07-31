@@ -969,11 +969,19 @@ async function loadOutstandingCashierMasterBills(params: {
     if (cashierRefRes.error) throw cashierRefRes.error;
     if (cashierSourceRes.error) throw cashierSourceRes.error;
 
-    const masters = (masterRowsRes.data || []) as Array<Record<string, any>>;
+    const masters = ((masterRowsRes.data || []) as Array<Record<string, any>>).filter((master) => {
+        const status = String(master.status || '').toLowerCase();
+        const pMethod = String(master.payment_method || '').toLowerCase();
+        return status !== 'closed' && status !== 'paid' && status !== 'settled' && pMethod !== 'room_charge';
+    });
     const members = ((memberRowsRes.data || []) as Array<Record<string, any>>).filter((row) => {
         const status = String(row.status || '').toLowerCase();
         const paymentStatus = String(row.payment_status || '').toLowerCase();
-        return status !== 'cancelled' && status !== 'voided' && paymentStatus !== 'voided';
+        const isSettled = status === 'cancelled' || status === 'voided' || status === 'paid'
+            || paymentStatus === 'voided' || paymentStatus === 'paid'
+            || paymentStatus === 'room_charge' || paymentStatus === 'charged_to_room'
+            || paymentStatus === 'settled' || paymentStatus === 'credit_bill' || paymentStatus === 'credit';
+        return !isSettled;
     });
 
     const membersByMaster = new Map<string, Array<Record<string, any>>>();
@@ -1005,8 +1013,15 @@ async function loadOutstandingCashierMasterBills(params: {
         const totalAmount = memberRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
         if (totalAmount <= 0) continue;
 
-        const memberPosPaid = memberRows.reduce((sum, row) => sum + Number(row.amount_paid || 0), 0);
-        const cashierPaid = Math.min(totalAmount, cashierTotals.get(masterId) || 0);
+        const memberPosPaid = memberRows.reduce((sum, row) => {
+            const pStatus = String(row.payment_status || '').toLowerCase();
+            const status = String(row.status || '').toLowerCase();
+            if (pStatus === 'paid' || pStatus === 'room_charge' || pStatus === 'charged_to_room' || pStatus === 'credit_bill' || status === 'paid') {
+                return sum + Number(row.total_amount || 0);
+            }
+            return sum + Number(row.amount_paid || 0);
+        }, 0);
+        const cashierPaid = Math.min(totalAmount, Math.max(memberPosPaid, cashierTotals.get(masterId) || 0));
         const balanceAmount = Math.max(0, totalAmount - cashierPaid);
         if (balanceAmount <= 0.009) continue;
 
