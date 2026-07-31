@@ -1,10 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../shared/presentation/guest_invoice_pdf.dart';
-
 import '../../data/repository.dart';
 
 class CheckOutScreen extends ConsumerStatefulWidget {
@@ -31,10 +30,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   double _totalCharges = 0;
   double _totalPayments = 0;
   List<Map<String, dynamic>> _transactions = [];
-  // Itemised Charge-to-Room lines (outlet · item) from the folio (folio_items).
   List<Map<String, dynamic>> _folioItems = [];
-  // Per-bill charge lines (outlet + bill) from folio_transactions — the
-  // detailed fallback when per-item folio_items isn't available.
   List<Map<String, dynamic>> _chargeLines = [];
 
   // Payment
@@ -47,13 +43,13 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   bool _savingService = false;
 
   bool _isAdditionalServiceTransaction(Map<String, dynamic> tx) {
-    final type = '${tx['type'] ?? ''}'.trim().toLowerCase();
-    final category = '${tx['category'] ?? ''}'.trim().toLowerCase();
-    final sourceTable =
-        '${tx['sourceTable'] ?? tx['source_table'] ?? ''}'.trim().toLowerCase();
-    return type == 'charge' &&
-        category == 'additional service' &&
-        (sourceTable.isEmpty || sourceTable == 'transactions');
+    final type = '${tx['type'] ?? tx['transaction_type'] ?? ''}'.trim().toLowerCase();
+    final status = '${tx['status'] ?? ''}'.trim().toLowerCase();
+    final voided = tx['voided'] == true;
+    if (voided || status == 'voided' || status == 'cancelled' || status == 'reversed') {
+      return false;
+    }
+    return type != 'payment';
   }
 
   List<Map<String, dynamic>> get _additionalServiceTransactions =>

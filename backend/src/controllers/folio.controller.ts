@@ -329,7 +329,105 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
     });
   } catch (error) {
     next(error);
+  }export const recomputeFolioTotals = async (folioId: string, reservationId?: string): Promise<void> => {
+  const { data: folioData } = await supabase.from('folios').select('*').eq('id', folioId).maybeSingle();
+  if (!folioData) return;
+
+  const resId = reservationId || folioData.reservation_id;
+  let resRoomCharge = Number(folioData.room_charges || 0);
+  let resPaid = 0;
+  if (resId) {
+    const { data: res } = await supabase.from('reservations').select('*').eq('id', resId).maybeSingle();
+    if (res) {
+      resRoomCharge = Number(res.total_amount || 0);
+      resPaid = res.deposit_paid
+        ? Math.max(Number(res.amount_paid || 0), Number(res.deposit_amount || 0))
+        : Number(res.amount_paid || 0);
+    }
   }
+
+  // 1. Query folio_transactions (excluding voided)
+  const { data: ftx } = await supabase
+    .from('folio_transactions')
+    .select('*')
+    .eq('folio_id', folioId);
+
+  let ftFood = 0;
+  let ftBev = 0;
+  let ftOther = 0;
+  let ftPayments = 0;
+
+  for (const t of (ftx || [])) {
+    const status = String(t.status || '').toLowerCase();
+    if (status === 'voided' || status === 'cancelled' || status === 'reversed' || t.voided === true) continue;
+
+    const type = (t.type || t.transaction_type || '').toLowerCase();
+    const cat = (t.category || '').toLowerCase();
+    const amt = Number(t.amount || t.total_amount || 0);
+
+    if (type.includes('payment')) {
+      ftPayments += amt;
+    } else {
+      if (cat.includes('food') || cat.includes('restaurant') || cat.includes('kitchen')) {
+        ftFood += amt;
+      } else if (cat.includes('bev') || cat.includes('bar') || cat.includes('drink')) {
+        ftBev += amt;
+      } else {
+        ftOther += amt;
+      }
+    }
+  }
+
+  // 2. Query transactions
+  const { data: addTx } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('folio_id', folioId);
+
+  let txFood = 0;
+  let txBev = 0;
+  let txOther = 0;
+  let txPayments = 0;
+
+  for (const t of (addTx || [])) {
+    const type = (t.type || 'charge').toLowerCase();
+    const cat = (t.category || '').toLowerCase();
+    const amt = Number(t.amount || 0);
+
+    if (type.includes('payment')) {
+      txPayments += amt;
+    } else {
+      if (cat.includes('food') || cat.includes('restaurant') || cat.includes('kitchen')) {
+        txFood += amt;
+      } else if (cat.includes('bev') || cat.includes('bar') || cat.includes('drink')) {
+        txBev += amt;
+      } else {
+        txOther += amt;
+      }
+    }
+  }
+
+  const foodCharges = ftFood + txFood;
+  const beverageCharges = ftBev + txBev;
+  const otherCharges = ftOther + txOther;
+  const currentRoomCharges = resRoomCharge;
+  const calculatedTotalCharges = currentRoomCharges + foodCharges + beverageCharges + otherCharges;
+  const totalPayments = Math.max(resPaid, ftPayments + txPayments);
+  const calculatedBalance = Math.max(0, calculatedTotalCharges - totalPayments);
+
+  await supabase
+    .from('folios')
+    .update({
+      room_charges: currentRoomCharges,
+      food_charges: foodCharges,
+      beverage_charges: beverageCharges,
+      other_charges: otherCharges,
+      total_charges: calculatedTotalCharges,
+      total_payments: totalPayments,
+      balance: calculatedBalance,
+      updated_at: new Date()
+    })
+    .eq('id', folioId);
 };
 
 export const addTransaction = async (req: Request, res: Response, next: NextFunction) => {
@@ -358,6 +456,8 @@ export const addTransaction = async (req: Request, res: Response, next: NextFunc
       performedBy: req.user?.id
     });
 
+    await recomputeFolioTotals(folio.id, reservationId);
+
     res.status(201).json({
       success: true,
       data: transaction
@@ -373,16 +473,6 @@ export const updateTransaction = async (req: Request, res: Response, next: NextF
     const folio = await Folio.findByReservationId(reservationId);
     if (!folio) throw new AppError('Folio not found', 404);
 
-    const existing = await folio.getTransactionById(transactionId);
-    if (!existing) throw new AppError('Transaction not found', 404);
-
-    if (
-      String(existing.type || '').toLowerCase() !== 'charge' ||
-      String(existing.category || '').trim().toLowerCase() !== 'additional service'
-    ) {
-      throw new AppError('Only additional service charges can be edited here', 400);
-    }
-
     const description = String(req.body?.description || '').trim();
     const amount = Number(req.body?.amount || 0);
 
@@ -394,16 +484,43 @@ export const updateTransaction = async (req: Request, res: Response, next: NextF
       throw new AppError('A valid service amount is required', 400);
     }
 
-    const transaction = await folio.updateTransaction(transactionId, {
-      category: 'Additional Service',
-      description,
-      amount,
-      performedBy: req.user?.id,
-    });
+    // 1. Try transactions table
+    const { data: txRow } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .eq('folio_id', folio.id)
+      .maybeSingle();
+
+    if (txRow) {
+      await supabase
+        .from('transactions')
+        .update({ description, amount, updated_at: new Date() })
+        .eq('id', transactionId);
+    } else {
+      // 2. Try folio_transactions table
+      const { data: ftxRow } = await supabase
+        .from('folio_transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .eq('folio_id', folio.id)
+        .maybeSingle();
+
+      if (ftxRow) {
+        await supabase
+          .from('folio_transactions')
+          .update({ description, amount, total_amount: amount, updated_at: new Date() })
+          .eq('id', transactionId);
+      } else {
+        throw new AppError('Transaction not found', 404);
+      }
+    }
+
+    await recomputeFolioTotals(folio.id, reservationId);
 
     res.status(200).json({
       success: true,
-      data: transaction,
+      message: 'Charge line updated successfully',
     });
   } catch (error) {
     next(error);
@@ -416,21 +533,40 @@ export const deleteTransaction = async (req: Request, res: Response, next: NextF
     const folio = await Folio.findByReservationId(reservationId);
     if (!folio) throw new AppError('Folio not found', 404);
 
-    const existing = await folio.getTransactionById(transactionId);
-    if (!existing) throw new AppError('Transaction not found', 404);
+    // 1. Try transactions table
+    const { data: txRow } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .eq('folio_id', folio.id)
+      .maybeSingle();
 
-    if (
-      String(existing.type || '').toLowerCase() !== 'charge' ||
-      String(existing.category || '').trim().toLowerCase() !== 'additional service'
-    ) {
-      throw new AppError('Only additional service charges can be deleted here', 400);
+    if (txRow) {
+      await supabase.from('transactions').delete().eq('id', transactionId);
+    } else {
+      // 2. Try folio_transactions table
+      const { data: ftxRow } = await supabase
+        .from('folio_transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .eq('folio_id', folio.id)
+        .maybeSingle();
+
+      if (ftxRow) {
+        await supabase
+          .from('folio_transactions')
+          .update({ status: 'voided', voided: true, updated_at: new Date() })
+          .eq('id', transactionId);
+      } else {
+        throw new AppError('Transaction not found', 404);
+      }
     }
 
-    await folio.deleteTransaction(transactionId);
+    await recomputeFolioTotals(folio.id, reservationId);
 
     res.status(200).json({
       success: true,
-      message: 'Additional service deleted successfully',
+      message: 'Charge line removed successfully',
     });
   } catch (error) {
     next(error);

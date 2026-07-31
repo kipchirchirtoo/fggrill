@@ -1289,6 +1289,11 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     final statusStr = '${bill['status'] ?? 'open'}'.toLowerCase();
     final source = bill['source'] ?? 'cashier_station';
     final isOutstanding = balance > 0;
+    final rawItems = (bill['items'] as List?)
+            ?.whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList() ??
+        [];
 
     showDialog(
       context: context,
@@ -1449,6 +1454,81 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                         ),
                       ],
                     ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  const Text(
+                    'CREDITED ITEMS & ORDER BREAKDOWN',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _PosPalette.canvas,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _PosPalette.border),
+                    ),
+                    child: rawItems.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              '1x $desc @ KES ${amount.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              for (int i = 0; i < rawItems.length; i++) ...[
+                                if (i > 0) const Divider(height: 1),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: _PosPalette.surfaceAlt,
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '${(rawItems[i]['quantity'] as num?)?.toInt() ?? 1}x',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          '${rawItems[i]['name'] ?? 'Item'}',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        'KES ${((rawItems[i]['line_total'] ?? rawItems[i]['unit_price']) as num?)?.toStringAsFixed(0) ?? '0'}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                   ),
 
                   const SizedBox(height: 16),
