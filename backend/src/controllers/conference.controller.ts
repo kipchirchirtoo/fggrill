@@ -384,6 +384,9 @@ export const createConferenceBooking = async (
             .insert([{
                 conference_hall_id,
                 branch_id,
+                client_name: customer_name,
+                client_phone: customer_phone,
+                client_email: customer_email,
                 customer_name,
                 customer_phone,
                 customer_email,
