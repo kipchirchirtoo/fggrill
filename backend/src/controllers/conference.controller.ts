@@ -375,6 +375,10 @@ export const createConferenceBooking = async (
             ? `${notes}\n\n__METADATA__:${JSON.stringify(metadata)}`
             : `__METADATA__:${JSON.stringify(metadata)}`;
 
+        const depositAmount = Number(req.body.deposit_amount || req.body.amount_paid || 0);
+        const totalAmount = Number(calculatedTotal || req.body.total_amount || 0);
+        const balanceAmount = Math.max(0, totalAmount - depositAmount);
+
         const { data: booking, error: bookingError } = await supabase
             .from('conference_hall_bookings')
             .insert([{
@@ -385,10 +389,12 @@ export const createConferenceBooking = async (
                 customer_email,
                 start_date,
                 end_date,
-                invoice_number,  // Add invoice_number as a proper column
-                total_amount: calculatedTotal || req.body.total_amount || 0,
-                amount_paid: 0,
-                payment_status: 'pending',
+                invoice_number,
+                total_amount: totalAmount,
+                deposit_amount: depositAmount,
+                amount_paid: depositAmount,
+                balance_amount: balanceAmount,
+                payment_status: depositAmount >= totalAmount ? 'paid' : depositAmount > 0 ? 'partial' : 'pending',
                 booking_status: 'confirmed',
                 notes: notesWithMetadata,
                 created_by
