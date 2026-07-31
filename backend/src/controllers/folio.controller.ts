@@ -329,7 +329,10 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
     });
   } catch (error) {
     next(error);
-  }export const recomputeFolioTotals = async (folioId: string, reservationId?: string): Promise<void> => {
+  }
+};
+
+export const recomputeFolioTotals = async (folioId: string, reservationId?: string): Promise<void> => {
   const { data: folioData } = await supabase.from('folios').select('*').eq('id', folioId).maybeSingle();
   if (!folioData) return;
 
