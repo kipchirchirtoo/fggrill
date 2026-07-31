@@ -383,7 +383,7 @@ export async function recordHotelCashierPayment(
       [
         context.branchId,
         context.reservationId,
-        shift.id,
+        shift.shift_id || null,
         amount,
         normalizedMethod,
         paymentStatus,
@@ -536,8 +536,8 @@ export async function recordHotelCashierPayment(
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $4, $4, $5, 'payment', 'ROOM_BOOKING', 'reservation', $6,
-          'RECEPTION', 'ROOM_FOLIO', $7, $8, $9, $10, $11, $12, $13, $13, $8, $14,
+          $1, $2, $3, $4, $5, $5, $6, 'payment', 'ROOM_BOOKING', 'reservation', $7,
+          'RECEPTION', 'ROOM_FOLIO', $8, $9, $10, $11, $12, $13, $14, $14, $9, $15,
           'completed', NOW(), NOW()
         )
         RETURNING id
@@ -546,6 +546,7 @@ export async function recordHotelCashierPayment(
         context.branchId,
         input.cashierUserId,
         input.cashierName || null,
+        shift.shift_id || null,
         shift.id,
         cashierTransactionNumber,
         context.reservationId,
@@ -553,8 +554,8 @@ export async function recordHotelCashierPayment(
         context.confirmationNumber,
         normalizedMethod,
         amount,
-        money(input.amountTendered),
-        money(input.changeGiven),
+        money(input.amountTendered || 0),
+        money(input.changeGiven || 0),
         paymentReference,
         context.guestName,
       ]
