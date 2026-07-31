@@ -378,11 +378,15 @@ export const createConferenceBooking = async (
         const depositAmount = Number(req.body.deposit_amount || req.body.amount_paid || 0);
         const totalAmount = Number(calculatedTotal || req.body.total_amount || 0);
         const balanceAmount = Math.max(0, totalAmount - depositAmount);
+        const dateFrom = String(start_date || '').slice(0, 10);
+        const dateTo = String(end_date || '').slice(0, 10);
+        const attendeesCount = Number(num_participants || req.body.num_attendees || 0);
 
         const { data: booking, error: bookingError } = await supabase
             .from('conference_hall_bookings')
             .insert([{
                 conference_hall_id,
+                hall_id: conference_hall_id,
                 branch_id,
                 client_name: customer_name,
                 client_phone: customer_phone,
@@ -392,6 +396,9 @@ export const createConferenceBooking = async (
                 customer_email,
                 start_date,
                 end_date,
+                date_from: dateFrom,
+                date_to: dateTo,
+                num_attendees: attendeesCount,
                 invoice_number,
                 total_amount: totalAmount,
                 deposit_amount: depositAmount,
