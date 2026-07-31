@@ -178,8 +178,9 @@ export class Folio implements IFolio {
   private isAdditionalServiceCharge(
     transaction: Pick<ITransaction, 'type' | 'category'>
   ): boolean {
-    return String(transaction.type || '').toLowerCase() === 'charge' &&
-      String(transaction.category || '').trim().toLowerCase() === 'additional service';
+    const type = String(transaction.type || 'charge').toLowerCase();
+    const cat = String(transaction.category || '').trim().toLowerCase();
+    return type === 'charge' && (cat === 'additional service' || cat === 'other' || cat === 'service' || cat === '');
   }
 
   private async applyAdditionalServiceDelta(amountDelta: number): Promise<void> {
@@ -210,12 +211,14 @@ export class Folio implements IFolio {
   }
 
   async addTransaction(transaction: Omit<ITransaction, 'id' | 'folioId' | 'createdAt'>): Promise<ITransaction> {
+    const txType = transaction.type || 'charge';
+    const txCategory = transaction.category || 'Additional Service';
     const { data, error } = await supabase
       .from('transactions')
       .insert({
         folio_id: this.id,
-        type: transaction.type,
-        category: transaction.category,
+        type: txType,
+        category: txCategory,
         amount: transaction.amount,
         description: transaction.description,
         reference_number: transaction.referenceNumber,
@@ -227,8 +230,8 @@ export class Folio implements IFolio {
     if (error) throw error;
 
     if (this.isAdditionalServiceCharge({
-      type: transaction.type,
-      category: transaction.category
+      type: txType,
+      category: txCategory
     })) {
       await this.applyAdditionalServiceDelta(Number(transaction.amount || 0));
     } else {

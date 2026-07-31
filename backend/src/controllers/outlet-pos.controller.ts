@@ -6248,6 +6248,182 @@ export const payConsolidatedBill = async (req: Request, res: Response, next: Nex
   }
 };
 
+export const getMyStaffCreditBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    assertUser(req);
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new AppError('Unauthorized', 401);
+    }
+
+    // 1. Resolve staff profile for logged-in user
+    const { data: staffProfile } = await supabase
+      .from('staff_profiles')
+      .select('id, first_name, last_name, user_id, employee_number')
+      .or(`user_id.eq.${userId},id.eq.${userId}`)
+      .maybeSingle();
+
+    const staffId = staffProfile?.id || userId;
+    const staffName = staffProfile ? `${staffProfile.first_name || ''} ${staffProfile.last_name || ''}`.trim() : '';
+
+    // 2. Query staff_credit_bills
+    let staffFilter = `staff_id.eq.${staffId}`;
+    if (staffProfile?.user_id && staffProfile.user_id !== staffId) {
+      staffFilter += `,staff_id.eq.${staffProfile.user_id}`;
+    }
+
+    const { data: staffBills, error: staffErr } = await supabase
+      .from('staff_credit_bills')
+      .select('*')
+      .or(staffFilter)
+      .order('created_at', { ascending: false });
+
+    if (staffErr) {
+      logger.warn('staff_credit_bills query error in getMyStaffCreditBills:', staffErr.message);
+    }
+
+    // 3. Query credit_bills
+    let cashierFilter = `staff_id.eq.${staffId}`;
+    if (staffProfile?.user_id && staffProfile.user_id !== staffId) {
+      cashierFilter += `,staff_id.eq.${staffProfile.user_id}`;
+    }
+    if (staffName) {
+      cashierFilter += `,customer_name.ilike.%${staffName}%`;
+    }
+
+    let cashierBills: any[] = [];
+    try {
+      const { data: cbData, error: cbErr } = await supabase
+        .from('credit_bills')
+        .select('*')
+        .or(cashierFilter)
+        .order('created_at', { ascending: false });
+      if (!cbErr && cbData) cashierBills = cbData;
+    } catch (_) {}
+
+    // 4. Fetch candidate pos_shift_orders for items resolution
+    const staffIds = [staffId, staffProfile?.user_id, userId].filter(Boolean);
+    let posOrders: any[] = [];
+    try {
+      const { data: ordersData } = await supabase
+        .from('pos_shift_orders')
+        .select('id, order_number, short_code, waiter_id, customer_name, total_amount, items, created_at, staff_credit_bill_id')
+        .or(`waiter_id.in.(${staffIds.join(',')}),created_by.in.(${staffIds.join(',')}),customer_name.ilike.%${staffName || 'NONE'}%`)
+        .order('created_at', { ascending: false })
+        .limit(300);
+      if (ordersData) posOrders = ordersData;
+    } catch (_) {}
+
+    const resolveItems = (b: any, rawAmt: number, dateStr?: string, docNo?: string) => {
+      const billAmt = Number(rawAmt || 0);
+      const bDate = (dateStr || '').split('T')[0];
+
+      // Direct match
+      let matched = posOrders.find((o: any) =>
+        (o.staff_credit_bill_id && (o.staff_credit_bill_id === b.id)) ||
+        (b.source_pos_order_id && o.id === b.source_pos_order_id) ||
+        (docNo && docNo !== 'pending' && (o.order_number === docNo || o.short_code === docNo)) ||
+        (b.bill_number && (o.order_number === b.bill_number || o.short_code === b.bill_number))
+      );
+
+      // Fuzzy match by date & amount
+      if (!matched && bDate && billAmt > 0) {
+        matched = posOrders.find((o: any) => {
+          const oDate = (o.created_at || '').split('T')[0];
+          const oAmt = Number(o.total_amount || 0);
+          return oDate === bDate && Math.abs(oAmt - billAmt) < 0.01;
+        });
+      }
+
+      if (matched && Array.isArray(matched.items) && matched.items.length > 0) {
+        return matched.items.map((i: any) => ({
+          name: i.name || i.item_name || i.title || 'Item',
+          quantity: Number(i.quantity || i.qty || 1),
+          unit_price: Number(i.unit_price || i.price || 0),
+          line_total: Number(i.line_total || i.total || (Number(i.quantity || 1) * Number(i.unit_price || 0))),
+        }));
+      }
+
+      return [
+        {
+          name: b.description || b.notes || 'Staff Credit Tab Charge',
+          quantity: 1,
+          unit_price: billAmt,
+          line_total: billAmt,
+        },
+      ];
+    };
+
+    // 5. Normalize & combine (Credited bills only)
+    const normalizedStaff = (staffBills || []).map((b: any) => {
+      const amt = Number(b.amount || 0);
+      const paid = Number(b.paid_amount || b.amount_paid || 0);
+      const bal = b.balance != null ? Number(b.balance) : Math.max(0, amt - paid);
+      return {
+        id: b.id,
+        bill_number: b.bill_number || `CRD-${b.id.substring(0, 8)}`,
+        bill_date: b.bill_date || b.created_at?.split('T')[0],
+        created_at: b.created_at,
+        description: b.description || 'Staff Credit Bill',
+        amount: amt,
+        paid_amount: paid,
+        balance: bal,
+        status: b.status || 'open',
+        source: 'staff_credit_bills',
+        items: resolveItems(b, amt, b.bill_date || b.created_at),
+      };
+    });
+
+    const normalizedCashier = (cashierBills || []).map((b: any) => {
+      const amt = Number(b.total_amount || b.amount || 0);
+      const paid = Number(b.amount_paid || b.paid_amount || 0);
+      const bal = b.balance_due != null ? Number(b.balance_due) : Math.max(0, amt - paid);
+      return {
+        id: b.id,
+        bill_number: b.bill_number || `CRD-${b.id.substring(0, 8)}`,
+        bill_date: b.bill_date || b.credit_date || b.created_at?.split('T')[0],
+        created_at: b.created_at,
+        description: b.notes || b.description || `Credit Bill (${b.customer_name || 'Staff'})`,
+        amount: amt,
+        paid_amount: paid,
+        balance: bal,
+        status: b.status || 'open',
+        source: 'credit_bills',
+        items: resolveItems(b, amt, b.bill_date || b.credit_date || b.created_at, b.source_document_number),
+      };
+    });
+
+    // Combine and deduplicate by bill_number / id
+    const map = new Map<string, any>();
+    for (const item of [...normalizedStaff, ...normalizedCashier]) {
+      const key = item.bill_number || item.id;
+      if (!map.has(key)) map.set(key, item);
+    }
+
+    const allBills = Array.from(map.values()).sort((a, b) =>
+      new Date(b.created_at || b.bill_date).getTime() - new Date(a.created_at || a.bill_date).getTime()
+    );
+
+    const outstandingBalance = allBills.reduce((sum, b) => sum + (b.balance > 0 ? b.balance : 0), 0);
+    const totalCredited = allBills.reduce((sum, b) => sum + b.amount, 0);
+    const totalPaid = allBills.reduce((sum, b) => sum + b.paid_amount, 0);
+
+    res.json({
+      success: true,
+      data: {
+        staff_name: staffName,
+        outstanding_balance: outstandingBalance,
+        total_credited: totalCredited,
+        total_paid: totalPaid,
+        count: allBills.length,
+        bills: allBills,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ── Cross-outlet settlement confirmation (cashier) ──────────────────────────
 // After the origin cashier settles a master bill, every OTHER outlet's sub-bill
 // is 'settled' — the money was collected for them by the origin cashier. Each

@@ -19,6 +19,7 @@ import {
   getActiveShift,
   getBarCaptainOrders,
   getWaiterOpenBills,
+  getMyStaffCreditBills,
   getConsolidatedBill,
   linkOrdersIntoBill,
   unlinkOrderFromBill,
@@ -277,5 +278,7 @@ router.get('/shifts/:shiftId/summary', getShiftSummary);
 router.post('/shifts/:shiftId/close', closeShift);
 router.post('/shifts/:shiftId/submit', submitShift);
 router.post('/shifts/:shiftId/review', reviewShift);
+
+router.get('/my-credit-bills', getMyStaffCreditBills);
 
 export default router;

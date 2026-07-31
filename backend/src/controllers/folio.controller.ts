@@ -53,7 +53,7 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
       });
       await folio.save();
     } else if (reservation) {
-      // Sync room_charges, POS charges from folio_transactions, and recalculate totalCharges & balance
+      // Sync room_charges, POS charges from folio_transactions, and additional services from transactions
       const resRoomCharge = Number(reservation.total_amount || 0);
 
       // Query folio_transactions for all charges posted to this folio from POS
@@ -85,15 +85,34 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
         }
       }
 
+      // Query transactions table for additional service charges posted directly to folio
+      const { data: addTx } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('folio_id', folio.id);
+
+      let txOther = 0;
+      let txPayments = 0;
+      for (const t of (addTx || [])) {
+        const type = (t.type || 'charge').toLowerCase();
+        const amt = Number(t.amount || 0);
+
+        if (type.includes('payment')) {
+          txPayments += amt;
+        } else {
+          txOther += amt;
+        }
+      }
+
       const foodCharges = Math.max(Number(folio.foodCharges || 0), ftFood);
       const beverageCharges = Math.max(Number(folio.beverageCharges || 0), ftBev);
-      const otherCharges = Math.max(Number(folio.otherCharges || 0), ftOther);
+      const otherCharges = Math.max(Number(folio.otherCharges || 0), ftOther + txOther);
       const currentRoomCharges = Math.max(Number(folio.roomCharges || 0), resRoomCharge);
       const calculatedTotalCharges = currentRoomCharges + foodCharges + beverageCharges + otherCharges;
       const resPaid = reservation.deposit_paid
         ? Math.max(Number(reservation.amount_paid || 0), Number(reservation.deposit_amount || 0))
         : Number(reservation.amount_paid || 0);
-      const totalPayments = Math.max(Number(folio.totalPayments || 0), resPaid, ftPayments);
+      const totalPayments = Math.max(Number(folio.totalPayments || 0), resPaid, ftPayments + txPayments);
       const calculatedBalance = Math.max(0, calculatedTotalCharges - totalPayments);
 
       if (folio.roomCharges !== currentRoomCharges ||
@@ -126,8 +145,10 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
       }
     }
 
-    // Fetch transactions from both transactions table and folio_transactions table
-    const tx1 = await folio.getTransactions();
+    const { data: tx1 } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('folio_id', folio.id);
 
     const { data: ftxData } = await supabase
       .from('folio_transactions')
@@ -150,9 +171,17 @@ export const getFolio = async (req: Request, res: Response, next: NextFunction) 
 
     const allTxnsMap = new Map();
     for (const t of [
-      ...tx1.map(tx => ({
-        ...tx,
-        reference: tx.referenceNumber || '',
+      ...(tx1 || []).map((tx: any) => ({
+        id: tx.id,
+        folioId: tx.folio_id,
+        type: (tx.type || 'charge').toLowerCase(),
+        category: tx.category || 'Additional Service',
+        amount: Number(tx.amount || 0),
+        description: tx.description,
+        referenceNumber: tx.reference_number || '',
+        reference: tx.reference_number || '',
+        performedBy: tx.performed_by,
+        createdAt: tx.created_at,
         sourceTable: 'transactions'
       })),
       ...tx2
@@ -322,8 +351,9 @@ export const addTransaction = async (req: Request, res: Response, next: NextFunc
 
     const transaction = await folio.addTransaction({
       ...req.body,
+      type: String(req.body?.type || 'charge').trim().toLowerCase(),
       amount,
-      category: 'Additional Service',
+      category: String(req.body?.category || 'Additional Service').trim(),
       description,
       performedBy: req.user?.id
     });

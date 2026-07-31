@@ -379,6 +379,16 @@ class OutletPosRepository {
         data: {'resolution': resolution});
   }
 
+  /// Outstanding staff credit bills for the authenticated waiter/bartender.
+  Future<Map<String, dynamic>> getMyCreditBills() async {
+    final response = await _dio.get('/pos/my-credit-bills');
+    final data = response.data;
+    if (data is Map && data['data'] is Map) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    return <String, dynamic>{};
+  }
+
   // ── Master bill actions (add cross-outlet items, transfer, move table) ─────
 
   /// Add items from ANOTHER outlet to a master bill; the new order is created in

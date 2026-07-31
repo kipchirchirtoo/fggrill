@@ -16,7 +16,7 @@ import '../domain/models.dart';
 import 'customer_bills_panel.dart';
 import 'cross_outlet_settlements_panel.dart';
 
-enum OutletPosSection { station, orders }
+enum OutletPosSection { station, orders, myCreditBills }
 
 // Temporarily disabled per ops request — flip back to true to restore the
 // "Merge bills" button on the orders tab.
@@ -80,6 +80,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   String? _error;
   Timer? _sessionTimeoutTimer;
   bool _printBillImmediately = true;
+  Future<Map<String, dynamic>>? _creditBillsFuture;
+  String _creditBillsFilter = 'all';
 
   @override
   void initState() {
@@ -292,8 +294,20 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
             section: OutletPosSection.orders,
             label: 'Orders',
             icon: PhosphorIcons.receipt()),
+        MasterNavItem(
+            section: OutletPosSection.myCreditBills,
+            label: 'My Credit Bills',
+            icon: PhosphorIcons.creditCard()),
       ],
-      onSectionSelected: (section) => setState(() => _section = section),
+      onSectionSelected: (section) {
+        setState(() {
+          _section = section;
+          if (section == OutletPosSection.myCreditBills) {
+            _creditBillsFuture =
+                ref.read(outletPosRepositoryProvider).getMyCreditBills();
+          }
+        });
+      },
       initialSidebarCollapsed: true,
       allowSidebarCollapse: true,
       child: Listener(
@@ -329,6 +343,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     return switch (_section) {
       OutletPosSection.station => _station(),
       OutletPosSection.orders => _ordersView(),
+      OutletPosSection.myCreditBills => _myCreditBillsView(),
     };
   }
 
@@ -788,6 +803,747 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _myCreditBillsView() {
+    _creditBillsFuture ??=
+        ref.read(outletPosRepositoryProvider).getMyCreditBills();
+
+    return _Surface(
+      child: FutureBuilder<Map<String, dynamic>>(
+        future: _creditBillsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Failed to load credit bills: ${snapshot.error}'),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _creditBillsFuture = ref
+                            .read(outletPosRepositoryProvider)
+                            .getMyCreditBills();
+                      });
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final data = snapshot.data ?? {};
+          final staffName = data['staff_name'] ?? '';
+          final outstandingBalance =
+              (data['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
+          final totalCredited =
+              (data['total_credited'] as num?)?.toDouble() ?? 0.0;
+          final totalPaid = (data['total_paid'] as num?)?.toDouble() ?? 0.0;
+          final rawBills = (data['bills'] as List?)
+                  ?.whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList() ??
+              [];
+
+          final filteredBills = rawBills.where((b) {
+            final balance = (b['balance'] as num?)?.toDouble() ?? 0.0;
+            if (_creditBillsFilter == 'outstanding') return balance > 0;
+            if (_creditBillsFilter == 'settled') return balance <= 0;
+            return true;
+          }).toList();
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                _creditBillsFuture =
+                    ref.read(outletPosRepositoryProvider).getMyCreditBills();
+              });
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'My Credit Bills',
+                            style:
+                                Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Outstanding credit bills registered at the cashier station for '
+                            '${staffName.toString().isEmpty ? 'your account' : staffName}. (Credited items only)',
+                            style:
+                                Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: _PosPalette.textMuted,
+                                    ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _creditBillsFuture = ref
+                              .read(outletPosRepositoryProvider)
+                              .getMyCreditBills();
+                        });
+                      },
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Refresh'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // ── Metric Cards Row ──────────────────────────────────────────
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isSmall = constraints.maxWidth < 700;
+                    return Flex(
+                      direction: isSmall ? Axis.vertical : Axis.horizontal,
+                      children: [
+                        Expanded(
+                          flex: isSmall ? 0 : 1,
+                          child: Card(
+                            color: Colors.red.shade900.withValues(alpha: 0.25),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                  color: Colors.red.shade700
+                                      .withValues(alpha: 0.5)),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.account_balance_wallet,
+                                          color: Colors.red.shade400, size: 20),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'OUTSTANDING BALANCE',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.red.shade200,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'KES ${outstandingBalance.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 22,
+                                      color: Colors.red.shade300,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Pending payroll / cashier settlement',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.red.shade200,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (isSmall)
+                          const SizedBox(height: 12)
+                        else
+                          const SizedBox(width: 12),
+                        Expanded(
+                          flex: isSmall ? 0 : 1,
+                          child: Card(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: _PosPalette.border),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.receipt_long,
+                                          color: _PosPalette.accent, size: 20),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'TOTAL CREDITED',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'KES ${totalCredited.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${rawBills.length} total credited bills',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: _PosPalette.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (isSmall)
+                          const SizedBox(height: 12)
+                        else
+                          const SizedBox(width: 12),
+                        Expanded(
+                          flex: isSmall ? 0 : 1,
+                          child: Card(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: _PosPalette.border),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.check_circle_outline,
+                                          color: Colors.green, size: 20),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'TOTAL SETTLED',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'KES ${totalPaid.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 22,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Amount paid / deducted',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: _PosPalette.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // ── Filter Chips ──────────────────────────────────────────────
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('All (${rawBills.length})'),
+                      selected: _creditBillsFilter == 'all',
+                      onSelected: (sel) {
+                        if (sel) setState(() => _creditBillsFilter = 'all');
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text(
+                        'Outstanding (${rawBills.where((b) => ((b['balance'] as num?) ?? 0) > 0).length})',
+                      ),
+                      selected: _creditBillsFilter == 'outstanding',
+                      selectedColor: Colors.red.shade700,
+                      onSelected: (sel) {
+                        if (sel) {
+                          setState(() => _creditBillsFilter = 'outstanding');
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text(
+                        'Settled (${rawBills.where((b) => ((b['balance'] as num?) ?? 0) <= 0).length})',
+                      ),
+                      selected: _creditBillsFilter == 'settled',
+                      selectedColor: Colors.green.shade700,
+                      onSelected: (sel) {
+                        if (sel) {
+                          setState(() => _creditBillsFilter = 'settled');
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // ── Bill List ────────────────────────────────────────────────
+                if (filteredBills.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: Text(
+                          _creditBillsFilter == 'outstanding'
+                              ? '🎉 No outstanding credit bills found!'
+                              : 'No credit bills found for this view.',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _PosPalette.textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Card(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filteredBills.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final bill = filteredBills[index];
+                        final billNo = bill['bill_number'] ?? 'CRD-BILL';
+                        final date = bill['bill_date'] ?? '';
+                        final desc = bill['description'] ?? 'Credit Bill';
+                        final amount =
+                            (bill['amount'] as num?)?.toDouble() ?? 0.0;
+                        final paid =
+                            (bill['paid_amount'] as num?)?.toDouble() ?? 0.0;
+                        final balance =
+                            (bill['balance'] as num?)?.toDouble() ?? 0.0;
+                        final statusStr =
+                            '${bill['status'] ?? 'open'}'.toLowerCase();
+                        final isOutstanding = balance > 0;
+
+                        return ListTile(
+                          onTap: () => _showCreditBillDetailDialog(bill, staffName),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          leading: CircleAvatar(
+                            backgroundColor: isOutstanding
+                                ? Colors.red.withValues(alpha: 0.15)
+                                : Colors.green.withValues(alpha: 0.15),
+                            child: Icon(
+                              isOutstanding
+                                  ? Icons.receipt_long
+                                  : Icons.check_circle_outline,
+                              color: isOutstanding ? Colors.red : Colors.green,
+                              size: 20,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(
+                                billNo,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isOutstanding
+                                      ? Colors.red.shade900
+                                          .withValues(alpha: 0.4)
+                                      : Colors.green.shade900
+                                          .withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isOutstanding
+                                        ? Colors.red.shade700
+                                        : Colors.green.shade700,
+                                  ),
+                                ),
+                                child: Text(
+                                  isOutstanding
+                                      ? (statusStr == 'partial'
+                                          ? 'PARTIAL'
+                                          : 'OUTSTANDING')
+                                      : 'SETTLED',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isOutstanding
+                                        ? Colors.red.shade200
+                                        : Colors.green.shade200,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  desc,
+                                  style: const TextStyle(fontSize: 13),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Date: $date',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: _PosPalette.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'KES ${balance.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                  color: isOutstanding
+                                      ? Colors.red.shade300
+                                      : Colors.green.shade300,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Original: KES ${amount.toStringAsFixed(0)} | Paid: KES ${paid.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: _PosPalette.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCreditBillDetailDialog(
+      Map<String, dynamic> bill, String staffName) {
+    final billNo = bill['bill_number'] ?? 'CRD-BILL';
+    final date = bill['bill_date'] ?? bill['created_at']?.split('T')[0] ?? '';
+    final desc = bill['description'] ?? 'Staff Credit Bill';
+    final amount = (bill['amount'] as num?)?.toDouble() ?? 0.0;
+    final paid = (bill['paid_amount'] as num?)?.toDouble() ?? 0.0;
+    final balance = (bill['balance'] as num?)?.toDouble() ?? 0.0;
+    final statusStr = '${bill['status'] ?? 'open'}'.toLowerCase();
+    final source = bill['source'] ?? 'cashier_station';
+    final isOutstanding = balance > 0;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: _PosPalette.border),
+          ),
+          backgroundColor: _PosPalette.surface,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isOutstanding
+                      ? Colors.red.withValues(alpha: 0.15)
+                      : Colors.green.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isOutstanding
+                      ? Icons.receipt_long
+                      : Icons.check_circle_outline,
+                  color: isOutstanding ? Colors.red : Colors.green,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      billNo,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Credit Bill Details',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _PosPalette.textMuted,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isOutstanding
+                      ? Colors.red.shade900.withValues(alpha: 0.4)
+                      : Colors.green.shade900.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isOutstanding
+                        ? Colors.red.shade700
+                        : Colors.green.shade700,
+                  ),
+                ),
+                child: Text(
+                  isOutstanding
+                      ? (statusStr == 'partial' ? 'PARTIAL' : 'OUTSTANDING')
+                      : 'SETTLED',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isOutstanding
+                        ? Colors.red.shade200
+                        : Colors.green.shade200,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(),
+                  const SizedBox(height: 8),
+
+                  // ── Financial Summary Box ────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _PosPalette.canvas,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _PosPalette.border),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Original Amount:',
+                                style: TextStyle(
+                                    color: _PosPalette.textMuted,
+                                    fontSize: 13)),
+                            Text(
+                              'KES ${amount.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Paid / Settled Amount:',
+                                style: TextStyle(
+                                    color: _PosPalette.textMuted,
+                                    fontSize: 13)),
+                            Text(
+                              'KES ${paid.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Divider(height: 1),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Outstanding Balance:',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
+                            Text(
+                              'KES ${balance.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                                color: isOutstanding
+                                    ? Colors.red.shade300
+                                    : Colors.green.shade300,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  const Text(
+                    'BILL INFORMATION',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  _detailRow('Bill Number', billNo),
+                  _detailRow('Staff Name',
+                      staffName.isEmpty ? 'Waiter / Bartender' : staffName),
+                  _detailRow('Date Credited', date),
+                  _detailRow('Description', desc),
+                  _detailRow(
+                      'Source System',
+                      source == 'staff_credit_bills'
+                          ? 'Payroll / Cashier Station'
+                          : 'Cashier Station'),
+                  _detailRow(
+                      'Status Note',
+                      isOutstanding
+                          ? 'Pending cashier settlement / payroll deduction'
+                          : 'Paid & Settled in Full'),
+
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Colors.blue.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 18, color: Colors.blue.shade300),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Credit bills are registered by cashiers when orders are taken on staff credit tabs. Outstanding balances are settled directly at the cashier desk or deducted via payroll.',
+                            style: TextStyle(
+                                fontSize: 11, color: _PosPalette.textMuted),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: _PosPalette.textMuted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
