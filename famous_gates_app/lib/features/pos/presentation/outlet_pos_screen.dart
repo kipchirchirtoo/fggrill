@@ -1136,6 +1136,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
     await showCustomerBillsPanel(
       context,
       ref,
+      shiftId: _shift?.id,
       onPrintBill: _printConsolidatedBill,
     );
     // Refresh this station's order list in case a member order was combined or

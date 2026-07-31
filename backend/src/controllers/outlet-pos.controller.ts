@@ -5876,12 +5876,8 @@ export const getWaiterOpenBills = async (req: Request, res: Response, next: Next
   try {
     assertUser(req);
     const branchId = branchIdFor(req);
-    // Waiters (owner-scoped roles) see ONLY their own orders. A cashier/manager
-    // is NOT owner-scoped: they see every open customer bill in the branch so
-    // they can recall a combined bill and settle it (the whole point of the
-    // "all outlets" panel for the settling cashier). A manager/global may still
-    // narrow to one waiter by passing waiter_id.
     const requestedWaiter = nullableText(req.query.waiter_id);
+    const requestedShiftId = nullableText(req.query.shift_id || req.query.shiftId);
     const ownerScoped = shouldScopeOrdersToOwner(req);
     const targetWaiterId = ownerScoped
       ? String(req.user.id)

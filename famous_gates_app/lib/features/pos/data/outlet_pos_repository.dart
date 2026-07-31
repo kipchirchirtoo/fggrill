@@ -287,9 +287,11 @@ class OutletPosRepository {
 
   /// Every unsettled order the current waiter owns across ALL their outlets,
   /// folded into consolidated bills.
-  Future<List<ConsolidatedBill>> getWaiterOpenBills({String? waiterId}) async {
+  Future<List<ConsolidatedBill>> getWaiterOpenBills(
+      {String? waiterId, String? shiftId}) async {
     final response = await _dio.get('/pos/waiter/open-bills', queryParameters: {
       if (waiterId != null && waiterId.isNotEmpty) 'waiter_id': waiterId,
+      if (shiftId != null && shiftId.isNotEmpty) 'shift_id': shiftId,
     });
     return _list(response.data)
         .whereType<Map>()

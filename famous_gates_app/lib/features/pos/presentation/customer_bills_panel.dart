@@ -11,19 +11,22 @@ Future<void> showCustomerBillsPanel(
   BuildContext context,
   WidgetRef ref, {
   String? waiterId,
+  String? shiftId,
   Future<void> Function(ConsolidatedBill bill)? onPrintBill,
 }) {
   return showDialog<void>(
     context: context,
     builder: (_) => Dialog.fullscreen(
-      child: _CustomerBillsPanel(waiterId: waiterId, onPrintBill: onPrintBill),
+      child: _CustomerBillsPanel(
+          waiterId: waiterId, shiftId: shiftId, onPrintBill: onPrintBill),
     ),
   );
 }
 
 class _CustomerBillsPanel extends ConsumerStatefulWidget {
-  const _CustomerBillsPanel({this.waiterId, this.onPrintBill});
+  const _CustomerBillsPanel({this.waiterId, this.shiftId, this.onPrintBill});
   final String? waiterId;
+  final String? shiftId;
   final Future<void> Function(ConsolidatedBill bill)? onPrintBill;
 
   @override
@@ -53,7 +56,10 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
     });
     try {
       final repo = ref.read(outletPosRepositoryProvider);
-      final bills = await repo.getWaiterOpenBills(waiterId: widget.waiterId);
+      final bills = await repo.getWaiterOpenBills(
+        waiterId: widget.waiterId,
+        shiftId: widget.shiftId,
+      );
       if (!mounted) return;
       setState(() {
         _bills = bills;

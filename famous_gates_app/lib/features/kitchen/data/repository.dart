@@ -70,8 +70,9 @@ class KitchenRepository {
   }
 
   Future<List<KitchenOrder>> getHistory({
-    int limit = 100,
+    int limit = 150,
     KitchenDisplayScope outletScope = KitchenDisplayScope.restaurant,
+    String timeline = 'shift',
   }) async {
     try {
       final branchId = await _branchId;
@@ -80,6 +81,7 @@ class KitchenRepository {
         if (branchId != null) 'branch_id': branchId,
         'limit': limit,
         'outlet_scope': outletScope.apiValue,
+        'timeline': timeline,
       });
       return _parseOrders(response.data);
     } catch (e, stackTrace) {

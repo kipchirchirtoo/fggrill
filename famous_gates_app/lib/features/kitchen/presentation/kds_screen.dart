@@ -51,6 +51,7 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   // _statusFilter: all | new | preparing | ready | recalled | void_pending
   String _statusFilter = 'all';
   String? _tableFilter; // null = all tables
+  String _historyTimeline = 'shift'; // shift | today | yesterday | 7days | all
 
   // Forces a rebuild every minute purely so the "stale order" cutoff below
   // (orders older than _kStaleOrderMinutes that were never cleared/served)
@@ -81,7 +82,8 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
   @override
   void didUpdateWidget(covariant KDSScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialSection != widget.initialSection) {
+    if (oldWidget.initialSection != widget.initialSection ||
+        oldWidget.scope != widget.scope) {
       _section = widget.initialSection;
       _refresh();
     }
@@ -101,7 +103,11 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     // ref.listen's auto-print to silently skip every order that arrived
     // on initial load (they'd already be in the dedup set).
     final results = await Future.wait<dynamic>([
-      _repo.getHistory(limit: 150, outletScope: widget.scope),
+      _repo.getHistory(
+        limit: 150,
+        outletScope: widget.scope,
+        timeline: _historyTimeline,
+      ),
       _repo.getNotifications(
         status: _notificationStatus,
         category: 'restaurant_order',
@@ -227,7 +233,16 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           group: 'Kitchen Display',
         ),
       ],
-      onSectionSelected: (section) => setState(() => _section = section),
+      onSectionSelected: (section) => setState(() {
+        final previous = _section;
+        _section = section;
+        if (previous != section &&
+            (section == KitchenKdsSection.history ||
+                section == KitchenKdsSection.analytics ||
+                section == KitchenKdsSection.notifications)) {
+          _future = _load();
+        }
+      }),
       child: _section == KitchenKdsSection.orders
           // Orders section is driven by kdsOrdersProvider (Realtime-backed)
           ? _buildOrdersSection()
@@ -505,6 +520,74 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
     );
   }
 
+  Widget _historyTimelineFilter() {
+    final options = [
+      {'key': 'shift', 'label': 'Current Shift'},
+      {'key': 'today', 'label': 'Today'},
+      {'key': 'yesterday', 'label': 'Yesterday'},
+      {'key': '7days', 'label': 'Last 7 Days'},
+      {'key': 'all', 'label': 'All (30 Days)'},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF22223D),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF34345A)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.tune_outlined, size: 18, color: AppColors.kAccent),
+          const SizedBox(width: 8),
+          const Text(
+            'Timeline Filter:',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: Color(0xFFF5F6FA),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: options.map((opt) {
+                  final key = opt['key']!;
+                  final label = opt['label']!;
+                  final selected = _historyTimeline == key;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(label),
+                      selected: selected,
+                      selectedColor: AppColors.kAccent,
+                      backgroundColor: const Color(0xFF1A1A2E),
+                      labelStyle: TextStyle(
+                        color: selected ? Colors.black : const Color(0xFFF5F6FA),
+                        fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                      onSelected: selected
+                          ? null
+                          : (_) {
+                              setState(() {
+                                _historyTimeline = key;
+                              });
+                              _refresh();
+                            },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _history(_KitchenModuleSnapshot data) {
     return _Page(
       title: widget.scope.historyTitle,
@@ -517,9 +600,16 @@ class _KDSScreenState extends ConsumerState<KDSScreen> {
           label: const Text('Refresh'),
         ),
       ],
-      child: _OrderList(
-        orders: data.history,
-        empty: widget.scope.emptyHistoryMessage,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _historyTimelineFilter(),
+          const SizedBox(height: 16),
+          _OrderList(
+            orders: data.history,
+            empty: widget.scope.emptyHistoryMessage,
+          ),
+        ],
       ),
     );
   }
@@ -1924,36 +2014,103 @@ class _OrderList extends StatelessWidget {
   final List<KitchenOrder> orders;
   final String empty;
 
+  String _formatHistoryTime(DateTime dt) {
+    final k = dt.toUtc().add(const Duration(hours: 3));
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final h12 = k.hour % 12 == 0 ? 12 : k.hour % 12;
+    final ampm = k.hour < 12 ? 'AM' : 'PM';
+    final minStr = k.minute.toString().padLeft(2, '0');
+    return '${k.day} ${months[k.month - 1]} ${k.year}, $h12:$minStr $ampm';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (orders.isEmpty) return EmptyState(message: empty);
+
+    // Strictly sort orders by createdAt descending (newest created orders first)
+    final sortedOrders = List<KitchenOrder>.from(orders)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     return Card(
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: orders.length,
+        itemCount: sortedOrders.length,
         separatorBuilder: (_, __) => const Divider(height: 1),
         itemBuilder: (context, index) {
-          final order = orders[index];
+          final order = sortedOrders[index];
           final isStopTicket = order.hasPendingVoidRequest || order.isVoided;
+          final formattedTime = _formatHistoryTime(order.createdAt);
           return ListTile(
-            leading: Icon(
-              isStopTicket ? Icons.block : Icons.receipt_long_outlined,
-              color: isStopTicket ? AppColors.kError : null,
-            ),
-            title: Text(
-              '#${order.orderNumber} • ${order.locationLabel} • ${order.orderTypeLabel}',
-              style: TextStyle(
-                decoration: isStopTicket ? TextDecoration.lineThrough : null,
-                decorationColor: AppColors.kError,
-                decorationThickness: 2.5,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            leading: CircleAvatar(
+              backgroundColor: isStopTicket
+                  ? AppColors.kError.withValues(alpha: 0.15)
+                  : AppColors.kAccent.withValues(alpha: 0.15),
+              child: Icon(
+                isStopTicket ? Icons.block : Icons.receipt_long_outlined,
+                color: isStopTicket ? AppColors.kError : AppColors.kAccent,
+                size: 20,
               ),
             ),
-            subtitle: Text(
-              '${(order.waiterName ?? '').isEmpty ? 'Waiter not assigned' : 'Waiter: ${order.waiterName}'}\n'
-              '${order.items.map((item) => '${item.quantity}x ${item.name}').join(', ')}\n${order.createdAt}',
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+            title: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '#${order.orderNumber} • ${order.locationLabel} • ${order.orderTypeLabel}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        decoration: isStopTicket ? TextDecoration.lineThrough : null,
+                        decorationColor: AppColors.kError,
+                        decorationThickness: 2.5,
+                      ),
+                    ),
+                  ),
+                  if (order.total > 0)
+                    Text(
+                      'KES ${order.total.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: AppColors.kAccent,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (order.waiterName ?? '').isEmpty ? 'Waiter not assigned' : 'Waiter: ${order.waiterName}',
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  order.items.map((item) => '${item.quantity}x ${item.name}').join(', '),
+                  style: const TextStyle(fontSize: 13, color: Color(0xFFF5F6FA)),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 12, color: Color(0xFFAAAFC4)),
+                    const SizedBox(width: 4),
+                    Text(
+                      formattedTime,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFFAAAFC4),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
             trailing: _StatusPill(status: order.status),
           );

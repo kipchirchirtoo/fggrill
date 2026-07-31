@@ -681,9 +681,25 @@ router.get('/kitchen/orders/history',
       const branchId = resolveKitchenBranchId(req);
       const outletScope = normalizeKitchenOutletScope(req.query.outlet_scope);
       const limit = Math.min(parseInt(req.query.limit as string) || 100, 250);
-      // Scoped to the current kitchen shift so History and Order Intelligence
-      // reset per shift instead of accumulating across days indefinitely.
-      const historySince = await resolveKitchenHistoryWindow(branchId);
+      const timeline = String(req.query.timeline || 'shift').toLowerCase();
+
+      let historySince: string;
+      if (timeline === 'today') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        historySince = today.toISOString();
+      } else if (timeline === 'yesterday') {
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        yesterday.setHours(0, 0, 0, 0);
+        historySince = yesterday.toISOString();
+      } else if (timeline === '7days') {
+        historySince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (timeline === 'all') {
+        historySince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      } else {
+        // Default: current active kitchen shift
+        historySince = await resolveKitchenHistoryWindow(branchId);
+      }
 
       let orders: any[] = [];
 
@@ -694,73 +710,6 @@ router.get('/kitchen/orders/history',
           .in('status', ['served', 'delivered', 'completed', 'paid', 'cancelled', 'voided'])
           .gte('created_at', historySince)
           .order('created_at', { ascending: false })
-          .limit(limit);
-
-        if (branchId) {
-          ordersQuery = ordersQuery.eq('branch_id', branchId);
-        }
-
-        const { data: restaurantOrders, error: ordersError } = await ordersQuery;
-        if (ordersError) throw ordersError;
-        orders = restaurantOrders || [];
-      }
-
-      const orderIds = orders.map((o: any) => o.id);
-      let allItems: any[] = [];
-      if (orderIds.length) {
-        const itemsResult = await supabase
-          .from('restaurant_order_items')
-          .select('id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, item_name, kitchen_status, kitchen_ready_at')
-          .in('order_id', orderIds);
-        allItems = itemsResult.data || [];
-        if (itemsResult.error) {
-          console.warn('Failed to fetch kitchen order history items:', itemsResult.error.message);
-        }
-      }
-
-      const itemsByOrder: Record<string, any[]> = {};
-      for (const item of (allItems || [])) {
-        if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
-        itemsByOrder[item.order_id].push(item);
-      }
-
-      const history = orders.map((order: any) => {
-        const items = itemsByOrder[order.id] || [];
-        return {
-          ...order,
-          elapsed_minutes: Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000),
-          items_count: items.length,
-          total: order.total_amount,
-          items: items.map((item: any) => ({
-            id: item.id,
-            name: item.item_name || `Item #${item.menu_item_id}`,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            notes: item.special_instructions,
-            status: item.kitchen_status || 'ready',
-            is_ready: (item.kitchen_status || 'ready') === 'ready',
-            kitchen_ready_at: item.kitchen_ready_at
-          }))
-        };
-      });
-
-      let posHistory: any[] = [];
-      try {
-        let shiftQuery = supabase
-          .from('pos_outlet_shifts')
-          .select('id, branch_id, outlet_id, outlet:pos_outlets(name, outlet_type)')
-          .gte('opened_at', historySince)
-          .order('opened_at', { ascending: false })
-          .limit(50);
-
-        if (branchId) {
-          shiftQuery = shiftQuery.eq('branch_id', branchId);
-        }
-
-        const { data: outletShifts, error: shiftError } = await shiftQuery;
-        if (shiftError) throw shiftError;
-
-        const restaurantShiftIds = (outletShifts || [])
           .limit(limit);
 
         if (branchId) {
@@ -843,6 +792,13 @@ router.get('/kitchen/orders/history',
             .in('shift_id', restaurantShiftIds)
             .or(`created_at.gte.${historySince},updated_at.gte.${historySince}`)
             .or('kitchen_status.in.(served,cancelled,voided),status.in.(paid,credit_bill,voided,cancelled),payment_status.in.(paid,credit_bill,voided)')
+            .order('updated_at', { ascending: false })
+            .limit(limit);
+
+          if (posOrdersError) throw posOrdersError;
+
+          posHistory = (posOrders || []).map((order: any) => {
+            const shift = shiftsById.get(order.shift_id) || {};
             const shiftOutlet = Array.isArray(shift.outlet) ? shift.outlet[0] : shift.outlet;
             const orderItems = Array.isArray(order.items) ? order.items : [];
             return {
@@ -898,7 +854,7 @@ router.get('/kitchen/orders/history',
       }
 
       const combinedHistory = [...history, ...posHistory]
-        .sort((a: any, b: any) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+        .sort((a: any, b: any) => new Date(b.created_at || b.updated_at).getTime() - new Date(a.created_at || a.updated_at).getTime())
         .slice(0, limit);
 
       res.json({ success: true, data: combinedHistory });

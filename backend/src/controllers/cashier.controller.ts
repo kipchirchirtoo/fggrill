@@ -6735,24 +6735,49 @@ export const getCashierStats = async (req: Request, res: Response, next: NextFun
             .eq('approval_status', 'pending');
         if (effectiveBranchId) creditQuery = creditQuery.eq('branch_id', effectiveBranchId);
 
-        const activeShiftQuery = supabase
+        const activeShiftLogQuery = supabase
+            .from('cashier_shift_logs')
+            .select('id,branch_id,cashier_id,status,shift_start,opening_float,expense_total,total_sales,updated_at')
+            .eq('cashier_id', req.user?.id)
+            .eq('status', 'open')
+            .order('shift_start', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        const activePosShiftQuery = supabase
+            .from('pos_outlet_shifts')
+            .select('id,branch_id,cashier_id,status,opened_at,opening_float,updated_at')
+            .eq('cashier_id', req.user?.id)
+            .eq('status', 'open')
+            .order('opened_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        const activeLegacyShiftQuery = supabase
             .from('cashier_shifts')
             .select('id,branch_id,cashier_id,status,shift_start,opening_float,expected_cash,expense_total,total_sales,updated_at')
             .eq('cashier_id', req.user?.id)
             .eq('status', 'open')
+            .limit(1)
             .maybeSingle();
 
         const [
             { data: transactions },
             { count: unpaidCount },
             { count: pendingCreditsCount },
-            { data: activeShift },
+            { data: activeLogShift },
+            { data: activePosShift },
+            { data: activeLegacyShift },
         ] = await Promise.all([
             txQuery,
             unpaidQuery,
             creditQuery,
-            activeShiftQuery,
+            activeShiftLogQuery,
+            activePosShiftQuery,
+            activeLegacyShiftQuery,
         ]);
+
+        const activeShift = activeLogShift || activePosShift || activeLegacyShift || null;
 
         const todayRevenue = transactions?.reduce((sum, t) => sum + parseFloat(t.amount), 0) || 0;
 
