@@ -580,7 +580,8 @@ class AdminRepository {
   }
 
   Future<List<AdminRatePlan>> getRatePlans() async {
-    final response = await _dio.get('/rate-plans');
+    final response = await _dio
+        .get('/rate-plans', queryParameters: {'include_inactive': 'true'});
     return _parseList(response.data, AdminRatePlan.fromJson);
   }
 
@@ -596,6 +597,28 @@ class AdminRepository {
 
   Future<void> deleteRatePlan(String id) async {
     await _dio.delete('/rate-plans/$id');
+  }
+
+  Future<List<AdminMealPlan>> getMealPlans({String? branchId}) async {
+    final response = await _dio.get('/meal-plans', queryParameters: {
+      'include_inactive': 'true',
+      if (branchId != null && branchId.isNotEmpty) 'branch_id': branchId,
+    });
+    return _parseList(response.data, AdminMealPlan.fromJson);
+  }
+
+  Future<AdminMealPlan> createMealPlan(Map<String, dynamic> data) async {
+    final response = await _dio.post('/meal-plans', data: data);
+    return AdminMealPlan.fromJson(_unwrap(response.data));
+  }
+
+  Future<AdminMealPlan> updateMealPlan(String id, Map<String, dynamic> data) async {
+    final response = await _dio.put('/meal-plans/$id', data: data);
+    return AdminMealPlan.fromJson(_unwrap(response.data));
+  }
+
+  Future<void> deleteMealPlan(String id) async {
+    await _dio.delete('/meal-plans/$id');
   }
 
 

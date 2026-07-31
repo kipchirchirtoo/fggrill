@@ -213,6 +213,20 @@ export const createBooking = async (
       throw new AppError('Room type ID is required', 400);
     }
 
+    const rawDepositAmount =
+      req.body.depositAmount ??
+      req.body.deposit_amount ??
+      req.body.amountPaid ??
+      req.body.amount_paid ??
+      0;
+    const depositAmount = Number(rawDepositAmount || 0);
+    const rawDepositPaid = req.body.depositPaid ?? req.body.deposit_paid;
+    const depositPaid =
+      rawDepositPaid === true ||
+      rawDepositPaid === 'true' ||
+      rawDepositPaid === 1 ||
+      rawDepositPaid === '1';
+
     // Use enhanced booking service for complete flow
     const bookingRequest: BookingRequest = {
       guestId: req.body.guestId || req.body.guest_id,
@@ -226,8 +240,10 @@ export const createBooking = async (
         nationality: req.body.guestInfo?.nationality || req.body.nationality,
         address: req.body.guestInfo?.address || req.body.address
       },
-      roomId: specificRoomId, // Renamed from specificRoomId to roomId as per instruction
+      roomId: specificRoomId,
       roomTypeId: roomTypeId,
+      ratePlanId: req.body.ratePlanId || req.body.rate_plan_id,
+      mealPlanId: req.body.mealPlanId || req.body.meal_plan_id,
       checkInDate: req.body.checkInDate || req.body.check_in_date || req.body.check_in,
       checkOutDate: req.body.checkOutDate || req.body.check_out_date || req.body.check_out,
       adults: req.body.adults || 1,
@@ -236,8 +252,9 @@ export const createBooking = async (
       mealPlan: req.body.mealPlan || req.body.meal_plan,
       specialRequests: req.body.specialRequests || req.body.special_requests,
       purpose: req.body.purpose,
-      paymentMethod: req.body.paymentMethod || 'card',
-      depositAmount: req.body.depositAmount || req.body.total_amount,
+      paymentMethod: req.body.paymentMethod || req.body.payment_method || 'cash',
+      depositAmount: Number.isFinite(depositAmount) ? depositAmount : 0,
+      depositPaid,
       bookingSource: req.body.bookingSource || 'WEBSITE',
       branchId: req.user?.branch_id || parseInt(req.body.branchId || req.body.branch_id) || undefined
     };
@@ -304,8 +321,6 @@ export const updateBooking = async (
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
-
-    // Update fields
     Object.assign(booking, req.body);
     const updatedBooking = await booking.save();
 
@@ -318,9 +333,107 @@ export const updateBooking = async (
   }
 };
 
-// @desc    Check-in booking
-// @route   POST /api/bookings/:id/check-in
-// @desc    Check-in booking
+// @desc    Extend stay for a booking
+// @route   PUT /api/bookings/:id/extend
+// @access  Private
+export const extendBooking = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { newCheckOutDate, checkOutDate, extraNights, extraAmount, notes } = req.body;
+    const targetDate = newCheckOutDate || checkOutDate;
+
+    const { data: booking, error: fetchError } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !booking) {
+      throw new AppError('Reservation/Booking not found', 404);
+    }
+
+    let finalCheckOut = targetDate;
+    if (!finalCheckOut && extraNights) {
+      const currentEnd = new Date(booking.check_out_date || Date.now());
+      currentEnd.setDate(currentEnd.getDate() + Number(extraNights));
+      finalCheckOut = currentEnd.toISOString().split('T')[0];
+    }
+
+    if (!finalCheckOut) {
+      throw new AppError('New checkout date or number of extra nights is required', 400);
+    }
+
+    const roomRate = Number(booking.room_rate || 0);
+    const addedCost = Number(extraAmount || 0) || (Number(extraNights || 1) * roomRate);
+    const newTotal = Number(booking.total_amount || 0) + addedCost;
+
+    const { data: updatedBooking, error: updateError } = await supabase
+      .from('reservations')
+      .update({
+        check_out_date: finalCheckOut,
+        total_amount: newTotal,
+        subtotal: Number(booking.subtotal || 0) + addedCost,
+        notes: notes ? `${booking.notes || ''}\n[Extended Stay] ${notes}`.trim() : booking.notes,
+        auto_extended_nights: 0,
+        last_auto_extension_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // ── FOLIO CHARGE & BALANCE UPDATE ──
+    const nightsCount = Number(extraNights) || 1;
+    const { data: folio } = await supabase
+      .from('folios')
+      .select('*')
+      .or(`reservation_id.eq.${id},booking_id.eq.${id}`)
+      .maybeSingle();
+
+    if (folio) {
+      const currentCharges = Number(folio.total_charges || 0);
+      const currentPayments = Number(folio.total_payments || 0);
+      const currentRoomCharges = Number(folio.room_charges || 0);
+      const newTotalCharges = currentCharges + addedCost;
+      const newRoomCharges = currentRoomCharges + addedCost;
+      const newBalance = newTotalCharges - currentPayments;
+
+      await supabase.from('folio_items').insert({
+        folio_id: folio.id,
+        description: `Room Charge - Extended Stay (+${nightsCount} night(s) to ${finalCheckOut})`,
+        charge_date: new Date().toISOString().split('T')[0],
+        department: 'Room',
+        amount: addedCost,
+        quantity: nightsCount,
+        unit_price: roomRate > 0 ? roomRate : (addedCost / nightsCount),
+        voided: false,
+        created_at: new Date().toISOString()
+      });
+
+      await supabase.from('folios').update({
+        total_charges: newTotalCharges,
+        room_charges: newRoomCharges,
+        balance_due: newBalance,
+        balance: newBalance,
+        updated_at: new Date().toISOString()
+      }).eq('id', folio.id);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Stay extended successfully to ${finalCheckOut}`,
+      data: updatedBooking
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 // @route   POST /api/bookings/:id/check-in
 // @access  Private
 export const checkInBooking = async (

@@ -498,6 +498,7 @@ export const settleRoomBill = async (req: Request, res: Response): Promise<void>
     const reservationId = String(req.params.reservationId || '').trim();
     const amount = Number(req.body.amount);
     const method = String(req.body.method || req.body.payment_method || 'cash').trim().toLowerCase();
+    const purpose = String(req.body.purpose || req.body.payment_purpose || '').trim();
     const reference = String(req.body.reference || '').trim() || null;
     const cashierUserId = String((req as any).user?.id || '').trim();
     const cashierName = String(
@@ -514,6 +515,7 @@ export const settleRoomBill = async (req: Request, res: Response): Promise<void>
       reservationId,
       amount,
       paymentMethod: method,
+      paymentPurpose: purpose || null,
       reference,
       cashierUserId,
       cashierName,
@@ -528,6 +530,7 @@ export const settleRoomBill = async (req: Request, res: Response): Promise<void>
         payment_id: settlement.paymentId,
         folio_id: settlement.folioId,
         cashier_transaction_id: settlement.cashierTransactionId,
+        cashier_transaction_number: settlement.cashierTransactionNumber,
         cashier_shift_log_id: settlement.cashierShiftLogId,
         amount,
         method: settlement.method,

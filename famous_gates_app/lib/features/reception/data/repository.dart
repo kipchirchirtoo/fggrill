@@ -183,6 +183,27 @@ class ReceptionRepository {
     await _dio.put('/bookings/$bookingId', data: data);
   }
 
+  Future<void> extendStay(String bookingId,
+      {required String newCheckOutDate,
+      int? extraNights,
+      double? extraAmount,
+      String? notes}) async {
+    try {
+      await _dio.put('/bookings/$bookingId/extend', data: {
+        'newCheckOutDate': newCheckOutDate,
+        if (extraNights != null) 'extraNights': extraNights,
+        if (extraAmount != null) 'extraAmount': extraAmount,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      });
+    } catch (_) {
+      await updateBooking(bookingId, {
+        'check_out_date': newCheckOutDate,
+        'checkOutDate': newCheckOutDate,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      });
+    }
+  }
+
   Future<void> cancelBooking(String bookingId, {String? reason}) async {
     await _dio.put('/bookings/$bookingId/cancel',
         data: {if (reason != null && reason.isNotEmpty) 'reason': reason});
@@ -596,6 +617,18 @@ class ReceptionRepository {
       String bookingId, Map<String, dynamic> data) async {
     final response = await _dio
         .post('/folios/reservation/$bookingId/transaction', data: data);
+    return _payload(response.data);
+  }
+
+  Future<Map<String, dynamic>> settleRoomFolioPayment(
+      String bookingId, Map<String, dynamic> data) async {
+    final response = await _dio.post(
+      '/cashier/pay',
+      data: await _withBranch({
+        'bookingId': bookingId,
+        ...data,
+      }),
+    );
     return _payload(response.data);
   }
 

@@ -3378,6 +3378,9 @@ class _CheckInOutSectionState extends ConsumerState<_CheckInOutSection> {
                                 widget.onRefresh();
                               }
                             }),
+                          if (_tab == 'checkout')
+                            _SmallAction('Extend Stay', Icons.update,
+                                () => _showExtendStayDialog(context, ref, b, widget.onRefresh)),
                           _SmallAction(
                               'Email',
                               Icons.email_outlined,
@@ -6200,15 +6203,21 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
   final _guestSearch = TextEditingController();
   final _special = TextEditingController();
   final _deposit = TextEditingController(text: '0');
+  final _paymentReference = TextEditingController();
+  final _cashTendered = TextEditingController();
   int _step = 0;
   int _adults = 1;
   int _children = 0;
   String _mealPlan = 'bed_breakfast';
+  String _paymentMethod = 'cash';
   bool _busy = false;
+  bool _payNowBusy = false;
   List<Map<String, dynamic>> _rooms = [];
   List<Guest> _guests = [];
   Map<String, dynamic>? _selectedRoom;
   Guest? _selectedGuest;
+  Map<String, dynamic>? _createdBookingForPayment;
+  Map<String, dynamic>? _cashierPaymentReceipt;
 
   DateTime get _checkInDate =>
       DateTime.tryParse(_checkIn.text) ?? DateTime.now();
@@ -6259,6 +6268,8 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     _guestSearch.dispose();
     _special.dispose();
     _deposit.dispose();
+    _paymentReference.dispose();
+    _cashTendered.dispose();
     super.dispose();
   }
 
@@ -6567,18 +6578,79 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                           color: AppColors.kTextPrimary),
                     ),
                   ),
-                  TextField(
-                    controller: _deposit,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      hintText: '0',
-                      prefixText: 'KES ',
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _deposit,
+                          keyboardType: TextInputType.number,
+                          enabled: _cashierPaymentReceipt == null,
+                          decoration: InputDecoration(
+                            hintText: '0',
+                            prefixText: 'KES ',
+                            helperText: widget.isBookingMode
+                                ? 'Use Pay Now to post received money through the cashier ledger.'
+                                : null,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                      if (widget.isBookingMode) ...[
+                        const SizedBox(width: 10),
+                        ElevatedButton.icon(
+                          onPressed: (_busy ||
+                                  _payNowBusy ||
+                                  _cashierPaymentReceipt != null)
+                              ? null
+                              : _openBookingPaymentDialog,
+                          icon: Icon(_cashierPaymentReceipt == null
+                              ? Icons.point_of_sale
+                              : Icons.check_circle),
+                          label: Text(_payNowBusy
+                              ? 'Posting...'
+                              : _cashierPaymentReceipt == null
+                                  ? 'Pay Now'
+                                  : 'Paid'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 14),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
+                  if (_cashierPaymentReceipt != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.kSuccess.withAlpha(26),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: AppColors.kSuccess.withAlpha(89)),
+                      ),
+                      child: Text(
+                        'Cashier payment posted: ${_money(_num(_cashierPaymentReceipt!, [
+                              'amount'
+                            ]))} via ${_paymentMethod.toUpperCase()} • Ref: ${_text(_cashierPaymentReceipt!, [
+                              'cashier_transaction_number',
+                              'reference',
+                              'payment_reference'
+                            ]) ?? '-'} • Folio balance: ${_money(_num(_cashierPaymentReceipt!, [
+                              'balance'
+                            ]))}',
+                        style: const TextStyle(
+                          color: AppColors.kSuccess,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   const Padding(
                     padding: EdgeInsets.only(left: 2, bottom: 6),
@@ -6659,9 +6731,11 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
                   ? (widget.isBookingMode
                       ? 'Creating Booking...'
                       : 'Creating Hold...')
+                  : (_cashierPaymentReceipt != null
+                      ? 'Done'
                   : (widget.isBookingMode
                       ? 'Create Confirmed Booking'
-                      : 'Create Provisional Hold'))),
+                          : 'Create Provisional Hold')))),
       ],
     );
   }
@@ -6740,29 +6814,248 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
     return (rate + mealAddon) * nights;
   }
 
+  Future<Map<String, dynamic>> _createBooking({required bool recordDepositAsPaid}) async {
+    if (_selectedRoom == null || _selectedGuest == null) {
+      throw StateError('Select a room and guest before creating the booking.');
+    }
+    final status = widget.isBookingMode ? 'confirmed' : 'pending';
+    final paidAmount = recordDepositAsPaid ? (num.tryParse(_deposit.text) ?? 0) : 0;
+    return ref.read(receptionRepositoryProvider).createBookingRow({
+      'room_id': _text(_selectedRoom!, ['id']),
+      'guest_id': _selectedGuest!.id,
+      'check_in': _checkIn.text,
+      'check_out': _checkOut.text,
+      'adults': _adults,
+      'children': _children,
+      'meal_plan': _mealPlan,
+      'special_requests': _special.text,
+      'total_amount': _totalAmount(),
+      'amount_paid': paidAmount,
+      'deposit_amount': paidAmount,
+      'deposit_paid': paidAmount > 0,
+      'payment_method': _paymentMethod,
+      'status': status,
+    });
+  }
+
   Future<void> _submit() async {
     if (_selectedRoom == null || _selectedGuest == null) return;
+    if (_cashierPaymentReceipt != null) {
+      widget.onSuccess();
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    final depositAmount = num.tryParse(_deposit.text) ?? 0;
+    if (widget.isBookingMode && depositAmount > 0) {
+      _showSnack('Use Pay Now to record received booking money through Cashier Station.');
+      await _openBookingPaymentDialog();
+      return;
+    }
+
     setState(() => _busy = true);
     try {
-      final status = widget.isBookingMode ? 'confirmed' : 'pending';
-      await ref.read(receptionRepositoryProvider).createBookingRow({
-        'room_id': _text(_selectedRoom!, ['id']),
-        'guest_id': _selectedGuest!.id,
-        'check_in': _checkIn.text,
-        'check_out': _checkOut.text,
-        'adults': _adults,
-        'children': _children,
-        'meal_plan': _mealPlan,
-        'special_requests': _special.text,
-        'total_amount': _totalAmount(),
-        'amount_paid': num.tryParse(_deposit.text) ?? 0,
-        'status': status,
-      });
+      await _createBooking(recordDepositAsPaid: !widget.isBookingMode);
       widget.onSuccess();
       if (mounted) Navigator.pop(context);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _openBookingPaymentDialog() async {
+    if (!widget.isBookingMode) return;
+    if (_selectedRoom == null || _selectedGuest == null) {
+      _showSnack('Select a room and guest before taking payment.');
+      return;
+    }
+    final amount = num.tryParse(_deposit.text) ?? 0;
+    if (amount <= 0) {
+      _showSnack('Enter the payment amount first.');
+      return;
+    }
+    if (_cashTendered.text.trim().isEmpty) {
+      _cashTendered.text = amount.toStringAsFixed(0);
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !_payNowBusy,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> postPayment() async {
+              setDialogState(() => _payNowBusy = true);
+              if (mounted) setState(() => _payNowBusy = true);
+              try {
+                final typedReference = _paymentReference.text.trim();
+                if ((_paymentMethod == 'mpesa' || _paymentMethod == 'card') &&
+                    typedReference.isEmpty) {
+                  _showSnack(_paymentMethod == 'mpesa'
+                      ? 'Enter the M-Pesa receipt/reference code.'
+                      : 'Enter the card approval/batch reference.');
+                  return;
+                }
+                final tendered = num.tryParse(_cashTendered.text) ?? amount;
+                if (_paymentMethod == 'cash') {
+                  if (tendered <= 0) {
+                    _showSnack('Enter cash tendered before posting payment.');
+                    return;
+                  }
+                  if (tendered < amount) {
+                    _showSnack('Cash tendered is short by ${_money(amount - tendered)}.');
+                    return;
+                  }
+                }
+                final booking = _createdBookingForPayment ??
+                    await _createBooking(recordDepositAsPaid: false);
+                if (mounted && _createdBookingForPayment == null) {
+                  setState(() => _createdBookingForPayment = booking);
+                }
+                final bookingId = _text(booking, [
+                  'id',
+                  'reservation_id',
+                  'reservationId',
+                  'booking_id',
+                  'bookingId'
+                ]);
+                if (bookingId == null || bookingId.isEmpty) {
+                  throw StateError('The created booking did not return a reservation id.');
+                }
+                final confirmation = _text(booking, [
+                      'confirmationNumber',
+                      'confirmation_number',
+                      'booking_number',
+                      'reservation_number'
+                    ]) ??
+                    bookingId.substring(
+                        0, bookingId.length < 8 ? bookingId.length : 8);
+                final reference = typedReference.isNotEmpty
+                    ? typedReference
+                    : 'DEP-CASH-$confirmation-${DateFormat('yyyyMMddHHmm').format(DateTime.now())}';
+                if (_paymentReference.text.trim().isEmpty) {
+                  _paymentReference.text = reference;
+                }
+                final receipt = await ref
+                    .read(receptionRepositoryProvider)
+                    .settleRoomFolioPayment(bookingId, {
+                  'amount': amount,
+                  'method': _paymentMethod,
+                  'reference': reference,
+                  'amount_tendered': _paymentMethod == 'cash' ? tendered : 0,
+                  'change_given': _paymentMethod == 'cash'
+                      ? (tendered - amount).clamp(0, double.infinity)
+                      : 0,
+                  'payment_purpose': 'booking_deposit',
+                });
+                if (!mounted) return;
+                setState(() {
+                  _createdBookingForPayment = booking;
+                  _cashierPaymentReceipt = receipt;
+                  _deposit.text = amount.toStringAsFixed(0);
+                });
+                widget.onSuccess();
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                _showSnack('Payment posted to guest folio. Room bills and checkout will reflect the balance.');
+              } catch (error) {
+                if (mounted) _showSnack('Payment failed: $error');
+              } finally {
+                if (mounted) {
+                  setState(() => _payNowBusy = false);
+                }
+                if (dialogContext.mounted) {
+                  setDialogState(() => _payNowBusy = false);
+                }
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Cashier Station Payment'),
+              content: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _KeyValueList(rows: [
+                      {'label': 'Guest', 'value': _selectedGuest!.name},
+                      {
+                        'label': 'Room',
+                        'value': 'Room ${_text(_selectedRoom!, [
+                              'room_number',
+                              'number'
+                            ]) ?? '-'}'
+                      },
+                      {'label': 'Amount', 'value': _money(amount)},
+                    ]),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _paymentMethod,
+                      decoration:
+                          const InputDecoration(labelText: 'Payment Method'),
+                      items: const [
+                        DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                        DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                        DropdownMenuItem(value: 'card', child: Text('Card')),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _paymentMethod = value ?? 'cash');
+                        setDialogState(() {});
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _cashTendered,
+                      keyboardType: TextInputType.number,
+                      enabled: _paymentMethod == 'cash',
+                      decoration: const InputDecoration(
+                        labelText: 'Cash Tendered',
+                        prefixText: 'KES ',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _paymentReference,
+                      decoration: InputDecoration(
+                        labelText: _paymentMethod == 'cash'
+                            ? 'Cash receipt reference'
+                            : _paymentMethod == 'mpesa'
+                                ? 'M-Pesa reference *'
+                                : 'Card approval / batch reference *',
+                        hintText: _paymentMethod == 'cash'
+                            ? 'Auto-generated if left blank'
+                            : _paymentMethod == 'mpesa'
+                                ? 'Enter M-Pesa receipt code'
+                                : 'Enter card terminal approval/batch code',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      _payNowBusy ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _payNowBusy ? null : postPayment,
+                  icon: const Icon(Icons.check_circle),
+                  label: Text(_payNowBusy ? 'Posting...' : 'Post Payment'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 }
 
@@ -7149,6 +7442,191 @@ Future<void> _showCheckoutDialog(
     {void Function(String)? onPayAtCashier}) async {
   await _openCheckOutBooking(context, booking, onSuccess,
       onPayAtCashier: onPayAtCashier);
+}
+
+Future<void> _showExtendStayDialog(
+    BuildContext context, WidgetRef ref, Booking booking, VoidCallback onSuccess) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (_) => _ExtendStayDialog(booking: booking),
+  );
+  if (result == true) {
+    onSuccess();
+  }
+}
+
+class _ExtendStayDialog extends StatefulWidget {
+  const _ExtendStayDialog({required this.booking});
+  final Booking booking;
+
+  @override
+  State<_ExtendStayDialog> createState() => _ExtendStayDialogState();
+}
+
+class _ExtendStayDialogState extends State<_ExtendStayDialog> {
+  int _extraNights = 1;
+  late DateTime _newCheckoutDate;
+  final TextEditingController _notesController = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _newCheckoutDate = widget.booking.checkOut.add(const Duration(days: 1));
+  }
+
+  void _updateNights(int nights) {
+    setState(() {
+      _extraNights = nights;
+      _newCheckoutDate = widget.booking.checkOut.add(Duration(days: nights));
+    });
+  }
+
+  Future<void> _pickCustomDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _newCheckoutDate,
+      firstDate: widget.booking.checkOut.add(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      final diff = picked.difference(widget.booking.checkOut).inDays;
+      setState(() {
+        _extraNights = diff > 0 ? diff : 1;
+        _newCheckoutDate = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('yyyy-MM-dd');
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.calendar_month, color: Colors.blue[700]),
+          const SizedBox(width: 8),
+          const Text('Extend Stay'),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.booking.guestName ?? 'Guest',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Room: ${widget.booking.roomNumber ?? '-'}'),
+                  Text('Current Checkout: ${fmt.format(widget.booking.checkOut)}'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Select Additional Nights:', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [1, 2, 3, 5, 7].map((n) {
+                final isSelected = _extraNights == n;
+                return ChoiceChip(
+                  label: Text('+$n Night${n > 1 ? 's' : ''}'),
+                  selected: isSelected,
+                  onSelected: (_) => _updateNights(n),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _pickCustomDate,
+              icon: const Icon(Icons.edit_calendar, size: 18),
+              label: Text('Pick Checkout Date (${fmt.format(_newCheckoutDate)})'),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'New Checkout Date: ${fmt.format(_newCheckoutDate)} (+$_extraNights Night${_extraNights > 1 ? 's' : ''})',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _notesController,
+              decoration: const InputDecoration(
+                labelText: 'Notes / Reason for Extension (Optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        Consumer(
+          builder: (context, ref, _) {
+            return ElevatedButton.icon(
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      setState(() => _saving = true);
+                      try {
+                        final repo = ref.read(receptionRepositoryProvider);
+                        await repo.extendStay(
+                          widget.booking.id,
+                          newCheckOutDate: DateFormat('yyyy-MM-dd').format(_newCheckoutDate),
+                          extraNights: _extraNights,
+                          notes: _notesController.text.trim(),
+                        );
+                        if (context.mounted) {
+                          _snack(context, 'Stay extended to ${fmt.format(_newCheckoutDate)}');
+                          Navigator.of(context).pop(true);
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          _snack(context, apiErrorMessage(e, fallback: 'Failed to extend stay'), error: true);
+                          setState(() => _saving = false);
+                        }
+                      }
+                    },
+              icon: _saving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check),
+              label: const Text('Confirm Extension'),
+            );
+          },
+        ),
+      ],
+    );
+  }
 }
 
 Future<void> _checkIn(BuildContext context, WidgetRef ref, Booking booking,

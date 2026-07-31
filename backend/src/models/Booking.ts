@@ -40,6 +40,8 @@ export interface IBooking {
 
   // Pricing
   ratePlanId?: string;
+  mealPlanId?: string;
+  pricingSnapshot?: any;
   roomRate: number;
   subtotal: number;
   taxAmount: number;
@@ -93,6 +95,8 @@ export class Booking implements IBooking {
   infants: number;
 
   ratePlanId?: string;
+  mealPlanId?: string;
+  pricingSnapshot?: any;
   roomRate: number;
   subtotal: number;
   taxAmount: number;
@@ -289,6 +293,8 @@ export class Booking implements IBooking {
           infants: this.infants,
 
           rate_plan_id: this.ratePlanId,
+          meal_plan_id: this.mealPlanId,
+          pricing_snapshot: this.pricingSnapshot,
           room_rate: this.roomRate,
           subtotal: this.subtotal,
           tax_amount: this.taxAmount,
@@ -300,7 +306,6 @@ export class Booking implements IBooking {
           deposit_paid: this.depositPaid,
           deposit_paid_at: this.depositPaidAt,
           payment_method: this.paymentMethod,
-          // payment_status: this.paymentStatus, // Column does not exist in DB
 
           booking_source: this.bookingSource,
           channel_manager_ref: this.channelManagerRef,
@@ -346,6 +351,8 @@ export class Booking implements IBooking {
       infants: data.infants,
 
       ratePlanId: data.rate_plan_id,
+      mealPlanId: data.meal_plan_id,
+      pricingSnapshot: data.pricing_snapshot,
       roomRate: data.room_rate,
       subtotal: data.subtotal,
       taxAmount: data.tax_amount,

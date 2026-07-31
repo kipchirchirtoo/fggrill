@@ -6,6 +6,7 @@ type PgClient = Awaited<ReturnType<typeof db.getClient>>;
 
 type ReservationFinancialContext = {
   reservationId: string;
+  bookingId: string | null;
   confirmationNumber: string | null;
   guestName: string;
   roomNumber: string | null;
@@ -27,6 +28,7 @@ type RecordHotelPaymentInput = {
   reservationId: string;
   amount: number;
   paymentMethod: string;
+  paymentPurpose?: string | null;
   reference?: string | null;
   cashierUserId: string;
   cashierName?: string | null;
@@ -217,6 +219,7 @@ async function loadReservationFinancialContextWithClient(
     `
       SELECT
         r.id,
+        r.booking_id,
         r.branch_id,
         r.confirmation_number,
         r.guest_id,
@@ -258,6 +261,7 @@ async function loadReservationFinancialContextWithClient(
 
   return {
     reservationId: String(reservation.id),
+    bookingId: reservation.booking_id ? String(reservation.booking_id) : null,
     confirmationNumber: reservation.confirmation_number || null,
     guestName: String(reservation.guest_name || '').trim() || 'Guest',
     roomNumber: reservation.room_number || null,
@@ -313,6 +317,9 @@ export async function recordHotelCashierPayment(
         400
       );
     }
+    if (['mpesa', 'card'].includes(normalizedMethod) && !String(input.reference || '').trim()) {
+      throw new AppError('A cashier payment reference is required for M-Pesa and Card payments.', 400);
+    }
 
     const amount = money(input.amount);
     if (!(amount > 0)) {
@@ -340,7 +347,11 @@ export async function recordHotelCashierPayment(
       );
     }
 
-    const paymentReference = String(input.reference || '').trim() || `HOTEL-${Date.now()}`;
+    const purpose = String(input.paymentPurpose || '').trim().toLowerCase();
+    const paymentReference = String(input.reference || '').trim() ||
+      (purpose === 'booking_deposit'
+        ? `DEP-${context.confirmationNumber || context.reservationId}-${Date.now()}`
+        : `HOTEL-${Date.now()}`);
     const paymentStatus = 'completed';
 
     const paymentInsert = await client.query(
@@ -349,6 +360,7 @@ export async function recordHotelCashierPayment(
           branch_id,
           booking_id,
           reservation_id,
+          cashier_shift_id,
           amount,
           payment_method,
           status,
@@ -364,13 +376,14 @@ export async function recordHotelCashierPayment(
           updated_at
         )
         VALUES (
-          $1, $2, $2, $3, $4, $5, $6, $6, $7, $8, $8, NOW(), NOW(), $9::jsonb, NOW(), NOW()
+          $1, $2, $2, $3, $4, $5, $6, $7, $7, $8, $9, $9, NOW(), NOW(), $10::jsonb, NOW(), NOW()
         )
         RETURNING id
       `,
       [
         context.branchId,
         context.reservationId,
+        shift.id,
         amount,
         normalizedMethod,
         paymentStatus,
@@ -381,9 +394,11 @@ export async function recordHotelCashierPayment(
           processed_by: 'shared_hotel_cashier_payment_service',
           cashier_id: input.cashierUserId,
           cashier_name: input.cashierName || null,
+          cashier_shift_log_id: shift.id,
           reservation_id: context.reservationId,
           confirmation_number: context.confirmationNumber,
           room_number: context.roomNumber,
+          payment_purpose: purpose || 'room_folio_payment',
         }),
       ]
     );
@@ -447,6 +462,10 @@ export async function recordHotelCashierPayment(
         SET
           amount_paid = GREATEST(COALESCE(amount_paid, 0), $3),
           payment_status = $2,
+          deposit_amount = CASE
+            WHEN $4 = 'booking_deposit' THEN GREATEST(COALESCE(deposit_amount, 0), $5)
+            ELSE deposit_amount
+          END,
           deposit_paid = CASE WHEN $3 > 0 THEN TRUE ELSE deposit_paid END,
           updated_at = NOW()
         WHERE id = $1
@@ -455,8 +474,35 @@ export async function recordHotelCashierPayment(
         context.reservationId,
         nextReservationPaymentStatus,
         nextTotalPaid,
+        purpose,
+        amount,
       ]
     );
+
+    if (context.bookingId) {
+      await client.query(
+        `
+          UPDATE bookings
+          SET
+            amount_paid = GREATEST(COALESCE(amount_paid, 0), $2),
+            payment_status = $3,
+            deposit_amount = CASE
+              WHEN $4 = 'booking_deposit' THEN GREATEST(COALESCE(deposit_amount, 0), $5)
+              ELSE deposit_amount
+            END,
+            deposit_paid = CASE WHEN $2 > 0 THEN TRUE ELSE deposit_paid END,
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [
+          context.bookingId,
+          nextTotalPaid,
+          nextReservationPaymentStatus,
+          purpose,
+          amount,
+        ]
+      );
+    }
 
     const cashierTransactionNumber = await generateCashierTransactionNumber(client);
     const cashierTransactionInsert = await client.query(
@@ -464,6 +510,8 @@ export async function recordHotelCashierPayment(
         INSERT INTO cashier_transactions (
           branch_id,
           cashier_id,
+          cashier_name,
+          cashier_shift_id,
           cashier_shift_log_id,
           shift_id,
           transaction_number,
@@ -480,6 +528,7 @@ export async function recordHotelCashierPayment(
           amount_tendered,
           change_given,
           payment_reference,
+          reference_number,
           confirmation_number,
           customer_name,
           status,
@@ -487,8 +536,8 @@ export async function recordHotelCashierPayment(
           updated_at
         )
         VALUES (
-          $1, $2, $3, $3, $4, 'payment', 'ROOM_BOOKING', 'reservation', $5,
-          'RECEPTION', 'ROOM_FOLIO', $6, $7, $8, $9, $10, $11, $12, $7, $13,
+          $1, $2, $3, $4, $4, $4, $5, 'payment', 'ROOM_BOOKING', 'reservation', $6,
+          'RECEPTION', 'ROOM_FOLIO', $7, $8, $9, $10, $11, $12, $13, $13, $8, $14,
           'completed', NOW(), NOW()
         )
         RETURNING id
@@ -496,6 +545,7 @@ export async function recordHotelCashierPayment(
       [
         context.branchId,
         input.cashierUserId,
+        input.cashierName || null,
         shift.id,
         cashierTransactionNumber,
         context.reservationId,
@@ -521,9 +571,14 @@ export async function recordHotelCashierPayment(
           transaction_ref,
           payment_method,
           amount,
-          transaction_time
+          transaction_time,
+          source_table,
+          source_id,
+          branch_id,
+          source,
+          notes
         )
-        VALUES ($1, $2, $3, $4, $5, NOW())
+        VALUES ($1, $2, $3, $4, $5, NOW(), 'cashier_transactions', $2, $6, 'cashier', $7)
       `,
       [
         shift.id,
@@ -531,6 +586,8 @@ export async function recordHotelCashierPayment(
         cashierTransactionNumber,
         shiftMethod,
         amount,
+        context.branchId,
+        `Reception room folio payment ${context.confirmationNumber || context.reservationId}`,
       ]
     );
 
@@ -576,6 +633,7 @@ export async function recordHotelCashierPayment(
           method: normalizedMethod,
           amount,
           balance_after: nextBalance,
+          payment_purpose: purpose || 'room_folio_payment',
         }),
         context.branchId,
       ]

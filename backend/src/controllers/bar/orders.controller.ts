@@ -15,11 +15,8 @@ export const getOrders = async (req: Request, res: Response, next: NextFunction)
       `)
       .order('created_at', { ascending: false });
 
-    if (req.user?.branch_id) {
-      query = query.eq('branch_id', req.user.branch_id);
-    } else if (branch_id) {
-      query = query.eq('branch_id', branch_id);
-    }
+    const targetBranchId = Number(branch_id || req.user?.branch_id || 1);
+    query = query.eq('branch_id', targetBranchId);
     if (status) query = query.eq('status', status);
     if (date) {
       // Simple date filtering

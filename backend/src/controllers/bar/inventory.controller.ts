@@ -5,13 +5,10 @@ import { logger } from '../../utils/logger';
 export const getStock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const rawBranchId = req.query.branch_id as string | undefined;
-    let targetBranchId: number | null = null;
+    let targetBranchId: number = (req as any).user?.branch_id || 1;
     if (rawBranchId && rawBranchId !== 'all' && rawBranchId !== '0') {
       const parsed = parseInt(rawBranchId, 10);
       if (!isNaN(parsed) && parsed > 0) targetBranchId = parsed;
-    }
-    if (!targetBranchId && (req as any).user?.branch_id) {
-      targetBranchId = (req as any).user.branch_id;
     }
 
     const { low_stock, category } = req.query;
@@ -32,11 +29,8 @@ export const getStock = async (req: Request, res: Response, next: NextFunction):
         updated_at,
         drink:bar_drinks(id, name, category, price, selling_price, is_available, image_url, sku)
       `)
+      .eq('branch_id', targetBranchId)
       .order('item_name');
-
-    if (targetBranchId) {
-      query = query.eq('branch_id', targetBranchId);
-    }
 
     const { data, error } = await query;
     if (error) throw error;

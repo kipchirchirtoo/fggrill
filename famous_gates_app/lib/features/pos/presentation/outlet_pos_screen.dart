@@ -922,12 +922,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                         Expanded(
                           flex: isSmall ? 0 : 1,
                           child: Card(
-                            color: Colors.red.shade900.withValues(alpha: 0.25),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(
-                                  color: Colors.red.shade700
-                                      .withValues(alpha: 0.5)),
+                              side: BorderSide(color: _PosPalette.border),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16),
@@ -937,14 +934,13 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                                   Row(
                                     children: [
                                       Icon(Icons.account_balance_wallet,
-                                          color: Colors.red.shade400, size: 20),
+                                          color: _PosPalette.accent, size: 20),
                                       const SizedBox(width: 8),
-                                      Text(
+                                      const Text(
                                         'OUTSTANDING BALANCE',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12,
-                                          color: Colors.red.shade200,
                                         ),
                                       ),
                                     ],
@@ -952,10 +948,9 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                                   const SizedBox(height: 8),
                                   Text(
                                     'KES ${outstandingBalance.toStringAsFixed(0)}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
                                       fontSize: 22,
-                                      color: Colors.red.shade300,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -963,7 +958,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                                     'Pending payroll / cashier settlement',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.red.shade200,
+                                      color: _PosPalette.textMuted,
                                     ),
                                   ),
                                 ],
@@ -1096,7 +1091,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                         'Outstanding (${rawBills.where((b) => ((b['balance'] as num?) ?? 0) > 0).length})',
                       ),
                       selected: _creditBillsFilter == 'outstanding',
-                      selectedColor: Colors.red.shade700,
+                      selectedColor: Colors.amber.shade700,
                       onSelected: (sel) {
                         if (sel) {
                           setState(() => _creditBillsFilter = 'outstanding');
@@ -1153,118 +1148,242 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                         final desc = bill['description'] ?? 'Credit Bill';
                         final amount =
                             (bill['amount'] as num?)?.toDouble() ?? 0.0;
-                        final paid =
-                            (bill['paid_amount'] as num?)?.toDouble() ?? 0.0;
                         final balance =
                             (bill['balance'] as num?)?.toDouble() ?? 0.0;
                         final statusStr =
                             '${bill['status'] ?? 'open'}'.toLowerCase();
                         final isOutstanding = balance > 0;
 
-                        return ListTile(
+                        // items for inline preview (up to 3)
+                        final billItems = (bill['items'] as List?)
+                                ?.whereType<Map>()
+                                .map((e) => Map<String, dynamic>.from(e))
+                                .toList() ??
+                            [];
+
+                        return InkWell(
                           onTap: () => _showCreditBillDetailDialog(bill, staffName),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          leading: CircleAvatar(
-                            backgroundColor: isOutstanding
-                                ? Colors.red.withValues(alpha: 0.15)
-                                : Colors.green.withValues(alpha: 0.15),
-                            child: Icon(
-                              isOutstanding
-                                  ? Icons.receipt_long
-                                  : Icons.check_circle_outline,
-                              color: isOutstanding ? Colors.red : Colors.green,
-                              size: 20,
-                            ),
-                          ),
-                          title: Row(
-                            children: [
-                              Text(
-                                billNo,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isOutstanding
-                                      ? Colors.red.shade900
-                                          .withValues(alpha: 0.4)
-                                      : Colors.green.shade900
-                                          .withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: isOutstanding
-                                        ? Colors.red.shade700
-                                        : Colors.green.shade700,
-                                  ),
-                                ),
-                                child: Text(
-                                  isOutstanding
-                                      ? (statusStr == 'partial'
-                                          ? 'PARTIAL'
-                                          : 'OUTSTANDING')
-                                      : 'SETTLED',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: isOutstanding
-                                        ? Colors.red.shade200
-                                        : Colors.green.shade200,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  desc,
-                                  style: const TextStyle(fontSize: 13),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                // ── Header row ─────────────────────────────
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor:
+                                          _PosPalette.surfaceAlt,
+                                      radius: 18,
+                                      child: Icon(
+                                        isOutstanding
+                                            ? Icons.receipt_long
+                                            : Icons.check_circle_outline,
+                                        color: isOutstanding
+                                            ? _PosPalette.accent
+                                            : Colors.green,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                billNo,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 7,
+                                                        vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: isOutstanding
+                                                      ? Colors.amber
+                                                          .withValues(alpha: 0.15)
+                                                      : Colors.green
+                                                          .withValues(alpha: 0.15),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: isOutstanding
+                                                        ? Colors.amber.shade600
+                                                        : Colors.green.shade600,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  isOutstanding
+                                                      ? (statusStr == 'partial'
+                                                          ? 'PARTIAL'
+                                                          : 'OUTSTANDING')
+                                                      : 'SETTLED',
+                                                  style: TextStyle(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isOutstanding
+                                                        ? Colors.amber.shade700
+                                                        : Colors.green.shade700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            desc,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: _PosPalette.textMuted,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            'Date: $date',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: _PosPalette.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // ── Amount column ──────────────────────
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          'KES ${balance.toStringAsFixed(0)}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 15,
+                                            color: isOutstanding
+                                                ? _PosPalette.accent
+                                                : Colors.green,
+                                          ),
+                                        ),
+                                        Text(
+                                          'of KES ${amount.toStringAsFixed(0)}',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: _PosPalette.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: _PosPalette.textMuted,
+                                      size: 18,
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Date: $date',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: _PosPalette.textMuted,
+
+                                // ── Inline items preview ───────────────────
+                                if (billItems.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: _PosPalette.canvas,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border:
+                                          Border.all(color: _PosPalette.border),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Items in this bill:',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: _PosPalette.textMuted,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        for (int i = 0;
+                                            i <
+                                                (billItems.length > 3
+                                                    ? 3
+                                                    : billItems.length);
+                                            i++) ...[
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 4),
+                                            child: Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        _PosPalette.surfaceAlt,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                  child: Text(
+                                                    '${(billItems[i]['quantity'] as num?)?.toInt() ?? 1}x',
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    '${billItems[i]['name'] ?? 'Item'}',
+                                                    style: const TextStyle(
+                                                        fontSize: 12),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'KES ${((billItems[i]['line_total'] ?? billItems[i]['unit_price']) as num?)?.toStringAsFixed(0) ?? '0'}',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        if (billItems.length > 3)
+                                          Text(
+                                            '+${billItems.length - 3} more items — tap to view all',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: _PosPalette.accent,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                'KES ${balance.toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 15,
-                                  color: isOutstanding
-                                      ? Colors.red.shade300
-                                      : Colors.green.shade300,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Original: KES ${amount.toStringAsFixed(0)} | Paid: KES ${paid.toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: _PosPalette.textMuted,
-                                ),
-                              ),
-                            ],
                           ),
                         );
                       },
@@ -1309,16 +1428,15 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isOutstanding
-                      ? Colors.red.withValues(alpha: 0.15)
-                      : Colors.green.withValues(alpha: 0.15),
+                  color: _PosPalette.surfaceAlt,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   isOutstanding
                       ? Icons.receipt_long
                       : Icons.check_circle_outline,
-                  color: isOutstanding ? Colors.red : Colors.green,
+                  color:
+                      isOutstanding ? _PosPalette.accent : Colors.green,
                   size: 22,
                 ),
               ),
@@ -1351,13 +1469,13 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: isOutstanding
-                      ? Colors.red.shade900.withValues(alpha: 0.4)
-                      : Colors.green.shade900.withValues(alpha: 0.4),
+                      ? Colors.amber.withValues(alpha: 0.15)
+                      : Colors.green.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isOutstanding
-                        ? Colors.red.shade700
-                        : Colors.green.shade700,
+                        ? Colors.amber.shade600
+                        : Colors.green.shade600,
                   ),
                 ),
                 child: Text(
@@ -1368,8 +1486,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     color: isOutstanding
-                        ? Colors.red.shade200
-                        : Colors.green.shade200,
+                        ? Colors.amber.shade700
+                        : Colors.green.shade700,
                   ),
                 ),
               ),
@@ -1446,8 +1564,8 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                                 fontWeight: FontWeight.w900,
                                 fontSize: 18,
                                 color: isOutstanding
-                                    ? Colors.red.shade300
-                                    : Colors.green.shade300,
+                                    ? _PosPalette.accent
+                                    : Colors.green,
                               ),
                             ),
                           ],
@@ -1483,45 +1601,133 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                           )
                         : Column(
                             children: [
+                              // Header row
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Item',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: _PosPalette.textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Qty',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: _PosPalette.textMuted,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    SizedBox(
+                                      width: 80,
+                                      child: Text(
+                                        'Total',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: _PosPalette.textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Divider(height: 1),
                               for (int i = 0; i < rawItems.length; i++) ...[
                                 if (i > 0) const Divider(height: 1),
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 10),
-                                  child: Row(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: _PosPalette.surfaceAlt,
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          '${(rawItems[i]['quantity'] as num?)?.toInt() ?? 1}x',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
+                                      // Category chip
+                                      if ((rawItems[i]['category'] ?? '').toString().isNotEmpty)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 4),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: _PosPalette.surfaceAlt,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '${rawItems[i]['category']}',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                                color: _PosPalette.textMuted,
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          '${rawItems[i]['name'] ?? 'Item'}',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '${rawItems[i]['name'] ?? 'Item'}',
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'KES ${((rawItems[i]['unit_price']) as num?)?.toStringAsFixed(0) ?? '0'} each',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        _PosPalette.textMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      ),
-                                      Text(
-                                        'KES ${((rawItems[i]['line_total'] ?? rawItems[i]['unit_price']) as num?)?.toStringAsFixed(0) ?? '0'}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: _PosPalette.surfaceAlt,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '${(rawItems[i]['quantity'] as num?)?.toInt() ?? 1}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          SizedBox(
+                                            width: 68,
+                                            child: Text(
+                                              'KES ${((rawItems[i]['line_total'] ?? rawItems[i]['unit_price']) as num?)?.toStringAsFixed(0) ?? '0'}',
+                                              textAlign: TextAlign.right,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),

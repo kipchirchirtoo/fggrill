@@ -53,6 +53,14 @@ Future<T?> showRatePlanDialog<T>(BuildContext context, {AdminRatePlan? plan}) {
   );
 }
 
+Future<T?> showMealPlanDialog<T>(BuildContext context, {AdminMealPlan? plan}) {
+  return showDialog<T>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _MealPlanDialog(plan: plan),
+  );
+}
+
 Future<T?> showGuestDialog<T>(BuildContext context, {AdminGuest? guest}) {
   return showDialog<T>(
     context: context,
@@ -1528,6 +1536,266 @@ class _RoomStandardDialogState extends ConsumerState<_RoomStandardDialog> {
   }
 }
 
+class _MealPlanDialog extends ConsumerStatefulWidget {
+  final AdminMealPlan? plan;
+  const _MealPlanDialog({this.plan});
+
+  @override
+  ConsumerState<_MealPlanDialog> createState() => _MealPlanDialogState();
+}
+
+class _MealPlanDialogState extends ConsumerState<_MealPlanDialog> {
+  final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _codeCtrl;
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _adultCtrl;
+  late final TextEditingController _childCtrl;
+  late final TextEditingController _infantCtrl;
+  String? _branchId; // null = global
+  bool _breakfast = false;
+  bool _lunch = false;
+  bool _dinner = false;
+  bool _snacks = false;
+  bool _drinks = false;
+  bool _includedInRoomRate = true;
+  bool _isDefault = false;
+  bool _isActive = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.plan;
+    _nameCtrl = TextEditingController(text: p?.name ?? '');
+    _codeCtrl = TextEditingController(text: p?.code ?? '');
+    _descCtrl = TextEditingController(text: p?.description ?? '');
+    _adultCtrl = TextEditingController(
+        text: p == null ? '0' : p.adultDailyPrice.toStringAsFixed(0));
+    _childCtrl = TextEditingController(
+        text: p == null ? '0' : p.childDailyPrice.toStringAsFixed(0));
+    _infantCtrl = TextEditingController(
+        text: p == null ? '0' : p.infantDailyPrice.toStringAsFixed(0));
+    _branchId = p?.branchId?.toString();
+    _breakfast = p?.includesBreakfast ?? false;
+    _lunch = p?.includesLunch ?? false;
+    _dinner = p?.includesDinner ?? false;
+    _snacks = p?.includesSnacks ?? false;
+    _drinks = p?.includesDrinks ?? false;
+    _includedInRoomRate = p?.includedInRoomRate ?? true;
+    _isDefault = p?.isDefault ?? false;
+    _isActive = p?.isActive ?? true;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _codeCtrl.dispose();
+    _descCtrl.dispose();
+    _adultCtrl.dispose();
+    _childCtrl.dispose();
+    _infantCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      final data = <String, dynamic>{
+        'name': _nameCtrl.text.trim(),
+        if (_codeCtrl.text.trim().isNotEmpty) 'code': _codeCtrl.text.trim(),
+        'description': _descCtrl.text.trim(),
+        'branch_id': _branchId, // null => global
+        'includes_breakfast': _breakfast,
+        'includes_lunch': _lunch,
+        'includes_dinner': _dinner,
+        'includes_snacks': _snacks,
+        'includes_drinks': _drinks,
+        'adult_daily_price': double.tryParse(_adultCtrl.text) ?? 0,
+        'child_daily_price': double.tryParse(_childCtrl.text) ?? 0,
+        'infant_daily_price': double.tryParse(_infantCtrl.text) ?? 0,
+        'included_in_room_rate': _includedInRoomRate,
+        'is_default': _isDefault,
+        'is_active': _isActive,
+      };
+      final repo = ref.read(adminRepositoryProvider);
+      if (widget.plan != null) {
+        await repo.updateMealPlan(widget.plan!.id, data);
+      } else {
+        await repo.createMealPlan(data);
+      }
+      ref.invalidate(adminMealPlansProvider);
+      if (mounted) {
+        AppNotifier.showSnackBar(
+            context,
+            const SnackBar(
+                content: Text('Meal plan saved'),
+                backgroundColor: AppColors.kSuccess));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppNotifier.showSnackBar(context,
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.kError));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final branches = ref.watch(adminBranchesProvider).valueOrNull ?? [];
+    return _DialogFormWrapper(
+      title: widget.plan != null ? 'Edit Meal Plan' : 'Add Meal Plan',
+      formKey: _formKey,
+      isLoading: _isLoading,
+      onSubmit: _submit,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextFormField(
+                  controller: _nameCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Name (e.g., Half Board)'),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _codeCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Code', hintText: 'auto'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _branchId,
+            decoration: const InputDecoration(labelText: 'Scope'),
+            items: [
+              const DropdownMenuItem(
+                  value: null, child: Text('Global (all branches)')),
+              ...branches.map((b) =>
+                  DropdownMenuItem(value: b.id, child: Text(b.name))),
+            ],
+            onChanged: (v) => setState(() => _branchId = v),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _descCtrl,
+            decoration: const InputDecoration(labelText: 'Description'),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('INCLUDED MEALS',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.kPrimary,
+                    letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              FilterChip(
+                  label: const Text('Breakfast'),
+                  selected: _breakfast,
+                  onSelected: (v) => setState(() => _breakfast = v)),
+              FilterChip(
+                  label: const Text('Lunch'),
+                  selected: _lunch,
+                  onSelected: (v) => setState(() => _lunch = v)),
+              FilterChip(
+                  label: const Text('Dinner'),
+                  selected: _dinner,
+                  onSelected: (v) => setState(() => _dinner = v)),
+              FilterChip(
+                  label: const Text('Snacks'),
+                  selected: _snacks,
+                  onSelected: (v) => setState(() => _snacks = v)),
+              FilterChip(
+                  label: const Text('Drinks'),
+                  selected: _drinks,
+                  onSelected: (v) => setState(() => _drinks = v)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('DAILY PRICE (KES)',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.kPrimary,
+                    letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _adultCtrl,
+                  decoration: const InputDecoration(labelText: 'Adult'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _childCtrl,
+                  decoration: const InputDecoration(labelText: 'Child'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _infantCtrl,
+                  decoration: const InputDecoration(labelText: 'Infant'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Included in room rate'),
+            subtitle:
+                const Text('Off = charged separately as a daily extra'),
+            value: _includedInRoomRate,
+            onChanged: (v) => setState(() => _includedInRoomRate = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Default meal plan'),
+            value: _isDefault,
+            onChanged: (v) => setState(() => _isDefault = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Active'),
+            value: _isActive,
+            onChanged: (v) => setState(() => _isActive = v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RatePlanDialog extends ConsumerStatefulWidget {
   final AdminRatePlan? plan;
   const _RatePlanDialog({this.plan});
@@ -1540,48 +1808,103 @@ class _RatePlanDialogState extends ConsumerState<_RatePlanDialog> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _multiplierCtrl;
-  late final TextEditingController _fixedAmountCtrl;
-  late final TextEditingController _minNightsCtrl;
-  late final TextEditingController _descriptionCtrl;
-  String _rateType = 'FIXED';
-  bool _active = true;
+  late final TextEditingController _codeCtrl;
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _rateCtrl;
+  late final TextEditingController _adultCtrl;
+  late final TextEditingController _childCtrl;
+  late final TextEditingController _bedCtrl;
+  late final TextEditingController _maxOccCtrl;
+  late final TextEditingController _minStayCtrl;
+  late final TextEditingController _maxStayCtrl;
+  String? _branchId;
+  String? _roomTypeId;
+  String? _mealPlanId;
+  DateTime? _validFrom;
+  DateTime? _validTo;
+  bool _isDefaultForReception = false;
+  bool _isActive = true;
 
   @override
   void initState() {
     super.initState();
     final p = widget.plan;
     _nameCtrl = TextEditingController(text: p?.name ?? '');
-    _multiplierCtrl = TextEditingController(text: p?.multiplier.toString() ?? '1.0');
-    _fixedAmountCtrl = TextEditingController(text: p?.fixedAmount.toString() ?? '0');
-    _minNightsCtrl = TextEditingController(text: p?.minNights.toString() ?? '1');
-    _descriptionCtrl = TextEditingController(text: p?.description ?? '');
-    _rateType = p?.rateType ?? 'FIXED';
-    _active = p?.active ?? true;
+    _codeCtrl = TextEditingController(text: p?.code ?? '');
+    _descCtrl = TextEditingController(text: p?.description ?? '');
+    _rateCtrl = TextEditingController(
+        text: p == null ? '' : p.ratePerNight.toStringAsFixed(0));
+    _adultCtrl = TextEditingController(
+        text: p == null ? '0' : p.extraAdultCharge.toStringAsFixed(0));
+    _childCtrl = TextEditingController(
+        text: p == null ? '0' : p.extraChildCharge.toStringAsFixed(0));
+    _bedCtrl = TextEditingController(
+        text: p == null ? '0' : p.extraBedCharge.toStringAsFixed(0));
+    _maxOccCtrl = TextEditingController(text: p?.maxOccupancy?.toString() ?? '');
+    _minStayCtrl = TextEditingController(text: (p?.minStay ?? 1).toString());
+    _maxStayCtrl = TextEditingController(text: p?.maxStay?.toString() ?? '');
+    _branchId = p?.branchId?.toString();
+    _roomTypeId = p?.roomTypeId;
+    _mealPlanId = p?.mealPlanId;
+    _validFrom = p?.validFrom != null ? DateTime.tryParse(p!.validFrom!) : null;
+    _validTo = p?.validTo != null ? DateTime.tryParse(p!.validTo!) : null;
+    _isDefaultForReception = p?.isDefaultForReception ?? false;
+    _isActive = p?.isActive ?? true;
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _multiplierCtrl.dispose();
-    _fixedAmountCtrl.dispose();
-    _minNightsCtrl.dispose();
-    _descriptionCtrl.dispose();
+    for (final c in [
+      _nameCtrl, _codeCtrl, _descCtrl, _rateCtrl, _adultCtrl, _childCtrl,
+      _bedCtrl, _maxOccCtrl, _minStayCtrl, _maxStayCtrl,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  String? _fmt(DateTime? d) => d == null ? null : d.toIso8601String().split('T').first;
+
+  Future<void> _pickDate(bool from) async {
+    final init = (from ? _validFrom : _validTo) ?? DateTime.now();
+    final picked = await showDatePicker(
+        context: context,
+        initialDate: init,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2035));
+    if (picked != null) {
+      setState(() {
+        if (from) {
+          _validFrom = picked;
+        } else {
+          _validTo = picked;
+        }
+      });
+    }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      final data = {
+      final data = <String, dynamic>{
         'name': _nameCtrl.text.trim(),
-        'rate_type': _rateType,
-        'multiplier': double.tryParse(_multiplierCtrl.text) ?? 1.0,
-        'fixed_amount': double.tryParse(_fixedAmountCtrl.text) ?? 0,
-        'min_nights': int.tryParse(_minNightsCtrl.text) ?? 1,
-        'description': _descriptionCtrl.text.trim(),
-        'active': _active,
+        if (_codeCtrl.text.trim().isNotEmpty) 'code': _codeCtrl.text.trim(),
+        'description': _descCtrl.text.trim(),
+        'branch_id': _branchId,
+        'room_type_id': _roomTypeId,
+        'meal_plan_id': _mealPlanId,
+        'rate_per_night': double.tryParse(_rateCtrl.text) ?? 0,
+        'extra_adult_charge': double.tryParse(_adultCtrl.text) ?? 0,
+        'extra_child_charge': double.tryParse(_childCtrl.text) ?? 0,
+        'extra_bed_charge': double.tryParse(_bedCtrl.text) ?? 0,
+        'max_occupancy': int.tryParse(_maxOccCtrl.text),
+        'min_stay': int.tryParse(_minStayCtrl.text) ?? 1,
+        'max_stay': int.tryParse(_maxStayCtrl.text),
+        'valid_from': _fmt(_validFrom),
+        'valid_to': _fmt(_validTo),
+        'is_default_for_reception': _isDefaultForReception,
+        'is_active': _isActive,
       };
       final repo = ref.read(adminRepositoryProvider);
       if (widget.plan != null) {
@@ -1591,18 +1914,45 @@ class _RatePlanDialogState extends ConsumerState<_RatePlanDialog> {
       }
       ref.invalidate(adminRatePlansProvider);
       if (mounted) {
-        AppNotifier.showSnackBar(context, const SnackBar(content: Text('Rate Plan saved'), backgroundColor: AppColors.kSuccess));
+        AppNotifier.showSnackBar(
+            context,
+            const SnackBar(
+                content: Text('Rate plan saved'),
+                backgroundColor: AppColors.kSuccess));
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) AppNotifier.showSnackBar(context, SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.kError));
+      if (mounted) {
+        AppNotifier.showSnackBar(context,
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.kError));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Widget _dateField(String label, String value, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: InputDecorator(
+          decoration: InputDecoration(labelText: label),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(child: Text(value, overflow: TextOverflow.ellipsis)),
+              const Icon(Icons.calendar_today, size: 16),
+            ],
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final roomTypes = ref.watch(adminRoomTypesProvider).valueOrNull ?? [];
+    final mealPlans = ref.watch(adminMealPlansProvider).valueOrNull ?? [];
+    final branches = ref.watch(adminBranchesProvider).valueOrNull ?? [];
+    final rtValue = roomTypes.any((t) => t.id == _roomTypeId) ? _roomTypeId : null;
+    final mpValue = mealPlans.any((m) => m.id == _mealPlanId) ? _mealPlanId : null;
+
     return _DialogFormWrapper(
       title: widget.plan != null ? 'Edit Rate Plan' : 'Add Rate Plan',
       formKey: _formKey,
@@ -1611,63 +1961,170 @@ class _RatePlanDialogState extends ConsumerState<_RatePlanDialog> {
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextFormField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(labelText: 'Plan Name (e.g., Bed & Breakfast)'),
-            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextFormField(
+                  controller: _nameCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Name (e.g., Executive – Half Board)'),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _codeCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Code', hintText: 'auto'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             isExpanded: true,
-            initialValue: _rateType,
-            decoration: const InputDecoration(labelText: 'Rate Calculation Type'),
-            items: const [
-              DropdownMenuItem(value: 'FIXED', child: Text('Fixed Price Addition')),
-              DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage Multiplier')),
-            ],
-            onChanged: (v) => setState(() => _rateType = v ?? 'FIXED'),
+            initialValue: rtValue,
+            decoration: const InputDecoration(labelText: 'Room Standard *'),
+            items: roomTypes
+                .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
+                .toList(),
+            onChanged: (v) => setState(() => _roomTypeId = v),
+            validator: (v) => v == null ? 'Select a room standard' : null,
           ),
           const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            initialValue: mpValue,
+            decoration: const InputDecoration(labelText: 'Meal Plan'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('— none —')),
+              ...mealPlans.map((m) =>
+                  DropdownMenuItem(value: m.id, child: Text('${m.name} (${m.code})'))),
+            ],
+            onChanged: (v) => setState(() => _mealPlanId = v),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _branchId,
+            decoration: const InputDecoration(labelText: 'Scope'),
+            items: [
+              const DropdownMenuItem(
+                  value: null, child: Text('Global (all branches)')),
+              ...branches
+                  .map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
+            ],
+            onChanged: (v) => setState(() => _branchId = v),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _rateCtrl,
+            decoration:
+                const InputDecoration(labelText: 'Rate per night (KES) *'),
+            keyboardType: TextInputType.number,
+            validator: (v) =>
+                (double.tryParse(v ?? '') ?? -1) < 0 ? 'Enter a valid rate' : null,
+          ),
+          const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('EXTRA-PAX CHARGES (per night)',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.kPrimary,
+                    letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
-              if (_rateType == 'PERCENTAGE')
-                Expanded(
-                  child: TextFormField(
-                    controller: _multiplierCtrl,
-                    decoration: const InputDecoration(labelText: 'Multiplier (e.g., 1.2)'),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-              if (_rateType == 'FIXED')
-                Expanded(
-                  child: TextFormField(
-                    controller: _fixedAmountCtrl,
-                    decoration: const InputDecoration(labelText: 'Fixed Amount (KES)'),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-              const SizedBox(width: 12),
               Expanded(
                 child: TextFormField(
-                  controller: _minNightsCtrl,
-                  decoration: const InputDecoration(labelText: 'Minimum Nights'),
+                  controller: _adultCtrl,
+                  decoration: const InputDecoration(labelText: 'Extra adult'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _childCtrl,
+                  decoration: const InputDecoration(labelText: 'Extra child'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _bedCtrl,
+                  decoration: const InputDecoration(labelText: 'Extra bed'),
                   keyboardType: TextInputType.number,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _maxOccCtrl,
+                  decoration: const InputDecoration(labelText: 'Max occupancy'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _minStayCtrl,
+                  decoration: const InputDecoration(labelText: 'Min nights'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: _maxStayCtrl,
+                  decoration: const InputDecoration(labelText: 'Max nights'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                  child: _dateField(
+                      'Valid from', _fmt(_validFrom) ?? 'Any', () => _pickDate(true))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: _dateField(
+                      'Valid to', _fmt(_validTo) ?? 'Any', () => _pickDate(false))),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextFormField(
-            controller: _descriptionCtrl,
+            controller: _descCtrl,
             decoration: const InputDecoration(labelText: 'Description'),
             maxLines: 2,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           SwitchListTile(
-            title: const Text('Is Active'),
-            value: _active,
-            onChanged: (v) => setState(() => _active = v),
             contentPadding: EdgeInsets.zero,
+            title: const Text('Default for Reception'),
+            subtitle:
+                const Text('Pre-selected when booking this room standard'),
+            value: _isDefaultForReception,
+            onChanged: (v) => setState(() => _isDefaultForReception = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Active'),
+            value: _isActive,
+            onChanged: (v) => setState(() => _isActive = v),
           ),
         ],
       ),

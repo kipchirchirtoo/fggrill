@@ -158,19 +158,27 @@ async function resolveOutletItemForOutput(
   outletItemId: string | null | undefined,
   outletId: string | null | undefined,
   sku?: string | null,
-  name?: string | null
+  name?: string | null,
+  extraDetails?: {
+    category?: string | null;
+    unit?: string | null;
+    unitCost?: number | null;
+    sellingPrice?: number | null;
+  }
 ): Promise<JsonRecord | null> {
   const direct = await getOutletItem(outletItemId);
   if (direct) return direct;
   if (!outletId) return null;
+
   const trimmedSku = (sku || '').trim();
   if (trimmedSku) {
     const bySku = await db.query(
-      'SELECT * FROM pos_outlet_items WHERE outlet_id = $1 AND sku = $2 ORDER BY updated_at DESC LIMIT 1',
-      [outletId, trimmedSku]
+      'SELECT * FROM pos_outlet_items WHERE outlet_id = $1 AND (sku = $2 OR sku = $3 OR sku = $4) ORDER BY updated_at DESC LIMIT 1',
+      [outletId, trimmedSku, trimmedSku.replace(/^[A-Z]{2,4}-/, ''), `KYO-${trimmedSku}`]
     );
     if (bySku.rows[0]) return bySku.rows[0];
   }
+
   const trimmedName = (name || '').trim();
   if (trimmedName) {
     const byName = await db.query(
@@ -178,8 +186,70 @@ async function resolveOutletItemForOutput(
       [outletId, trimmedName]
     );
     if (byName.rows[0]) return byName.rows[0];
+
+    const firstWord = trimmedName.split(' ')[0];
+    if (firstWord && firstWord.length >= 3) {
+      const byFuzzy = await db.query(
+        'SELECT * FROM pos_outlet_items WHERE outlet_id = $1 AND lower(btrim(name)) ILIKE $2 ORDER BY updated_at DESC LIMIT 1',
+        [outletId, `%${firstWord.toLowerCase()}%`]
+      );
+      if (byFuzzy.rows[0]) return byFuzzy.rows[0];
+    }
   }
-  return null;
+
+  if (!trimmedSku && !trimmedName) return null;
+
+  const outletRes = await db.query('SELECT branch_id FROM pos_outlets WHERE id = $1', [outletId]);
+  if (!outletRes.rows.length) return null;
+  const branchId = outletRes.rows[0].branch_id;
+
+  const lookupDrink = await db.query(
+    'SELECT * FROM bar_drinks WHERE (lower(btrim(name)) = lower(btrim($1)) OR sku = $2) AND (branch_id = $3 OR branch_id IS NULL) LIMIT 1',
+    [trimmedName || 'item', trimmedSku, branchId]
+  );
+  const drinkRow = lookupDrink.rows[0];
+
+  const lookupMenu = await db.query(
+    'SELECT * FROM restaurant_menu_items WHERE (lower(btrim(name)) = lower(btrim($1)) OR metadata->>\'source_code\' = $2) AND (branch_id = $3 OR branch_id IS NULL) LIMIT 1',
+    [trimmedName || 'item', trimmedSku, branchId]
+  );
+  const menuRow = lookupMenu.rows[0];
+
+  const itemName = trimmedName || drinkRow?.name || menuRow?.name || trimmedSku || 'Issued Item';
+  const itemSku = trimmedSku || drinkRow?.sku || menuRow?.sku || `M-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  const category = extraDetails?.category || drinkRow?.category || menuRow?.category || 'General';
+  const unit = extraDetails?.unit || drinkRow?.unit || menuRow?.unit || 'pcs';
+  const costPrice = extraDetails?.unitCost ?? numberValue(drinkRow?.cost_price ?? menuRow?.cost_price ?? 0);
+  const sellingPrice = extraDetails?.sellingPrice ?? numberValue(drinkRow?.selling_price ?? drinkRow?.price ?? menuRow?.selling_price ?? menuRow?.price ?? 0);
+
+  const inserted = await db.query(
+    `
+      INSERT INTO pos_outlet_items (
+        outlet_id, branch_id, name, sku, category, unit, cost_price, selling_price,
+        current_stock, opening_stock, reserved_stock, low_stock_level,
+        track_stock, is_active, is_available, status, source_table, source_item_id, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8,
+        0, 0, 0, 5,
+        true, true, true, 'active', $9, $10, NOW(), NOW()
+      )
+      RETURNING *
+    `,
+    [
+      outletId,
+      branchId,
+      itemName,
+      itemSku,
+      category,
+      unit,
+      costPrice,
+      sellingPrice,
+      drinkRow ? 'bar_drinks' : menuRow ? 'restaurant_menu_items' : 'manual',
+      drinkRow?.id || menuRow?.id || null
+    ]
+  );
+
+  return inserted.rows[0] || null;
 }
 
 async function buildRecipeInputsFromOutputs(outputs: JsonRecord[]): Promise<JsonRecord[]> {
@@ -588,7 +658,13 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
         row.outlet_item_id ?? row.outletItemId,
         destinationOutletId,
         textValue(row.item_sku ?? row.output_sku ?? row.sku),
-        textValue(row.item_name ?? row.output_name)
+        textValue(row.item_name ?? row.output_name),
+        {
+          category: textValue(row.category),
+          unit: textValue(row.unit),
+          unitCost: numberValue(row.unit_cost ?? row.unitCost),
+          sellingPrice: numberValue(row.selling_price ?? row.price)
+        }
       );
       if (!resolved) {
         const label = textValue(row.item_name ?? row.output_name ?? row.item_sku ?? row.sku) || 'item';
@@ -729,7 +805,13 @@ export async function postProductionRun(input: JsonRecord, actorId: string) {
       row.outlet_item_id ?? row.outletItemId,
       destinationOutletId,
       textValue(row.item_sku ?? row.output_sku ?? row.sku),
-      textValue(row.item_name ?? row.output_name)
+      textValue(row.item_name ?? row.output_name),
+      {
+        category: textValue(row.category),
+        unit: textValue(row.unit),
+        unitCost: numberValue(row.unit_cost ?? row.unitCost),
+        sellingPrice: numberValue(row.selling_price ?? row.price)
+      }
     );
     const sku = textValue(row.item_sku ?? row.output_sku ?? row.sku ?? outletItem?.sku);
     const quantity = numberValue(row.quantity_produced ?? row.output_quantity ?? row.quantity);

@@ -42,7 +42,7 @@ const resolveScopedBranchId = (
 
     return Number.isInteger(requested) && requested > 0
         ? requested
-        : (Number.isInteger(userBranch) && userBranch > 0 ? userBranch : null);
+        : (Number.isInteger(userBranch) && userBranch > 0 ? userBranch : 1);
 };
 
 const canAccessRecordBranch = (req: Request, recordBranchId: unknown): boolean => {
@@ -977,6 +977,45 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
             .select('*, item:inventory_items(id, item_name, unit)');
         if (error) throw error;
 
+        // Immediately update pos_outlet_items.current_stock & bar_stock.current_stock
+        // with the storekeeper's submitted physical count so items are active for sale right away.
+        const outletTypesForLoc = bar_location === 'executive_bar'
+            ? ['executive_bar', 'kyogong_executive_bar']
+            : ['main_bar', 'sports_bar', 'kyogong_sports_bar'];
+
+        for (const row of finalRows) {
+            if (row?.item_id && row?.physical_quantity != null) {
+                const physQty = num(row.physical_quantity);
+
+                // Update bar_stock
+                await db.query(
+                    `UPDATE public.bar_stock bs
+                     SET current_stock = GREATEST(0, $1),
+                         last_updated  = NOW(),
+                         updated_at    = NOW()
+                     FROM public.bar_drinks bd
+                     WHERE bs.drink_id = bd.id
+                       AND bd.inventory_item_id = $2::uuid
+                       AND bs.branch_id = $3`,
+                    [physQty, row.item_id, branchId]
+                ).catch((err: any) => logger.warn('recordBarStocktake: bar_stock sync warning:', err?.message));
+
+                // Update pos_outlet_items for this bar location/outlet
+                await db.query(
+                    `UPDATE public.pos_outlet_items poi
+                     SET current_stock = GREATEST(0, $1),
+                         updated_at    = NOW()
+                     FROM public.bar_drinks bd
+                     JOIN public.pos_outlets po ON po.branch_id  = $3
+                                               AND po.outlet_type = ANY($4::text[])
+                     WHERE poi.outlet_id      = po.id
+                       AND bd.inventory_item_id = $2::uuid
+                       AND poi.source_item_id = bd.id::text`,
+                    [physQty, row.item_id, branchId, outletTypesForLoc]
+                ).catch((err: any) => logger.warn('recordBarStocktake: pos_outlet_items sync warning:', err?.message));
+            }
+        }
+
         // Sync into the unified stock_counts table so the cashier shift gate works.
         // Non-fatal: a constraint or schema error in stock_counts must not block the stocktake submission itself.
         syncBarStocktakeToStockCounts(branchId, bar_location, stocktakeDate, 'pending')
@@ -998,8 +1037,6 @@ export const recordBarStocktake = async (req: Request, res: Response, next: Next
 /**
  * @desc    Accountant marks a bar stocktake record reviewed.
  * @route   PATCH /api/storekeeping/bar-stocktake/:id/review
- *          body: { notes? }
- * @access  Branch Accountant, Super Admin
  */
 export const reviewBarStocktake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1012,33 +1049,18 @@ export const reviewBarStocktake = async (req: Request, res: Response, next: Next
             res.status(403).json({ success: false, message: 'Forbidden: stocktake record belongs to another branch' });
             return;
         }
-        if (existing.status !== 'pending') {
-            res.status(400).json({ success: false, message: `Cannot review a record that is ${existing.status}` });
-            return;
-        }
 
-        const now = new Date().toISOString();
         const { data, error } = await supabase
             .from('bar_stocktake_records')
             .update({
                 status: 'reviewed',
                 reviewed_by: req.user?.id || null,
-                reviewed_at: now,
-                notes: req.body?.notes ?? existing.notes
+                reviewed_at: new Date().toISOString()
             })
             .eq('id', req.params.id)
             .select('*, item:inventory_items(id, item_name, unit)')
             .single();
         if (error) throw error;
-
-        await syncBarStocktakeToStockCounts(
-            existing.branch_id,
-            existing.bar_location,
-            existing.stocktake_date,
-            'reviewed',
-            req.user?.id || null,
-            now
-        );
 
         res.status(200).json({ success: true, data: { ...data, item_name: data?.item?.item_name || null } });
     } catch (error) {
@@ -1048,12 +1070,8 @@ export const reviewBarStocktake = async (req: Request, res: Response, next: Next
 };
 
 /**
- * @desc    Accountant approves a bar stocktake record. Writes the physical
- *          count back into stock_balance_ledger as actual_closing/variance
- *          (feeding the get_branch_profit_loss() bar_stock_variance line —
- *          see migration 20260622_kitchen_storekeeper_integration.sql).
+ * @desc    Accountant approves a bar stocktake record (or all records for the date/location).
  * @route   PATCH /api/storekeeping/bar-stocktake/:id/approve
- * @access  Branch Accountant, Super Admin
  */
 export const approveBarStocktake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -1104,6 +1122,10 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
             .eq('item_id', existing.item_id)
             .eq('ledger_date', existing.stocktake_date);
 
+        const targetOutletTypes = existing.bar_location === 'executive_bar'
+            ? ['executive_bar', 'kyogong_executive_bar']
+            : ['main_bar', 'sports_bar', 'kyogong_sports_bar'];
+
         // Correct the live bar_stock so the next stocktake starts from the
         // approved physical count (closing the loop between stocktake and inventory).
         await db.query(
@@ -1117,27 +1139,21 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
             [num(existing.physical_quantity), existing.item_id, existing.branch_id]
         );
 
-        // Also sync into pos_outlet_items so the Bar POS outlet reflects the
-        // approved count — bar_stock and pos_outlet_items track the same physical
-        // goods but are queried by different screens.
+        // Also sync into pos_outlet_items so the Bar POS outlet reflects the approved count.
         await db.query(
             `UPDATE public.pos_outlet_items poi
              SET current_stock = GREATEST(0, $1),
-                 updated_at = NOW()
+                 updated_at    = NOW()
              FROM public.bar_drinks bd
              JOIN public.pos_outlets po ON po.branch_id = $3
-                                       AND po.outlet_type = $4
+                                       AND po.outlet_type = ANY($4::text[])
              WHERE bd.inventory_item_id = $2::uuid
                AND poi.outlet_id = po.id
                AND poi.source_item_id = bd.id::text`,
-            [num(existing.physical_quantity), existing.item_id, existing.branch_id, existing.bar_location]
+            [num(existing.physical_quantity), existing.item_id, existing.branch_id, targetOutletTypes]
         );
 
-        // Batch-approve all remaining reviewed/pending records for the same
-        // session (same branch + location + date) in one shot, so the accountant
-        // approving any one record approves the whole submission automatically.
-        // The Flutter app already loops through all IDs but 116 sequential calls
-        // are unreliable — this makes a single call sufficient.
+        // Batch-approve all remaining reviewed/pending records for the same session.
         await supabase
             .from('bar_stocktake_records')
             .update({
@@ -1150,8 +1166,7 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
             .eq('stocktake_date', existing.stocktake_date)
             .in('status', ['pending', 'reviewed']);
 
-        // Bulk-update bar_stock and pos_outlet_items for ALL approved records in
-        // this session (covers both the record just approved and the batch above).
+        // Bulk-update bar_stock and pos_outlet_items for ALL approved records in this session.
         await db.query(
             `UPDATE public.bar_stock bs
              SET current_stock = GREATEST(0, btr.physical_quantity::numeric),
@@ -1174,14 +1189,14 @@ export const approveBarStocktake = async (req: Request, res: Response, next: Nex
              FROM public.bar_stocktake_records btr
              JOIN public.bar_drinks bd ON bd.inventory_item_id = btr.item_id
              JOIN public.pos_outlets po ON po.branch_id  = btr.branch_id
-                                       AND po.outlet_type = btr.bar_location
+                                       AND po.outlet_type = ANY($4::text[])
              WHERE poi.outlet_id      = po.id
                AND poi.source_item_id = bd.id::text
                AND btr.branch_id      = $1
                AND btr.bar_location   = $2
                AND btr.stocktake_date = $3
                AND btr.status         = 'approved'`,
-            [existing.branch_id, existing.bar_location, existing.stocktake_date]
+            [existing.branch_id, existing.bar_location, existing.stocktake_date, targetOutletTypes]
         );
 
         // Sync into the unified stock_counts table.

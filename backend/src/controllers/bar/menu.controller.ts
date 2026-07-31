@@ -64,7 +64,7 @@ export const getDrinks = async (req: Request, res: Response, next: NextFunction)
       `);
 
     if (branchId) {
-      query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+      query = query.eq('branch_id', branchId);
     }
 
     if (category_id) {

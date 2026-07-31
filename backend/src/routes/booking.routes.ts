@@ -11,6 +11,7 @@ import {
   checkAvailability,
   getPricingQuote,
   modifyBooking,
+  extendBooking,
   getBookingByConfirmation,
   getDailyBreakfastPax,
   upsertDailyBreakfastPax,
@@ -80,6 +81,11 @@ router.put('/:id/modify',
 router.put('/:id/move-room',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
   moveRoom
+);
+
+router.put('/:id/extend',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.RECEPTIONIST, UserRole.BRANCH_MANAGER]),
+  extendBooking
 );
 
 export default router;

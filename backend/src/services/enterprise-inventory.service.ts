@@ -1853,82 +1853,108 @@ export async function finalizeStockTakeByAuditor(input: {
 }
 
 async function syncIssuedStockToBar(branchId: number, itemSku: string, quantity: number, itemName: string, userId: string) {
-  const { data: drink } = await supabase
-    .from('bar_drinks')
-    .select('id, item_name')
-    .eq('branch_id', branchId)
-    .eq('item_sku', itemSku)
-    .maybeSingle();
-
-  if (drink?.id) {
-    const { data: currentStock } = await supabase
-      .from('bar_stock')
-      .select('current_stock')
-      .eq('branch_id', branchId)
-      .eq('drink_id', drink.id)
+  try {
+    const { data: invItem } = await supabase
+      .from('inventory_items')
+      .select('id, sku, item_name')
+      .or(`sku.eq.${itemSku},id.eq.${itemSku}`)
       .maybeSingle();
-      
-    const newStock = Number(currentStock?.current_stock || 0) + quantity;
-    
-    await supabase
-      .from('bar_stock')
-      .upsert({
-        branch_id: branchId,
-        drink_id: drink.id,
-        current_stock: newStock,
-        par_level: 10,
-        unit: 'Unit',
-        last_updated: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'branch_id,drink_id' });
+
+    const { data: drink } = await supabase
+      .from('bar_drinks')
+      .select('id, sku, name')
+      .or(`sku.eq.${itemSku},linked_inventory_sku.eq.${itemSku},id.eq.${itemSku}${invItem?.id ? `,inventory_item_id.eq.${invItem.id}` : ''}`)
+      .eq('branch_id', branchId)
+      .maybeSingle();
+
+    const resolvedDrinkName = drink?.name || invItem?.item_name || itemName;
+
+    if (drink?.id) {
+      const { data: currentStock } = await supabase
+        .from('bar_stock')
+        .select('current_stock')
+        .eq('branch_id', branchId)
+        .eq('drink_id', drink.id)
+        .maybeSingle();
+
+      const newStock = Number(currentStock?.current_stock || 0) + quantity;
+
+      await supabase
+        .from('bar_stock')
+        .upsert({
+          branch_id: branchId,
+          drink_id: drink.id,
+          current_stock: newStock,
+          par_level: 10,
+          unit: 'Unit',
+          last_updated: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'branch_id,drink_id' });
+    }
 
     const { data: outlets } = await supabase
       .from('pos_outlets')
       .select('id')
       .eq('branch_id', branchId)
-      .in('outlet_type', ['bar', 'restaurant_bar']);
-      
+      .in('outlet_type', ['main_bar', 'executive_bar', 'sports_bar', 'kyogong_sports_bar', 'kyogong_executive_bar']);
+
     if (outlets && outlets.length > 0) {
       for (const outlet of outlets) {
-        const { data: posStock } = await supabase
+        let posItemQuery = supabase
           .from('pos_outlet_items')
-          .select('current_stock')
-          .eq('outlet_id', outlet.id)
-          .eq('item_sku', itemSku)
-          .maybeSingle();
-          
-        const newPosStock = Number(posStock?.current_stock || 0) + quantity;
-        
-        await supabase
-          .from('pos_outlet_items')
-          .upsert({
-            outlet_id: outlet.id,
-            item_sku: itemSku,
-            item_name: drink.item_name || itemName,
-            current_stock: newPosStock,
-            price: 0,
-            last_updated: new Date().toISOString()
-          }, { onConflict: 'outlet_id,item_sku' });
+          .select('id, current_stock')
+          .eq('outlet_id', outlet.id);
+
+        if (drink?.id) {
+          posItemQuery = posItemQuery.or(`source_item_id.eq.${drink.id},sku.eq.${itemSku}`);
+        } else {
+          posItemQuery = posItemQuery.eq('sku', itemSku);
+        }
+
+        const { data: posItem } = await posItemQuery.maybeSingle();
+
+        if (posItem?.id) {
+          const newPosStock = Number(posItem.current_stock || 0) + quantity;
+          await supabase
+            .from('pos_outlet_items')
+            .update({
+              current_stock: newPosStock,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', posItem.id);
+        }
       }
     }
+
+    const { data: barStockRow } = drink?.id ? await supabase
+      .from('bar_stock')
+      .select('current_stock')
+      .eq('branch_id', branchId)
+      .eq('drink_id', drink.id)
+      .maybeSingle() : { data: null };
+
+    const prevBal = Number(barStockRow?.current_stock || 0);
+    const nextBal = prevBal + quantity;
 
     await supabase
       .from('bar_stock_ledger')
       .insert({
         branch_id: branchId,
         item_sku: itemSku,
-        item_name: drink.item_name || itemName,
+        item_name: resolvedDrinkName,
         transaction_type: 'RECEIPT',
         reference_type: 'STOCK_OUT',
         reference_id: null,
-        opening_balance: Number(currentStock?.current_stock || 0),
+        opening_balance: prevBal,
         quantity_in: quantity,
         quantity_out: 0,
-        closing_balance: newStock,
+        closing_balance: nextBal,
         unit_of_measure: 'Unit',
         user_id: userId,
         notes: `Issued from branch store`
       });
+  } catch (err: any) {
+    logger.warn(`syncIssuedStockToBar failed for ${itemSku}:`, err?.message || err);
   }
 }
 

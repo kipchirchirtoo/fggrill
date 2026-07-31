@@ -614,7 +614,7 @@ export async function getBarStock(
       id, name, sku, unit, price, selling_price, cost_price, min_stock, is_available,
       category:bar_drink_categories(name)
     `)
-    .or(`branch_id.is.null,branch_id.eq.${branchId}`)
+    .eq('branch_id', branchId)
     .eq('is_available', true)
     .order('name');
 

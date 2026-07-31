@@ -208,6 +208,12 @@ final adminRatePlansProvider =
   return repo.getRatePlans();
 });
 
+final adminMealPlansProvider =
+    FutureProvider.autoDispose<List<AdminMealPlan>>((ref) async {
+  final repo = ref.read(adminRepositoryProvider);
+  return repo.getMealPlans();
+});
+
 final adminGuestsProvider =
     FutureProvider.autoDispose<List<AdminGuest>>((ref) async {
   final repo = ref.read(adminRepositoryProvider);

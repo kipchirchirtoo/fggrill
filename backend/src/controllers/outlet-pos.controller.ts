@@ -1381,7 +1381,7 @@ const seedOutletItemsFromExistingMenus = async (
       };
     });
 
-    if (outletType === 'main_bar') {
+    if (false && outletType === 'main_bar') {
       let seededMenuQuery = supabase
         .from('restaurant_menu_items')
         .select('id, name, price, selling_price, cost_price, category, metadata, is_available, is_active, branch_id, unit')
@@ -1518,6 +1518,7 @@ const seedOutletItemsFromExistingMenus = async (
     .from('pos_outlet_items')
     .select('*')
     .eq('outlet_id', outlet.id)
+    .eq('branch_id', outlet.branch_id)
     .eq('is_active', true)
     .order('category', { ascending: true })
     .order('name', { ascending: true });
@@ -2498,7 +2499,7 @@ export const getOutletItems = async (req: Request, res: Response, next: NextFunc
     if (outletError || !outlet) throw new AppError('POS outlet not found', 404);
     await ensureCashierOutletAccess(req, outlet);
 
-    if (includeRelated && isFoodOrBarOutlet(outlet.outlet_type)) {
+    if (false && includeRelated && isFoodOrBarOutlet(outlet.outlet_type)) {
       const { data: outlets, error: outletsError } = await supabase
         .from('pos_outlets')
         .select('*')
@@ -6256,26 +6257,51 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
       throw new AppError('Unauthorized', 401);
     }
 
-    // 1. Resolve staff profile for logged-in user
+    // 1. Resolve staff profile & user details for logged-in user
+    const { data: userRec } = await supabase
+      .from('users')
+      .select('id, first_name, last_name, display_name, email')
+      .eq('id', userId)
+      .maybeSingle();
+
     const { data: staffProfile } = await supabase
       .from('staff_profiles')
-      .select('id, first_name, last_name, user_id, employee_number')
+      .select('id, user_id, employee_number')
       .or(`user_id.eq.${userId},id.eq.${userId}`)
       .maybeSingle();
 
     const staffId = staffProfile?.id || userId;
-    const staffName = staffProfile ? `${staffProfile.first_name || ''} ${staffProfile.last_name || ''}`.trim() : '';
+    const staffName = (userRec
+      ? `${userRec.first_name || ''} ${userRec.last_name || ''}`.trim() || userRec.display_name
+      : '') || '';
+
+    // Collect ALL linked user & profile IDs for this staff member
+    const staffIdsSet = new Set<string>([userId]);
+    if (staffProfile?.id) staffIdsSet.add(staffProfile.id);
+    if (staffProfile?.user_id) staffIdsSet.add(staffProfile.user_id);
+
+    // Look up any duplicate/secondary user records for the same employee email
+    if (userRec?.email) {
+      const emailPrefix = userRec.email.split('@')[0];
+      if (emailPrefix && emailPrefix.length > 3) {
+        const { data: linkedUsers } = await supabase
+          .from('users')
+          .select('id')
+          .ilike('email', `${emailPrefix}%`);
+        for (const u of (linkedUsers || [])) {
+          staffIdsSet.add(u.id);
+        }
+      }
+    }
+    const staffIds = Array.from(staffIdsSet);
 
     // 2. Query staff_credit_bills
-    let staffFilter = `staff_id.eq.${staffId}`;
-    if (staffProfile?.user_id && staffProfile.user_id !== staffId) {
-      staffFilter += `,staff_id.eq.${staffProfile.user_id}`;
-    }
+    const staffIdFilter = staffIds.map(id => `staff_id.eq.${id}`).join(',');
 
     const { data: staffBills, error: staffErr } = await supabase
       .from('staff_credit_bills')
       .select('*')
-      .or(staffFilter)
+      .or(staffIdFilter)
       .order('created_at', { ascending: false });
 
     if (staffErr) {
@@ -6283,10 +6309,7 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
     }
 
     // 3. Query credit_bills
-    let cashierFilter = `staff_id.eq.${staffId}`;
-    if (staffProfile?.user_id && staffProfile.user_id !== staffId) {
-      cashierFilter += `,staff_id.eq.${staffProfile.user_id}`;
-    }
+    let cashierFilter = staffIds.map(id => `staff_id.eq.${id}`).join(',');
     if (staffName) {
       cashierFilter += `,customer_name.ilike.%${staffName}%`;
     }
@@ -6301,55 +6324,148 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
       if (!cbErr && cbData) cashierBills = cbData;
     } catch (_) {}
 
-    // 4. Fetch candidate pos_shift_orders for items resolution
-    const staffIds = [staffId, staffProfile?.user_id, userId].filter(Boolean);
+    // 4. Fetch credit-billed pos_shift_orders for this staff member
+    const nameVariants = staffName
+      ? [...new Set([staffName, staffName.toUpperCase(), staffName.toLowerCase()])]
+      : [];
+
     let posOrders: any[] = [];
     try {
+      const idFilters = staffIds.map(id => `waiter_id.eq.${id}`).join(',');
+      const exactNameFilters = nameVariants.map(n => `waiter_name.eq.${n}`).join(',');
+      const orFilter = [idFilters, exactNameFilters].filter(Boolean).join(',');
+
       const { data: ordersData } = await supabase
         .from('pos_shift_orders')
-        .select('id, order_number, short_code, waiter_id, customer_name, total_amount, items, created_at, staff_credit_bill_id')
-        .or(`waiter_id.in.(${staffIds.join(',')}),created_by.in.(${staffIds.join(',')}),customer_name.ilike.%${staffName || 'NONE'}%`)
+        .select('id, order_number, short_code, waiter_id, waiter_name, customer_name, total_amount, items, created_at, staff_credit_bill_id, payment_status')
+        .or(orFilter)
         .order('created_at', { ascending: false })
-        .limit(300);
+        .limit(500);
       if (ordersData) posOrders = ordersData;
     } catch (_) {}
 
+    // Also fetch by source_pos_order_id if directly linked
+    const directOrderIds = [
+      ...(staffBills || []).map((b: any) => b.source_pos_order_id),
+      ...(cashierBills || []).map((b: any) => b.source_pos_order_id),
+    ].filter(Boolean);
+
+    if (directOrderIds.length > 0) {
+      try {
+        const { data: directOrders } = await supabase
+          .from('pos_shift_orders')
+          .select('id, order_number, short_code, waiter_id, waiter_name, customer_name, total_amount, items, created_at, staff_credit_bill_id, payment_status')
+          .in('id', directOrderIds);
+        if (directOrders) {
+          const existingIds = new Set(posOrders.map((o: any) => o.id));
+          for (const o of directOrders) {
+            if (!existingIds.has(o.id)) posOrders.push(o);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Track which POS orders we've already assigned
+    const usedOrderIds = new Set<string>();
+
     const resolveItems = (b: any, rawAmt: number, dateStr?: string, docNo?: string) => {
       const billAmt = Number(rawAmt || 0);
-      const bDate = (dateStr || '').split('T')[0];
+      const bTime = new Date(b.created_at || dateStr || Date.now()).getTime();
 
-      // Direct match
-      let matched = posOrders.find((o: any) =>
-        (o.staff_credit_bill_id && (o.staff_credit_bill_id === b.id)) ||
-        (b.source_pos_order_id && o.id === b.source_pos_order_id) ||
-        (docNo && docNo !== 'pending' && (o.order_number === docNo || o.short_code === docNo)) ||
-        (b.bill_number && (o.order_number === b.bill_number || o.short_code === b.bill_number))
-      );
+      // 1. Direct UUID match (source_pos_order_id stored on the bill)
+      let matched = b.source_pos_order_id
+        ? posOrders.find((o: any) => o.id === b.source_pos_order_id)
+        : null;
 
-      // Fuzzy match by date & amount
-      if (!matched && bDate && billAmt > 0) {
-        matched = posOrders.find((o: any) => {
-          const oDate = (o.created_at || '').split('T')[0];
-          const oAmt = Number(o.total_amount || 0);
-          return oDate === bDate && Math.abs(oAmt - billAmt) < 0.01;
-        });
+      // 2. staff_credit_bill_id on the POS order points back to this bill
+      if (!matched) {
+        matched = posOrders.find((o: any) =>
+          o.staff_credit_bill_id && o.staff_credit_bill_id === b.id
+        ) ?? null;
+      }
+
+      // 3. Source document / order number match
+      if (!matched && docNo && docNo !== 'pending') {
+        matched = posOrders.find((o: any) =>
+          o.order_number === docNo || o.short_code === docNo
+        ) ?? null;
+      }
+
+      // 4. Bill number matches order number
+      if (!matched && b.bill_number) {
+        matched = posOrders.find((o: any) =>
+          o.order_number === b.bill_number || o.short_code === b.bill_number
+        ) ?? null;
+      }
+
+      // 5. Time & Amount Fuzzy Match: within ≤ 1 KES diff & within 48 hours
+      if (!matched && billAmt > 0) {
+        const maxTimeDiffMs = 48 * 3600 * 1000; // 48h tolerance to bridge UTC vs local date
+        const candidates = posOrders
+          .filter((o: any) => {
+            if (usedOrderIds.has(o.id)) return false;
+            const oTime = new Date(o.created_at || 0).getTime();
+            const oAmt = Number(o.total_amount || 0);
+            const amtDiff = Math.abs(oAmt - billAmt);
+            const timeDiff = Math.abs(oTime - bTime);
+            return amtDiff <= 1 && timeDiff <= maxTimeDiffMs;
+          })
+          .sort((a: any, b: any) => {
+            const aTimeDiff = Math.abs(new Date(a.created_at).getTime() - bTime);
+            const bTimeDiff = Math.abs(new Date(b.created_at).getTime() - bTime);
+            const aAmtDiff = Math.abs(Number(a.total_amount) - billAmt);
+            const bAmtDiff = Math.abs(Number(b.total_amount) - billAmt);
+            if (aAmtDiff !== bAmtDiff) return aAmtDiff - bAmtDiff;
+            return aTimeDiff - bTimeDiff;
+          });
+        matched = candidates[0] ?? null;
+      }
+
+      // 6. Loose Fuzzy Match: within 5% amount diff & within 48 hours
+      if (!matched && billAmt > 0) {
+        const tolerance = Math.max(5, billAmt * 0.05);
+        const maxTimeDiffMs = 48 * 3600 * 1000;
+        const candidates = posOrders
+          .filter((o: any) => {
+            if (usedOrderIds.has(o.id)) return false;
+            const oTime = new Date(o.created_at || 0).getTime();
+            const oAmt = Number(o.total_amount || 0);
+            const amtDiff = Math.abs(oAmt - billAmt);
+            const timeDiff = Math.abs(oTime - bTime);
+            return amtDiff <= tolerance && timeDiff <= maxTimeDiffMs;
+          })
+          .sort((a: any, b: any) => {
+            const aTimeDiff = Math.abs(new Date(a.created_at).getTime() - bTime);
+            const bTimeDiff = Math.abs(new Date(b.created_at).getTime() - bTime);
+            const aAmtDiff = Math.abs(Number(a.total_amount) - billAmt);
+            const bAmtDiff = Math.abs(Number(b.total_amount) - billAmt);
+            if (aAmtDiff !== bAmtDiff) return aAmtDiff - bAmtDiff;
+            return aTimeDiff - bTimeDiff;
+          });
+        matched = candidates[0] ?? null;
       }
 
       if (matched && Array.isArray(matched.items) && matched.items.length > 0) {
+        usedOrderIds.add(matched.id);
         return matched.items.map((i: any) => ({
           name: i.name || i.item_name || i.title || 'Item',
           quantity: Number(i.quantity || i.qty || 1),
           unit_price: Number(i.unit_price || i.price || 0),
           line_total: Number(i.line_total || i.total || (Number(i.quantity || 1) * Number(i.unit_price || 0))),
+          category: i.category || i.item_group || '',
+          outlet_name: i.outlet_name || '',
         }));
       }
 
+      // Fallback: description-only item
       return [
         {
           name: b.description || b.notes || 'Staff Credit Tab Charge',
           quantity: 1,
           unit_price: billAmt,
           line_total: billAmt,
+          category: '',
+          outlet_name: '',
         },
       ];
     };

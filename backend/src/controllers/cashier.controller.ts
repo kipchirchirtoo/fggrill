@@ -2657,6 +2657,7 @@ export const processCashierPayment = async (
     try {
         let { bookingId } = req.body;
         const { amount, method, reference } = req.body;
+        const paymentPurpose = String(req.body.payment_purpose || req.body.purpose || '').trim();
         // Cash change handed back + cash tendered (recorded on the cleared
         // payment row so reconciliation/audit can see it).
         const changeGiven = Number(req.body.change_given) || 0;
@@ -3698,6 +3699,7 @@ export const processCashierPayment = async (
             reservationId: String(resolvedBookingId),
             amount: Number(amount),
             paymentMethod: String(method),
+            paymentPurpose,
             reference: paymentRef,
             cashierUserId: String(req.user?.id || ''),
             cashierName: `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim(),
@@ -3714,10 +3716,12 @@ export const processCashierPayment = async (
                 booking_id: result.reservationId,
                 folio_id: result.folioId,
                 cashier_transaction_id: result.cashierTransactionId,
+                cashier_transaction_number: result.cashierTransactionNumber,
                 cashier_shift_log_id: result.cashierShiftLogId,
                 amount: result.amount,
                 payment_method: result.method,
                 reference: paymentRef,
+                payment_purpose: paymentPurpose || 'room_folio_payment',
                 balance: result.balance,
                 payment_status: result.paymentStatus,
                 room_number: result.roomNumber,
@@ -4222,22 +4226,41 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 : Promise.resolve({ data: [], error: null } as any);
 
             const financeInvoicesPromise = includeFinance
-                ? (() => {
-                    let financeInvoiceQuery = supabase
-                        .from('finance_invoices')
-                        .select('id, invoice_number, branch_id, customer_name, total_amount, paid_amount, created_at, status')
-                        .neq('status', 'paid')
-                        .order('created_at', { ascending: false });
+                ? (async () => {
+                    try {
+                        let financeInvoiceQuery = supabase
+                            .from('customer_invoices')
+                            .select('id, invoice_number, branch_id, amount, created_at, status')
+                            .neq('status', 'paid')
+                            .order('created_at', { ascending: false });
 
-                    if (effectiveBranchId) {
-                        financeInvoiceQuery = financeInvoiceQuery.eq('branch_id', effectiveBranchId);
+                        if (effectiveBranchId) {
+                            financeInvoiceQuery = financeInvoiceQuery.eq('branch_id', effectiveBranchId);
+                        }
+                        if (from && to) {
+                            financeInvoiceQuery = financeInvoiceQuery
+                                .gte('created_at', from.toISOString())
+                                .lte('created_at', to.toISOString());
+                        }
+                        const res = await financeInvoiceQuery;
+                        if (res.error) {
+                            logger.warn('customer_invoices query notice in getUnpaidBills:', res.error.message);
+                            return { data: [], error: null };
+                        }
+                        const mapped = (res.data || []).map((inv: any) => ({
+                            id: inv.id,
+                            invoice_number: inv.invoice_number,
+                            branch_id: inv.branch_id,
+                            customer_name: 'Customer Invoice',
+                            total_amount: Number(inv.amount || 0),
+                            paid_amount: inv.status === 'paid' ? Number(inv.amount || 0) : 0,
+                            created_at: inv.created_at,
+                            status: inv.status
+                        }));
+                        return { data: mapped, error: null };
+                    } catch (_) {
+                        return { data: [], error: null };
                     }
-                    if (from && to) {
-                        financeInvoiceQuery = financeInvoiceQuery
-                            .gte('created_at', from.toISOString())
-                            .lte('created_at', to.toISOString());
-                    }
-                    return financeInvoiceQuery;
                 })()
                 : Promise.resolve({ data: [], error: null } as any);
 
@@ -4272,7 +4295,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
             ]);
 
             if (hotelReservationsRes.error) throw hotelReservationsRes.error;
-            if (financeInvoicesRes.error) throw financeInvoicesRes.error;
+            // financeInvoicesRes error handled inside the Promise
             if (arInvoicesRes.error) throw arInvoicesRes.error;
 
             const mappedHotel = (hotelReservationsRes.data || []).map((resv: any) => ({
@@ -4293,7 +4316,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 bill_number: inv.invoice_number,
                 branch_id: inv.branch_id,
                 bill_type: 'finance_invoice',
-                customer_name: inv.customer_name || 'Guest',
+                customer_name: inv.customer_name || 'Customer Invoice',
                 total_amount: inv.total_amount,
                 paid_amount: inv.paid_amount || 0,
                 balance_amount: Number(inv.total_amount) - Number(inv.paid_amount || 0),

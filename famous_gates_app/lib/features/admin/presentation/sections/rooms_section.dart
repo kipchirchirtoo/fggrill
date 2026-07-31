@@ -22,66 +22,76 @@ class _RoomsSectionState extends ConsumerState<RoomsSection> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Rooms & Pricing',
-                  style: Theme.of(context).textTheme.displaySmall,
+      length: 5,
+      child: Builder(
+        builder: (tabContext) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Rooms & Pricing',
+                      style: Theme.of(context).textTheme.displaySmall,
+                    ),
+                    FloatingActionButton.extended(
+                      onPressed: () {
+                        final tabIndex = DefaultTabController.of(tabContext).index;
+                        if (tabIndex == 0) {
+                          showRoomDialog(tabContext);
+                        } else if (tabIndex == 1) {
+                          showRoomStandardDialog(tabContext);
+                        } else if (tabIndex == 2) {
+                          showMealPlanDialog(tabContext);
+                        } else {
+                          showRatePlanDialog(tabContext);
+                        }
+                      },
+                      backgroundColor: AppColors.kPrimary,
+                      foregroundColor: Colors.white,
+                      icon: Icon(PhosphorIcons.plus()),
+                      label: const Text('Add New'),
+                    ),
+                  ],
                 ),
-                FloatingActionButton.extended(
-                  onPressed: () {
-                    final tabIndex = DefaultTabController.of(context)?.index ?? 0;
-                    if (tabIndex == 0) {
-                      showRoomDialog(context);
-                    } else if (tabIndex == 1) {
-                      showRoomStandardDialog(context);
-                    } else {
-                      showRatePlanDialog(context);
-                    }
-                  },
-                  backgroundColor: AppColors.kPrimary,
-                  foregroundColor: Colors.white,
-                  icon: Icon(PhosphorIcons.plus()),
-                  label: const Text('Add New'),
+              ),
+              const SizedBox(height: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  labelColor: AppColors.kPrimary,
+                  unselectedLabelColor: AppColors.kTextSecondary,
+                  indicatorColor: AppColors.kPrimary,
+                  dividerColor: Colors.transparent,
+                  tabs: [
+                    Tab(text: 'Physical Rooms'),
+                    Tab(text: 'Room Standards'),
+                    Tab(text: 'Meal Plans'),
+                    Tab(text: 'Rate Plans'),
+                    Tab(text: 'Pricing Matrix'),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
-            child: TabBar(
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelColor: AppColors.kPrimary,
-              unselectedLabelColor: AppColors.kTextSecondary,
-              indicatorColor: AppColors.kPrimary,
-              dividerColor: Colors.transparent,
-              tabs: [
-                Tab(text: 'Physical Rooms'),
-                Tab(text: 'Room Standards'),
-                Tab(text: 'Rate Plans & Meals'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Expanded(
-            child: TabBarView(
-              children: [
-                _PhysicalRoomsTab(),
-                _RoomStandardsTab(),
-                _RatePlansTab(),
-              ],
-            ),
-          ),
-        ],
+              ),
+              const SizedBox(height: 16),
+              const Expanded(
+                child: TabBarView(
+                  children: [
+                    _PhysicalRoomsTab(),
+                    _RoomStandardsTab(),
+                    _MealPlansTab(),
+                    _RatePlansTab(),
+                    _PricingMatrixTab(),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -604,7 +614,6 @@ class _RatePlansTabState extends ConsumerState<_RatePlansTab> {
   @override
   Widget build(BuildContext context) {
     final plansAsync = ref.watch(adminRatePlansProvider);
-
     return plansAsync.when(
       loading: () => const LoadingSkeleton(type: SkeletonType.list),
       error: (err, _) => ErrorState(
@@ -614,69 +623,459 @@ class _RatePlansTabState extends ConsumerState<_RatePlansTab> {
       data: (plans) {
         if (plans.isEmpty) {
           return EmptyState(
-              message: 'No rate plans found', icon: PhosphorIcons.currencyDollar());
+              message:
+                  'No rate plans yet — tap "Add New" to create a sellable package.',
+              icon: PhosphorIcons.tag());
         }
         return ListView.separated(
           padding: const EdgeInsets.all(24),
           itemCount: plans.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final plan = plans[index];
-            return Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                    color: AppColors.kDivider.withValues(alpha: 0.5)),
-              ),
-              child: ListTile(
-                title: Text(plan.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('${plan.rateType} | Multiplier: ${plan.multiplier} | Fixed: KES ${plan.fixedAmount}\n${plan.description}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(PhosphorIcons.pencilSimple(), color: AppColors.kPrimary),
-                      onPressed: () => showRatePlanDialog(context, plan: plan),
-                    ),
-                    IconButton(
-                      icon: Icon(PhosphorIcons.trash(), color: Colors.red),
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (c) => AlertDialog(
-                            title: const Text('Delete Rate Plan?'),
-                            content: Text('Are you sure you want to delete ${plan.name}?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                              TextButton(
-                                onPressed: () => Navigator.pop(c, true),
-                                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                child: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          try {
-                            await ref.read(adminRepositoryProvider).deleteRatePlan(plan.id);
-                            ref.invalidate(adminRatePlansProvider);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                            }
-                          }
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
+          itemBuilder: (context, index) => _ratePlanCard(plans[index]),
         );
       },
     );
+  }
+
+  Widget _chip(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      );
+
+  Widget _ratePlanCard(AdminRatePlan p) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+            color: p.isActive
+                ? AppColors.kDivider.withValues(alpha: 0.5)
+                : Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    children: [
+                      Text(p.name,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.kPrimary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(p.code,
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.kPrimary)),
+                      ),
+                      if (p.isDefaultForReception)
+                        const Icon(Icons.star, size: 14, color: Colors.amber),
+                    ],
+                  ),
+                ),
+                Text('KES ${p.ratePerNight.toStringAsFixed(0)}/night',
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.kPrimary)),
+                PopupMenuButton<String>(
+                  onSelected: (v) {
+                    if (v == 'edit') showRatePlanDialog(context, plan: p);
+                    if (v == 'clone') _clone(p);
+                    if (v == 'copy') _copyToBranch(p);
+                    if (v == 'delete') _confirmDelete(p);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(value: 'clone', child: Text('Clone')),
+                    PopupMenuItem(
+                        value: 'copy', child: Text('Copy to branch…')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _chip(p.roomTypeName ?? 'No room type', AppColors.kPrimary),
+                _chip(p.mealPlanName ?? 'No meal plan', AppColors.kSuccess),
+                _chip(p.isGlobal ? 'Global' : 'Branch #${p.branchId}',
+                    Colors.blueGrey),
+                if (!p.isActive) _chip('INACTIVE', Colors.red),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Extra: adult KES ${p.extraAdultCharge.toStringAsFixed(0)} · '
+              'child KES ${p.extraChildCharge.toStringAsFixed(0)} · '
+              'bed KES ${p.extraBedCharge.toStringAsFixed(0)}   ·   '
+              '${p.minStay}${p.maxStay != null ? '–${p.maxStay}' : '+'} nights   ·   '
+              '${p.validityLabel}',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary),
+            ),
+            if (p.description.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(p.description,
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.kTextSecondary)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _planData(AdminRatePlan p,
+          {String? code, String? name, String? branchId}) =>
+      {
+        'name': name ?? p.name,
+        if (code != null) 'code': code,
+        'description': p.description,
+        'branch_id': branchId ?? p.branchId?.toString(),
+        'room_type_id': p.roomTypeId,
+        'meal_plan_id': p.mealPlanId,
+        'rate_per_night': p.ratePerNight,
+        'extra_adult_charge': p.extraAdultCharge,
+        'extra_child_charge': p.extraChildCharge,
+        'extra_bed_charge': p.extraBedCharge,
+        'max_occupancy': p.maxOccupancy,
+        'min_stay': p.minStay,
+        'max_stay': p.maxStay,
+        'valid_from': p.validFrom,
+        'valid_to': p.validTo,
+        'is_default_for_reception': false,
+        'is_active': p.isActive,
+      };
+
+  Future<void> _clone(AdminRatePlan p) async {
+    try {
+      await ref.read(adminRepositoryProvider).createRatePlan(
+          _planData(p, code: '${p.code}-COPY', name: '${p.name} (copy)'));
+      ref.invalidate(adminRatePlansProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Rate plan cloned')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Clone failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _copyToBranch(AdminRatePlan p) async {
+    final branches = ref.read(adminBranchesProvider).valueOrNull ?? [];
+    if (branches.isEmpty) return;
+    final branchId = await showDialog<String>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: const Text('Copy to branch'),
+        children: branches
+            .map((b) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(c, b.id),
+                child: Text(b.name)))
+            .toList(),
+      ),
+    );
+    if (branchId == null) return;
+    try {
+      await ref.read(adminRepositoryProvider).createRatePlan(
+          _planData(p, code: '${p.code}-B$branchId', branchId: branchId));
+      ref.invalidate(adminRatePlansProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Copied to branch')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Copy failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _confirmDelete(AdminRatePlan p) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete Rate Plan?'),
+        content: Text('Are you sure you want to delete ${p.name}?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await ref.read(adminRepositoryProvider).deleteRatePlan(p.id);
+        ref.invalidate(adminRatePlansProvider);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Error: $e')));
+        }
+      }
+    }
+  }
+}
+
+class _PricingMatrixTab extends ConsumerWidget {
+  const _PricingMatrixTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final plansAsync = ref.watch(adminRatePlansProvider);
+    return plansAsync.when(
+      loading: () => const LoadingSkeleton(type: SkeletonType.list),
+      error: (err, _) => ErrorState(
+        message: err.toString().replaceAll('Exception: ', ''),
+        onRetry: () => ref.invalidate(adminRatePlansProvider),
+      ),
+      data: (plans) {
+        if (plans.isEmpty) {
+          return const EmptyState(
+              message: 'No rate plans to show in the matrix yet.',
+              icon: Icons.grid_on);
+        }
+        final sorted = [...plans]
+          ..sort((a, b) {
+            final r =
+                (a.roomTypeName ?? '').compareTo(b.roomTypeName ?? '');
+            return r != 0 ? r : a.name.compareTo(b.name);
+          });
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Room Standard')),
+                DataColumn(label: Text('Meal Plan')),
+                DataColumn(label: Text('Rate Plan')),
+                DataColumn(label: Text('Price/Night'), numeric: true),
+                DataColumn(label: Text('Branch')),
+                DataColumn(label: Text('Active')),
+              ],
+              rows: sorted
+                  .map((p) => DataRow(cells: [
+                        DataCell(Text(p.roomTypeName ?? '—')),
+                        DataCell(Text(p.mealPlanName ?? '—')),
+                        DataCell(Text(p.name)),
+                        DataCell(
+                            Text('KES ${p.ratePerNight.toStringAsFixed(0)}')),
+                        DataCell(Text(p.isGlobal ? 'Global' : '#${p.branchId}')),
+                        DataCell(Icon(
+                            p.isActive ? Icons.check_circle : Icons.cancel,
+                            size: 16,
+                            color: p.isActive
+                                ? AppColors.kSuccess
+                                : Colors.red)),
+                      ]))
+                  .toList(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MealPlansTab extends ConsumerStatefulWidget {
+  const _MealPlansTab();
+  @override
+  ConsumerState<_MealPlansTab> createState() => _MealPlansTabState();
+}
+
+class _MealPlansTabState extends ConsumerState<_MealPlansTab> {
+  @override
+  Widget build(BuildContext context) {
+    final plansAsync = ref.watch(adminMealPlansProvider);
+    return plansAsync.when(
+      loading: () => const LoadingSkeleton(type: SkeletonType.list),
+      error: (err, _) => ErrorState(
+        message: err.toString().replaceAll('Exception: ', ''),
+        onRetry: () => ref.invalidate(adminMealPlansProvider),
+      ),
+      data: (plans) {
+        if (plans.isEmpty) {
+          return const EmptyState(
+              message: 'No meal plans yet — tap "Add New" to create one.',
+              icon: Icons.restaurant_menu);
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(24),
+          itemCount: plans.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) => _mealPlanCard(plans[index]),
+        );
+      },
+    );
+  }
+
+  Widget _chip(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      );
+
+  Widget _mealPlanCard(AdminMealPlan p) {
+    final meals = p.includedMeals;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+            color: p.isActive
+                ? AppColors.kDivider.withValues(alpha: 0.5)
+                : Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    children: [
+                      Text(p.name,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.kPrimary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(p.code,
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.kPrimary)),
+                      ),
+                      if (p.isDefault)
+                        const Icon(Icons.star, size: 14, color: Colors.amber),
+                    ],
+                  ),
+                ),
+                Text(p.isGlobal ? 'Global' : 'Branch #${p.branchId}',
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.kTextSecondary)),
+                IconButton(
+                  icon: Icon(PhosphorIcons.pencilSimple(),
+                      color: AppColors.kPrimary, size: 18),
+                  onPressed: () => showMealPlanDialog(context, plan: p),
+                ),
+                IconButton(
+                  icon: Icon(PhosphorIcons.trash(), color: Colors.red, size: 18),
+                  onPressed: () => _confirmDelete(p),
+                ),
+              ],
+            ),
+            if (p.description.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(p.description,
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.kTextSecondary)),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                if (meals.isEmpty)
+                  _chip('No meals', Colors.grey)
+                else
+                  ...meals.map((m) => _chip(m, AppColors.kPrimary)),
+                _chip(
+                    p.includedInRoomRate
+                        ? 'In room rate'
+                        : 'Charged separately',
+                    p.includedInRoomRate ? AppColors.kSuccess : Colors.orange),
+                if (!p.isActive) _chip('INACTIVE', Colors.red),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Daily: Adult KES ${p.adultDailyPrice.toStringAsFixed(0)} · '
+              'Child KES ${p.childDailyPrice.toStringAsFixed(0)} · '
+              'Infant KES ${p.infantDailyPrice.toStringAsFixed(0)}',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.kTextSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(AdminMealPlan p) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete Meal Plan?'),
+        content: Text('Are you sure you want to delete ${p.name}?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await ref.read(adminRepositoryProvider).deleteMealPlan(p.id);
+        ref.invalidate(adminMealPlansProvider);
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Error: $e')));
+        }
+      }
+    }
   }
 }

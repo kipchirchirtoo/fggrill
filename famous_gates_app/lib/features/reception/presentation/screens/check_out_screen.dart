@@ -614,7 +614,16 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   void _redirectToCashierStation() {
     final conf =
         _selectedBooking?.confirmationNumber ?? _selectedBooking?.id ?? '';
-    Navigator.of(context).pop(conf);
+    final handoff = widget.onPayAtCashier;
+    if (handoff != null) {
+      // Hand the confirmation code to the embedded (Reception) cashier.
+      handoff(conf);
+    }
+    // Always pop with NO result. Some callers push this screen with
+    // Navigator.push<bool>(...); returning a String there throws
+    // "type 'String' is not a subtype of type 'bool?'". The handoff above (or,
+    // for the standalone route, the caller re-loading by code) does the routing.
+    Navigator.of(context).pop();
   }
 
   @override
