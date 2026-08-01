@@ -457,9 +457,6 @@ export async function performReceptionCheckIn(input: {
       if (MAINTENANCE_ROOM_STATUSES.has(physicalStatus) || hkStatus === 'out_of_order') {
         throw new AppError('Room is out of service and cannot be checked in', 409);
       }
-      if (CLEANING_HK_STATUSES.has(hkStatus) || hkStatus === 'vacant_dirty') {
-        throw new AppError('Room is not ready for check-in yet', 409);
-      }
 
       const conflictRes = await client.query(
         `
