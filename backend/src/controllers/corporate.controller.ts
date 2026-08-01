@@ -115,7 +115,7 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
 
         // 2. Update Master Bill to credit_bill and PAYMENT_METHOD to CORPORATE_CREDIT
         const { error: updateBillErr } = await supabase
-            .from('master_bills')
+            .from('pos_master_bills')
             .update({
                 payment_status: 'credit_bill',
                 status: 'credit_bill', // Treated as cleared but on credit
@@ -139,8 +139,7 @@ export const getPendingCorporateBills = async (req: Request, res: Response) => {
             .select(`
                 *,
                 corporate_customers(name),
-                auth_users:cashier_id(full_name),
-                master_bills(bill_number)
+                pos_master_bills(bill_number)
             `)
             .eq('status', 'UNINVOICED')
             .order('created_at', { ascending: false });

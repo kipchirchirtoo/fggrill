@@ -381,7 +381,13 @@ async function upsertShiftActualCollections(
 }
 
 export async function generateCashierShiftLogbook(shift: any, reviewerId?: string): Promise<any> {
-    const logDate = String(shift.shift_start || new Date().toISOString()).slice(0, 10);
+    let logDate = new Date().toISOString().slice(0, 10);
+    if (shift.shift_start) {
+        const parsedDate = new Date(shift.shift_start);
+        if (!isNaN(parsedDate.getTime())) {
+            logDate = parsedDate.toISOString().slice(0, 10);
+        }
+    }
     const creditBills = toArray(shift.credit_bills_details);
     const paidBills = toArray(shift.paid_bills_details);
     const totalCash = toNumber(shift.total_cash_sales);
