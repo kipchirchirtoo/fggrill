@@ -77,6 +77,18 @@ function createLimiterMiddleware(
     limiterName: string
 ) {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+        // Authenticated requests (Bearer token / staff session) are internal operations — do not rate limit
+        if (req.headers.authorization || (req as any).user) {
+            next();
+            return;
+        }
+
+        // Never rate limit non-GET write/update operations (paying, approving, logging out, etc.)
+        if (req.method !== 'GET' && limiterName !== 'auth') {
+            next();
+            return;
+        }
+
         if (!redisRateLimitEnabled) {
             if (!warnedRedisDisabled) {
                 warnedRedisDisabled = true;

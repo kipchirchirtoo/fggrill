@@ -237,17 +237,9 @@ initializeApp().then(({ app, httpServer }) => {
   });
 
   // Route-specific limiters (tightest first)
-  app.use('/api/auth', authLimiter);         // 60 req / 5 min per IP (Upstash)
-  app.use('/api/pos', posLimiter);           // 3000 req / 5 min per branch (Upstash)
-  app.use('/api/orders', posLimiter);        // POS orders share the same limit
-  app.use('/api/restaurant', posLimiter);    // Kitchen & restaurant orders share POS limit
-  app.use('/api/kitchen', posLimiter);       // Kitchen orders share POS limit
-  app.use('/api/payment', financialLimiter);
-  app.use('/api/accounting', financialLimiter);
-  app.use('/api/finance', financialLimiter);
-  app.use('/api/cashier', financialLimiter);
-  // Global limiter applied last — catches all other routes
-  app.use(globalLimiter);                    // 5000 req / 15 min per IP (Upstash)
+  app.use('/api/auth', authLimiter);         // 60 req / 5 min per IP on unauthenticated auth routes
+  // Global limiter applied last — catches unauthenticated requests on all other routes
+  app.use(globalLimiter);
   // ─────────────────────────────────────────────────────────────────────────────
 
   // API routes
