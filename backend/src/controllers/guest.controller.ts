@@ -120,20 +120,41 @@ export const updateGuest = async (
       throw new AppError('Guest not found', 404);
     }
 
-    if (
-      ['idNumber', 'id_number', 'identification_number'].some((key) =>
-        Object.prototype.hasOwnProperty.call(req.body, key)
-      ) &&
-      !readText(req.body, ['idNumber', 'id_number', 'identification_number'])
-    ) {
-      throw new AppError('Guest ID number is required', 400);
-    }
+    const body = req.body || {};
+    const firstName = body.first_name ?? body.firstName ?? existingGuest.firstName;
+    const lastName = body.last_name ?? body.lastName ?? existingGuest.lastName;
+    const email = body.email !== undefined ? body.email : existingGuest.email;
+    const phone = body.phone !== undefined ? body.phone : existingGuest.phone;
+    const idType = body.id_type ?? body.idType ?? existingGuest.idType;
+    const idNumber = body.id_number ?? body.idNumber ?? body.identification_number ?? existingGuest.idNumber;
+    const carNumberPlate = body.car_number_plate ?? body.carNumberPlate ?? body.vehicle_plate ?? body.vehiclePlate ?? body.number_plate ?? existingGuest.carNumberPlate;
+    const address = body.address !== undefined ? body.address : existingGuest.address;
+    const nationality = body.nationality !== undefined ? body.nationality : existingGuest.nationality;
+    const city = body.city !== undefined ? body.city : existingGuest.city;
+    const country = body.country !== undefined ? body.country : existingGuest.country;
+    const dateOfBirth = body.date_of_birth ?? body.dateOfBirth ?? existingGuest.dateOfBirth;
+    const isVip = body.is_vip ?? body.isVip ?? body.vip_status ?? existingGuest.isVip;
+    const notes = body.notes !== undefined ? body.notes : existingGuest.notes;
 
-    // Merge existing data with updates
     const updatedGuest = new Guest({
-      ...existingGuest,
-      ...req.body,
-      id: req.params.id // Ensure ID doesn't change
+      id: req.params.id,
+      firstName,
+      lastName,
+      email,
+      phone,
+      idType,
+      idNumber,
+      carNumberPlate,
+      address,
+      nationality,
+      city,
+      country,
+      dateOfBirth,
+      isVip,
+      notes,
+      preferences: body.preferences ?? existingGuest.preferences,
+      blacklistStatus: body.blacklist_status ?? body.blacklistStatus ?? existingGuest.blacklistStatus,
+      blacklistReason: body.blacklist_reason ?? body.blacklistReason ?? existingGuest.blacklistReason
     });
 
     const savedGuest = await updatedGuest.save();

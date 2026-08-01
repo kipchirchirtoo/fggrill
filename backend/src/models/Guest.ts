@@ -48,30 +48,30 @@ export class Guest implements IGuest {
 
   constructor(data: Partial<IGuest> & Record<string, any>) {
     this.id = data.id || crypto.randomUUID();
-    this.firstName = data.firstName || data.first_name || '';
-    this.lastName = data.lastName || data.last_name || '';
+    this.firstName = data.first_name ?? data.firstName ?? '';
+    this.lastName = data.last_name ?? data.lastName ?? '';
     this.email = data.email;
     this.phone = data.phone;
-    this.idType = data.idType || data.id_type;
-    this.idNumber = data.idNumber || data.id_number || data.identification_number;
+    this.idType = data.id_type ?? data.idType;
+    this.idNumber = data.id_number ?? data.idNumber ?? data.identification_number;
     this.carNumberPlate =
-      data.carNumberPlate ||
-      data.car_number_plate ||
-      data.vehiclePlate ||
-      data.vehicle_plate ||
+      data.car_number_plate ??
+      data.carNumberPlate ??
+      data.vehicle_plate ??
+      data.vehiclePlate ??
       data.number_plate;
     this.address = data.address;
     this.nationality = data.nationality;
     this.city = data.city;
     this.country = data.country;
-    this.dateOfBirth = data.dateOfBirth || data.date_of_birth;
-    this.isVip = data.isVip || data.is_vip || data.vip_status || false;
+    this.dateOfBirth = data.date_of_birth ?? data.dateOfBirth;
+    this.isVip = data.is_vip ?? data.isVip ?? data.vip_status ?? false;
     this.notes = data.notes;
     this.preferences = data.preferences || {};
-    this.blacklistStatus = data.blacklistStatus || data.blacklist_status || false;
-    this.blacklistReason = data.blacklistReason || data.blacklist_reason;
-    this.createdAt = data.createdAt || data.created_at || new Date();
-    this.updatedAt = data.updatedAt || data.updated_at || new Date();
+    this.blacklistStatus = data.blacklist_status ?? data.blacklistStatus ?? false;
+    this.blacklistReason = data.blacklist_reason ?? data.blacklistReason;
+    this.createdAt = data.created_at ? new Date(data.created_at) : (data.createdAt ? new Date(data.createdAt) : new Date());
+    this.updatedAt = data.updated_at ? new Date(data.updated_at) : (data.updatedAt ? new Date(data.updatedAt) : new Date());
   }
 
   // ===========================================================
