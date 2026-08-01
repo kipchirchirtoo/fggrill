@@ -229,13 +229,16 @@ async function loadReservationFinancialContextWithClient(
         r.deposit_amount,
         r.deposit_paid,
         rm.room_number,
-        TRIM(CONCAT(COALESCE(g.first_name, ''), ' ', COALESCE(g.last_name, ''))) AS guest_name
+        TRIM(CONCAT(COALESCE(g.first_name, ''), ' ', COALESCE(g.last_name, ''))) AS guest_name,
+        b.total_amount AS booking_total_amount,
+        b.total_price AS booking_total_price
       FROM reservations r
       LEFT JOIN rooms rm ON rm.id = r.room_id
       LEFT JOIN guests g ON g.id = r.guest_id
-      WHERE r.id = $1
+      LEFT JOIN bookings b ON (b.id = r.booking_id OR b.id = r.id)
+      WHERE r.id = $1 OR r.booking_id = $1
+      ORDER BY r.created_at DESC
       LIMIT 1
-      FOR UPDATE OF r
     `,
     [reservationId]
   );
@@ -247,7 +250,15 @@ async function loadReservationFinancialContextWithClient(
 
   const folio = await ensureFolio(client, reservation);
 
-  const roomCharges = Math.max(money(reservation.total_amount), money(folio.room_charges));
+  const bookingTotal = Math.max(
+    money(reservation.booking_total_amount),
+    money(reservation.booking_total_price)
+  );
+  const roomCharges = Math.max(
+    money(reservation.total_amount),
+    bookingTotal,
+    money(folio.room_charges)
+  );
   const foodCharges = money(folio.food_charges);
   const beverageCharges = money(folio.beverage_charges);
   const otherCharges = money(folio.other_charges);
@@ -336,15 +347,25 @@ export async function recordHotelCashierPayment(
       context.branchId
     );
 
-    if (context.outstandingBalance <= 0.009) {
+    const purpose = String(input.paymentPurpose || '').trim().toLowerCase();
+    const isDepositOrPrepayment = purpose === 'booking_deposit' || purpose === 'deposit' || purpose.includes('deposit');
+
+    if (context.outstandingBalance <= 0.009 && !isDepositOrPrepayment) {
       throw new AppError('This room bill is already fully settled', 409);
     }
 
     if (amount > context.outstandingBalance + 0.01) {
-      throw new AppError(
-        `Payment amount (${amount.toFixed(2)}) exceeds room bill balance (${context.outstandingBalance.toFixed(2)})`,
-        400
-      );
+      if (isDepositOrPrepayment || amount <= context.roomCharges + 15000) {
+        const delta = amount - context.outstandingBalance;
+        context.roomCharges += delta;
+        context.totalCharges += delta;
+        context.outstandingBalance = amount;
+      } else {
+        throw new AppError(
+          `Payment amount (${amount.toFixed(2)}) exceeds room bill balance (${context.outstandingBalance.toFixed(2)})`,
+          400
+        );
+      }
     }
 
     const purpose = String(input.paymentPurpose || '').trim().toLowerCase();
