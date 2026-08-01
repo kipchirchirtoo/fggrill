@@ -15,8 +15,7 @@ import { UserRole } from '../models/User';
 const router = Router();
 router.use(protect);
 
-// Accountant/Admin/Front-Office/POS routes for fetching Corporate Customers
-router.get('/customers', authorize([
+const corporateAccountants = [
     UserRole.SUPER_ADMIN, 
     UserRole.DIRECTOR, 
     UserRole.GENERAL_MANAGER, 
@@ -24,6 +23,12 @@ router.get('/customers', authorize([
     UserRole.ACCOUNTANT,
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.FINANCE_MANAGER,
+    UserRole.AUDITOR
+];
+
+// Accountant/Admin/Front-Office/POS routes for fetching Corporate Customers
+router.get('/customers', authorize([
+    ...corporateAccountants,
     UserRole.RECEPTIONIST,
     UserRole.FRONT_DESK_SUPERVISOR,
     UserRole.CASHIER,
@@ -33,16 +38,12 @@ router.get('/customers', authorize([
     UserRole.BARTENDER
 ] as any), getCorporateCustomers);
 
-router.post('/customers', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.FINANCE_MANAGER] as any), createCorporateCustomer);
-router.put('/customers/:id', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.FINANCE_MANAGER] as any), updateCorporateCustomer);
+router.post('/customers', authorize(corporateAccountants as any), createCorporateCustomer);
+router.put('/customers/:id', authorize(corporateAccountants as any), updateCorporateCustomer);
 
 // Cashier & Receptionist route to charge a bill to corporate credit
 router.post('/charge', authorize([
-    UserRole.SUPER_ADMIN, 
-    UserRole.DIRECTOR,
-    UserRole.GENERAL_MANAGER, 
-    UserRole.BRANCH_MANAGER, 
-    UserRole.ACCOUNTANT,
+    ...corporateAccountants,
     UserRole.CASHIER,
     UserRole.RESTAURANT_CASHIER,
     UserRole.RECEPTIONIST,
@@ -50,9 +51,9 @@ router.post('/charge', authorize([
 ] as any), chargeCorporateCredit);
 
 // Accountant routes for Invoicing
-router.get('/bills/pending', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT] as any), getPendingCorporateBills);
-router.post('/invoices/generate', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT] as any), generateCorporateInvoice);
-router.get('/invoices', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT] as any), getCorporateInvoices);
-router.post('/invoices/:id/pay', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT] as any), payCorporateInvoice);
+router.get('/bills/pending', authorize(corporateAccountants as any), getPendingCorporateBills);
+router.post('/invoices/generate', authorize(corporateAccountants as any), generateCorporateInvoice);
+router.get('/invoices', authorize(corporateAccountants as any), getCorporateInvoices);
+router.post('/invoices/:id/pay', authorize(corporateAccountants as any), payCorporateInvoice);
 
 export default router;
