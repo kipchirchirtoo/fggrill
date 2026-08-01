@@ -5694,6 +5694,12 @@ class _ShiftsTabState extends ConsumerState<_ShiftsTab> {
                                         'Credit bills', _money(credits),
                                         accent: AppColors.kWarning),
                                     _LogbookEntry(
+                                        'Net sales', _money(baseCash + baseMpesa + baseCard),
+                                        bold: true),
+                                    _LogbookEntry(
+                                        'Expenses', _money(_num(row['expense_total'])),
+                                        accent: AppColors.kError),
+                                    _LogbookEntry(
                                         'Expected cash', _money(expectedCash)),
                                     _LogbookEntry('Actual cash counted',
                                         _money(closingFloat),
@@ -6574,15 +6580,25 @@ Future<Map<String, dynamic>?> _shiftCloseLogbookDialog(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _KeyValueGrid(values: {
+                          'Opening float': _money(openingFloat),
+                          'Cash sales': _money(baseCashSales),
+                          'M-Pesa sales': _money(baseMpesaSales),
+                          'Card sales': _money(baseCardSales),
+                          'Credit bills': _money(creditBillsTotal),
                           'Net sales': _money(
                               baseCashSales + baseMpesaSales + baseCardSales),
                           'Expenses': _money(expenseTotal),
                           'Expected cash': _money(expectedCash),
-                          'Variance': _money(variance),
+                          'Variance': (variance >= 0 ? '+' : '') + _money(variance),
                         }),
                         const SizedBox(height: 20),
                         Text('Cash reconciliation',
                             style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Count physical cash in drawer (Opening Float + Cash Sales - Cash Expenses). Do NOT include M-Pesa or Card collections here.',
+                          style: TextStyle(color: AppColors.kTextSecondary, fontSize: 12),
+                        ),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 12,
