@@ -902,6 +902,272 @@ function buildOutletPosBillResponse(resolution: OutletPosOrderResolution): Recor
     };
 }
 
+async function findConferenceBookingByReference(
+    reference: unknown,
+    req: Request
+): Promise<any | null> {
+    const rawRef = normalizeSearchTerm(reference);
+    if (!rawRef) return null;
+
+    const normalized = rawRef.toUpperCase();
+    const uuid = normalizeUuidOrNull(rawRef);
+
+    let query = supabase.from('conference_hall_bookings').select('*');
+    if (uuid) {
+        query = query.or(`id.eq.${uuid},invoice_number.eq.${normalized},short_code.eq.${normalized}`);
+    } else {
+        query = query.or(`invoice_number.eq.${normalized},short_code.eq.${normalized}`);
+    }
+
+    query = applyBranchFilter(query, req);
+    const { data: exactMatches } = await query;
+    if (exactMatches && exactMatches.length > 0) {
+        return exactMatches[0];
+    }
+
+    // Suffix / substring fallback for short codes / last 3 digits / reference numbers
+    if (normalized.length >= 2) {
+        let suffixQuery = supabase
+            .from('conference_hall_bookings')
+            .select('*')
+            .or(`invoice_number.ilike.%${normalized},short_code.ilike.%${normalized}`);
+
+        suffixQuery = applyBranchFilter(suffixQuery, req);
+        const { data: suffixMatches } = await suffixQuery.order('created_at', { ascending: false }).limit(1);
+        if (suffixMatches && suffixMatches.length > 0) {
+            return suffixMatches[0];
+        }
+    }
+
+    return null;
+}
+
+function buildConferenceBillResponse(booking: any): Record<string, unknown> {
+    const totalAmount = Number(booking.total_amount || 0);
+    const amountPaid = Number(booking.amount_paid || 0);
+    const balance = Math.max(0, totalAmount - amountPaid);
+    const paymentStatus = balance <= 0 ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid');
+
+    return {
+        success: true,
+        data: {
+            type: 'conference',
+            booking: {
+                id: booking.id,
+                invoice_number: booking.invoice_number,
+                short_code: booking.short_code,
+                company_name: booking.company_name || booking.customer_name || 'Conference Client',
+                customer_name: booking.customer_name || booking.company_name || 'Conference Client',
+                contact_person: booking.contact_person,
+                phone: booking.customer_phone,
+                email: booking.customer_email,
+                start_date: booking.start_date,
+                end_date: booking.end_date,
+                status: booking.payment_status || paymentStatus,
+                items: Array.isArray(booking.items) ? booking.items : []
+            },
+            financials: {
+                total_amount: totalAmount,
+                amount_paid: amountPaid,
+                balance: balance,
+                currency: 'KES'
+            },
+            payment_status: paymentStatus
+        }
+    };
+}
+
+async function findGeneralInvoiceByReference(
+    reference: unknown,
+    req: Request
+): Promise<{ type: 'accounting' | 'finance' | 'credit_bill'; data: any } | null> {
+    const rawRef = normalizeSearchTerm(reference);
+    if (!rawRef) return null;
+
+    const normalized = rawRef.toUpperCase();
+    const uuid = normalizeUuidOrNull(rawRef);
+
+    // 1. accounting_ar_invoices
+    let arQuery = supabase
+        .from('accounting_ar_invoices')
+        .select('*, customer:accounting_customers(id, customer_name, email, phone)');
+
+    if (uuid) {
+        arQuery = arQuery.or(`id.eq.${uuid},invoice_number.eq.${normalized},short_code.eq.${normalized}`);
+    } else {
+        arQuery = arQuery.or(`invoice_number.eq.${normalized},short_code.eq.${normalized}`);
+    }
+    arQuery = applyBranchFilter(arQuery, req);
+    const { data: arMatches } = await arQuery.limit(1);
+    if (arMatches && arMatches.length > 0) {
+        return { type: 'accounting', data: arMatches[0] };
+    }
+
+    // 2. finance_invoices
+    let finQuery = supabase.from('finance_invoices').select('*');
+    if (uuid) {
+        finQuery = finQuery.or(`id.eq.${uuid},invoice_number.eq.${normalized},short_code.eq.${normalized}`);
+    } else {
+        finQuery = finQuery.or(`invoice_number.eq.${normalized},short_code.eq.${normalized}`);
+    }
+    finQuery = applyBranchFilter(finQuery, req);
+    const { data: finMatches } = await finQuery.limit(1);
+    if (finMatches && finMatches.length > 0) {
+        return { type: 'finance', data: finMatches[0] };
+    }
+
+    // 3. credit_bills
+    let cbQuery = supabase.from('credit_bills').select('*');
+    if (uuid) {
+        cbQuery = cbQuery.or(`id.eq.${uuid},bill_number.eq.${normalized},short_code.eq.${normalized}`);
+    } else {
+        cbQuery = cbQuery.or(`bill_number.eq.${normalized},short_code.eq.${normalized}`);
+    }
+    cbQuery = applyBranchFilter(cbQuery, req);
+    const { data: cbMatches } = await cbQuery.limit(1);
+    if (cbMatches && cbMatches.length > 0) {
+        return { type: 'credit_bill', data: cbMatches[0] };
+    }
+
+    // Suffix fallbacks for last digits / short codes (>= 2 chars)
+    if (normalized.length >= 2) {
+        // AR Invoices Suffix
+        let arSuffixQuery = supabase
+            .from('accounting_ar_invoices')
+            .select('*, customer:accounting_customers(id, customer_name, email, phone)')
+            .or(`invoice_number.ilike.%${normalized},short_code.ilike.%${normalized}`);
+        arSuffixQuery = applyBranchFilter(arSuffixQuery, req);
+        const { data: arSuffixMatches } = await arSuffixQuery.order('created_at', { ascending: false }).limit(1);
+        if (arSuffixMatches && arSuffixMatches.length > 0) {
+            return { type: 'accounting', data: arSuffixMatches[0] };
+        }
+
+        // Finance Invoices Suffix
+        let finSuffixQuery = supabase
+            .from('finance_invoices')
+            .select('*')
+            .or(`invoice_number.ilike.%${normalized},short_code.ilike.%${normalized}`);
+        finSuffixQuery = applyBranchFilter(finSuffixQuery, req);
+        const { data: finSuffixMatches } = await finSuffixQuery.order('created_at', { ascending: false }).limit(1);
+        if (finSuffixMatches && finSuffixMatches.length > 0) {
+            return { type: 'finance', data: finSuffixMatches[0] };
+        }
+
+        // Credit Bills Suffix
+        let cbSuffixQuery = supabase
+            .from('credit_bills')
+            .select('*')
+            .or(`bill_number.ilike.%${normalized},short_code.ilike.%${normalized}`);
+        cbSuffixQuery = applyBranchFilter(cbSuffixQuery, req);
+        const { data: cbSuffixMatches } = await cbSuffixQuery.order('created_at', { ascending: false }).limit(1);
+        if (cbSuffixMatches && cbSuffixMatches.length > 0) {
+            return { type: 'credit_bill', data: cbSuffixMatches[0] };
+        }
+    }
+
+    return null;
+}
+
+function buildInvoiceBillResponse(invoiceRes: { type: string; data: any }): Record<string, unknown> {
+    const { type, data: inv } = invoiceRes;
+    if (type === 'accounting') {
+        const totalAmount = Number(inv.total_amount || 0);
+        const balance = Number(inv.balance ?? Math.max(0, totalAmount - Number(inv.amount_paid || 0)));
+        const amountPaid = Math.max(0, totalAmount - balance);
+        const paymentStatus = inv.status === 'paid' || balance <= 0.01 ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid');
+
+        return {
+            success: true,
+            data: {
+                type: 'invoice',
+                source: 'accounting',
+                invoice: {
+                    id: inv.id,
+                    invoice_number: inv.invoice_number,
+                    short_code: inv.short_code,
+                    customer_name: inv.customer?.customer_name || inv.customer_name || 'Invoice Customer',
+                    status: inv.status,
+                    items: (inv.items || []).map((item: any) => ({
+                        name: item.description || item.item_name || 'Item',
+                        quantity: Number(item.quantity || item.qty || 1),
+                        price: Number(item.unit_price || item.unitPrice || 0),
+                        total: Number(item.total_amount || item.totalAmount || 0)
+                    }))
+                },
+                financials: {
+                    total_amount: totalAmount,
+                    amount_paid: amountPaid,
+                    balance: balance,
+                    currency: 'KES'
+                },
+                payment_status: paymentStatus
+            }
+        };
+    }
+
+    if (type === 'finance') {
+        const totalAmount = Number(inv.total_amount || 0);
+        const amountPaid = Number(inv.paid_amount || 0);
+        const balance = Math.max(0, totalAmount - amountPaid);
+        const paymentStatus = inv.status === 'paid' || balance <= 0.01 ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid');
+
+        return {
+            success: true,
+            data: {
+                type: 'invoice',
+                source: 'finance',
+                invoice: {
+                    id: inv.id,
+                    invoice_number: inv.invoice_number,
+                    short_code: inv.short_code,
+                    customer_name: inv.customer_name || 'Invoice Customer',
+                    status: inv.status,
+                    items: Array.isArray(inv.items) ? inv.items : []
+                },
+                financials: {
+                    total_amount: totalAmount,
+                    amount_paid: amountPaid,
+                    balance: balance,
+                    currency: 'KES'
+                },
+                payment_status: paymentStatus
+            }
+        };
+    }
+
+    if (type === 'credit_bill') {
+        const totalAmount = Number(inv.total_amount || 0);
+        const amountPaid = Number(inv.amount_paid || 0);
+        const balance = Number(inv.balance_amount ?? Math.max(0, totalAmount - amountPaid));
+        const paymentStatus = inv.status === 'paid' || balance <= 0.01 ? 'paid' : (amountPaid > 0 ? 'partial' : 'unpaid');
+
+        return {
+            success: true,
+            data: {
+                type: 'credit_bill',
+                source: 'credit_bill',
+                invoice: {
+                    id: inv.id,
+                    invoice_number: inv.bill_number,
+                    short_code: inv.short_code,
+                    customer_name: inv.customer_name || inv.company_name || 'Credit Client',
+                    status: inv.status,
+                    items: Array.isArray(inv.items) ? inv.items : []
+                },
+                financials: {
+                    total_amount: totalAmount,
+                    amount_paid: amountPaid,
+                    balance: balance,
+                    currency: 'KES'
+                },
+                payment_status: paymentStatus
+            }
+        };
+    }
+
+    return { success: false, message: 'Invoice not found' };
+}
+
 // Build the cashier-station bill view for a master (combined) customer bill:
 // every member order's items folded into one bill with a combined total, so the
 // cashier settles all outlets' shares with a single tender.
@@ -1356,6 +1622,26 @@ export const getBillDetails = async (
                 res.json(responseData);
                 return;
             }
+        }
+
+        // Check Conference Hall Bookings by invoice number, short code, reference, or suffix
+        const confBooking = await findConferenceBookingByReference(searchId, req);
+        if (confBooking) {
+            const responseData = buildConferenceBillResponse(confBooking);
+            billCache.set(cacheKey, responseData, 60 * 1000);
+            timer.end(true);
+            res.json(responseData);
+            return;
+        }
+
+        // Check General Invoices (AR Invoices, Finance Invoices, Credit Bills) by invoice number, short code, reference, or suffix
+        const genInvoice = await findGeneralInvoiceByReference(searchId, req);
+        if (genInvoice) {
+            const responseData = buildInvoiceBillResponse(genInvoice);
+            billCache.set(cacheKey, responseData, 60 * 1000);
+            timer.end(true);
+            res.json(responseData);
+            return;
         }
 
         // Route to specific handlers based on prefix for better performance
@@ -2805,6 +3091,150 @@ export const processCashierPayment = async (
                 });
                 return;
             }
+        }
+
+        // Check Conference Hall Bookings by invoice number, short code, reference, or suffix
+        const confBookingToPay = await findConferenceBookingByReference(bookingId, req);
+        if (confBookingToPay) {
+            const settlement = await recordConferenceCashierPayment({
+                bookingId: confBookingToPay.id,
+                amount: Number(amount),
+                paymentMethod: method,
+                reference: paymentRef,
+                cashierUserId: req.user?.id!,
+                cashierName: `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim() || null,
+                amountTendered,
+                changeGiven,
+            });
+            billCache.clear();
+            res.json({
+                success: true,
+                message: 'Conference payment processed successfully',
+                data: {
+                    id: settlement.paymentId,
+                    booking_id: settlement.bookingId,
+                    amount: settlement.amount,
+                    payment_method: method,
+                    reference: settlement.paymentReference,
+                    balance: settlement.balance,
+                    payment_status: settlement.paymentStatus,
+                    cashier_transaction_id: settlement.cashierTransactionId,
+                    cashier_shift_log_id: settlement.cashierShiftLogId,
+                }
+            });
+            return;
+        }
+
+        // Check General Invoices (AR Invoices, Finance Invoices, Credit Bills) by invoice number, short code, reference, or suffix
+        const genInvoiceToPay = await findGeneralInvoiceByReference(bookingId, req);
+        if (genInvoiceToPay) {
+            const { type: invoiceSource, data: targetInvoice } = genInvoiceToPay;
+            const isVerifiedMethod = isImmediateCashierPaymentMethod(method);
+            const initialStatus = isVerifiedMethod ? 'completed' : 'pending';
+
+            const paymentPayload: any = {
+                amount: amount,
+                payment_method: method,
+                status: initialStatus,
+                reference: paymentRef,
+                metadata: {
+                    processed_by: 'cashier',
+                    cashier_id: req.user?.id,
+                    processed_at: new Date().toISOString(),
+                    invoice_number: targetInvoice.invoice_number || targetInvoice.bill_number || bookingId,
+                    invoice_source: invoiceSource,
+                    verification_required: !isVerifiedMethod
+                }
+            };
+
+            if (invoiceSource === 'accounting') {
+                paymentPayload.invoice_id = targetInvoice.id;
+            } else {
+                paymentPayload.bill_id = targetInvoice.id;
+            }
+
+            const { data: payment, error: paymentError } = await supabase
+                .from('payments')
+                .insert(paymentPayload)
+                .select()
+                .single();
+
+            if (paymentError) {
+                throw new AppError(`Payment recording failed: ${paymentError.message}`, 500);
+            }
+
+            if (initialStatus === 'completed') {
+                const currentBalance = Number(targetInvoice.balance ?? targetInvoice.balance_amount ?? (Number(targetInvoice.total_amount) - Number(targetInvoice.paid_amount || targetInvoice.amount_paid || 0)));
+                const paymentAmount = Number(amount);
+                const newBalance = Math.max(0, currentBalance - paymentAmount);
+                const isPaid = newBalance <= 0.01;
+                const newStatus = isPaid ? 'paid' : 'partial';
+
+                if (invoiceSource === 'accounting') {
+                    const { error: invError } = await supabase
+                        .from('accounting_ar_invoices')
+                        .update({
+                            balance: newBalance,
+                            status: newStatus,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', targetInvoice.id);
+                    if (invError) throw new AppError(`Failed to update AR invoice balance: ${invError.message}`, 500);
+                } else if (invoiceSource === 'finance') {
+                    const currentPaid = Number(targetInvoice.total_amount) - currentBalance;
+                    const newPaidAmount = currentPaid + paymentAmount;
+                    const { error: finError } = await supabase
+                        .from('finance_invoices')
+                        .update({
+                            paid_amount: newPaidAmount,
+                            status: newStatus,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', targetInvoice.id);
+                    if (finError) throw new AppError(`Failed to update finance invoice status: ${finError.message}`, 500);
+                } else if (invoiceSource === 'credit_bill') {
+                    const currentPaid = Number(targetInvoice.amount_paid || 0);
+                    const newPaidAmount = currentPaid + paymentAmount;
+                    const { error: cbError } = await supabase
+                        .from('credit_bills')
+                        .update({
+                            amount_paid: newPaidAmount,
+                            balance_amount: newBalance,
+                            status: newStatus,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', targetInvoice.id);
+                    if (cbError) throw new AppError(`Failed to update credit bill status: ${cbError.message}`, 500);
+                }
+
+                const { error } = await supabase.from('cashier_transactions').insert({
+                    change_given: changeGiven,
+                    amount_tendered: amountTendered,
+                    transaction_number: `PAY-${Date.now()}`,
+                    branch_id: req.user?.branch_id,
+                    cashier_id: req.user?.id,
+                    transaction_type: 'payment',
+                    revenue_type: invoiceSource === 'credit_bill' ? 'CREDIT_BILL_SETTLEMENT' : 'INVOICE_SETTLEMENT',
+                    reference_type: invoiceSource === 'accounting' ? 'invoice' : (invoiceSource === 'credit_bill' ? 'credit_bill' : 'finance_invoice'),
+                    reference_id: targetInvoice.id,
+                    payment_method: method,
+                    amount: amount,
+                    customer_name: targetInvoice.customer_name || targetInvoice.company_name || 'Invoice Customer'
+                });
+
+                if (error) {
+                    logger.error('Cashier transaction insertion error:', error);
+                }
+            }
+
+            await linkPaymentToActiveShift(req.user?.id!, payment.id, paymentRef, method, Number(amount));
+            billCache.clear();
+            res.json({
+                success: true,
+                message: 'Invoice payment processed successfully',
+                data: payment
+            });
+            return;
         }
 
         // Check if it's an invoice (starts with INV)
