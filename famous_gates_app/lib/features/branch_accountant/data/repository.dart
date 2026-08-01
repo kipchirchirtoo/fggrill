@@ -1373,6 +1373,32 @@ class BranchAccountantRepository {
     });
   }
 
+  Future<Map<String, dynamic>> getPayrollCreditBillContents(String id) async {
+    final res = await _dio.get('/payroll/credit-bills/$id/contents');
+    return _asMap(res.data);
+  }
+
+  Future<void> transferPayrollCreditBill(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.post('/payroll/credit-bills/$id/transfer', data: data);
+  }
+
+  Future<void> rejectPayrollCreditBill(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.patch('/payroll/credit-bills/$id/reject', data: data);
+  }
+
+  Future<void> editPayrollCreditBill(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await _dio.put('/payroll/credit-bills/$id', data: data);
+  }
+
   Future<List<Map<String, dynamic>>> getCashierPaidCreditEntries({
     String status = 'pending',
   }) async {

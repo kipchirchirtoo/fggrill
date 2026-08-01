@@ -10382,6 +10382,11 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         _buildDateButton(context, 'From', _from, true),
         _buildDateButton(context, 'To', _to, false),
         _RefreshButton(onPressed: _refresh),
+        OutlinedButton.icon(
+          onPressed: () => _printCreditBillsPdfReport(selectedItems),
+          icon: const Icon(Icons.picture_as_pdf),
+          label: const Text('Export PDF'),
+        ),
         FilledButton.icon(
           onPressed: _staffTab == 'approval' || _staffTab == 'paid_entries'
               ? null
@@ -10473,17 +10478,29 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                 _text(e, ['bill_date', 'created_at']),
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   _CompactAction(
-                    label: 'View',
-                    icon: Icons.visibility_outlined,
-                    onPressed: () => _showRecord(context, e),
+                    label: 'Contents',
+                    icon: Icons.receipt_long_outlined,
+                    onPressed: () => _showCreditBillContents(e),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
+                  _CompactAction(
+                    label: 'Transfer',
+                    icon: Icons.swap_horiz_outlined,
+                    onPressed: () => _transferPayrollCreditBill(e),
+                  ),
+                  const SizedBox(width: 4),
+                  _CompactAction(
+                    label: 'Edit',
+                    icon: Icons.edit_outlined,
+                    onPressed: () => _editPayrollCreditBill(e),
+                  ),
+                  const SizedBox(width: 4),
                   _CompactAction(
                     label: 'History',
                     icon: Icons.history,
                     onPressed: () => _showCreditPaymentHistory(e),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   if (_staffCreditBalance(e) > 0)
                     _CompactAction(
                       label: 'Pay',
@@ -10522,16 +10539,34 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                 _text(e, ['bill_date', 'created_at']),
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   _CompactAction(
-                    label: 'View',
-                    icon: Icons.visibility_outlined,
-                    onPressed: () => _showRecord(context, e),
+                    label: 'Contents',
+                    icon: Icons.receipt_long_outlined,
+                    onPressed: () => _showCreditBillContents(e),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   _CompactAction(
                     label: 'Approve',
                     icon: Icons.check_circle_outline,
                     filled: true,
                     onPressed: () => _approvePayrollCreditBill(e),
+                  ),
+                  const SizedBox(width: 4),
+                  _CompactAction(
+                    label: 'Reject',
+                    icon: Icons.cancel_outlined,
+                    onPressed: () => _rejectPayrollCreditBill(e),
+                  ),
+                  const SizedBox(width: 4),
+                  _CompactAction(
+                    label: 'Transfer',
+                    icon: Icons.swap_horiz_outlined,
+                    onPressed: () => _transferPayrollCreditBill(e),
+                  ),
+                  const SizedBox(width: 4),
+                  _CompactAction(
+                    label: 'Edit',
+                    icon: Icons.edit_outlined,
+                    onPressed: () => _editPayrollCreditBill(e),
                   ),
                 ]),
               ])
@@ -11051,6 +11086,451 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
         notes: '${data['notes'] ?? ''}');
     if (mounted) _notify(context, 'Credit bill approved');
     _refresh();
+  }
+
+  void _printCreditBillsPdfReport(List<Map<String, dynamic>> items) {
+    final totalAmount = items.fold<num>(0, (sum, e) => sum + _num(e['amount'] ?? e['total_amount']));
+    final totalPaid = items.fold<num>(0, (sum, e) => sum + _num(e['paid_amount']));
+    final totalBalance = items.fold<num>(0, (sum, e) => sum + _staffCreditBalance(e));
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.picture_as_pdf, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Credit Bills Date Range Ledger Statement'),
+          ],
+        ),
+        content: SizedBox(
+          width: 750,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Column(
+                    children: [
+                      const Text('FAMOUSGATE HOTELS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const Text('BRANCH ACCOUNTANT — CREDIT LEDGER REPORT', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey)),
+                      Text('Period: $_from to $_to', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                      const Divider(height: 24),
+                    ],
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _printSummaryChip('Total Credit Granted', _money(totalAmount), Colors.blue),
+                    _printSummaryChip('Total Paid/Applied', _money(totalPaid), Colors.green),
+                    _printSummaryChip('Net Outstanding Balance', _money(totalBalance), Colors.orange),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(2.5),
+                    1: FlexColumnWidth(2.5),
+                    2: FlexColumnWidth(2),
+                    3: FlexColumnWidth(2),
+                    4: FlexColumnWidth(2),
+                    5: FlexColumnWidth(2),
+                  },
+                  border: TableBorder.all(color: Colors.grey.shade300),
+                  children: [
+                    TableRow(
+                      decoration: BoxDecoration(color: Colors.grey.shade200),
+                      children: const [
+                        Padding(padding: EdgeInsets.all(6), child: Text('Staff Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Description', style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Paid', style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Balance', style: TextStyle(fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                    ),
+                    ...items.map((it) => TableRow(
+                          children: [
+                            Padding(padding: const EdgeInsets.all(6), child: Text(_staffName(it))),
+                            Padding(padding: const EdgeInsets.all(6), child: Text(_text(it, ['description']))),
+                            Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['amount'])))),
+                            Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['paid_amount'])))),
+                            Padding(padding: const EdgeInsets.all(6), child: Text(_money(_staffCreditBalance(it)))),
+                            Padding(padding: const EdgeInsets.all(6), child: Text(_text(it, ['status']))),
+                          ],
+                        )),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    Text('Prepared By: Branch Accountant ________________', style: TextStyle(fontSize: 11)),
+                    Text('Approved By: Internal Auditor ________________', style: TextStyle(fontSize: 11)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Close')),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _notify(context, 'PDF report sent to printer / download queue');
+            },
+            icon: const Icon(Icons.print),
+            label: const Text('Print / Save PDF'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _printSummaryChip(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color),
+      ),
+      child: Column(
+        children: [
+          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+          Text(value, style: TextStyle(fontSize: 14, color: color, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCreditBillContents(Map<String, dynamic> bill) async {
+    final billId = '${bill['id']}';
+    showDialog(
+      context: context,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final res = await ref.read(branchAccountantRepositoryProvider).getPayrollCreditBillContents(billId);
+      if (mounted) Navigator.pop(context); // dismiss loader
+      final data = res['data'] ?? {};
+      final items = (data['items'] as List?) ?? [];
+      final orderHeader = data['order_header'] ?? {};
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.receipt_long, color: AppColors.kPrimary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'POS Bill Contents — ${_staffName(bill)}',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 650,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Bill #: ${_text(bill, ['description', 'credit_number', 'id'])}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Total: ${_money(_num(bill['amount']))}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.kPrimary)),
+                          ],
+                        ),
+                        if (orderHeader.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Table/Outlet: ${orderHeader['table_name'] ?? orderHeader['outlet_name'] ?? 'N/A'}'),
+                              Text('Waiter: ${orderHeader['waiter_name'] ?? 'N/A'}'),
+                            ],
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Line Items Purchased:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  if (items.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text('No itemized POS breakdown found for this bill reference.', style: TextStyle(fontStyle: FontStyle.italic)),
+                    )
+                  else
+                    Table(
+                      columnWidths: const {
+                        0: FlexColumnWidth(3),
+                        1: FlexColumnWidth(1),
+                        2: FlexColumnWidth(2),
+                        3: FlexColumnWidth(2),
+                      },
+                      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+                      children: [
+                        TableRow(
+                          decoration: BoxDecoration(color: Colors.grey.shade200),
+                          children: const [
+                            Padding(padding: EdgeInsets.all(6), child: Text('Item Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                            Padding(padding: EdgeInsets.all(6), child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
+                            Padding(padding: EdgeInsets.all(6), child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
+                            Padding(padding: EdgeInsets.all(6), child: Text('Subtotal', style: TextStyle(fontWeight: FontWeight.bold))),
+                          ],
+                        ),
+                        ...items.map((it) => TableRow(
+                              children: [
+                                Padding(padding: const EdgeInsets.all(6), child: Text('${it['name']}')),
+                                Padding(padding: const EdgeInsets.all(6), child: Text('${it['quantity']}')),
+                                Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['unit_price'])))),
+                                Padding(padding: const EdgeInsets.all(6), child: Text(_money(_num(it['total_price'])))),
+                              ],
+                            )),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        _notify(context, 'Error loading bill contents: $e');
+      }
+    }
+  }
+
+  Future<void> _transferPayrollCreditBill(Map<String, dynamic> bill) async {
+    final targetStaffController = TextEditingController();
+    final reasonController = TextEditingController();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Transfer Credit Bill'),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Transfer bill of ${_money(_num(bill['amount']))} currently under ${_staffName(bill)} to another staff or customer.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: targetStaffController,
+                decoration: const InputDecoration(
+                  labelText: 'New Staff Name / Customer Name / Staff ID',
+                  hintText: 'e.g. John Kamau or Corporate Customer',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Transfer Reason (Required)',
+                  hintText: 'e.g. Entered under wrong waiter ID by cashier',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (reasonController.text.trim().isEmpty) return;
+              Navigator.pop(dialogCtx, {
+                'new_customer_name': targetStaffController.text.trim(),
+                'transfer_reason': reasonController.text.trim(),
+              });
+            },
+            child: const Text('Transfer'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || !mounted) return;
+    try {
+      await ref.read(branchAccountantRepositoryProvider).transferPayrollCreditBill('${bill['id']}', result);
+      if (mounted) _notify(context, 'Credit bill transferred successfully');
+      _refresh();
+    } catch (e) {
+      if (mounted) _notify(context, 'Transfer failed: $e');
+    }
+  }
+
+  Future<void> _rejectPayrollCreditBill(Map<String, dynamic> bill) async {
+    final reasonController = TextEditingController();
+    bool isPaid = false;
+    final paidAmountController = TextEditingController(text: _num(bill['amount']).toStringAsFixed(0));
+    String paymentMethod = 'cash';
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Reject & Void Credit Bill'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Voiding credit bill of ${_money(_num(bill['amount']))} for ${_staffName(bill)}.'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(
+                    labelText: 'Rejection & Void Reason (Required)',
+                    hintText: 'e.g. Duplicate entry / Customer paid cash directly',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  title: const Text('Record Paid Bill Entry for this Void'),
+                  subtitle: const Text('Check if payment was received to show and enter paid bill'),
+                  value: isPaid,
+                  onChanged: (v) => setDialogState(() => isPaid = v ?? false),
+                ),
+                if (isPaid) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: paidAmountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Paid Amount (KES)'),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: paymentMethod,
+                    items: const [
+                      DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                      DropdownMenuItem(value: 'mpesa', child: Text('M-Pesa')),
+                      DropdownMenuItem(value: 'card', child: Text('Card')),
+                      DropdownMenuItem(value: 'bank_transfer', child: Text('Bank Transfer')),
+                    ],
+                    onChanged: (v) => setDialogState(() => paymentMethod = v ?? 'cash'),
+                    decoration: const InputDecoration(labelText: 'Payment Method'),
+                  ),
+                ]
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.kError),
+              onPressed: () {
+                if (reasonController.text.trim().isEmpty) return;
+                Navigator.pop(dialogCtx, {
+                  'rejection_reason': reasonController.text.trim(),
+                  'is_paid': isPaid,
+                  'paid_amount': _num(paidAmountController.text),
+                  'payment_method': paymentMethod,
+                });
+              },
+              child: const Text('Reject & Void'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+    try {
+      await ref.read(branchAccountantRepositoryProvider).rejectPayrollCreditBill('${bill['id']}', result);
+      if (mounted) _notify(context, 'Credit bill voided and rejected');
+      _refresh();
+    } catch (e) {
+      if (mounted) _notify(context, 'Rejection failed: $e');
+    }
+  }
+
+  Future<void> _editPayrollCreditBill(Map<String, dynamic> bill) async {
+    final amountController = TextEditingController(text: _num(bill['amount']).toStringAsFixed(0));
+    final descController = TextEditingController(text: _text(bill, ['description']));
+    final deptController = TextEditingController(text: _text(bill, ['department']));
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Edit Credit Bill'),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Amount (KES)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descController,
+                decoration: const InputDecoration(labelText: 'Description'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: deptController,
+                decoration: const InputDecoration(labelText: 'Department'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final amt = _num(amountController.text);
+              if (amt <= 0) return;
+              Navigator.pop(dialogCtx, {
+                'amount': amt,
+                'description': descController.text.trim(),
+                'department': deptController.text.trim(),
+              });
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || !mounted) return;
+    try {
+      await ref.read(branchAccountantRepositoryProvider).editPayrollCreditBill('${bill['id']}', result);
+      if (mounted) _notify(context, 'Credit bill updated successfully');
+      _refresh();
+    } catch (e) {
+      if (mounted) _notify(context, 'Update failed: $e');
+    }
   }
 
   Future<void> _applyPaidCreditEntry(

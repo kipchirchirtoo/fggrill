@@ -808,9 +808,6 @@ export const getCreditBillPayments = async (req: Request, res: Response, next: N
     }
 };
 
-// @desc    Manually trigger pending bills migration
-// @route   POST /api/payroll/credit-bills/migrate-pending
-// @access  Private (Branch Accountant, Manager)
 export const triggerPendingBillsMigration = async (
     req: Request,
     res: Response,
@@ -833,3 +830,288 @@ export const triggerPendingBillsMigration = async (
         next(error);
     }
 };
+
+// @desc    Get detailed line items and POS order contents for a credit bill
+// @route   GET /api/payroll/credit-bills/:id/contents
+// @access  Private (Branch Accountant, Manager, Auditor)
+export const getCreditBillContents = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+
+        // Fetch bill from staff_credit_bills or credit_bills
+        let { data: staffBill } = await supabase
+            .from('staff_credit_bills')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        let cashierBill: any = null;
+        if (!staffBill) {
+            const { data } = await supabase
+                .from('credit_bills')
+                .select('*')
+                .eq('id', id)
+                .single();
+            cashierBill = data;
+        }
+
+        const targetBill = staffBill || cashierBill;
+        if (!targetBill) {
+            throw new AppError('Credit bill not found', 404);
+        }
+
+        const posBillId = targetBill.pos_bill_id || targetBill.source_cashier_credit_bill_id || targetBill.id;
+
+        // Query pos_master_bills, master_bills, or pos_shift_orders
+        let items: any[] = [];
+        let orderHeader: any = null;
+
+        try {
+            const { data: masterBill } = await supabase
+                .from('pos_master_bills')
+                .select('*, pos_bill_items(*)')
+                .eq('id', posBillId)
+                .single();
+
+            if (masterBill) {
+                orderHeader = masterBill;
+                items = masterBill.pos_bill_items || [];
+            }
+        } catch (_) {}
+
+        if (!items.length) {
+            try {
+                const { data: shiftOrder } = await supabase
+                    .from('pos_shift_orders')
+                    .select('*, items:pos_order_items(*)')
+                    .eq('id', posBillId)
+                    .single();
+
+                if (shiftOrder) {
+                    orderHeader = shiftOrder;
+                    items = shiftOrder.items || [];
+                }
+            } catch (_) {}
+        }
+
+        // Fetch staff profile if linked
+        let staffProfile: any = null;
+        if (targetBill.staff_id) {
+            const { data: sp } = await supabase
+                .from('staff_profiles')
+                .select('*, users(first_name, last_name, employee_id)')
+                .eq('id', targetBill.staff_id)
+                .single();
+            staffProfile = sp;
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                bill: targetBill,
+                order_header: orderHeader,
+                items: items.map((item: any) => ({
+                    id: item.id,
+                    name: item.item_name || item.name || item.description || 'Item',
+                    category: item.category || item.department || 'Food & Beverage',
+                    quantity: item.quantity || item.qty || 1,
+                    unit_price: item.unit_price || item.price || item.amount || 0,
+                    total_price: item.total_price || item.subtotal || (item.quantity * item.unit_price) || 0,
+                    notes: item.notes || item.special_instructions || '',
+                    is_voided: item.is_voided || item.status === 'voided' || false
+                })),
+                staff_profile: staffProfile
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Transfer credit bill to another staff member or customer account
+// @route   POST /api/payroll/credit-bills/:id/transfer
+// @access  Private (Branch Accountant, Manager)
+export const transferCreditBill = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { new_staff_id, new_customer_name, transfer_reason } = req.body;
+
+        if (!transfer_reason || !transfer_reason.trim()) {
+            throw new AppError('Transfer reason is mandatory', 400);
+        }
+
+        let newStaffName = new_customer_name;
+        let newStaffObj: any = null;
+
+        if (new_staff_id) {
+            const { data: sp } = await supabase
+                .from('staff_profiles')
+                .select('*, users(first_name, last_name)')
+                .eq('id', new_staff_id)
+                .single();
+            if (sp) {
+                newStaffObj = sp;
+                newStaffName = sp.users
+                    ? `${sp.users.first_name || ''} ${sp.users.last_name || ''}`.trim()
+                    : `${sp.first_name || ''} ${sp.last_name || ''}`.trim();
+            }
+        }
+
+        const updateData: any = {
+            updated_at: new Date().toISOString()
+        };
+        if (new_staff_id) updateData.staff_id = new_staff_id;
+        if (newStaffName) updateData.staff_name = newStaffName;
+
+        // Update staff_credit_bills
+        const { data: updatedStaffBill, error: staffErr } = await supabase
+            .from('staff_credit_bills')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        // Update credit_bills if present
+        await supabase
+            .from('credit_bills')
+            .update(updateData)
+            .eq('id', id);
+
+        const actorId = (req as any).user?.id || null;
+
+        // Log transfer in payments/audit history
+        try {
+            await supabase.from('staff_credit_bill_payments').insert({
+                credit_bill_id: id,
+                amount: 0,
+                payment_method: 'transfer',
+                payment_date: new Date().toISOString().split('T')[0],
+                notes: `Transferred to ${newStaffName || new_staff_id}. Reason: ${transfer_reason.trim()}`,
+                recorded_by: actorId
+            });
+        } catch (_) {}
+
+        res.status(200).json({
+            success: true,
+            message: `Credit bill transferred to ${newStaffName || 'new target'} successfully`,
+            data: updatedStaffBill || updateData
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Reject and void credit bill with mandatory reason and optional paid bill entry
+// @route   PATCH /api/payroll/credit-bills/:id/reject
+// @access  Private (Branch Accountant, Manager)
+export const rejectCreditBill = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { rejection_reason, is_paid, paid_amount, payment_method } = req.body;
+
+        if (!rejection_reason || !rejection_reason.trim()) {
+            throw new AppError('Rejection reason is required', 400);
+        }
+
+        const actorId = (req as any).user?.id || null;
+        const voidedAt = new Date().toISOString();
+
+        // Fetch bill
+        const { data: bill, error: fetchErr } = await supabase
+            .from('staff_credit_bills')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        const updatePayload = {
+            status: 'cancelled',
+            rejection_reason: rejection_reason.trim(),
+            rejected_at: voidedAt,
+            rejected_by: actorId,
+            balance: 0
+        };
+
+        const { data: updatedBill, error: updateErr } = await supabase
+            .from('staff_credit_bills')
+            .update(updatePayload)
+            .eq('id', id)
+            .select()
+            .single();
+
+        await syncLinkedCashierCreditBill(bill?.source_cashier_credit_bill_id || id, {
+            status: 'voided',
+            approval_status: 'rejected'
+        });
+
+        // Record Paid Bill entry if payment was received upon rejection
+        let paidEntry: any = null;
+        if (is_paid || (paid_amount && Number(paid_amount) > 0)) {
+            const payAmt = Number(paid_amount) || Number(bill?.amount || 0);
+            try {
+                const { data: pData } = await supabase.from('staff_credit_bill_payments').insert({
+                    credit_bill_id: id,
+                    amount: payAmt,
+                    payment_method: payment_method || 'cash',
+                    payment_date: new Date().toISOString().split('T')[0],
+                    notes: `Paid entry recorded upon credit bill rejection/void: ${rejection_reason.trim()}`,
+                    recorded_by: actorId
+                }).select().single();
+                paidEntry = pData;
+            } catch (pErr) {
+                logger.warn('Failed recording paid bill entry on rejection:', pErr);
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Credit bill voided and rejected successfully',
+            data: {
+                bill: updatedBill,
+                paid_entry: paidEntry
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Edit credit bill details (amount, description, bill date)
+// @route   PUT /api/payroll/credit-bills/:id
+// @access  Private (Branch Accountant, Manager)
+export const editCreditBill = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { amount, description, bill_date, department } = req.body;
+
+        const updateData: any = {};
+        if (amount !== undefined) {
+            const parsedAmt = Number(amount);
+            if (isNaN(parsedAmt) || parsedAmt <= 0) throw new AppError('Amount must be positive', 400);
+            updateData.amount = parsedAmt;
+            updateData.balance = parsedAmt;
+        }
+        if (description !== undefined) updateData.description = description.trim();
+        if (bill_date !== undefined) updateData.bill_date = bill_date;
+        if (department !== undefined) updateData.department = department.trim();
+
+        const { data: updatedBill, error } = await supabase
+            .from('staff_credit_bills')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        await syncLinkedCashierCreditBill(updatedBill.source_cashier_credit_bill_id, updateData);
+
+        res.status(200).json({
+            success: true,
+            message: 'Credit bill updated successfully',
+            data: updatedBill
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
