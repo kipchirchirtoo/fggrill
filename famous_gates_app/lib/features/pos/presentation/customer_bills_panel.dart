@@ -42,11 +42,54 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
   bool _combineMode = false;
   // Order ids selected for combining, keyed for quick toggle.
   final Set<String> _selectedOrderIds = {};
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<ConsolidatedBill> get _visibleBills {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _bills;
+
+    return _bills.where((bill) {
+      final label = bill.label.toLowerCase();
+      final masterNum = (bill.masterBillNumber ?? '').toLowerCase();
+      final customer = bill.customerName.toLowerCase();
+      final waiter = (bill.waiterName ?? '').toLowerCase();
+      final table = (bill.tableNumber ?? '').toLowerCase();
+
+      final matchesGeneral = label.contains(query) ||
+          label.endsWith(query) ||
+          masterNum.contains(query) ||
+          masterNum.endsWith(query) ||
+          customer.contains(query) ||
+          waiter.contains(query) ||
+          table.contains(query);
+
+      if (matchesGeneral) return true;
+
+      for (final order in bill.orders) {
+        final orderNum = order.orderNumber.toLowerCase();
+        final shortCode = (order.shortCode ?? '').toLowerCase();
+        if (orderNum.contains(query) ||
+            orderNum.endsWith(query) ||
+            shortCode.contains(query) ||
+            shortCode.endsWith(query)) {
+          return true;
+        }
+      }
+
+      return false;
+    }).toList();
   }
 
   Future<void> _load() async {
@@ -159,16 +202,55 @@ class _CustomerBillsPanelState extends ConsumerState<_CustomerBillsPanel> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _errorView()
-              : _bills.isEmpty
-                  ? const Center(
-                      child: Text('No open bills across your outlets.',
-                          style: TextStyle(color: Colors.grey)))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _bills.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _billCard(_bills[i], theme),
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText:
+                              'Search by short code (e.g. UR6), bill #, waiter, table, customer...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                    });
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
                     ),
+                    Expanded(
+                      child: _visibleBills.isEmpty
+                          ? Center(
+                              child: Text(
+                                _bills.isEmpty
+                                    ? 'No open bills across your outlets.'
+                                    : 'No matching bills found.',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _visibleBills.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (_, i) =>
+                                  _billCard(_visibleBills[i], theme),
+                            ),
+                    ),
+                  ],
+                ),
       bottomNavigationBar: _combineMode
           ? SafeArea(
               child: Padding(

@@ -804,6 +804,26 @@ async function findOutletPosOrderByReference(
         if (order) break;
     }
 
+    if (!order && normalized.length >= 2) {
+        let suffixQuery = supabase
+            .from('pos_shift_orders')
+            .select('*')
+            .or(`short_code.ilike.%${normalized},order_number.ilike.%${normalized}`)
+            .not('status', 'eq', 'cancelled')
+            .not('payment_status', 'eq', 'voided')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (shiftIds && shiftIds.length > 0) {
+            suffixQuery = suffixQuery.in('shift_id', shiftIds);
+        }
+
+        const { data: suffixMatches } = await suffixQuery;
+        if (suffixMatches && suffixMatches.length > 0) {
+            order = suffixMatches[0];
+        }
+    }
+
     if (!order) return null;
 
     let targetOrder = order;

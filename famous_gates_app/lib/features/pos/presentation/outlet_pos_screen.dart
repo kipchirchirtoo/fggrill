@@ -68,6 +68,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   List<OutletShiftOrder> _orders = [];
   OutletShiftOrder? _recalledOrder;
   final _searchController = TextEditingController();
+  final _recentOrdersSearchController = TextEditingController();
   final _tableController = TextEditingController();
   final _roomController = TextEditingController();
   final _customerController = TextEditingController();
@@ -94,6 +95,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
   void dispose() {
     _sessionTimeoutTimer?.cancel();
     _searchController.dispose();
+    _recentOrdersSearchController.dispose();
     _tableController.dispose();
     _roomController.dispose();
     _customerController.dispose();
@@ -657,6 +659,29 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 16),
+            TextField(
+              controller: _recentOrdersSearchController,
+              decoration: InputDecoration(
+                hintText: 'Search bill by last digits/code (e.g. UR6, 002), order #, waiter, table...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _recentOrdersSearchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            _recentOrdersSearchController.clear();
+                          });
+                        },
+                      )
+                    : null,
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
             const SizedBox(height: 12),
             for (final order in _visibleOrders)
               Card(
@@ -2526,7 +2551,28 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
         final isVoided =
             order.status == 'voided' || order.paymentStatus == 'voided';
         final isZeroed = order.totalAmount <= 0;
-        return !(isVoided && isZeroed);
+        if (isVoided && isZeroed) return false;
+
+        final query = _recentOrdersSearchController.text.trim().toLowerCase();
+        if (query.isNotEmpty) {
+          final orderNum = order.orderNumber.toLowerCase();
+          final shortCode = (order.shortCode ?? '').toLowerCase();
+          final customer = (order.customerName ?? '').toLowerCase();
+          final waiter = (order.waiterName ?? '').toLowerCase();
+          final table = (order.tableNumber ?? '').toLowerCase();
+          final room = (order.roomNumber ?? '').toLowerCase();
+
+          return orderNum.contains(query) ||
+              orderNum.endsWith(query) ||
+              shortCode.contains(query) ||
+              shortCode.endsWith(query) ||
+              customer.contains(query) ||
+              waiter.contains(query) ||
+              table.contains(query) ||
+              room.contains(query);
+        }
+
+        return true;
       }).toList();
 
   List<OutletShiftOrder> get _mergeableOrders =>
