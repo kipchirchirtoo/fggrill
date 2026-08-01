@@ -368,7 +368,6 @@ export async function recordHotelCashierPayment(
       }
     }
 
-    const purpose = String(input.paymentPurpose || '').trim().toLowerCase();
     const paymentReference = String(input.reference || '').trim() ||
       (purpose === 'booking_deposit'
         ? `DEP-${context.confirmationNumber || context.reservationId}-${Date.now()}`
