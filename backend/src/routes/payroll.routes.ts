@@ -19,7 +19,11 @@ import {
   partialPayCreditBill,
   getCreditBillPayments,
   getCashierPaidCreditEntries,
-  applyCashierPaidCreditEntry
+  applyCashierPaidCreditEntry,
+  getCreditBillContents,
+  transferCreditBill,
+  rejectCreditBill,
+  editCreditBill
 } from '../controllers/credit-bills.controller';
 import { getLoans, createLoan, approveLoan, rejectLoan, recordLoanPayment } from '../controllers/loans.controller';
 import { getAdvances, createAdvance, approveAdvance, rejectAdvance } from '../controllers/advances.controller';
@@ -152,6 +156,30 @@ router.get(
   '/credit-bills/:id/payments',
   authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
   getCreditBillPayments
+);
+
+router.get(
+  '/credit-bills/:id/contents',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.AUDITOR]),
+  getCreditBillContents
+);
+
+router.post(
+  '/credit-bills/:id/transfer',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  transferCreditBill
+);
+
+router.patch(
+  '/credit-bills/:id/reject',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  rejectCreditBill
+);
+
+router.put(
+  '/credit-bills/:id',
+  authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT]),
+  editCreditBill
 );
 
 // Staff Loans
