@@ -134,7 +134,7 @@ async function loadEligibleInHouseGuests(branchId: number, queryStr: string) {
       // balance and the remainder stays outstanding on the room bill.
       const reservationPaid = Number(row?.amount_paid || 0);
       const folioPayments = Number(folio?.total_payments || 0);
-      const totalPaid = reservationPaid + folioPayments;
+      const totalPaid = Math.max(reservationPaid, folioPayments);
       const folioBalance = Math.max(0, roomGross + folioPosCharges - totalPaid);
 
       return {

@@ -256,7 +256,7 @@ async function loadReservationFinancialContextWithClient(
     ? Math.max(money(reservation.amount_paid), money(reservation.deposit_amount))
     : money(reservation.amount_paid);
   const totalCharges = roomCharges + foodCharges + beverageCharges + otherCharges;
-  const totalPaid = reservationBasePaid + folioPayments;
+  const totalPaid = Math.max(reservationBasePaid, folioPayments);
   const outstandingBalance = Math.max(0, totalCharges - totalPaid);
 
   return {

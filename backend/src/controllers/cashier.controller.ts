@@ -4268,7 +4268,7 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 ? (() => {
                     let arInvoiceQuery = supabase
                         .from('accounting_ar_invoices')
-                        .select('id, invoice_number, branch_id, notes, total_amount, balance, created_at, status')
+                        .select('id, invoice_number, branch_id, notes, total, balance, created_at, status')
                         .neq('status', 'paid')
                         .order('created_at', { ascending: false });
 
@@ -4331,9 +4331,9 @@ export const getUnpaidBills = async (req: Request, res: Response, next: NextFunc
                 branch_id: inv.branch_id,
                 bill_type: 'ar_invoice',
                 customer_name: inv.notes || 'AR Invoice',
-                total_amount: inv.total_amount,
-                paid_amount: Number(inv.total_amount) - Number(inv.balance),
-                balance_amount: inv.balance,
+                total_amount: Number(inv.total || 0),
+                paid_amount: Number(inv.total || 0) - Number(inv.balance || 0),
+                balance_amount: Number(inv.balance || 0),
                 bill_date: inv.created_at,
                 status: inv.status,
                 is_invoice: true

@@ -6295,20 +6295,21 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
     }
     const staffIds = Array.from(staffIdsSet);
 
-    // 2. Query staff_credit_bills
+    // 2. Query staff_credit_bills (Approved & valid credit bills)
     const staffIdFilter = staffIds.map(id => `staff_id.eq.${id}`).join(',');
 
     const { data: staffBills, error: staffErr } = await supabase
       .from('staff_credit_bills')
       .select('*')
       .or(staffIdFilter)
+      .neq('status', 'rejected')
       .order('created_at', { ascending: false });
 
     if (staffErr) {
       logger.warn('staff_credit_bills query error in getMyStaffCreditBills:', staffErr.message);
     }
 
-    // 3. Query credit_bills
+    // 3. Query credit_bills (Approved & valid credit bills)
     let cashierFilter = staffIds.map(id => `staff_id.eq.${id}`).join(',');
     if (staffName) {
       cashierFilter += `,customer_name.ilike.%${staffName}%`;
@@ -6320,6 +6321,7 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
         .from('credit_bills')
         .select('*')
         .or(cashierFilter)
+        .neq('status', 'rejected')
         .order('created_at', { ascending: false });
       if (!cbErr && cbData) cashierBills = cbData;
     } catch (_) {}
@@ -6485,6 +6487,7 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
         paid_amount: paid,
         balance: bal,
         status: b.status || 'open',
+        approval_status: b.approval_status || 'approved',
         source: 'staff_credit_bills',
         items: resolveItems(b, amt, b.bill_date || b.created_at),
       };
@@ -6504,6 +6507,7 @@ export const getMyStaffCreditBills = async (req: Request, res: Response, next: N
         paid_amount: paid,
         balance: bal,
         status: b.status || 'open',
+        approval_status: b.approval_status || 'approved',
         source: 'credit_bills',
         items: resolveItems(b, amt, b.bill_date || b.credit_date || b.created_at, b.source_document_number),
       };
