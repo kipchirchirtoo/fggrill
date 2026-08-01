@@ -11217,8 +11217,24 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       final res = await ref.read(branchAccountantRepositoryProvider).getPayrollCreditBillContents(billId);
       if (mounted) Navigator.pop(context); // dismiss loader
       final data = res['data'] ?? {};
-      final items = (data['items'] as List?) ?? [];
+      var items = (data['items'] as List?) ?? [];
       final orderHeader = data['order_header'] ?? {};
+
+      // Fallback item resolution if items list is empty
+      if (items.isEmpty) {
+        final desc = _text(bill, ['description', 'notes', 'credit_number']).isNotEmpty
+            ? _text(bill, ['description', 'notes', 'credit_number'])
+            : 'Cashier Credit Bill Charge';
+        final amt = _num(bill['amount'] ?? bill['total_amount']);
+        items = [
+          {
+            'name': desc,
+            'quantity': 1,
+            'unit_price': amt,
+            'total_price': amt,
+          }
+        ];
+      }
 
       if (!mounted) return;
       showDialog(
