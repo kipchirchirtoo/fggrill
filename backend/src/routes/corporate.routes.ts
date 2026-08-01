@@ -15,13 +15,39 @@ import { UserRole } from '../models/User';
 const router = Router();
 router.use(protect);
 
-// Accountant/Admin routes for managing Corporate Customers
-router.get('/customers', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT] as any), getCorporateCustomers);
-router.post('/customers', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT] as any), createCorporateCustomer);
-router.put('/customers/:id', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT] as any), updateCorporateCustomer);
+// Accountant/Admin/Front-Office/POS routes for fetching Corporate Customers
+router.get('/customers', authorize([
+    UserRole.SUPER_ADMIN, 
+    UserRole.DIRECTOR, 
+    UserRole.GENERAL_MANAGER, 
+    UserRole.BRANCH_MANAGER, 
+    UserRole.ACCOUNTANT,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.FINANCE_MANAGER,
+    UserRole.RECEPTIONIST,
+    UserRole.FRONT_DESK_SUPERVISOR,
+    UserRole.CASHIER,
+    UserRole.RESTAURANT_CASHIER,
+    UserRole.WAITER,
+    UserRole.WAITRESS,
+    UserRole.BARTENDER
+] as any), getCorporateCustomers);
 
-// Cashier route to charge a bill to corporate credit
-router.post('/charge', authorize([UserRole.SUPER_ADMIN, UserRole.GENERAL_MANAGER, UserRole.BRANCH_MANAGER, UserRole.CASHIER] as any), chargeCorporateCredit);
+router.post('/customers', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.FINANCE_MANAGER] as any), createCorporateCustomer);
+router.put('/customers/:id', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT, UserRole.BRANCH_ACCOUNTANT, UserRole.FINANCE_MANAGER] as any), updateCorporateCustomer);
+
+// Cashier & Receptionist route to charge a bill to corporate credit
+router.post('/charge', authorize([
+    UserRole.SUPER_ADMIN, 
+    UserRole.DIRECTOR,
+    UserRole.GENERAL_MANAGER, 
+    UserRole.BRANCH_MANAGER, 
+    UserRole.ACCOUNTANT,
+    UserRole.CASHIER,
+    UserRole.RESTAURANT_CASHIER,
+    UserRole.RECEPTIONIST,
+    UserRole.FRONT_DESK_SUPERVISOR
+] as any), chargeCorporateCredit);
 
 // Accountant routes for Invoicing
 router.get('/bills/pending', authorize([UserRole.SUPER_ADMIN, UserRole.DIRECTOR, UserRole.ACCOUNTANT] as any), getPendingCorporateBills);
