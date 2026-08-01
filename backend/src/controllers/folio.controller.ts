@@ -533,36 +533,65 @@ export const updateTransaction = async (req: Request, res: Response, next: NextF
 export const deleteTransaction = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { reservationId, transactionId } = req.params;
-    const folio = await Folio.findByReservationId(reservationId);
+    let folio = await Folio.findByReservationId(reservationId);
+
+    if (!folio) {
+      const { data: fRow } = await supabase
+        .from('folios')
+        .select('*')
+        .or(`reservation_id.eq.${reservationId},booking_id.eq.${reservationId},id.eq.${reservationId}`)
+        .maybeSingle();
+
+      if (fRow) folio = Folio.fromDatabase(fRow);
+    }
+
+    if (!folio && transactionId) {
+      const { data: ftx } = await supabase
+        .from('folio_transactions')
+        .select('folio_id')
+        .eq('id', transactionId)
+        .maybeSingle();
+
+      if (ftx?.folio_id) {
+        const { data: fRow } = await supabase
+          .from('folios')
+          .select('*')
+          .eq('id', ftx.folio_id)
+          .maybeSingle();
+        if (fRow) folio = Folio.fromDatabase(fRow);
+      }
+    }
+
     if (!folio) throw new AppError('Folio not found', 404);
+
+    let deletedAny = false;
 
     // 1. Try transactions table
     const { data: txRow } = await supabase
       .from('transactions')
       .select('*')
       .eq('id', transactionId)
-      .eq('folio_id', folio.id)
       .maybeSingle();
 
     if (txRow) {
       await supabase.from('transactions').delete().eq('id', transactionId);
-    } else {
-      // 2. Try folio_transactions table
-      const { data: ftxRow } = await supabase
-        .from('folio_transactions')
-        .select('*')
-        .eq('id', transactionId)
-        .eq('folio_id', folio.id)
-        .maybeSingle();
+      deletedAny = true;
+    }
 
-      if (ftxRow) {
-        await supabase
-          .from('folio_transactions')
-          .update({ status: 'voided', voided: true, updated_at: new Date() })
-          .eq('id', transactionId);
-      } else {
-        throw new AppError('Transaction not found', 404);
-      }
+    // 2. Try folio_transactions table
+    const { data: ftxRow } = await supabase
+      .from('folio_transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .maybeSingle();
+
+    if (ftxRow) {
+      await supabase.from('folio_transactions').delete().eq('id', transactionId);
+      deletedAny = true;
+    }
+
+    if (!deletedAny) {
+      throw new AppError('Transaction not found', 404);
     }
 
     await recomputeFolioTotals(folio.id, reservationId);
