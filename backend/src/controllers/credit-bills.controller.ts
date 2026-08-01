@@ -838,12 +838,12 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
     try {
         const { id } = req.params;
 
-        // Fetch bill from staff_credit_bills or credit_bills
+        // 1. Fetch bill from staff_credit_bills or credit_bills
         let { data: staffBill } = await supabase
             .from('staff_credit_bills')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         let cashierBill: any = null;
         if (!staffBill) {
@@ -851,7 +851,7 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
                 .from('credit_bills')
                 .select('*')
                 .eq('id', id)
-                .single();
+                .maybeSingle();
             cashierBill = data;
         }
 
@@ -860,66 +860,151 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             throw new AppError('Credit bill not found', 404);
         }
 
-        const posBillId = targetBill.pos_bill_id || targetBill.source_cashier_credit_bill_id || targetBill.id;
+        // Also fetch linked cashier credit_bill if source_cashier_credit_bill_id is present
+        if (targetBill.source_cashier_credit_bill_id && !cashierBill) {
+            const { data: linkedCb } = await supabase
+                .from('credit_bills')
+                .select('*')
+                .eq('id', targetBill.source_cashier_credit_bill_id)
+                .maybeSingle();
+            if (linkedCb) cashierBill = linkedCb;
+        }
 
-        // Query pos_master_bills, master_bills, or pos_shift_orders
-        let items: any[] = [];
+        let rawItems: any[] = [];
         let orderHeader: any = null;
 
-        try {
-            const { data: masterBill } = await supabase
-                .from('pos_master_bills')
-                .select('*, pos_bill_items(*)')
-                .eq('id', posBillId)
-                .single();
+        // 2. Check JSON items stored directly on the bill
+        const directJsonItems = targetBill.items || targetBill.items_snapshot || targetBill.order_items || cashierBill?.items || cashierBill?.items_snapshot;
+        if (Array.isArray(directJsonItems) && directJsonItems.length > 0) {
+            rawItems = directJsonItems;
+        }
 
-            if (masterBill) {
-                orderHeader = masterBill;
-                items = masterBill.pos_bill_items || [];
-            }
-        } catch (_) {}
+        const billAmt = Number(targetBill.amount || targetBill.total_amount || 0);
+        const posBillId = targetBill.source_pos_order_id || targetBill.pos_bill_id || targetBill.id;
+        const billDocNo = targetBill.source_document_number || targetBill.bill_number;
+        const crdMatch = (targetBill.description || '').match(/CRD-[\w-]+/)?.[0];
 
-        if (!items.length) {
+        // 3. Query pos_shift_orders for attached order details
+        if (!rawItems.length) {
             try {
-                const { data: shiftOrder } = await supabase
+                let shiftOrder: any = null;
+
+                // 3a. Match by posBillId or staff_credit_bill_id
+                const { data: matchedById } = await supabase
                     .from('pos_shift_orders')
                     .select('*, items:pos_order_items(*)')
-                    .eq('id', posBillId)
-                    .single();
+                    .or(`id.eq.${posBillId},staff_credit_bill_id.eq.${targetBill.id}`)
+                    .maybeSingle();
+
+                if (matchedById) shiftOrder = matchedById;
+
+                // 3b. Match by document / CRD order number
+                if (!shiftOrder && (billDocNo || crdMatch)) {
+                    const docFilter = [billDocNo, crdMatch].filter(Boolean).map(d => `order_number.eq.${d},short_code.eq.${d}`).join(',');
+                    const { data: matchedByDoc } = await supabase
+                        .from('pos_shift_orders')
+                        .select('*, items:pos_order_items(*)')
+                        .or(docFilter)
+                        .maybeSingle();
+                    if (matchedByDoc) shiftOrder = matchedByDoc;
+                }
+
+                // 3c. Fuzzy match by staff waiter ID + amount
+                if (!shiftOrder && targetBill.staff_id && billAmt > 0) {
+                    const { data: candidates } = await supabase
+                        .from('pos_shift_orders')
+                        .select('*, items:pos_order_items(*)')
+                        .eq('waiter_id', targetBill.staff_id)
+                        .order('created_at', { ascending: false })
+                        .limit(20);
+
+                    if (candidates && candidates.length > 0) {
+                        const bTime = new Date(targetBill.created_at || targetBill.bill_date || Date.now()).getTime();
+                        shiftOrder = candidates.find(c => {
+                            const cAmt = Number(c.total_amount || 0);
+                            const cTime = new Date(c.created_at || 0).getTime();
+                            return Math.abs(cAmt - billAmt) <= 2 && Math.abs(cTime - bTime) <= 48 * 3600 * 1000;
+                        }) || null;
+                    }
+                }
 
                 if (shiftOrder) {
                     orderHeader = shiftOrder;
-                    items = shiftOrder.items || [];
+                    if (Array.isArray(shiftOrder.items) && shiftOrder.items.length > 0) {
+                        rawItems = shiftOrder.items;
+                    } else if (typeof shiftOrder.items === 'string') {
+                        try { rawItems = JSON.parse(shiftOrder.items); } catch (_) {}
+                    }
                 }
             } catch (_) {}
         }
 
-        // Fetch staff profile if linked
+        // 4. Query pos_master_bills if still empty
+        if (!rawItems.length) {
+            try {
+                const { data: masterBill } = await supabase
+                    .from('pos_master_bills')
+                    .select('*, pos_bill_items(*)')
+                    .eq('id', posBillId)
+                    .maybeSingle();
+
+                if (masterBill) {
+                    orderHeader = masterBill;
+                    rawItems = masterBill.pos_bill_items || [];
+                }
+            } catch (_) {}
+        }
+
+        // 5. Fallback line items: construct from bill description/notes if no nested items found
+        if (!rawItems.length) {
+            const desc = targetBill.description || targetBill.notes || targetBill.reason || cashierBill?.description || cashierBill?.notes || 'POS Credit Bill Charge';
+            rawItems = [
+                {
+                    id: targetBill.id,
+                    name: desc,
+                    category: targetBill.department || cashierBill?.department || 'Staff Credit',
+                    quantity: 1,
+                    unit_price: billAmt,
+                    total_price: billAmt,
+                    notes: targetBill.status ? `Status: ${targetBill.status}` : ''
+                }
+            ];
+        }
+
+        // 6. Fetch staff profile if linked
         let staffProfile: any = null;
         if (targetBill.staff_id) {
             const { data: sp } = await supabase
                 .from('staff_profiles')
                 .select('*, users(first_name, last_name, employee_id)')
                 .eq('id', targetBill.staff_id)
-                .single();
+                .maybeSingle();
             staffProfile = sp;
         }
+
+        // 7. Format line items consistently
+        const formattedItems = rawItems.map((item: any, idx: number) => {
+            const qty = Number(item.quantity || item.qty || 1);
+            const price = Number(item.unit_price || item.price || item.amount || 0);
+            const total = Number(item.total_price || item.subtotal || item.line_total || (qty * price));
+            return {
+                id: item.id || `${targetBill.id}_${idx}`,
+                name: item.item_name || item.name || item.description || item.title || 'Item',
+                category: item.category || item.department || item.item_group || 'Food & Beverage',
+                quantity: qty,
+                unit_price: price,
+                total_price: total > 0 ? total : (qty * price),
+                notes: item.notes || item.special_instructions || '',
+                is_voided: item.is_voided || item.status === 'voided' || false
+            };
+        });
 
         res.status(200).json({
             success: true,
             data: {
                 bill: targetBill,
                 order_header: orderHeader,
-                items: items.map((item: any) => ({
-                    id: item.id,
-                    name: item.item_name || item.name || item.description || 'Item',
-                    category: item.category || item.department || 'Food & Beverage',
-                    quantity: item.quantity || item.qty || 1,
-                    unit_price: item.unit_price || item.price || item.amount || 0,
-                    total_price: item.total_price || item.subtotal || (item.quantity * item.unit_price) || 0,
-                    notes: item.notes || item.special_instructions || '',
-                    is_voided: item.is_voided || item.status === 'voided' || false
-                })),
+                items: formattedItems,
                 staff_profile: staffProfile
             }
         });
