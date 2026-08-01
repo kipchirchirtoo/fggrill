@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { applyBranchFilter } from '../utils/branchIsolation';
 import { AppError } from '../middleware/errorHandler';
+import { logger } from '../utils/logger';
 
 // 1. Get Corporate Customers
 export const getCorporateCustomers = async (req: Request, res: Response) => {
@@ -10,12 +11,15 @@ export const getCorporateCustomers = async (req: Request, res: Response) => {
         query = applyBranchFilter(query, req);
         
         const { data, error } = await query;
-        if (error) throw new AppError(error.message, 400);
+        if (error) {
+            logger.warn('Error fetching corporate customers:', error.message);
+            res.json({ success: true, data: [] });
+            return;
+        }
 
-        // Map to include total_unpaid_amount if needed
-        // For simplicity, we just return the raw customers
-        res.json({ success: true, data });
+        res.json({ success: true, data: data || [] });
     } catch (error: any) {
+        logger.error('Failed to get corporate customers:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -44,6 +48,7 @@ export const createCorporateCustomer = async (req: Request, res: Response) => {
         if (error) throw new AppError(error.message, 400);
         res.status(201).json({ success: true, data });
     } catch (error: any) {
+        logger.error('Failed to create corporate customer:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -62,6 +67,7 @@ export const updateCorporateCustomer = async (req: Request, res: Response) => {
 
         res.json({ success: true, data });
     } catch (error: any) {
+        logger.error('Failed to update corporate customer:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -114,19 +120,31 @@ export const chargeCorporateCredit = async (req: Request, res: Response) => {
         if (creditErr) throw new AppError(creditErr.message, 400);
 
         // 2. Update Master Bill to credit_bill and PAYMENT_METHOD to CORPORATE_CREDIT
-        const { error: updateBillErr } = await supabase
-            .from('pos_master_bills')
-            .update({
-                payment_status: 'credit_bill',
-                status: 'credit_bill', // Treated as cleared but on credit
-                payment_method: 'CORPORATE_CREDIT'
-            })
-            .eq('id', pos_bill_id);
-            
-        if (updateBillErr) throw new AppError(updateBillErr.message, 400);
+        if (pos_bill_id) {
+            const { error: updateMasterErr } = await supabase
+                .from('pos_master_bills')
+                .update({
+                    payment_status: 'credit_bill',
+                    status: 'credit_bill',
+                    payment_method: 'CORPORATE_CREDIT'
+                })
+                .eq('id', pos_bill_id);
+            if (updateMasterErr) {
+                logger.warn('Failed updating pos_master_bills, trying pos_shift_orders:', updateMasterErr.message);
+                await supabase
+                    .from('pos_shift_orders')
+                    .update({
+                        payment_status: 'credit_bill',
+                        status: 'credit_bill',
+                        payment_method: 'CORPORATE_CREDIT'
+                    })
+                    .eq('id', pos_bill_id);
+            }
+        }
 
         res.json({ success: true, data: creditBill, message: 'Charged to Corporate Credit' });
     } catch (error: any) {
+        logger.error('Failed to charge corporate credit:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -139,17 +157,33 @@ export const getPendingCorporateBills = async (req: Request, res: Response) => {
             .select(`
                 *,
                 corporate_customers(name),
-                pos_master_bills(bill_number)
+                pos_master_bills:pos_bill_id(bill_number)
             `)
             .eq('status', 'UNINVOICED')
             .order('created_at', { ascending: false });
             
         query = applyBranchFilter(query, req);
-        const { data, error } = await query;
-        if (error) throw new AppError(error.message, 400);
+        let { data, error } = await query;
+        if (error) {
+            logger.warn('Embedded query failed for corporate_credit_bills, trying plain select:', error.message);
+            let fallbackQuery = supabase
+                .from('corporate_credit_bills')
+                .select('*, corporate_customers(name)')
+                .eq('status', 'UNINVOICED')
+                .order('created_at', { ascending: false });
+            fallbackQuery = applyBranchFilter(fallbackQuery, req);
+            const fallbackRes = await fallbackQuery;
+            if (fallbackRes.error) {
+                logger.warn('Fallback query also failed for corporate_credit_bills:', fallbackRes.error.message);
+                res.json({ success: true, data: [] });
+                return;
+            }
+            data = fallbackRes.data || [];
+        }
 
-        res.json({ success: true, data });
+        res.json({ success: true, data: data || [] });
     } catch (error: any) {
+        logger.error('Failed to get pending corporate bills:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -219,6 +253,7 @@ export const generateCorporateInvoice = async (req: Request, res: Response) => {
 
         res.status(201).json({ success: true, data: invoice });
     } catch (error: any) {
+        logger.error('Failed to generate corporate invoice:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -235,11 +270,26 @@ export const getCorporateInvoices = async (req: Request, res: Response) => {
             .order('created_at', { ascending: false });
             
         query = applyBranchFilter(query, req);
-        const { data, error } = await query;
-        if (error) throw new AppError(error.message, 400);
+        let { data, error } = await query;
+        if (error) {
+            logger.warn('Embedded query failed for corporate_invoices, trying plain select:', error.message);
+            let fallbackQuery = supabase
+                .from('corporate_invoices')
+                .select('*')
+                .order('created_at', { ascending: false });
+            fallbackQuery = applyBranchFilter(fallbackQuery, req);
+            const fallbackRes = await fallbackQuery;
+            if (fallbackRes.error) {
+                logger.warn('Fallback query also failed for corporate_invoices:', fallbackRes.error.message);
+                res.json({ success: true, data: [] });
+                return;
+            }
+            data = fallbackRes.data || [];
+        }
 
-        res.json({ success: true, data });
+        res.json({ success: true, data: data || [] });
     } catch (error: any) {
+        logger.error('Failed to get corporate invoices:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };
@@ -281,6 +331,7 @@ export const payCorporateInvoice = async (req: Request, res: Response) => {
 
         res.json({ success: true, data: updatedInvoice });
     } catch (error: any) {
+        logger.error('Failed to pay corporate invoice:', error);
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
 };

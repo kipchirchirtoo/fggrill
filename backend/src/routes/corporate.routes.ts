@@ -23,7 +23,22 @@ const corporateAccountants = [
     UserRole.ACCOUNTANT,
     UserRole.BRANCH_ACCOUNTANT,
     UserRole.FINANCE_MANAGER,
-    UserRole.AUDITOR
+    UserRole.AUDITOR,
+    UserRole.BRANCH_OPERATIONS_MANAGER,
+    UserRole.CENTRAL_OPERATIONS_MANAGER,
+    UserRole.CASHIER,
+    UserRole.RESTAURANT_CASHIER,
+    UserRole.MAIN_BAR_CASHIER,
+    UserRole.EXECUTIVE_BAR_CASHIER,
+    UserRole.NON_CONSUMABLES_CASHIER,
+    UserRole.KYOGONG_SPA_CASHIER,
+    UserRole.KYOGONG_EXECUTIVE_BAR_CASHIER,
+    UserRole.KYOGONG_SPORTS_BAR_CASHIER,
+    UserRole.KYOGONG_RECEPTION_CASHIER,
+    UserRole.CHOMA_ZONE_CASHIER,
+    UserRole.NIGHT_AUDITOR,
+    UserRole.RECEPTIONIST,
+    UserRole.FRONT_DESK_SUPERVISOR
 ];
 
 // Accountant/Admin/Front-Office/POS routes for fetching Corporate Customers
