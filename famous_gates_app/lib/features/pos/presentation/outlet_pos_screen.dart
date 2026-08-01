@@ -482,7 +482,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
                   hintText: 'Search menu items',
                 ),
               ),
-              if (_isRestaurant) ...[
+              if (_canRequestKitchenVoid) ...[
                 const SizedBox(height: 12),
                 _OrderContextPanel(
                   orderType: _orderType,
@@ -1954,7 +1954,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               shiftId: _shift!.id,
               items: _cart,
               customerName: _orderCustomerLabel(),
-              orderType: _isRestaurant ? _orderType : null,
+              orderType: _canRequestKitchenVoid ? _orderType : null,
               tableNumber: _tableController.text.trim(),
               roomNumber: _roomController.text.trim(),
             )
@@ -1963,14 +1963,14 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
               orderId: recalled.id,
               items: _cart,
               customerName: _orderCustomerLabel(),
-              orderType: _isRestaurant ? _orderType : null,
+              orderType: _canRequestKitchenVoid ? _orderType : null,
               tableNumber: _tableController.text.trim(),
               roomNumber: _roomController.text.trim(),
               appendItems: true,
             );
       if (_printBillImmediately) {
         if (recalled == null) {
-          if (_isRestaurant) {
+          if (_canRequestKitchenVoid) {
             // Restaurant new order: print the customer bill only.
             // The captain order goes to the KDS which polls every 5 s and
             // prints it on the kitchen printer — printing it here too would
@@ -2268,7 +2268,7 @@ class _OutletPOSScreenState extends ConsumerState<OutletPOSScreen> {
       builder: (context) => _BillDetailSheet(
         order: order,
         shiftId: _shift!.id,
-        isRestaurant: _isRestaurant,
+        isRestaurant: _canRequestKitchenVoid,
         onPrintOriginal: () {
           Navigator.of(context).pop();
           _printOriginalBill(order);

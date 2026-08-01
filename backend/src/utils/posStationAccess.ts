@@ -17,12 +17,7 @@ const KYOGONG_RESTAURANT_RECEPTION_ROLES = new Set([
 ]);
 
 export const POS_STATION_CASHIER_ROLE_TYPES: Record<string, string[]> = {
-  // Choma Zone AND the Non-consumables outlet run under the restaurant station:
-  // they open/run alongside the restaurant shift, and their bills are cleared by
-  // the restaurant cashier (and the Kyogong receptionist, which resolves to
-  // restaurant_cashier). Non-consumables (retail: car wash, dog food, etc.) is
-  // not food/kitchen — it never routes to the KDS — but the restaurant cashier
-  // still settles its bills at the same station.
+  choma_zone_cashier: ['choma_zone'],
   restaurant_cashier: ['restaurant', 'choma_zone', 'non_consumables'],
   main_bar_cashier: ['main_bar', 'kyogong_sports_bar'],
   executive_bar_cashier: ['executive_bar', 'kyogong_executive_bar'],
@@ -31,7 +26,6 @@ export const POS_STATION_CASHIER_ROLE_TYPES: Record<string, string[]> = {
   kyogong_spa_cashier: ['kyogong_spa'],
   kyogong_executive_bar_cashier: ['executive_bar', 'kyogong_executive_bar'],
   kyogong_sports_bar_cashier: ['main_bar', 'kyogong_sports_bar'],
-  choma_zone_cashier: ['choma_zone']
 };
 
 const EXPLICIT_ASSIGNMENT_CASHIER_ROLES = new Set([
