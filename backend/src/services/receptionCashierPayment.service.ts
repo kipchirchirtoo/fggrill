@@ -230,8 +230,7 @@ async function loadReservationFinancialContextWithClient(
         r.deposit_paid,
         rm.room_number,
         TRIM(CONCAT(COALESCE(g.first_name, ''), ' ', COALESCE(g.last_name, ''))) AS guest_name,
-        b.total_amount AS booking_total_amount,
-        b.total_price AS booking_total_price
+        b.total_amount AS booking_total_amount
       FROM reservations r
       LEFT JOIN rooms rm ON rm.id = r.room_id
       LEFT JOIN guests g ON g.id = r.guest_id
@@ -250,10 +249,7 @@ async function loadReservationFinancialContextWithClient(
 
   const folio = await ensureFolio(client, reservation);
 
-  const bookingTotal = Math.max(
-    money(reservation.booking_total_amount),
-    money(reservation.booking_total_price)
-  );
+  const bookingTotal = money(reservation.booking_total_amount);
   const roomCharges = Math.max(
     money(reservation.total_amount),
     bookingTotal,
