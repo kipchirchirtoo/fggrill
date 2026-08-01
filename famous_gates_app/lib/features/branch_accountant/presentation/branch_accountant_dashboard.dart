@@ -11220,19 +11220,6 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
       var items = (data['items'] as List?) ?? [];
       final orderHeader = data['order_header'] ?? {};
 
-      // Fallback item resolution if items list is empty
-      if (items.isEmpty) {
-        final amt = _num(bill['amount'] ?? bill['total_amount']);
-        items = [
-          {
-            'name': 'Food & Beverage Staff Credit Order',
-            'quantity': 1,
-            'unit_price': amt,
-            'total_price': amt,
-          }
-        ];
-      }
-
       if (!mounted) return;
       showDialog(
         context: context,
@@ -11288,9 +11275,35 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
                   const Text('Line Items Purchased:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 8),
                   if (items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Text('No itemized POS breakdown found for this bill reference.', style: TextStyle(fontStyle: FontStyle.italic)),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        border: Border.all(color: Colors.amber.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.amber.shade800),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Summary Credit Bill Entry',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'This bill was logged as a shift credit tab without individual cart itemization. Total Amount: ${_money(_num(bill['amount']))}',
+                                  style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     )
                   else
                     Table(

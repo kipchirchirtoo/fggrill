@@ -1002,6 +1002,43 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             } catch (_) {}
         }
 
+        // 4.5. Query cashier_shifts table for credit_bills_details
+        if (!rawItems || !rawItems.length) {
+            const shiftIdToSearch = targetBill.shift_id || targetBill.source_pos_shift_id || cashierBill?.shift_id || cashierBill?.source_pos_shift_id;
+            if (shiftIdToSearch) {
+                try {
+                    const { data: shiftRow } = await supabase
+                        .from('cashier_shifts')
+                        .select('credit_bills_details, sales_breakdown')
+                        .eq('id', shiftIdToSearch)
+                        .maybeSingle();
+
+                    if (shiftRow) {
+                        const details = Array.isArray(shiftRow.credit_bills_details)
+                            ? shiftRow.credit_bills_details
+                            : (shiftRow.sales_breakdown?.credit_bills_details || []);
+
+                        const matchedEntry = (details || []).find((b: any) => {
+                            const bAmt = Number(b.amount || b.total_amount || 0);
+                            const bRef = String(b.reference || b.credit_number || b.id || '');
+                            const bStaff = String(b.staff_id || b.staff_name || b.name || '');
+                            return (crdMatch && bRef.includes(crdMatch)) ||
+                                (targetBill.staff_id && bStaff === String(targetBill.staff_id)) ||
+                                (Math.abs(bAmt - billAmt) <= 1);
+                        });
+
+                        if (matchedEntry && matchedEntry.items) {
+                            if (Array.isArray(matchedEntry.items) && matchedEntry.items.length > 0) {
+                                rawItems = matchedEntry.items;
+                            } else if (typeof matchedEntry.items === 'string') {
+                                try { rawItems = JSON.parse(matchedEntry.items); } catch (_) {}
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+
         // 5. Query restaurant_orders if still empty
         if (!rawItems || !rawItems.length) {
             try {
@@ -1040,22 +1077,6 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
                     rawItems = masterBill.pos_bill_items || [];
                 }
             } catch (_) {}
-        }
-
-        // 7. Clean item name fallback: if no sub-cart items found, use clean Food & Beverage label instead of raw string
-        if (!rawItems || !rawItems.length) {
-            const cleanName = 'Food & Beverage Staff Credit Order';
-            rawItems = [
-                {
-                    id: targetBill.id,
-                    name: cleanName,
-                    category: targetBill.department || cashierBill?.department || 'Food & Beverage',
-                    quantity: 1,
-                    unit_price: billAmt,
-                    total_price: billAmt,
-                    notes: crdMatch ? `Ref: ${crdMatch}` : (targetBill.status ? `Status: ${targetBill.status}` : '')
-                }
-            ];
         }
 
         // 7. Fetch staff profile if linked
