@@ -525,15 +525,15 @@ export const getPricingQuote = async (
       throw new AppError('Check-in date, check-out date, and room type are required', 400);
     }
 
-    const quote = await bookingService.getPricingQuote({
+    const quote = await bookingService.calculatePricing(
       checkInDate,
       checkOutDate,
       roomTypeId,
-      adults: adults || 1,
-      children: children || 0,
+      adults || 1,
+      children || 0,
       mealPlan,
       ratePlanId
-    });
+    );
 
     res.status(200).json({
       success: true,
