@@ -860,63 +860,85 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             throw new AppError('Credit bill not found', 404);
         }
 
-        // Also fetch linked cashier credit_bill if source_cashier_credit_bill_id is present
-        if (targetBill.source_cashier_credit_bill_id && !cashierBill) {
-            const { data: linkedCb } = await supabase
-                .from('credit_bills')
-                .select('*')
-                .eq('id', targetBill.source_cashier_credit_bill_id)
-                .maybeSingle();
-            if (linkedCb) cashierBill = linkedCb;
+        const crdMatch = (targetBill.description || '').match(/CRD-[\w-]+/)?.[0];
+
+        // Also fetch linked cashier credit_bill if source_cashier_credit_bill_id or CRD code is present
+        if (!cashierBill) {
+            if (targetBill.source_cashier_credit_bill_id) {
+                const { data: linkedCb } = await supabase
+                    .from('credit_bills')
+                    .select('*')
+                    .eq('id', targetBill.source_cashier_credit_bill_id)
+                    .maybeSingle();
+                if (linkedCb) cashierBill = linkedCb;
+            }
+            if (!cashierBill && crdMatch) {
+                const { data: linkedCb } = await supabase
+                    .from('credit_bills')
+                    .select('*')
+                    .or(`credit_number.eq.${crdMatch},bill_number.eq.${crdMatch}`)
+                    .maybeSingle();
+                if (linkedCb) cashierBill = linkedCb;
+            }
         }
 
         let rawItems: any[] = [];
         let orderHeader: any = null;
 
-        // 2. Check JSON items stored directly on the bill
-        const directJsonItems = targetBill.items || targetBill.items_snapshot || targetBill.order_items || cashierBill?.items || cashierBill?.items_snapshot;
+        // 2. Check JSON items stored directly on targetBill or cashierBill
+        const directJsonItems = targetBill.items || targetBill.items_snapshot || targetBill.order_items || cashierBill?.items || cashierBill?.items_snapshot || cashierBill?.order_items;
         if (Array.isArray(directJsonItems) && directJsonItems.length > 0) {
             rawItems = directJsonItems;
+        } else if (typeof directJsonItems === 'string') {
+            try { rawItems = JSON.parse(directJsonItems); } catch (_) {}
         }
 
-        const billAmt = Number(targetBill.amount || targetBill.total_amount || 0);
-        const posBillId = targetBill.source_pos_order_id || targetBill.pos_bill_id || targetBill.id;
-        const billDocNo = targetBill.source_document_number || targetBill.bill_number;
-        const crdMatch = (targetBill.description || '').match(/CRD-[\w-]+/)?.[0];
+        const billAmt = Number(targetBill.amount || targetBill.total_amount || cashierBill?.total_amount || cashierBill?.amount || 0);
+        const candidatePosIds = [
+            targetBill.source_pos_order_id,
+            targetBill.pos_bill_id,
+            cashierBill?.source_pos_order_id,
+            cashierBill?.pos_order_id,
+            cashierBill?.order_id
+        ].filter(Boolean);
 
-        // 3. Query pos_shift_orders for attached order details
-        if (!rawItems.length) {
+        const billDocNo = targetBill.source_document_number || targetBill.bill_number || cashierBill?.source_document_number || cashierBill?.bill_number;
+
+        // 3. Query pos_shift_orders with clean .select('*') (no broken relation alias)
+        if (!rawItems || !rawItems.length) {
             try {
                 let shiftOrder: any = null;
 
-                // 3a. Match by posBillId or staff_credit_bill_id
-                const { data: matchedById } = await supabase
-                    .from('pos_shift_orders')
-                    .select('*, items:pos_order_items(*)')
-                    .or(`id.eq.${posBillId},staff_credit_bill_id.eq.${targetBill.id}`)
-                    .maybeSingle();
-
-                if (matchedById) shiftOrder = matchedById;
+                // 3a. Match by candidate POS order IDs or staff_credit_bill_id
+                if (candidatePosIds.length > 0) {
+                    const { data: matchedById } = await supabase
+                        .from('pos_shift_orders')
+                        .select('*')
+                        .or(`id.in.(${candidatePosIds.join(',')}),staff_credit_bill_id.eq.${targetBill.id}`)
+                        .maybeSingle();
+                    if (matchedById) shiftOrder = matchedById;
+                }
 
                 // 3b. Match by document / CRD order number
                 if (!shiftOrder && (billDocNo || crdMatch)) {
-                    const docFilter = [billDocNo, crdMatch].filter(Boolean).map(d => `order_number.eq.${d},short_code.eq.${d}`).join(',');
+                    const searchCodes = [billDocNo, crdMatch].filter(Boolean);
+                    const codeFilter = searchCodes.map(d => `order_number.eq.${d},short_code.eq.${d}`).join(',');
                     const { data: matchedByDoc } = await supabase
                         .from('pos_shift_orders')
-                        .select('*, items:pos_order_items(*)')
-                        .or(docFilter)
+                        .select('*')
+                        .or(codeFilter)
                         .maybeSingle();
                     if (matchedByDoc) shiftOrder = matchedByDoc;
                 }
 
-                // 3c. Fuzzy match by staff waiter ID + amount
+                // 3c. Match by staff waiter ID + amount
                 if (!shiftOrder && targetBill.staff_id && billAmt > 0) {
                     const { data: candidates } = await supabase
                         .from('pos_shift_orders')
-                        .select('*, items:pos_order_items(*)')
+                        .select('*')
                         .eq('waiter_id', targetBill.staff_id)
                         .order('created_at', { ascending: false })
-                        .limit(20);
+                        .limit(25);
 
                     if (candidates && candidates.length > 0) {
                         const bTime = new Date(targetBill.created_at || targetBill.bill_date || Date.now()).getTime();
@@ -924,7 +946,7 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
                             const cAmt = Number(c.total_amount || 0);
                             const cTime = new Date(c.created_at || 0).getTime();
                             return Math.abs(cAmt - billAmt) <= 2 && Math.abs(cTime - bTime) <= 48 * 3600 * 1000;
-                        }) || null;
+                        }) || candidates[0];
                     }
                 }
 
@@ -936,16 +958,19 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
                         try { rawItems = JSON.parse(shiftOrder.items); } catch (_) {}
                     }
                 }
-            } catch (_) {}
+            } catch (err: any) {
+                logger.warn('pos_shift_orders query exception:', err?.message || err);
+            }
         }
 
         // 4. Query pos_master_bills if still empty
-        if (!rawItems.length) {
+        if (!rawItems || !rawItems.length) {
             try {
+                const targetMasterId = candidatePosIds[0] || targetBill.id;
                 const { data: masterBill } = await supabase
                     .from('pos_master_bills')
                     .select('*, pos_bill_items(*)')
-                    .eq('id', posBillId)
+                    .eq('id', targetMasterId)
                     .maybeSingle();
 
                 if (masterBill) {
@@ -956,7 +981,7 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
         }
 
         // 5. Fallback line items: construct from bill description/notes if no nested items found
-        if (!rawItems.length) {
+        if (!rawItems || !rawItems.length) {
             const desc = targetBill.description || targetBill.notes || targetBill.reason || cashierBill?.description || cashierBill?.notes || 'POS Credit Bill Charge';
             rawItems = [
                 {
@@ -983,7 +1008,7 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
         }
 
         // 7. Format line items consistently
-        const formattedItems = rawItems.map((item: any, idx: number) => {
+        const formattedItems = (rawItems || []).map((item: any, idx: number) => {
             const qty = Number(item.quantity || item.qty || 1);
             const price = Number(item.unit_price || item.price || item.amount || 0);
             const total = Number(item.total_price || item.subtotal || item.line_total || (qty * price));
