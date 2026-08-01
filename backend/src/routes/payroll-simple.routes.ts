@@ -8,7 +8,11 @@ import {
     partialPayCreditBill,
     getCreditBillPayments,
     getCashierPaidCreditEntries,
-    applyCashierPaidCreditEntry
+    applyCashierPaidCreditEntry,
+    getCreditBillContents,
+    transferCreditBill,
+    rejectCreditBill,
+    editCreditBill
 } from '../controllers/credit-bills.controller';
 import {
     createAdvance,
