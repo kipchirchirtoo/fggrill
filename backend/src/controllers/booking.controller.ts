@@ -1053,45 +1053,6 @@ export const upsertDailyBreakfastPax = async (
     next(error);
   }
 };
-
-// @desc    Cancel booking
-// @route   PUT /api/bookings/:id/cancel
-// @access  Private
-export const cancelBooking = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.id;
-    const { reason } = req.body;
-
-    // 1. Get the booking
-    const { data: booking, error: fetchError } = await supabase
-      .from('reservations')
-      .select('*')
-      .eq('id', id)
-      .single();
-    const pricing = await bookingService.calculatePricing(
-      checkInDate,
-      checkOutDate,
-      roomTypeId,
-      adults || 1,
-      children || 0,
-      mealPlan,
-      ratePlanId
-    );
-
-    res.status(200).json({
-      success: true,
-      data: pricing
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 // @desc    Modify booking
 // @route   PUT /api/bookings/:id/modify
 // @access  Private
