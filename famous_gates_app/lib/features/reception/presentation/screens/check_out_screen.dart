@@ -1252,7 +1252,9 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                 child: OutlinedButton.icon(
                   onPressed: _generateInvoicePDF,
                   icon: const Icon(Icons.print, size: 18),
-                  label: const Text('Generate & Print Invoice'),
+                  label: Text(_displayBalance <= 0.01
+                      ? 'Print Receipt (PDF)'
+                      : 'Print Invoice (PDF)'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.kPrimary,
                     side:

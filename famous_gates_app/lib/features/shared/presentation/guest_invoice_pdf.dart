@@ -51,6 +51,10 @@ Future<void> printBookingInvoicePDF({
   final double balance =
       balanceDue ?? (grossTotal - paid).clamp(0.0, double.infinity);
 
+  final bool isPaid = balance <= 0.01;
+  final String titleText = isPaid ? 'RECEIPT' : 'INVOICE';
+  final String docNumberLabel = isPaid ? 'Receipt #' : 'Invoice #';
+
   final numFormat = NumberFormat('#,##0.00', 'en_KE');
 
   pdf.addPage(
@@ -94,11 +98,11 @@ Future<void> printBookingInvoicePDF({
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('INVOICE',
+                  pw.Text(titleText,
                       style: pw.TextStyle(
                           fontSize: 22,
                           fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.grey800)),
+                          color: isPaid ? PdfColors.green800 : PdfColors.grey800)),
                 ],
               ),
             ],
@@ -132,7 +136,7 @@ Future<void> printBookingInvoicePDF({
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('Invoice #: $invoiceNumber',
+                  pw.Text('$docNumberLabel: $invoiceNumber',
                       style: pw.TextStyle(
                           fontWeight: pw.FontWeight.bold, fontSize: 10)),
                   pw.SizedBox(height: 2),
@@ -255,9 +259,13 @@ Future<void> printBookingInvoicePDF({
     ),
   );
 
+  final String pdfDocName = isPaid
+      ? 'Receipt_${invoiceNumber.replaceAll('/', '_')}.pdf'
+      : 'Invoice_${invoiceNumber.replaceAll('/', '_')}.pdf';
+
   await Printing.layoutPdf(
     onLayout: (PdfPageFormat format) async => pdf.save(),
-    name: 'Invoice_${invoiceNumber.replaceAll('/', '_')}.pdf',
+    name: pdfDocName,
   );
 }
 
