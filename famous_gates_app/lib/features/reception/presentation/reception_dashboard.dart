@@ -6405,44 +6405,57 @@ class _NewReservationDialogState extends ConsumerState<_NewReservationDialog> {
               content: _rooms.isEmpty
                   ? const EmptyState(
                       message: 'Search dates to load available rooms')
-                  : SizedBox(
-                      height: 220,
-                      child: ListView(
-                        children: _rooms.map((room) {
-                          final selected = _selectedRoom?['id'] == room['id'];
-                          return ListTile(
-                            selected: selected,
-                            title: Text('Room ${_text(room, [
-                                      'room_number',
-                                      'number'
-                                    ]) ?? '-'}'),
-                            subtitle: Text('${_text(room, [
-                                      'type.name',
-                                      'type.code',
-                                      'room_type.name',
-                                      'room_type.code',
-                                      'type_name',
-                                    ]) ?? 'Standard'} • ${_money(_num(room, [
-                                  'price_per_night',
-                                  'rate',
-                                  'base_rate',
-                                  'base_price',
-                                  'type.base_price',
-                                  'type.price_per_night',
-                                  'type.base_rate',
-                                  'type.rate',
-                                  'room_type.base_price',
-                                  'room_type.price_per_night',
-                                  'room_type.rate',
-                                ]))}/night'),
-                            trailing: selected
-                                ? const Icon(Icons.check_circle,
-                                    color: AppColors.kSuccess)
-                                : null,
-                            onTap: () => setState(() => _selectedRoom = room),
-                          );
-                        }).toList(),
-                      ),
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'Available Rooms (${_rooms.length} found)',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.kPrimary),
+                          ),
+                        ),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 360),
+                          child: ListView(
+                            shrinkWrap: true,
+                            children: _rooms.map((room) {
+                              final selected = _selectedRoom?['id'] == room['id'];
+                              return ListTile(
+                                selected: selected,
+                                title: Text('Room ${_text(room, [
+                                          'room_number',
+                                          'number'
+                                        ]) ?? '-'}'),
+                                subtitle: Text('${_text(room, [
+                                          'type.name',
+                                          'type.code',
+                                          'room_type.name',
+                                          'room_type.code',
+                                          'type_name',
+                                        ]) ?? 'Standard'} • ${_money(_num(room, [
+                                      'price_per_night',
+                                      'rate',
+                                      'base_rate',
+                                      'base_price',
+                                      'type.base_price',
+                                      'type.price_per_night',
+                                      'type.base_rate',
+                                      'type.rate',
+                                      'room_type.base_price',
+                                      'room_type.price_per_night',
+                                      'room_type.rate',
+                                    ]))}/night'),
+                                trailing: selected
+                                    ? const Icon(Icons.check_circle,
+                                        color: AppColors.kSuccess)
+                                    : null,
+                                onTap: () => setState(() => _selectedRoom = room),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
                     ),
             ),
             Step(

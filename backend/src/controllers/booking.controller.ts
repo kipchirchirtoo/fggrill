@@ -333,6 +333,217 @@ export const updateBooking = async (
   }
 };
 
+// @desc    Cancel booking
+// @route   PUT /api/bookings/:id/cancel
+// @access  Private
+export const cancelBooking = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const { reason } = req.body;
+
+    const { data: booking, error: fetchError } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !booking) {
+      throw new AppError('Booking not found', 404);
+    }
+
+    const { data: updatedBooking, error: updateError } = await supabase
+      .from('reservations')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: userId,
+        cancellation_reason: reason || 'User cancelled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    if (booking.room_id) {
+      try {
+        const { data: room } = await supabase
+          .from('rooms')
+          .select('status')
+          .eq('id', booking.room_id)
+          .single();
+
+        if (room && room.status === RoomStatus.RESERVED) {
+          await bookingService.updateRoomStatus(
+            booking.room_id,
+            RoomStatus.AVAILABLE,
+            userId,
+            `Room released via cancellation for booking ${booking.confirmation_number}`
+          );
+        }
+      } catch (roomError) {
+        logger.error('Failed to update room status during cancellation:', roomError);
+      }
+    }
+
+    res.status(200).json({ success: true, data: updatedBooking });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get available rooms
+// @route   GET /api/bookings/available
+// @access  Public
+export const getAvailableRooms = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const checkIn = req.query.checkIn || req.query.check_in_date;
+    const checkOut = req.query.checkOut || req.query.check_out_date;
+    if (!checkIn || !checkOut) throw new AppError('Dates required', 400);
+
+    const { data: bookedResv } = await supabase
+      .from('reservations')
+      .select('room_id')
+      .not('status', 'in', '(cancelled,canceled,checked_out,completed,no_show,expired)')
+      .lt('check_in_date', checkOut as string)
+      .gt('check_out_date', checkIn as string);
+
+    const { data: bookedBk } = await supabase
+      .from('bookings')
+      .select('room_id')
+      .not('status', 'in', '(cancelled,canceled,checked_out,completed,no_show,expired)')
+      .lt('check_in_date', checkOut as string)
+      .gt('check_out_date', checkIn as string);
+
+    const bookedIds = Array.from(new Set([
+      ...(bookedResv || []).map((b: any) => b.room_id),
+      ...(bookedBk || []).map((b: any) => b.room_id)
+    ])).filter(Boolean);
+
+    let query = supabase
+      .from('rooms')
+      .select('*, type:room_types!type_id(*)')
+      .not('status', 'in', '(out_of_order,maintenance,out_of_service)')
+      .order('room_number', { ascending: true });
+
+    if (bookedIds.length > 0) {
+      query = query.not('id', 'in', `(${bookedIds.join(',')})`);
+    }
+
+    const isGlobal = isGlobalRole(req.user?.role);
+    const branchId = req.query.branch_id || (isGlobal ? undefined : req.user?.branch_id);
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data: rooms, error } = await query;
+    if (error) {
+      logger.error('Error fetching available rooms:', error);
+      throw new AppError('Failed to fetch available rooms', 500);
+    }
+
+    const checkInDate = new Date(checkIn as string);
+    const checkOutDate = new Date(checkOut as string);
+    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    const message = rooms && rooms.length > 0
+      ? `Found ${rooms.length} available room${rooms.length > 1 ? 's' : ''} for your dates`
+      : 'No rooms available for the selected dates. Please try different dates or contact us for assistance.';
+
+    res.status(200).json({
+      success: true,
+      message,
+      data: rooms || [],
+      count: rooms?.length || 0,
+      nights: nights,
+      dates: {
+        checkIn: checkIn,
+        checkOut: checkOut
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Check room availability
+// @route   GET /api/bookings/check-availability
+// @access  Public
+export const checkAvailability = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { checkInDate, checkOutDate, roomTypeId, branchId } = req.query;
+
+    if (!checkInDate || !checkOutDate || !roomTypeId) {
+      throw new AppError('Check-in date, check-out date, and room type are required', 400);
+    }
+
+    const isGlobal = isGlobalRole(req.user?.role);
+    const effectiveBranchId = isGlobal && branchId ? Number(branchId) : req.user?.branch_id;
+
+    const availability = await bookingService.checkAvailability(
+      checkInDate as string,
+      checkOutDate as string,
+      roomTypeId as string,
+      effectiveBranchId
+    );
+
+    res.status(200).json({
+      success: true,
+      data: availability
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get pricing quote
+// @route   POST /api/bookings/quote
+// @access  Public
+export const getPricingQuote = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { checkInDate, checkOutDate, roomTypeId, adults, children, mealPlan, ratePlanId } = req.body;
+
+    if (!checkInDate || !checkOutDate || !roomTypeId) {
+      throw new AppError('Check-in date, check-out date, and room type are required', 400);
+    }
+
+    const quote = await bookingService.getPricingQuote({
+      checkInDate,
+      checkOutDate,
+      roomTypeId,
+      adults: adults || 1,
+      children: children || 0,
+      mealPlan,
+      ratePlanId
+    });
+
+    res.status(200).json({
+      success: true,
+      data: quote
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Extend stay for a booking
 // @route   PUT /api/bookings/:id/extend
 // @access  Private
@@ -862,214 +1073,6 @@ export const cancelBooking = async (
       .select('*')
       .eq('id', id)
       .single();
-
-    if (fetchError || !booking) {
-      throw new AppError('Booking not found', 404);
-    }
-
-    // 2. Update booking status
-    const { data: updatedBooking, error: updateError } = await supabase
-      .from('reservations')
-      .update({
-        status: 'cancelled',
-        cancelled_at: new Date().toISOString(),
-        cancelled_by: userId,
-        cancellation_reason: reason || 'User cancelled',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
-
-    // 3. Update room status if room is assigned and was reserved
-    if (booking.room_id) {
-      try {
-        const { data: room } = await supabase
-          .from('rooms')
-          .select('status')
-          .eq('id', booking.room_id)
-          .single();
-
-        if (room && room.status === RoomStatus.RESERVED) {
-          await bookingService.updateRoomStatus(
-            booking.room_id,
-            RoomStatus.AVAILABLE,
-            userId,
-            `Room released via cancellation for booking ${booking.confirmation_number}`
-          );
-        }
-      } catch (roomError) {
-        logger.error('Failed to update room status during cancellation:', roomError);
-      }
-    }
-
-    res.status(200).json({ success: true, data: updatedBooking });
-
-    // Auto-send cancellation email (fire-and-forget)
-    try {
-      const { data: bookingWithGuest } = await supabase
-        .from('reservations')
-        .select('*, guest:guests!guest_id(email, first_name, last_name), room:rooms(room_number, room_type)')
-        .eq('id', id)
-        .single();
-      const guest = bookingWithGuest?.guest;
-      if (guest?.email) {
-        const room = Array.isArray(bookingWithGuest?.room) ? bookingWithGuest.room[0] : bookingWithGuest?.room;
-        emailService.sendBookingCancellation(guest.email, {
-          guest_name: `${guest.first_name || ''} ${guest.last_name || ''}`.trim(),
-          confirmation_number: booking.confirmation_number || id,
-          check_in: booking.check_in_date,
-          check_out: booking.check_out_date,
-          room_type: room?.room_type || 'Standard Room',
-          cancellation_reason: reason || 'User cancelled',
-          cancelled_at: new Date().toISOString()
-        })
-          .then(() => logger.info(`Auto-sent cancellation email to ${guest.email}`))
-          .catch((err: any) => logger.error('Auto-send cancellation email failed:', err.message));
-      }
-    } catch (emailErr: any) {
-      logger.error('Auto-send cancellation email error:', emailErr.message);
-    }
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Get available rooms
-// @route   GET /api/bookings/available
-// @access  Public
-export const getAvailableRooms = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const checkIn = req.query.checkIn || req.query.check_in_date;
-    const checkOut = req.query.checkOut || req.query.check_out_date;
-    if (!checkIn || !checkOut) throw new AppError('Dates required', 400);
-
-    // Find booked room IDs from reservations table
-    const { data: booked, error: bookedError } = await supabase
-      .from('reservations')
-      .select('room_id')
-      .not('status', 'in', '(cancelled,checked_out)')
-      .lt('check_in_date', checkOut as string)
-      .gt('check_out_date', checkIn as string);
-
-    if (bookedError) {
-      logger.error('Error fetching booked rooms:', bookedError);
-      // Continue with empty booked IDs if there's an error
-    }
-
-    const bookedIds = (booked || []).map((b: { room_id: string }) => b.room_id).filter(Boolean);
-
-    // Find available rooms
-    // Only show rooms that are:
-    // 1. Status is 'available' or 'cleaning' (cleaning rooms can be booked for future dates)
-    // 2. Not in maintenance or out of order
-    // 3. Not already booked for the selected dates
-    let query = supabase
-      .from('rooms')
-      .select('*, type:room_types!type_id(*)')
-      .in('status', ['available', 'cleaning']);
-
-    if (bookedIds.length > 0) {
-      // Format array for Supabase filter: ("id1","id2")
-      const bookedIdsString = `(${bookedIds.map(id => `"${id}"`).join(',')})`;
-      query = query.not('id', 'in', bookedIdsString);
-    }
-
-    const isGlobal = isGlobalRole(req.user?.role);
-    // req.query.branch_id is honoured for all callers (including the unauthenticated
-    // public landing page). Authenticated non-global users fall back to their assigned branch.
-    const branchId = req.query.branch_id || (isGlobal ? undefined : req.user?.branch_id);
-    if (branchId) {
-      query = query.eq('branch_id', branchId);
-    }
-
-    const { data: rooms, error } = await query;
-    if (error) {
-      logger.error('Error fetching available rooms:', error);
-      throw new AppError('Failed to fetch available rooms', 500);
-    }
-
-    // Calculate nights for the stay
-    const checkInDate = new Date(checkIn as string);
-    const checkOutDate = new Date(checkOut as string);
-    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-
-    // Provide helpful message if no rooms available
-    const message = rooms && rooms.length > 0
-      ? `Found ${rooms.length} available room${rooms.length > 1 ? 's' : ''} for your dates`
-      : 'No rooms available for the selected dates. Please try different dates or contact us for assistance.';
-
-    res.status(200).json({
-      success: true,
-      message,
-      data: rooms || [],
-      count: rooms?.length || 0,
-      nights: nights,
-      dates: {
-        checkIn: checkIn,
-        checkOut: checkOut
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Check room availability
-// @route   GET /api/bookings/check-availability
-// @access  Public
-export const checkAvailability = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { checkInDate, checkOutDate, roomTypeId, branchId } = req.query;
-
-    if (!checkInDate || !checkOutDate || !roomTypeId) {
-      throw new AppError('Check-in date, check-out date, and room type are required', 400);
-    }
-
-    const isGlobal = isGlobalRole(req.user?.role);
-    const effectiveBranchId = isGlobal && branchId ? Number(branchId) : req.user?.branch_id;
-
-    const availability = await bookingService.checkAvailability(
-      checkInDate as string,
-      checkOutDate as string,
-      roomTypeId as string,
-      effectiveBranchId
-    );
-
-    res.status(200).json({
-      success: true,
-      data: availability
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Get pricing quote
-// @route   POST /api/bookings/quote
-// @access  Public
-export const getPricingQuote = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { checkInDate, checkOutDate, roomTypeId, adults, children, mealPlan, ratePlanId } = req.body;
-
-    if (!checkInDate || !checkOutDate || !roomTypeId) {
-      throw new AppError('Check-in date, check-out date, and room type are required', 400);
-    }
-
     const pricing = await bookingService.calculatePricing(
       checkInDate,
       checkOutDate,
