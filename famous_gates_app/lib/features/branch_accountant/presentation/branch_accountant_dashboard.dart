@@ -11222,13 +11222,10 @@ class _CreditBillsSectionState extends ConsumerState<_CreditBillsSection> {
 
       // Fallback item resolution if items list is empty
       if (items.isEmpty) {
-        final desc = _text(bill, ['description', 'notes', 'credit_number']).isNotEmpty
-            ? _text(bill, ['description', 'notes', 'credit_number'])
-            : 'Cashier Credit Bill Charge';
         final amt = _num(bill['amount'] ?? bill['total_amount']);
         items = [
           {
-            'name': desc,
+            'name': 'Food & Beverage Staff Credit Order',
             'quantity': 1,
             'unit_price': amt,
             'total_price': amt,

@@ -861,6 +861,7 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
         }
 
         const crdMatch = (targetBill.description || '').match(/CRD-[\w-]+/)?.[0];
+        const staffNameMatch = (targetBill.description || '').replace(/^Cashier Credit Bill - CRD-[\w-]+ -\s*/i, '').trim();
 
         // Also fetch linked cashier credit_bill if source_cashier_credit_bill_id or CRD code is present
         if (!cashierBill) {
@@ -904,7 +905,7 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
 
         const billDocNo = targetBill.source_document_number || targetBill.bill_number || cashierBill?.source_document_number || cashierBill?.bill_number;
 
-        // 3. Query pos_shift_orders with clean .select('*') (no broken relation alias)
+        // 3. Query pos_shift_orders with clean .select('*')
         if (!rawItems || !rawItems.length) {
             try {
                 let shiftOrder: any = null;
@@ -931,14 +932,15 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
                     if (matchedByDoc) shiftOrder = matchedByDoc;
                 }
 
-                // 3c. Match by staff waiter ID + amount
-                if (!shiftOrder && targetBill.staff_id && billAmt > 0) {
-                    const { data: candidates } = await supabase
-                        .from('pos_shift_orders')
-                        .select('*')
-                        .eq('waiter_id', targetBill.staff_id)
-                        .order('created_at', { ascending: false })
-                        .limit(25);
+                // 3c. Match by staff waiter ID or name + amount
+                if (!shiftOrder && (staffNameMatch || targetBill.staff_id) && billAmt > 0) {
+                    let orderQuery = supabase.from('pos_shift_orders').select('*');
+                    if (targetBill.staff_id) {
+                        orderQuery = orderQuery.eq('waiter_id', targetBill.staff_id);
+                    } else if (staffNameMatch) {
+                        orderQuery = orderQuery.or(`waiter_name.ilike.%${staffNameMatch}%,customer_name.ilike.%${staffNameMatch}%`);
+                    }
+                    const { data: candidates } = await orderQuery.order('created_at', { ascending: false }).limit(25);
 
                     if (candidates && candidates.length > 0) {
                         const bTime = new Date(targetBill.created_at || targetBill.bill_date || Date.now()).getTime();
@@ -963,7 +965,30 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             }
         }
 
-        // 4. Query pos_master_bills if still empty
+        // 4. Query restaurant_orders if still empty
+        if (!rawItems || !rawItems.length) {
+            try {
+                let restOrder: any = null;
+                if (crdMatch || billDocNo) {
+                    const searchCodes = [crdMatch, billDocNo].filter(Boolean);
+                    const { data: ro } = await supabase
+                        .from('restaurant_orders')
+                        .select('*, items:restaurant_order_items(*)')
+                        .or(searchCodes.map(c => `order_number.eq.${c}`).join(','))
+                        .maybeSingle();
+                    if (ro) restOrder = ro;
+                }
+
+                if (restOrder) {
+                    orderHeader = restOrder;
+                    if (Array.isArray(restOrder.items) && restOrder.items.length > 0) {
+                        rawItems = restOrder.items;
+                    }
+                }
+            } catch (_) {}
+        }
+
+        // 5. Query pos_master_bills if still empty
         if (!rawItems || !rawItems.length) {
             try {
                 const targetMasterId = candidatePosIds[0] || targetBill.id;
@@ -980,23 +1005,23 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             } catch (_) {}
         }
 
-        // 5. Fallback line items: construct from bill description/notes if no nested items found
+        // 6. Clean item name fallback: if no sub-cart items found, use clean Food & Beverage label instead of raw string
         if (!rawItems || !rawItems.length) {
-            const desc = targetBill.description || targetBill.notes || targetBill.reason || cashierBill?.description || cashierBill?.notes || 'POS Credit Bill Charge';
+            const cleanName = 'Food & Beverage Staff Credit Order';
             rawItems = [
                 {
                     id: targetBill.id,
-                    name: desc,
-                    category: targetBill.department || cashierBill?.department || 'Staff Credit',
+                    name: cleanName,
+                    category: targetBill.department || cashierBill?.department || 'Food & Beverage',
                     quantity: 1,
                     unit_price: billAmt,
                     total_price: billAmt,
-                    notes: targetBill.status ? `Status: ${targetBill.status}` : ''
+                    notes: crdMatch ? `Ref: ${crdMatch}` : (targetBill.status ? `Status: ${targetBill.status}` : '')
                 }
             ];
         }
 
-        // 6. Fetch staff profile if linked
+        // 7. Fetch staff profile if linked
         let staffProfile: any = null;
         if (targetBill.staff_id) {
             const { data: sp } = await supabase
@@ -1007,14 +1032,18 @@ export const getCreditBillContents = async (req: Request, res: Response, next: N
             staffProfile = sp;
         }
 
-        // 7. Format line items consistently
+        // 8. Format line items consistently
         const formattedItems = (rawItems || []).map((item: any, idx: number) => {
             const qty = Number(item.quantity || item.qty || 1);
             const price = Number(item.unit_price || item.price || item.amount || 0);
             const total = Number(item.total_price || item.subtotal || item.line_total || (qty * price));
+            let rawItemName = item.item_name || item.name || item.description || item.title || 'Food & Beverage Item';
+            if (rawItemName.startsWith('Cashier Credit Bill - CRD-')) {
+                rawItemName = 'Food & Beverage Staff Credit Order';
+            }
             return {
                 id: item.id || `${targetBill.id}_${idx}`,
-                name: item.item_name || item.name || item.description || item.title || 'Item',
+                name: rawItemName,
                 category: item.category || item.department || item.item_group || 'Food & Beverage',
                 quantity: qty,
                 unit_price: price,
