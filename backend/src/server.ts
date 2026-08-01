@@ -229,7 +229,7 @@ initializeApp().then(({ app, httpServer }) => {
   // cycles and dashboard loads don't trip the limiter and return 429.
   const financialLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute window
-    max: 300,                  // 300 req/min in production
+    max: 1000,                 // 1000 req/min in production
     skip: () => process.env.NODE_ENV === 'development',
     message: 'Too many requests to financial endpoints — please try again shortly.',
     standardHeaders: true,
@@ -237,15 +237,17 @@ initializeApp().then(({ app, httpServer }) => {
   });
 
   // Route-specific limiters (tightest first)
-  app.use('/api/auth', authLimiter);         // 20 req / 5 min per IP (Upstash)
-  app.use('/api/pos', posLimiter);           // 300 req / 5 min per branch (Upstash)
+  app.use('/api/auth', authLimiter);         // 60 req / 5 min per IP (Upstash)
+  app.use('/api/pos', posLimiter);           // 3000 req / 5 min per branch (Upstash)
   app.use('/api/orders', posLimiter);        // POS orders share the same limit
+  app.use('/api/restaurant', posLimiter);    // Kitchen & restaurant orders share POS limit
+  app.use('/api/kitchen', posLimiter);       // Kitchen orders share POS limit
   app.use('/api/payment', financialLimiter);
   app.use('/api/accounting', financialLimiter);
   app.use('/api/finance', financialLimiter);
   app.use('/api/cashier', financialLimiter);
   // Global limiter applied last — catches all other routes
-  app.use(globalLimiter);                    // 500 req / 15 min per IP (Upstash)
+  app.use(globalLimiter);                    // 5000 req / 15 min per IP (Upstash)
   // ─────────────────────────────────────────────────────────────────────────────
 
   // API routes

@@ -41,21 +41,21 @@ function getBranchIdentifier(req: Request): string {
 
 const globalRatelimit = new Ratelimit({
     redis: upstashRedis,
-    limiter: Ratelimit.slidingWindow(500, '15 m'),
+    limiter: Ratelimit.slidingWindow(5000, '15 m'),
     prefix: 'fg:rl:global',
     analytics: true,
 });
 
 const authRatelimit = new Ratelimit({
     redis: upstashRedis,
-    limiter: Ratelimit.slidingWindow(20, '5 m'),
+    limiter: Ratelimit.slidingWindow(60, '5 m'),
     prefix: 'fg:rl:auth',
     analytics: true,
 });
 
 const posRatelimit = new Ratelimit({
     redis: upstashRedis,
-    limiter: Ratelimit.slidingWindow(300, '5 m'),
+    limiter: Ratelimit.slidingWindow(3000, '5 m'),
     prefix: 'fg:rl:pos',
     analytics: true,
 });
