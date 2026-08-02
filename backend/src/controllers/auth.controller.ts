@@ -409,11 +409,40 @@ export const login = async (
     try {
       // Get user profile with password_hash from users table using Supabase client
       logger.info(`[AUTH-DEBUG] Querying users table for email: ${email}`);
-      const { data: dbUser, error: dbError } = await supabase
-        .from('users')
-        .select('id, email, first_name, last_name, role, branch_id, status, password_hash')
-        .eq('email', email)
-        .single();
+      let dbUser: any = null;
+      let dbError: any = null;
+
+      try {
+        const res = await supabase
+          .from('users')
+          .select('id, email, first_name, last_name, role, branch_id, status, password_hash')
+          .eq('email', email)
+          .maybeSingle();
+        dbUser = res.data;
+        dbError = res.error;
+      } catch (err: any) {
+        dbError = err;
+      }
+
+      // Direct Postgres Pool Fallback if Supabase REST call failed or timed out
+      if ((dbError || !dbUser) && email) {
+        if (dbError) {
+          logger.warn(`Supabase REST query failed/timed out for ${email}: ${dbError.message || JSON.stringify(dbError)}. Trying direct Postgres pool...`);
+        }
+        try {
+          const pgRes = await db.query(
+            'SELECT id, email, first_name, last_name, role, branch_id, status, password_hash FROM users WHERE email = $1 LIMIT 1',
+            [email]
+          );
+          if (pgRes.rows && pgRes.rows.length > 0) {
+            dbUser = pgRes.rows[0];
+            dbError = null;
+            logger.info(`[AUTH-DEBUG] Direct Postgres pool fallback succeeded for ${email}`);
+          }
+        } catch (pgErr: any) {
+          logger.error(`Direct Postgres pool query also failed for ${email}:`, pgErr.message || pgErr);
+        }
+      }
 
       logger.info(`[AUTH-DEBUG] Query result - dbUser: ${dbUser ? 'FOUND' : 'NULL'}, error: ${dbError ? JSON.stringify(dbError) : 'NONE'}`);
 
@@ -443,18 +472,15 @@ export const login = async (
             });
 
             if (error) {
-
               console.error('Database error:', error);
-
               throw error;
-
             }
             // Re-query after insert
             const { data: requeried } = await supabase
               .from('users')
               .select('id, email, first_name, last_name, role, branch_id, status, password_hash')
               .eq('email', email)
-              .single();
+              .maybeSingle();
             if (requeried) {
               userId = requeried.id;
               storedHash = requeried.password_hash;
