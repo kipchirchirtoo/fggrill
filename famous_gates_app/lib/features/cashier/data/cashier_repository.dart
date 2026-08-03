@@ -575,15 +575,13 @@ class CashierRepository {
   /// to issue petty-cash payments against approved/received POs.
   Future<List<Map<String, dynamic>>> getPendingPOs({int? branchId}) async {
     try {
-      final bId = branchId ?? await _branchId;
       return await _getList('/kyogong/petty-cash/pending-pos', query: {
-        if (bId != null) 'branch_id': bId,
+        if (branchId != null) 'branch_id': branchId,
       });
     } catch (_) {
       try {
-        final bId = branchId ?? await _branchId;
         return await _getList('/storekeeping/purchase-orders', query: {
-          if (bId != null) 'branch_id': bId,
+          if (branchId != null) 'branch_id': branchId,
           'status': 'approved',
         });
       } catch (_) {
