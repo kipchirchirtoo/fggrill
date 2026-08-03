@@ -296,23 +296,38 @@ type OpeningStocktakeReadiness = {
 };
 
 async function getBreakfastPaxControl(branchId: number, date: string) {
-    const [{ data: control, error: controlError }, calculated] = await Promise.all([
-        supabase
+    let control: any = null;
+    try {
+        const { data, error } = await supabase
             .from('accommodation_breakfast_pax')
             .select('*')
             .eq('branch_id', branchId)
             .eq('breakfast_date', date)
-            .maybeSingle(),
-        buildBreakfastPaxSnapshot(branchId, date),
-    ]);
+            .maybeSingle();
+        if (!error && data) {
+            control = data;
+        }
+    } catch (_) {}
 
-    if (controlError) throw new AppError(controlError.message, 500);
+    if (!control) {
+        try {
+            const pgRes = await db.query(
+                'SELECT * FROM accommodation_breakfast_pax WHERE branch_id = $1 AND breakfast_date = $2 LIMIT 1',
+                [branchId, date]
+            );
+            if (pgRes.rows && pgRes.rows.length > 0) {
+                control = pgRes.rows[0];
+            }
+        } catch (_) {}
+    }
+
+    const calculated = await buildBreakfastPaxSnapshot(branchId, date);
 
     return {
         branch_id: branchId,
         breakfast_date: date,
         calculated_pax: calculated.calculatedPax,
-        confirmed_pax: control?.confirmed_pax ?? calculated.calculatedPax,
+        confirmed_pax: Number(control?.confirmed_pax ?? calculated.calculatedPax),
         status: control?.status ?? 'unconfirmed',
         adjustment_reason: control?.adjustment_reason ?? null,
         confirmed_at: control?.confirmed_at ?? null
