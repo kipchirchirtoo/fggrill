@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../../config/database';
 import db from '../../db';
+import { InventoryStocktakePostingService } from '../../modules/inventory';
 import { logger } from '../../utils/logger';
 import { getLastClosedCashierShiftWindow } from '../../utils/posStationAccess';
 
@@ -47,6 +48,157 @@ const STORE_CASHIER_ROLES = [
 
 const getLastClosedStoreShiftWindow = (branchId: number, stocktakeDate: string): Promise<any> =>
     getLastClosedCashierShiftWindow(supabase, branchId, STORE_CASHIER_ROLES, stocktakeDate);
+
+const withPostingFields = (record: any) => ({
+    ...record,
+    additions: num(record.additions),
+    document_id: record.document_id ?? null,
+    document_number: record.document_number ?? null,
+    issuance: num(record.issuance),
+    physical_quantity: record.physical_quantity ?? null,
+    posted_at: record.posted_at ?? null,
+    posting_status: record.posting_status ?? null,
+    reversal_of_document_id: record.reversal_of_document_id ?? null,
+    sales: num(record.sales),
+});
+
+const loadPreviousApprovedStoreCounts = async (
+    branchId: number,
+    stocktakeDate: string,
+): Promise<Map<string, number>> => {
+    const map = new Map<string, number>();
+    const { data: previous } = await supabase
+        .from('store_stocktake_records')
+        .select('stocktake_date')
+        .eq('branch_id', branchId)
+        .eq('status', 'approved')
+        .lt('stocktake_date', stocktakeDate)
+        .order('stocktake_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (!previous?.stocktake_date) return map;
+
+    const { data: rows } = await supabase
+        .from('store_stocktake_records')
+        .select('item_id, physical_quantity, recorded_at')
+        .eq('branch_id', branchId)
+        .eq('status', 'approved')
+        .eq('stocktake_date', previous.stocktake_date)
+        .order('recorded_at', { ascending: true });
+
+    for (const row of rows || []) {
+        if ((row as any).item_id && (row as any).physical_quantity != null) {
+            map.set(String((row as any).item_id), num((row as any).physical_quantity));
+        }
+    }
+    return map;
+};
+
+const approveStoreSession = async (
+    branchId: number,
+    stocktakeDate: string,
+    actorId: string | null | undefined,
+    idempotencyKey: string,
+) => {
+    const { data: rows, error } = await supabase
+        .from('store_stocktake_records')
+        .select('*, item:inventory_items(id, item_name, unit, sku, default_unit_cost)')
+        .eq('branch_id', branchId)
+        .eq('stocktake_date', stocktakeDate)
+        .in('status', ['pending', 'reviewed', 'approved'])
+        .order('recorded_at', { ascending: true });
+    if (error) throw error;
+    const sessionRows = rows || [];
+    if (!sessionRows.length) return { posting: null, rows: [] as any[] };
+
+    const alreadyApprovedWithDocument = sessionRows.find((row: any) => row.status === 'approved' && row.document_id);
+    const reviewedBy = alreadyApprovedWithDocument?.reviewed_by || actorId || null;
+    const reviewedAt = alreadyApprovedWithDocument?.reviewed_at || new Date().toISOString();
+
+    let posting = null;
+    if (!alreadyApprovedWithDocument) {
+        posting = await InventoryStocktakePostingService.postApproval({
+            actorId: actorId || '',
+            branchId,
+            documentReason: `Store stocktake approval ${stocktakeDate}`,
+            idempotencyKey,
+            lines: sessionRows.map((row: any) => ({
+                itemName: row.item?.item_name || row.item_name || row.item?.sku,
+                itemSku: row.item?.sku,
+                metadata: { stocktake_record_id: row.id },
+                physicalQuantity: num(row.physical_quantity),
+                systemQuantity: num(row.system_quantity),
+                unitCost: num(row.item?.default_unit_cost),
+            })).filter((row: any) => row.itemSku),
+            location: {
+                branchId,
+                locationCode: `BRANCH-${branchId}-STORE`,
+                locationName: `Branch Store ${branchId}`,
+                locationType: 'branch_store',
+            },
+            metadata: {
+                branch_id: branchId,
+                stocktake_date: stocktakeDate,
+            },
+            scope: 'store',
+            sourceId: String(sessionRows[0].id),
+            sourceTable: 'store_stocktake_records',
+            stocktakeDate,
+        });
+    }
+
+    const documentFields = posting ? {
+        document_id: posting.document.document_id,
+        document_number: posting.document.document_number,
+        posted_at: posting.document.posted_at,
+        posting_status: posting.document.posting_status,
+        reversal_of_document_id: posting.document.reversal_of_document_id,
+    } : {
+        document_id: alreadyApprovedWithDocument?.document_id ?? null,
+        document_number: alreadyApprovedWithDocument?.document_number ?? null,
+        posted_at: alreadyApprovedWithDocument?.posted_at ?? null,
+        posting_status: alreadyApprovedWithDocument?.posting_status ?? null,
+        reversal_of_document_id: alreadyApprovedWithDocument?.reversal_of_document_id ?? null,
+    };
+
+    const { error: updateError } = await supabase
+        .from('store_stocktake_records')
+        .update({
+            status: 'approved',
+            reviewed_at: reviewedAt,
+            reviewed_by: reviewedBy,
+            ...documentFields,
+        })
+        .eq('branch_id', branchId)
+        .eq('stocktake_date', stocktakeDate)
+        .in('status', ['pending', 'reviewed', 'approved']);
+    if (updateError) throw updateError;
+
+    await db.query(
+        `UPDATE public.stock_balance_ledger sbl
+         SET actual_closing = ssr.physical_quantity::numeric,
+             variance = COALESCE(ssr.variance, ssr.physical_quantity::numeric - ssr.system_quantity::numeric)
+         FROM public.store_stocktake_records ssr
+         WHERE sbl.branch_id = ssr.branch_id
+           AND sbl.item_id = ssr.item_id
+           AND sbl.ledger_date = ssr.stocktake_date
+           AND ssr.branch_id = $1
+           AND ssr.stocktake_date = $2`,
+        [branchId, stocktakeDate],
+    );
+
+    await syncStoreStocktakeToStockCounts(branchId, stocktakeDate, 'approved', reviewedBy, reviewedAt);
+
+    const { data: refreshed, error: refreshedError } = await supabase
+        .from('store_stocktake_records')
+        .select('*, item:inventory_items(id, item_name, unit, store_type, sku)')
+        .eq('branch_id', branchId)
+        .eq('stocktake_date', stocktakeDate)
+        .order('recorded_at', { ascending: true });
+    if (refreshedError) throw refreshedError;
+
+    return { posting, rows: refreshed || [] };
+};
 
 const enrichWithShiftInfo = async (records: any[]): Promise<any[]> => {
     const shiftIds = [...new Set(records.map((r: any) => r.shift_id).filter(Boolean))] as string[];
@@ -180,7 +332,7 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
             if (shiftIdFilter) historyQuery = historyQuery.eq('shift_id', shiftIdFilter);
             const { data: historyRecords, error: historyErr } = await historyQuery;
             if (historyErr) throw historyErr;
-            const rawResult = (historyRecords || []).map((r: any) => ({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || r.category || null }));
+            const rawResult = (historyRecords || []).map((r: any) => withPostingFields({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || r.category || null }));
             const result = await enrichWithShiftInfo(rawResult);
             res.status(200).json({ success: true, data: result, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
@@ -203,36 +355,74 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
         if (existingRecords && existingRecords.length > 0) {
             const rawResult = existingRecords
                 .filter((r: any) => isStoreCountableItem(r.item))
-                .map((r: any) => ({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || null }));
+                .map((r: any) => withPostingFields({ ...r, item_name: r.item?.item_name || r.item_name || null, category: r.item?.category || null }));
             const result = await enrichWithShiftInfo(rawResult);
             res.status(200).json({ success: true, data: result, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
             return;
         }
+        // Query store-countable items from simple_items, inventory_items, and branch_stock
+        const [{ data: branchStockRows }, { data: simpleItems }, { data: invItems }] = await Promise.all([
+            supabase.from('branch_stock').select('item_sku, quantity').eq('branch_id', branchId),
+            supabase.from('simple_items').select('id, sku, item_sku, item_name, unit, unit_of_measure, category, store_type, quantity, cost_price').or(`branch_id.eq.${branchId},branch_id.is.null`).eq('is_active', true),
+            supabase.from('inventory_items').select('id, sku, item_name, unit, category, store_type, default_unit_cost').eq('is_active', true)
+        ]);
 
-        const { data: branchStockRows, error: bsErr } = await supabase.from('branch_stock').select('item_sku, quantity').eq('branch_id', branchId);
-        if (bsErr) throw bsErr;
         const stockRows = (branchStockRows || []) as Array<{ item_sku: string; quantity: number }>;
-        if (stockRows.length === 0) { res.status(200).json({ success: true, data: [], shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct }); return; }
+        const stockBySkuMap = new Map<string, number>();
+        for (const r of stockRows) {
+            if (r.item_sku) stockBySkuMap.set(r.item_sku, num(r.quantity));
+        }
 
-        const allSkus = stockRows.map((r) => r.item_sku).filter(Boolean);
-        const stockBySkuMap = new Map(stockRows.map((r) => [r.item_sku, num(r.quantity)]));
+        const invMap = new Map<string, any>();
+        for (const item of (invItems || []).filter(isStoreCountableItem)) {
+            if (item.sku) invMap.set(item.sku, item);
+        }
 
-        const { data: invItems, error: invErr } = await supabase.from('inventory_items').select('id, sku, item_name, unit, category, store_type').in('sku', allSkus);
-        if (invErr) throw invErr;
+        for (const item of (simpleItems || []).filter(isStoreCountableItem)) {
+            const sku = item.sku || item.item_sku;
+            if (sku && !invMap.has(sku)) {
+                invMap.set(sku, {
+                    id: item.id || sku,
+                    sku,
+                    item_name: item.item_name || sku,
+                    unit: item.unit || item.unit_of_measure || 'units',
+                    category: item.category || 'GENERAL',
+                    store_type: item.store_type || 'general_store',
+                    quantity: num(item.quantity)
+                });
+            }
+            if (sku && item.quantity != null && !stockBySkuMap.has(sku)) {
+                stockBySkuMap.set(sku, num(item.quantity));
+            }
+        }
 
-        const invMap = new Map((invItems || []).filter(isStoreCountableItem).map((i: any) => [i.sku as string, i]));
+        for (const r of stockRows) {
+            if (r.item_sku && !invMap.has(r.item_sku)) {
+                invMap.set(r.item_sku, {
+                    id: r.item_sku,
+                    sku: r.item_sku,
+                    item_name: r.item_sku,
+                    unit: 'units',
+                    category: 'GENERAL',
+                    store_type: 'general_store',
+                    quantity: num(r.quantity)
+                });
+            }
+        }
 
-        const missingSkus = allSkus.filter((sku) => !invMap.has(sku));
-        if (missingSkus.length > 0) {
-            const { data: simpleRows } = await supabase.from('simple_items').select('sku, item_name, unit, category, store_type').in('sku', missingSkus).not('store_type', 'in', `(${NON_STORE_TYPES.join(',')})`);
-            for (const s of (simpleRows || []).filter(isStoreCountableItem)) invMap.set(s.sku, { id: null, ...s });
+        const allSkus = Array.from(invMap.keys());
+        if (allSkus.length === 0) {
+            res.status(200).json({ success: true, data: [], shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
+            return;
         }
 
         const dayStart = (shiftWindow as any).from ?? `${rawDate}T00:00:00.000Z`;
         const dayEnd   = (shiftWindow as any).to   ?? `${rawDate}T23:59:59.999Z`;
-        const resolvedSkus = allSkus.filter((sku) => invMap.has(sku));
+        const resolvedSkus = allSkus;
+        const previousApprovedCounts = await loadPreviousApprovedStoreCounts(branchId, rawDate);
         const salesBySku: Record<string, number> = {};
         const additionsBySku: Record<string, number> = {};
+        const issuanceBySku: Record<string, number> = {};
 
         if (resolvedSkus.length > 0) {
             const { data: movRows } = await supabase.from('branch_stock_movements').select('item_sku, movement_type, quantity').eq('branch_id', branchId).in('item_sku', resolvedSkus).gte('created_at', dayStart).lte('created_at', dayEnd);
@@ -240,19 +430,26 @@ export const listStoreStocktakes = async (req: Request, res: Response, next: Nex
                 const sku = mv.item_sku;
                 const qty = Math.abs(num(mv.quantity));
                 const t = (mv.movement_type || '').toUpperCase();
-                if (['SALE','KITCHEN_USE','HOUSEKEEPING_USE','DAMAGE','LOSS','TRANSFER_OUT','ADJUSTMENT_OUT','DISPATCH_OUT','ISSUE'].includes(t)) salesBySku[sku] = (salesBySku[sku] ?? 0) + qty;
-                else if (['DISPATCH_RECEIVE','PURCHASE','ADJUSTMENT_IN','TRANSFER_IN','RETURN','RESTOCK','SUPPLIER_RECEIPT','DISPATCH','DISPATCH_IN'].includes(t)) additionsBySku[sku] = (additionsBySku[sku] ?? 0) + qty;
+                if (['SALE'].includes(t)) salesBySku[sku] = (salesBySku[sku] ?? 0) + qty;
+                if (['KITCHEN_USE','HOUSEKEEPING_USE','TRANSFER_OUT','DISPATCH_OUT','ISSUE','STOCK_OUT','DIRECT_ISSUE_OUT','DAMAGE','LOSS','SPOILAGE'].includes(t)) issuanceBySku[sku] = (issuanceBySku[sku] ?? 0) + qty;
+                if (['SALE','KITCHEN_USE','HOUSEKEEPING_USE','DAMAGE','LOSS','SPOILAGE','TRANSFER_OUT','ADJUSTMENT_OUT','DISPATCH_OUT','ISSUE','STOCK_OUT','DIRECT_ISSUE_OUT'].includes(t)) salesBySku[sku] = (salesBySku[sku] ?? 0) + qty;
+                else if (['DISPATCH_RECEIVE','PURCHASE','PO_RECEIVE','ADJUSTMENT_IN','TRANSFER_IN','RETURN','RESTOCK','SUPPLIER_RECEIPT','RECEIVE','DISPATCH','DISPATCH_IN','STOCK_IN','DIRECT_ISSUE_IN'].includes(t)) additionsBySku[sku] = (additionsBySku[sku] ?? 0) + qty;
             }
         }
 
         const candidates = resolvedSkus.map((sku) => {
             const inv = invMap.get(sku)!;
-            if (!inv.id) return null;
-            const currentStock = stockBySkuMap.get(sku) ?? 0;
+            if (!inv || !inv.id) return null;
+            const currentStock = stockBySkuMap.get(sku) ?? num(inv.quantity);
             const sales = salesBySku[sku] ?? 0;
             const additions = additionsBySku[sku] ?? 0;
-            const opening = Math.max(0, currentStock + sales - additions);
-            return { item_id: inv.id, id: inv.id, sku, item_name: inv.item_name || sku, name: inv.item_name || sku, unit: inv.unit || 'unit', category: inv.category || 'GENERAL', store_type: inv.store_type, opening_stock: opening, sales, additions, sdds: -additions, system_quantity: currentStock, quantity: currentStock, physical_quantity: null };
+            const issuance = issuanceBySku[sku] ?? 0;
+            const opening = previousApprovedCounts.has(String(inv.id))
+                ? previousApprovedCounts.get(String(inv.id))!
+                : (previousApprovedCounts.has(sku)
+                    ? previousApprovedCounts.get(sku)!
+                    : Math.max(0, currentStock + sales + issuance - additions));
+            return withPostingFields({ item_id: inv.id, id: inv.id, sku, item_name: inv.item_name || sku, name: inv.item_name || sku, unit: inv.unit || 'unit', category: inv.category || 'GENERAL', store_type: inv.store_type, opening_stock: opening, sales, additions, issuance, sdds: -additions, system_quantity: currentStock, quantity: currentStock, physical_quantity: null });
         }).filter(Boolean);
 
         res.status(200).json({ success: true, data: candidates, shift_id: shiftWindow.shiftId, stocktake_variance_large_pct: largePct, stocktake_variance_extreme_pct: extremePct });
@@ -316,21 +513,7 @@ export const recordStoreStocktake = async (req: Request, res: Response, next: Ne
 
         await syncStoreStocktakeToStockCounts(branchId, stocktakeDate, 'submitted');
 
-        const now2 = new Date().toISOString();
-        for (const row of rows as Array<Record<string, any>>) {
-            if (!row) continue;
-            const sku = skuById.get(row.item_id);
-            if (!sku) continue;
-            const physQty = num(row.physical_quantity);
-            const systemQty = num(row.system_quantity);
-            await supabase.from('branch_stock').upsert({ branch_id: branchId, item_sku: sku, quantity: physQty, updated_at: now2 }, { onConflict: 'branch_id,item_sku' });
-            const variance = physQty - systemQty;
-            if (variance !== 0) {
-                await supabase.from('branch_stock_movements').insert({ branch_id: branchId, item_sku: sku, movement_type: variance > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT', quantity: Math.abs(variance), previous_stock: systemQty, new_stock: physQty, reference_type: 'STOCKTAKE', reference_number: `ST-${stocktakeDate}-${branchId}`, performed_by: req.user?.id || null, notes: `Store stocktake adjustment ${stocktakeDate} (shift: ${resolvedShiftId ?? 'unknown'})` });
-            }
-        }
-
-        const result = (data || []).map((r: any) => ({ ...r, item_name: r.item?.item_name || r.item_name || null }));
+        const result = (data || []).map((r: any) => withPostingFields({ ...r, item_name: r.item?.item_name || r.item_name || null }));
         res.status(201).json({ success: true, data: result, shift_id: resolvedShiftId });
     } catch (error) {
         logger.error('recordStoreStocktake failed:', error);
@@ -359,14 +542,14 @@ export const approveStoreStocktake = async (req: Request, res: Response, next: N
         const existing = await loadRecord(req.params.id);
         if (!existing) { res.status(404).json({ success: false, message: 'Stocktake record not found' }); return; }
         if (!['pending', 'reviewed'].includes(existing.status)) { res.status(400).json({ success: false, message: `Cannot approve a record that is ${existing.status}` }); return; }
-        const now = new Date().toISOString();
-        const { data, error } = await supabase.from('store_stocktake_records').update({ status: 'approved', reviewed_by: existing.reviewed_by || req.user?.id || null, reviewed_at: existing.reviewed_at || now }).eq('id', req.params.id).select('*, item:inventory_items(id, item_name, unit)').single();
-        if (error) throw error;
-        await supabase.from('stock_balance_ledger').update({ actual_closing: num(existing.physical_quantity), variance: num(existing.variance) }).eq('branch_id', existing.branch_id).eq('item_id', existing.item_id).eq('ledger_date', existing.stocktake_date);
-        await supabase.from('store_stocktake_records').update({ status: 'approved', reviewed_by: existing.reviewed_by || req.user?.id || null, reviewed_at: existing.reviewed_at || now }).eq('branch_id', existing.branch_id).eq('stocktake_date', existing.stocktake_date).in('status', ['pending', 'reviewed']);
-        await db.query(`UPDATE public.branch_stock bs SET quantity = ssr.physical_quantity::numeric, updated_at = NOW() FROM public.store_stocktake_records ssr JOIN public.inventory_items ii ON ii.id = ssr.item_id WHERE bs.branch_id = ssr.branch_id AND bs.item_sku = ii.sku AND ssr.branch_id = $1 AND ssr.stocktake_date = $2 AND ssr.status = 'approved'`, [existing.branch_id, existing.stocktake_date]);
-        await syncStoreStocktakeToStockCounts(existing.branch_id, existing.stocktake_date, 'approved', existing.reviewed_by || req.user?.id || null, existing.reviewed_at || now);
-        res.status(200).json({ success: true, data: { ...data, item_name: data?.item?.item_name || null } });
+        const { rows } = await approveStoreSession(
+            existing.branch_id,
+            existing.stocktake_date,
+            req.user?.id || null,
+            req.header('Idempotency-Key') || `store-stocktake-approve-${existing.branch_id}-${existing.stocktake_date}`,
+        );
+        const approved = rows.find((row: any) => row.id === req.params.id) || rows[0] || existing;
+        res.status(200).json({ success: true, data: withPostingFields({ ...approved, item_name: approved.item?.item_name || approved.item_name || null }) });
     } catch (error) {
         logger.error('approveStoreStocktake failed:', error);
         next(error);
@@ -413,14 +596,12 @@ export const batchApproveStoreStocktake = async (req: Request, res: Response, ne
         const branchId = Number(req.body?.branch_id);
         const stocktakeDate = req.body?.stocktake_date as string;
         if (!Number.isInteger(branchId) || !stocktakeDate) { res.status(400).json({ success: false, message: 'branch_id and stocktake_date are required' }); return; }
-        const now = new Date().toISOString();
-        const { error } = await supabase.from('store_stocktake_records').update({ status: 'approved', reviewed_by: req.user?.id || null, reviewed_at: now }).eq('branch_id', branchId).eq('stocktake_date', stocktakeDate).in('status', ['pending', 'reviewed']);
-        if (error) throw error;
-        await db.query(
-            `UPDATE public.branch_stock bs SET quantity = ssr.physical_quantity::numeric, updated_at = NOW() FROM public.store_stocktake_records ssr JOIN public.inventory_items ii ON ii.id = ssr.item_id WHERE bs.branch_id = ssr.branch_id AND bs.item_sku = ii.sku AND ssr.branch_id = $1 AND ssr.stocktake_date = $2 AND ssr.status = 'approved'`,
-            [branchId, stocktakeDate]
+        await approveStoreSession(
+            branchId,
+            stocktakeDate,
+            req.user?.id || null,
+            req.header('Idempotency-Key') || `store-stocktake-approve-${branchId}-${stocktakeDate}`,
         );
-        await syncStoreStocktakeToStockCounts(branchId, stocktakeDate, 'approved', req.user?.id || null, now);
         res.status(200).json({ success: true, message: 'Stocktake session approved' });
     } catch (error) {
         logger.error('batchApproveStoreStocktake failed:', error);
