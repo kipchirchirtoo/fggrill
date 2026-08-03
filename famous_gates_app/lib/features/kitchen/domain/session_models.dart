@@ -35,9 +35,26 @@ class KitchenShift {
       shiftDate: json['shift_date'] as String,
       shiftType: json['shift_type'] as String,
       subShiftType: json['sub_shift_type'] as String?,
-      status: json['status'] as String,
-      openedBy: json['opened_by'] as String,
-      closedAt: json['closed_at'] as String?,
+      status: (json['status'] ?? 'open') as String,
+      openedBy: () {
+        final name = (json['opened_by_name'] ??
+                json['staff_name'] ??
+                json['opened_by_staff_name'])
+            ?.toString()
+            .trim();
+        if (name != null && name.isNotEmpty) return name;
+        if (json['opened_by_user'] is Map) {
+          final u = json['opened_by_user'] as Map;
+          final fn = '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'.trim();
+          if (fn.isNotEmpty) return fn;
+        }
+        if (json['store_keeper'] is Map) {
+          final sk = json['store_keeper'] as Map;
+          final fn = '${sk['first_name'] ?? ''} ${sk['last_name'] ?? ''}'.trim();
+          if (fn.isNotEmpty) return fn;
+        }
+        return (json['opened_by'] ?? 'Staff').toString();
+      }(),
       department: json['department'] as String?,
       assignedChefIds: (json['assigned_chef_ids'] as List?)
               ?.map((e) => e.toString())

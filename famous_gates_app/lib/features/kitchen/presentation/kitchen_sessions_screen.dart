@@ -1026,7 +1026,24 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                 _metaChip(
                   icon: Icons.person_outline,
                   label: 'Opened by',
-                  value: shift.openedBy,
+                  value: () {
+                    final raw = shift.openedBy;
+                    if (raw.contains('-') && raw.length > 20) {
+                      final staffList =
+                          ref.watch(staffProfilesProvider).valueOrNull ?? [];
+                      final match = staffList.where((s) {
+                        final id = (s['id'] ?? s['user_id'])?.toString();
+                        return id == raw;
+                      }).firstOrNull;
+                      if (match != null) {
+                        final fn =
+                            '${match['first_name'] ?? ''} ${match['last_name'] ?? ''}'
+                                .trim();
+                        if (fn.isNotEmpty) return fn;
+                      }
+                    }
+                    return raw;
+                  }(),
                 ),
               ],
             ),
@@ -5641,24 +5658,128 @@ class _KitchenProductionLogSectionState
                   const Text('Issued By',
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<Map<String, dynamic>>(
-                    value: _selectedStaff,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Staff issuing to kitchen',
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
+                  Autocomplete<Map<String, dynamic>>(
+                    key: ValueKey(
+                      'issued_by_staff_${_selectedStaff != null ? _selectedStaff!['id'] : 'none'}_${_staff.length}',
                     ),
-                    items: _staff
-                        .map((s) => DropdownMenuItem(
-                              value: s,
-                              child: Text(_staffName(s),
-                                  overflow: TextOverflow.ellipsis),
-                            ))
-                        .toList(),
-                    onChanged: (s) => setState(() => _selectedStaff = s),
+                    initialValue: TextEditingValue(
+                      text: _selectedStaff != null
+                          ? _staffName(_selectedStaff!)
+                          : '',
+                    ),
+                    displayStringForOption: (s) => _staffName(s),
+                    optionsBuilder: (textEditingValue) {
+                      final query =
+                          textEditingValue.text.trim().toLowerCase();
+                      if (query.isEmpty) {
+                        return _staff.take(50);
+                      }
+                      return _staff.where((s) {
+                        final name = _staffName(s).toLowerCase();
+                        final role = '${s['role'] ?? ''}'.toLowerCase();
+                        final email = '${s['email'] ?? ''}'.toLowerCase();
+                        return name.contains(query) ||
+                            role.contains(query) ||
+                            email.contains(query);
+                      }).take(50);
+                    },
+                    onSelected: (s) => setState(() => _selectedStaff = s),
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          hintText:
+                              'Type to search staff issuing to kitchen...',
+                          labelText: 'Staff issuing to kitchen',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: controller.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  tooltip: 'Clear selection',
+                                  onPressed: () {
+                                    controller.clear();
+                                    setState(() => _selectedStaff = null);
+                                  },
+                                )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                        onChanged: (val) {
+                          if (val.isEmpty && _selectedStaff != null) {
+                            setState(() => _selectedStaff = null);
+                          }
+                        },
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      final rows = options.toList();
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 8,
+                          borderRadius: BorderRadius.circular(12),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                                maxWidth: 600, maxHeight: 250),
+                            child: ListView.separated(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 6),
+                              shrinkWrap: true,
+                              itemCount: rows.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                  height: 1, indent: 16, endIndent: 16),
+                              itemBuilder: (context, index) {
+                                final s = rows[index];
+                                final name = _staffName(s);
+                                final role = (s['role'] ?? 'Staff')
+                                    .toString()
+                                    .replaceAll('_', ' ')
+                                    .toUpperCase();
+
+                                return ListTile(
+                                  dense: true,
+                                  leading: CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: Theme.of(context)
+                                        .primaryColor
+                                        .withValues(alpha: 0.1),
+                                    child: Icon(Icons.person,
+                                        size: 16,
+                                        color: Theme.of(context).primaryColor),
+                                  ),
+                                  title: Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  subtitle: role.isNotEmpty
+                                      ? Text(
+                                          role,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey.shade700),
+                                        )
+                                      : null,
+                                  onTap: () => onSelected(s),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
