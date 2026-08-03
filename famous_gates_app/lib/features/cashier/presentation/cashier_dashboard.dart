@@ -197,14 +197,15 @@ class _CashierDashboardState extends ConsumerState<CashierDashboard> {
         icon: Icons.payments,
         content: _RequiresOpenShift(child: _PaidBillsTab()),
       ),
-      // Room Bills (checked-in guest folios) live ONLY in the Reception module.
-      // The cashier settles a guest bill from the Station tab when Reception
-      // sends it over via "Pay at Cashier" (loaded by confirmation code), so no
-      // Room Bills tab is shown at the cashier station.
       const DashboardTab(
         label: 'Expenses',
         icon: Icons.receipt_long,
         content: _RequiresOpenShift(child: _ShiftExpensesTab()),
+      ),
+      const DashboardTab(
+        label: 'Cross-Outlet Clearances',
+        icon: Icons.sync_alt,
+        content: _RequiresOpenShift(child: _CrossOutletClearancesTab()),
       ),
       const DashboardTab(
         label: 'Shifts',
