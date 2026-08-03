@@ -6270,9 +6270,6 @@ export const settleMasterBillCore = async (
   const masterBillId = String(master.id);
   const method = normalizePaymentMethod(opts.method);
   if (!method) throw new AppError('Unsupported payment method', 400);
-  if (method === 'credit_bill') {
-    throw new AppError('Credit-bill settlement must be done per order, not on a consolidated bill.', 400);
-  }
 
   const { data: memberRows, error } = await supabase
     .from('pos_shift_orders')
