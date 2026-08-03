@@ -106,7 +106,210 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
     ref.invalidate(shiftDetailsProvider(shift.id));
   }
 
-  @override
+  String _formatSessionDate(String rawDate) {
+    try {
+      final parsed = DateTime.parse(rawDate);
+      return DateFormat('EEE, d MMM yyyy').format(parsed);
+    } catch (_) {
+      return rawDate;
+    }
+  }
+
+  String _formatSessionTime(String rawDateTime) {
+    try {
+      final parsed = DateTime.parse(rawDateTime).toLocal();
+      return DateFormat('d MMM - HH:mm').format(parsed);
+    } catch (_) {
+      return rawDateTime;
+    }
+  }
+
+  ({Color fg, Color bg, Color border}) _statusPalette(String status) {
+    switch (status.toLowerCase()) {
+      case 'open':
+        return (
+          fg: const Color(0xFF2E7D32),
+          bg: const Color(0xFFE8F5E9),
+          border: const Color(0xFFA5D6A7),
+        );
+      case 'closed':
+        return (
+          fg: const Color(0xFF6A1B9A),
+          bg: const Color(0xFFF3E5F5),
+          border: const Color(0xFFCE93D8),
+        );
+      default:
+        return (
+          fg: const Color(0xFF8D6E63),
+          bg: const Color(0xFFEFEBE9),
+          border: const Color(0xFFBCAAA4),
+        );
+    }
+  }
+
+  Widget _metaChip({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? tint,
+  }) {
+    final color = tint ?? const Color(0xFF23476A);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          RichText(
+            text: TextSpan(
+              style: TextStyle(
+                color: Colors.blueGrey.shade800,
+                fontSize: 13,
+              ),
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sessionStatTile({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 160),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.blueGrey.shade500,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionShell({
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    required Widget child,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.blueGrey.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                trailing,
+              ],
+            ],
+          ),
+          const SizedBox(height: 18),
+          child,
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final configAsync = ref.watch(shiftConfigProvider);
@@ -126,10 +329,6 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
       'director',
       'general_manager',
       'branch_manager',
-      'branch_storekeeper',
-      'storekeeper',
-      'central_storekeeper',
-      'kitchen_operations',
     };
     final isAccountant = accountantRoles.contains(userRole) ||
         user?.roles.any(accountantRoles.contains) == true;
@@ -172,96 +371,100 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Kitchen Sessions has not been configured for this branch yet. Select a shift operating model below to activate kitchen sessions.\nReason: ${config.reason ?? "KITCHEN_SESSIONS_NOT_CONFIGURED"}',
+                      isAccountant
+                          ? 'Kitchen Sessions has not been configured for this branch yet. Select a shift operating model below to activate kitchen sessions.'
+                          : 'Kitchen Shift Sessions have not been activated for this branch yet.\nPlease contact your Branch Accountant to perform initial shift mode configuration.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey),
                     ),
-                    const SizedBox(height: 32),
-                    const Text(
-                      'Activate Kitchen Shift Session Mode',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.looks_one),
-                          label: const Text('Single Shift (All Day)'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 16),
-                            backgroundColor: Theme.of(context).primaryColor,
-                            foregroundColor: Colors.white,
+                    if (isAccountant) ...[
+                      const SizedBox(height: 32),
+                      const Text(
+                        'Activate Kitchen Shift Session Mode',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 16,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.looks_one),
+                            label: const Text('Single Shift (All Day)'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 16),
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () async {
+                              try {
+                                await ref
+                                    .read(kitchenRepositoryProvider)
+                                    .configureShiftMode('SINGLE_SHIFT');
+                                ref.invalidate(shiftConfigProvider);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          'Single Shift mode activated successfully!'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
                           ),
-                          onPressed: () async {
-                            try {
-                              await ref
-                                  .read(kitchenRepositoryProvider)
-                                  .configureShiftMode('SINGLE_SHIFT');
-                              ref.invalidate(shiftConfigProvider);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Single Shift mode activated successfully!'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.looks_two),
+                            label: const Text('Two Shifts (Shift A / Shift B)'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 16),
+                              backgroundColor: Colors.blue.shade700,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () async {
+                              try {
+                                await ref
+                                    .read(kitchenRepositoryProvider)
+                                    .configureShiftMode('TWO_SHIFT');
+                                ref.invalidate(shiftConfigProvider);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          'Two Shifts mode activated successfully!'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
                               }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Error: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.looks_two),
-                          label: const Text('Two Shifts (Shift A / Shift B)'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 16),
-                            backgroundColor: Colors.blue.shade700,
-                            foregroundColor: Colors.white,
+                            },
                           ),
-                          onPressed: () async {
-                            try {
-                              await ref
-                                  .read(kitchenRepositoryProvider)
-                                  .configureShiftMode('TWO_SHIFT');
-                              ref.invalidate(shiftConfigProvider);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Two Shifts mode activated successfully!'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Error: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -274,7 +477,6 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Kitchen Shift Sessions'),
-            actions: [
               IconButton(
                 icon: const Icon(Icons.history_outlined),
                 tooltip: 'Kitchen Session History',
@@ -734,28 +936,33 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
             .toList();
 
         if (isAccountant) {
-          return Column(
-            children: [
-              _buildHeaderCard(activeShift, items, isWriteUser),
-              Expanded(
-                child: _buildChannelStockIssuanceDashboard(
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildHeaderCard(activeShift, items, isWriteUser),
+                _buildChannelStockIssuanceDashboard(
                   activeShift,
                   items,
                   isWriteUser: false,
                 ),
-              ),
-            ],
+                const SizedBox(height: 24),
+              ],
+            ),
           );
         }
 
-        return Column(
-          children: [
-            _buildHeaderCard(activeShift, items, isWriteUser),
-            Expanded(
-              child: _buildChannelStockIssuanceDashboard(activeShift, items,
-                  isWriteUser: isWriteUser),
-            ),
-          ],
+        return SingleChildScrollView(
+          child: Column(
+            children: [
+              _buildHeaderCard(activeShift, items, isWriteUser),
+              _buildChannelStockIssuanceDashboard(
+                activeShift,
+                items,
+                isWriteUser: isWriteUser,
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
         );
       },
     );
@@ -763,115 +970,218 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
 
   Widget _buildHeaderCard(
       KitchenShift shift, List<KitchenShiftItem> items, bool isWriteUser) {
-    return Card(
-      margin: const EdgeInsets.all(16),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
+    final status = _statusPalette(shift.status);
+    final trackedItems = items.length;
+    final openingQty = items.fold<double>(0, (sum, item) => sum + item.openingStock);
+    final issuedQty = items.fold<double>(0, (sum, item) => sum + item.additions);
+    final spoilageQty =
+        items.fold<double>(0, (sum, item) => sum + item.spoilageQuantity);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: _sectionShell(
+        title: 'Shift ${shift.shiftNumber}',
+        subtitle:
+            '${_formatSessionDate(shift.shiftDate)} - ${shift.shiftType.toUpperCase()}${shift.subShiftType != null ? ' (Shift ${shift.subShiftType})' : ''}',
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: status.bg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: status.border),
+          ),
+          child: Text(
+            shift.status.toUpperCase(),
+            style: TextStyle(
+              color: status.fg,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
+          ),
+        ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Shift: ${shift.shiftNumber}',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Date: ${shift.shiftDate} | Type: ${shift.shiftType.toUpperCase()} ${shift.subShiftType != null ? '(Shift ${shift.subShiftType})' : ''}',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                  ],
+                _metaChip(
+                  icon: Icons.calendar_today_outlined,
+                  label: 'Date',
+                  value: _formatSessionDate(shift.shiftDate),
                 ),
-                Chip(
-                  label: Text(
-                    shift.status.toUpperCase(),
-                    style: TextStyle(
-                        color: Colors.green.shade800,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  backgroundColor: Colors.green.shade100,
+                _metaChip(
+                  icon: Icons.schedule_outlined,
+                  label: 'Shift',
+                  value: shift.subShiftType == null || shift.subShiftType!.isEmpty
+                      ? shift.shiftType.toUpperCase()
+                      : 'Shift ${shift.subShiftType}',
+                ),
+                _metaChip(
+                  icon: Icons.apartment_outlined,
+                  label: 'Department',
+                  value: shift.department ?? 'KITCHEN',
+                ),
+                _metaChip(
+                  icon: Icons.person_outline,
+                  label: 'Opened by',
+                  value: shift.openedBy,
                 ),
               ],
             ),
+            const SizedBox(height: 18),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _sessionStatTile(
+                    label: 'Tracked Items',
+                    value: '$trackedItems',
+                    icon: Icons.inventory_2_outlined,
+                    color: const Color(0xFF23476A),
+                  ),
+                  const SizedBox(width: 12),
+                  _sessionStatTile(
+                    label: 'Opening Qty',
+                    value: openingQty.toStringAsFixed(
+                        openingQty % 1 == 0 ? 0 : 2),
+                    icon: Icons.stacked_bar_chart_outlined,
+                    color: const Color(0xFF1976D2),
+                  ),
+                  const SizedBox(width: 12),
+                  _sessionStatTile(
+                    label: 'Issued Qty',
+                    value:
+                        issuedQty.toStringAsFixed(issuedQty % 1 == 0 ? 0 : 2),
+                    icon: Icons.outbox_outlined,
+                    color: const Color(0xFF2E7D32),
+                  ),
+                  const SizedBox(width: 12),
+                  _sessionStatTile(
+                    label: 'Spoilage',
+                    value: spoilageQty.toStringAsFixed(
+                        spoilageQty % 1 == 0 ? 0 : 2),
+                    icon: Icons.warning_amber_rounded,
+                    color: const Color(0xFFD84315),
+                  ),
+                ],
+              ),
+            ),
             if (isWriteUser && shift.status == 'open') ...[
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => _showCloseShiftDialog(shift, items),
-                    icon: const Icon(Icons.close),
-                    label: const Text('Close shift / Handover'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _openPrepBatches(shift),
-                    icon: const Icon(Icons.move_down_outlined),
-                    label: const Text('Prep Returns'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _openProductionLogging,
-                    icon: const Icon(Icons.blender_outlined),
-                    label: const Text('Production Logging'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _openKitchenSpoilage(shift),
-                    icon: const Icon(Icons.report_problem_outlined),
-                    label: const Text('Record Spoilage'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _openKitchenStocktake,
-                    icon: const Icon(Icons.kitchen_outlined),
-                    label: const Text('Kitchen Stocktake'),
-                  ),
-                ],
-              ),
-              const Divider(height: 24),
-            ],
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (isWriteUser)
-                  TextButton.icon(
-                    onPressed: () => _triggerSyncRetry(shift.id),
-                    icon: const Icon(Icons.sync),
-                    label: const Text('Retry Sync Report'),
-                  )
-                else
-                  const Row(
-                    children: [
-                      Icon(Icons.lock_outline, size: 16, color: Colors.grey),
-                      SizedBox(width: 4),
-                      Text('Read-Only Session View',
-                          style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    ],
-                  ),
-                Text(
-                  'Department: ${shift.department ?? 'KITCHEN'}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.grey.shade200),
                 ),
-              ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: () => _showCloseShiftDialog(shift, items),
+                          icon: const Icon(Icons.close_rounded),
+                          label: const Text('Close shift / Handover'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'Quick actions',
+                          style: TextStyle(
+                            color: Colors.blueGrey.shade700,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _openPrepBatches(shift),
+                          icon: const Icon(Icons.move_down_outlined),
+                          label: const Text('Prep Returns'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _openProductionLogging,
+                          icon: const Icon(Icons.blender_outlined),
+                          label: const Text('Production Logging'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _openKitchenSpoilage(shift),
+                          icon: const Icon(Icons.report_problem_outlined),
+                          label: const Text('Record Spoilage'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _openKitchenStocktake,
+                          icon: const Icon(Icons.kitchen_outlined),
+                          label: const Text('Kitchen Stocktake'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  if (isWriteUser)
+                    TextButton.icon(
+                      onPressed: () => _triggerSyncRetry(shift.id),
+                      icon: const Icon(Icons.sync),
+                      label: const Text('Retry Sync Report'),
+                    )
+                  else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.lock_outline,
+                            size: 16, color: Colors.grey),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Read-only session view',
+                          style: TextStyle(
+                            color: Colors.blueGrey.shade500,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  Text(
+                    'Department: ${shift.department ?? 'KITCHEN'}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -894,193 +1204,317 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
             'code': 'pos_restaurant',
             'name': 'POS Restaurant',
             'icon': Icons.restaurant,
-            'color': Colors.orange
+            'color': Colors.orange,
+            'description': 'Restaurant service issues for active food sales.'
           },
           {
             'code': 'accommodation_breakfast',
             'name': 'Accommodation Breakfast',
             'icon': Icons.free_breakfast,
-            'color': Colors.blue
+            'color': Colors.blue,
+            'description': 'Breakfast allocations for staying guests.'
           },
           {
             'code': 'buffet',
             'name': 'Buffet',
             'icon': Icons.brunch_dining,
-            'color': Colors.purple
+            'color': Colors.purple,
+            'description': 'Buffet preparation and serving sessions.'
           },
           {
             'code': 'conference_event',
             'name': 'Conference',
             'icon': Icons.meeting_room,
-            'color': Colors.teal
+            'color': Colors.teal,
+            'description': 'Conference or event catering consumption.'
           },
           {
             'code': 'outside_catering',
             'name': 'Outside Catering',
             'icon': Icons.local_shipping,
-            'color': Colors.indigo
+            'color': Colors.indigo,
+            'description': 'External catering dispatches and event support.'
           },
           {
             'code': 'group_meal',
             'name': 'Group Meal',
             'icon': Icons.groups_outlined,
-            'color': Colors.cyan
+            'color': Colors.cyan,
+            'description': 'Group bookings, tours, and special meal plans.'
           },
           {
             'code': 'staff_meal',
             'name': 'Staff Meals',
             'icon': Icons.badge,
-            'color': Colors.green
+            'color': Colors.green,
+            'description': 'Internal staff meal issues for the shift.'
           },
           {
             'code': 'wastage',
             'name': 'Wastage / Spoilage',
             'icon': Icons.delete_outline,
-            'color': Colors.red
+            'color': Colors.red,
+            'description': 'Record damaged, expired, or wasted stock.'
           },
         ];
+        final totalIssues = additions.length;
+        final totalQty =
+            additions.fold<double>(0, (sum, item) => sum + item.quantity);
+        final activeChannels = additions
+            .map((item) => item.purposeChannel)
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .length;
 
-        return SingleChildScrollView(
+        return Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Issue Stock to Channels',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Select a channel below to issue stock into the active kitchen session, or jump straight to spoilage logging.',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final crossAxisCount = constraints.maxWidth > 1100
-                      ? 4
-                      : constraints.maxWidth > 800
-                          ? 3
-                          : constraints.maxWidth > 550
-                              ? 2
-                              : 1;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      mainAxisExtent: 180,
+              _sectionShell(
+                title: 'Issue Stock to Channels',
+                subtitle:
+                    'Select a kitchen channel below to issue stock into the active session, or jump straight to spoilage logging.',
+                trailing: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Text(
+                    '${channels.length} channels',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _sessionStatTile(
+                            label: 'Issues Logged',
+                            value: '$totalIssues',
+                            icon: Icons.fact_check_outlined,
+                            color: const Color(0xFF23476A),
+                          ),
+                          const SizedBox(width: 12),
+                          _sessionStatTile(
+                            label: 'Total Quantity',
+                            value: numberFmt.format(totalQty),
+                            icon: Icons.stacked_line_chart_outlined,
+                            color: const Color(0xFF0F9D58),
+                          ),
+                          const SizedBox(width: 12),
+                          _sessionStatTile(
+                            label: 'Active Channels',
+                            value: '$activeChannels',
+                            icon: Icons.hub_outlined,
+                            color: const Color(0xFF8E24AA),
+                          ),
+                        ],
+                      ),
                     ),
-                    itemCount: channels.length,
-                    itemBuilder: (context, idx) {
-                      final ch = channels[idx];
-                      final code = ch['code'] as String;
-                      final name = ch['name'] as String;
-                      final icon = ch['icon'] as IconData;
-                      final color = ch['color'] as MaterialColor;
+                    const SizedBox(height: 18),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final crossAxisCount = constraints.maxWidth > 1180
+                            ? 4
+                            : constraints.maxWidth > 860
+                                ? 3
+                                : constraints.maxWidth > 560
+                                    ? 2
+                                    : 1;
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            mainAxisExtent: 220,
+                          ),
+                          itemCount: channels.length,
+                          itemBuilder: (context, idx) {
+                            final ch = channels[idx];
+                            final code = ch['code'] as String;
+                            final name = ch['name'] as String;
+                            final description = ch['description'] as String;
+                            final icon = ch['icon'] as IconData;
+                            final color = ch['color'] as MaterialColor;
 
-                      // Count additions for this channel
-                      final channelAdds = additions
-                          .where((a) => a.purposeChannel == code)
-                          .toList();
-                      final totalQty = channelAdds.fold<double>(
-                          0, (sum, a) => sum + a.quantity);
+                            final channelAdds = additions
+                                .where((a) => a.purposeChannel == code)
+                                .toList();
+                            final channelQty = channelAdds.fold<double>(
+                              0,
+                              (sum, a) => sum + a.quantity,
+                            );
 
-                      return Card(
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: Colors.grey.shade200),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: color.shade50,
-                                    radius: 20,
-                                    child: Icon(icon,
-                                        color: color.shade700, size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      name,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(22),
+                                border:
+                                    Border.all(color: color.shade100, width: 1),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.03),
+                                    blurRadius: 14,
+                                    offset: const Offset(0, 6),
                                   ),
                                 ],
                               ),
-                              const Spacer(),
-                              Text(
-                                '${channelAdds.length} issue(s) logged',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600, fontSize: 13),
-                              ),
-                              if (totalQty > 0)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2.0),
-                                  child: Text(
-                                    'Total Qty: ${numberFmt.format(totalQty)}',
-                                    style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 12),
-                                  ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 48,
+                                          height: 48,
+                                          decoration: BoxDecoration(
+                                            color: color.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                          ),
+                                          child: Icon(icon,
+                                              color: color.shade700, size: 22),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                name,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 15,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                description,
+                                                style: TextStyle(
+                                                  color: Colors.blueGrey.shade600,
+                                                  fontSize: 12,
+                                                  height: 1.3,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const Spacer(),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: color.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            '${channelAdds.length} logged',
+                                            style: TextStyle(
+                                              color: color.shade700,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        if (channelQty > 0)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              'Qty ${numberFmt.format(channelQty)}',
+                                              style: TextStyle(
+                                                color:
+                                                    Colors.blueGrey.shade700,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 14),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: isWriteUser && shift.status == 'open'
+                                          ? FilledButton.icon(
+                                              onPressed: () {
+                                                if (code == 'wastage') {
+                                                  _openKitchenSpoilage(shift);
+                                                  return;
+                                                }
+                                                _openIssueStockScreen(
+                                                  shift,
+                                                  channelCode: code,
+                                                );
+                                              },
+                                              icon: Icon(
+                                                code == 'wastage'
+                                                    ? Icons.open_in_new
+                                                    : Icons.add,
+                                                size: 16,
+                                              ),
+                                              label: Text(
+                                                code == 'wastage'
+                                                    ? 'Open Spoilage'
+                                                    : 'Issue Stock',
+                                              ),
+                                              style: FilledButton.styleFrom(
+                                                backgroundColor: color.shade50,
+                                                foregroundColor:
+                                                    color.shade700,
+                                                elevation: 0,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  vertical: 12,
+                                                ),
+                                              ),
+                                            )
+                                          : OutlinedButton.icon(
+                                              onPressed: null,
+                                              icon: const Icon(Icons.lock_outline,
+                                                  size: 16),
+                                              label: const Text('Read-only'),
+                                            ),
+                                    ),
+                                  ],
                                 ),
-                              const Spacer(),
-                              if (isWriteUser && shift.status == 'open')
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () {
-                                      if (code == 'wastage') {
-                                        _openKitchenSpoilage(shift);
-                                        return;
-                                      }
-                                      _openIssueStockScreen(shift,
-                                          channelCode: code);
-                                    },
-                                    icon: Icon(
-                                      code == 'wastage'
-                                          ? Icons.open_in_new
-                                          : Icons.add,
-                                      size: 16,
-                                    ),
-                                    label: Text(
-                                      code == 'wastage'
-                                          ? 'Open Spoilage'
-                                          : 'Issue Stock',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: color.shade700,
-                                      side: BorderSide(color: color.shade200),
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(8)),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 8),
-                                    ),
-                                  ),
-                                )
-                              else
-                                const SizedBox(height: 32),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
               if (isWriteUser && shift.status == 'open') ...[
                 const SizedBox(height: 32),
@@ -1101,96 +1535,179 @@ class _KitchenSessionsScreenState extends ConsumerState<KitchenSessionsScreen> {
                 const Divider(),
               ],
               const SizedBox(height: 32),
-              const Text(
-                'Recent Stock Issues',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              if (additions.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Center(
-                      child: Text('No stock issues logged yet for this shift.',
-                          style: TextStyle(color: Colors.grey)),
-                    ),
+              _sectionShell(
+                title: 'Recent Stock Issues',
+                subtitle: 'Latest stock movements recorded under this kitchen session.',
+                trailing: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
-                )
-              else
-                Card(
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.grey.shade200)),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: additions.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, idx) {
-                      final add = additions[idx];
-                      final channelName = channels.firstWhere(
-                          (c) => c['code'] == add.purposeChannel,
-                          orElse: () => {'name': add.purposeChannel})['name'];
-                      final staffName = add.responsibleStaffIds.join(', ');
-
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        title: Row(
-                          children: [
-                            Text(
-                              add.itemName ?? add.itemSku,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                add.itemSku,
-                                style: TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700),
-                              ),
-                            ),
-                          ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Channel: $channelName | Staff: $staffName'),
-                              if (add.notes != null ||
-                                  add.wastageReason != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2.0),
-                                  child: Text(
-                                    'Notes: ${add.notes ?? add.wastageReason}',
-                                    style: const TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 12),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        trailing: Text(
-                          '${numberFmt.format(add.quantity)} ${add.unit ?? "pcs"}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15),
-                        ),
-                      );
-                    },
+                  child: Text(
+                    '${additions.length} entries',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
+                child: additions.isEmpty
+                    ? Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(28),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'No stock issues logged yet for this shift.',
+                            style: TextStyle(color: Colors.blueGrey.shade500),
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: additions.map((add) {
+                          final channel = channels.firstWhere(
+                            (c) => c['code'] == add.purposeChannel,
+                            orElse: () => {
+                              'name': add.purposeChannel,
+                              'color': Colors.blueGrey,
+                            },
+                          );
+                          final channelName = channel['name'] as String;
+                          final channelColor =
+                              channel['color'] as MaterialColor? ??
+                                  Colors.blueGrey;
+                          final staffName = add.responsibleStaffIds.isEmpty
+                              ? '—'
+                              : add.responsibleStaffIds.join(', ');
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: channelColor.shade50,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Icon(
+                                    Icons.inventory_2_outlined,
+                                    color: channelColor.shade700,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          Text(
+                                            add.itemName ?? add.itemSku,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              add.itemSku,
+                                              style: TextStyle(
+                                                fontFamily: 'monospace',
+                                                fontSize: 11,
+                                                color:
+                                                    Colors.blueGrey.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: channelColor.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              channelName,
+                                              style: TextStyle(
+                                                color: channelColor.shade700,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Staff: $staffName - ${_formatSessionTime(add.addedAt)}',
+                                        style: TextStyle(
+                                          color: Colors.blueGrey.shade600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      if (add.notes != null ||
+                                          add.wastageReason != null) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          add.notes ?? add.wastageReason!,
+                                          style: TextStyle(
+                                            color: Colors.blueGrey.shade700,
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Text(
+                                    '${numberFmt.format(add.quantity)} ${add.unit ?? "pcs"}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+              ),
             ],
           ),
         );
