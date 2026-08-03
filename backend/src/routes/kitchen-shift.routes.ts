@@ -61,12 +61,21 @@ export const SHIFT_WRITE_ROLES = [
     UserRole.KITCHEN_OPERATIONS
 ];
 
+const SHIFT_ADMIN_ROLES = [
+    UserRole.SUPER_ADMIN,
+    UserRole.DIRECTOR,
+    UserRole.GENERAL_MANAGER,
+    UserRole.BRANCH_MANAGER,
+    UserRole.BRANCH_ACCOUNTANT,
+    UserRole.ACCOUNTANT
+];
+
 // Shifts
 router.post('/', authorize(SHIFT_WRITE_ROLES), openKitchenShift);
 router.get('/', authorize(KITCHEN_ROLES), listKitchenShifts);
 router.get('/stats', authorize(KITCHEN_ROLES), getKitchenShiftStats);
 router.get('/shift-mode', authorize(KITCHEN_ROLES), getActiveShiftModeHandler);
-router.post('/shift-mode', authorize(KITCHEN_ROLES), configureShiftModeHandler);
+router.post('/shift-mode', authorize(SHIFT_ADMIN_ROLES), configureShiftModeHandler);
 router.post('/production/log', authorize(SHIFT_WRITE_ROLES), logProductionEvent);
 
 // Compatibility view for old kitchen_production_sessions-shaped consumers
