@@ -588,31 +588,79 @@ class KitchenRepository {
 
   Future<int> getBreakfastPax() async {
     try {
-      final response = await _dio.get('/kitchen/shifts/breakfast-pax');
-      if (response.data is Map && response.data['breakfast_pax'] != null) {
-        return (response.data['breakfast_pax'] as num).toInt();
+      final branchId = await _branchId;
+      final response = await _dio.get(
+        '/kitchen/shifts/breakfast-pax',
+        queryParameters: {
+          if (branchId != null) 'branch_id': branchId,
+        },
+      );
+      if (response.data is Map) {
+        final resMap = Map<String, dynamic>.from(response.data);
+        if (resMap['breakfast_pax'] != null) {
+          return (resMap['breakfast_pax'] as num).toInt();
+        }
+        final data = resMap['data'];
+        if (data is Map && data['confirmed_pax'] != null) {
+          return (data['confirmed_pax'] as num).toInt();
+        }
+      }
+
+      // Fallback to /bookings/breakfast-pax/daily
+      final fallback = await _dio.get(
+        '/bookings/breakfast-pax/daily',
+        queryParameters: {
+          if (branchId != null) 'branch_id': branchId,
+        },
+      );
+      if (fallback.data is Map) {
+        final fData = fallback.data['data'];
+        if (fData is Map && fData['confirmed_pax'] != null) {
+          return (fData['confirmed_pax'] as num).toInt();
+        }
       }
       return 0;
     } catch (e) {
+      debugPrint('KitchenRepository.getBreakfastPax error: $e');
       return 0;
     }
   }
 
   Future<Map<String, dynamic>> getBreakfastPaxSnapshot({String? date}) async {
     try {
-      final response =
-          await _dio.get('/kitchen/shifts/breakfast-pax', queryParameters: {
+      final branchId = await _branchId;
+      final query = <String, dynamic>{
         if (date != null && date.isNotEmpty) 'date': date,
-      });
-      if (response.data is Map) {
-        final data = response.data['data'];
-        if (data is Map) {
-          return Map<String, dynamic>.from(data);
+        if (branchId != null) 'branch_id': branchId,
+      };
+
+      try {
+        final response = await _dio.get('/kitchen/shifts/breakfast-pax',
+            queryParameters: query);
+        if (response.data is Map) {
+          final resMap = Map<String, dynamic>.from(response.data);
+          final data = resMap['data'];
+          if (data is Map && data.isNotEmpty) {
+            return Map<String, dynamic>.from(data);
+          }
+          if (resMap.isNotEmpty) {
+            return resMap;
+          }
         }
-        return Map<String, dynamic>.from(response.data);
+      } catch (_) {}
+
+      // Fallback to /bookings/breakfast-pax/daily
+      final fallback =
+          await _dio.get('/bookings/breakfast-pax/daily', queryParameters: query);
+      if (fallback.data is Map) {
+        final fData = fallback.data['data'];
+        if (fData is Map) {
+          return Map<String, dynamic>.from(fData);
+        }
       }
       return {};
     } catch (e) {
+      debugPrint('KitchenRepository.getBreakfastPaxSnapshot error: $e');
       return {};
     }
   }
