@@ -1160,7 +1160,10 @@ class _BranchStorekeeperDashboardState
       case BranchStorekeeperSection.stockOut:
         return _consolidatedStockOutPage(0);
       case BranchStorekeeperSection.kitchenProduction:
-        return const KitchenSessionsScreen();
+        return KitchenSessionsScreen(
+          onBack: () =>
+              setState(() => _section = BranchStorekeeperSection.overview),
+        );
       case BranchStorekeeperSection.kitchenProductionLog:
         return const KitchenProductionLoggingScreen();
       case BranchStorekeeperSection.storeStocktake:
@@ -2988,6 +2991,7 @@ class _BranchStorekeeperDashboardState
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _kitchenSessionsRedirectCard(),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -3029,7 +3033,82 @@ class _BranchStorekeeperDashboardState
           label: const Text('Log & Issue'),
         ),
       ],
-      children: content,
+      children: [
+        _kitchenSessionsRedirectCard(),
+        ...content,
+      ],
+    );
+  }
+
+  Widget _kitchenSessionsRedirectCard() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.kPrimary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.kPrimary.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        cross: WrapCrossAlignment.center,
+        spacing: 14,
+        runSpacing: 12,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.kPrimary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  PhosphorIcons.cookingPot(),
+                  color: AppColors.kPrimary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Restaurant POS Outlet & Kitchen Issuance',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'For Restaurant POS outlet stock and raw kitchen ingredients, items are issued directly inside Kitchen Sessions.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.kTextSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          FilledButton.icon(
+            onPressed: () => _go(BranchStorekeeperSection.kitchenSessions),
+            icon: Icon(PhosphorIcons.caretRight(), size: 16),
+            label: const Text('Go to Kitchen Sessions'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.kPrimary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3655,6 +3734,7 @@ class _BranchStorekeeperDashboardState
         ),
       ],
       children: [
+        _kitchenSessionsRedirectCard(),
         // ── stat strip ────────────────────────────────────────────────────────
         _StatGrid(cards: [
           _StatCardData('Stock IN', _qtyText(totalIn), PhosphorIcons.trendUp(),
